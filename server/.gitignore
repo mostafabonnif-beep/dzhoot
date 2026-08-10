@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Build output
+/dist
+backend/dist/
+frontend/.next/
+frontend/out/
+packages/*/dist/
+
+# Test & coverage
+coverage/
+test-results/
+playwright-report/
+blob-report/
+
+# Uploads and backups
+/public/uploads/profiles/*
+!/public/uploads/profiles/.gitkeep
+/backups
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+docker-compose.override.yml

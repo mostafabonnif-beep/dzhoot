@@ -1,0 +1,57 @@
+{
+  "name": "firevision-iptv",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Server for FireVisionIPTV - Manages channel lists and app updates",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @firevision/backend\" \"npm run dev -w @firevision/frontend\"",
+    "dev:backend": "npm run dev -w @firevision/backend",
+    "dev:frontend": "npm run dev -w @firevision/frontend",
+    "build": "npm run build -w @firevision/shared && npm run build -w @firevision/backend && npm run build -w @firevision/frontend",
+    "build:backend": "npm run build -w @firevision/shared && npm run build -w @firevision/backend",
+    "lint": "npm run lint -w @firevision/backend",
+    "lint:fix": "npm run lint:fix -w @firevision/backend && npm run lint:fix -w @firevision/frontend",
+    "test": "npm run test -w @firevision/backend && npm run test -w @firevision/frontend",
+    "test:backend": "npm run test -w @firevision/backend",
+    "test:frontend": "npm run test -w @firevision/frontend",
+    "test:e2e": "npx playwright test",
+    "typecheck": "npm run typecheck -w @firevision/shared && npm run typecheck -w @firevision/backend",
+    "start": "npm run start -w @firevision/backend",
+    "prepare": "husky"
+  },
+  "keywords": [
+    "iptv",
+    "streaming",
+    "channel-management"
+  ],
+  "author": "CADnative",
+  "license": "MIT",
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.5.1",
+    "admin-lte": "^3.2.0",
+    "bootstrap": "^4.6.2",
+    "datatables.net-bs4": "^1.13.8",
+    "datatables.net-responsive-bs4": "^2.5.0",
+    "hls.js": "^1.6.15",
+    "jquery": "^3.7.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^8.57.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  }
+}
