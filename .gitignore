@@ -1,0 +1,36 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+local.properties
+*.jks
+*.keystore
+
+# Dependencies and build outputs
+node_modules/
+.gradle/
+build/
+*/build/
+server/frontend/.next/
+server/backend/dist/
+server/packages/*/dist/
+
+# Local logs and reports
+*.log
+coverage/
+.DS_Store
+
+# Generated IDE files
+.idea/
+.vscode/
+
+# Generated compiler metadata
+**/tsconfig.tsbuildinfo
+
+# Firebase configuration for private app projects
+**/google-services.json
+
+# Local dependency and build folders
+**/node_modules/
+**/.gradle/
+**/build/
