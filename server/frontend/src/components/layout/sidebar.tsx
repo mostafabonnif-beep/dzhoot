@@ -82,16 +82,16 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
       >
         <div className="flex h-11 items-center border-b border-sidebar-border px-4">
           <span className="text-sm font-display font-bold tracking-tight md:hidden">
-            FIRE<span className="text-sidebar-primary">Vision</span>
+            Dzhoof<span className="text-sidebar-primary"> IPTV</span>
           </span>
           <span className="text-sm font-display font-bold tracking-tight hidden md:inline">
             {!sidebarCollapsed ? (
               <>
-                FIRE<span className="text-sidebar-primary">Vision</span>
+                Dzhoof<span className="text-sidebar-primary"> IPTV</span>
               </>
             ) : (
               <>
-                F<span className="text-sidebar-primary">V</span>
+                D<span className="text-sidebar-primary">Z</span>
               </>
             )}
           </span>

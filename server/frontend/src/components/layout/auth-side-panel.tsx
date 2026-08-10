@@ -24,7 +24,7 @@ export function AuthSidePanel({ footer }: { footer: string }) {
       <div>
         <Link href="/" className="inline-block">
           <span className="text-lg font-display font-bold tracking-tight">
-            FIRE<span className="text-primary">VISION</span>
+            Dzhoof<span className="text-primary"> IPTV</span>
           </span>
         </Link>
         <p className="mt-4 text-xs uppercase tracking-widest text-muted-foreground">

@@ -150,8 +150,8 @@ export default function Home() {
                 className="mb-6 w-24 h-24 sm:w-36 sm:h-36 lg:w-[260px] lg:h-[260px]"
                 priority
               />
-              <h1 className="text-5xl sm:text-6xl lg:text-[5.5rem] font-display font-bold tracking-tight leading-none">
-                FIRE<span className="text-primary">VISION</span>
+              <h1 className="text-5xl sm:text-6xl lg:text-[5.5rem] font-display font-bold tracking-tight leading-none text-primary">
+                Dzhoof IPTV
               </h1>
 
               <p className="mt-4 text-sm uppercase tracking-widest text-muted-foreground font-medium">

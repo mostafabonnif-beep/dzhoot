@@ -197,7 +197,7 @@ export default function VerifyEmailPage() {
         <div>
           <Link href="/" className="inline-block">
             <span className="text-lg font-display font-bold tracking-tight">
-              FIRE<span className="text-primary">VISION</span>
+              Dzhoof<span className="text-primary"> IPTV</span>
             </span>
           </Link>
           <p className="mt-4 text-xs uppercase tracking-widest text-muted-foreground">
@@ -250,7 +250,7 @@ export default function VerifyEmailPage() {
         <div className="lg:hidden absolute top-6 left-6">
           <Link href="/">
             <span className="text-lg font-display font-bold tracking-tight">
-              FIRE<span className="text-primary">VISION</span>
+              Dzhoof<span className="text-primary"> IPTV</span>
             </span>
           </Link>
         </div>
