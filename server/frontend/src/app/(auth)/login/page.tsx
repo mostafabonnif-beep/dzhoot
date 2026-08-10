@@ -136,7 +136,7 @@ function LoginContent() {
       <div className="lg:hidden mb-10">
         <Link href="/">
           <span className="text-lg font-display font-bold tracking-tight">
-            FIRE<span className="text-primary">VISION</span>
+            Dzhoof<span className="text-primary"> IPTV</span>
           </span>
         </Link>
       </div>
