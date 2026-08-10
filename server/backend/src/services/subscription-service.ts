@@ -97,12 +97,15 @@ export async function redeemCode(
     }
   }
 
-  // Create or extend the active subscription.
+  // Create or extend the active subscription. An already-expired row is
+  // treated as new: the new duration starts from now, not the stale expiry.
   let subscription = await Subscription.findOne({ userId, status: 'ACTIVE' }).exec();
 
   if (subscription) {
-    const extendedUntil = new Date(subscription.expiresAt.getTime() + plan.durationDays * DAY_MS);
+    const base = subscription.expiresAt.getTime() > now.getTime() ? subscription.expiresAt : now;
+    const extendedUntil = new Date(base.getTime() + plan.durationDays * DAY_MS);
     subscription.expiresAt = extendedUntil;
+    subscription.startsAt = now;
     subscription.planId = plan._id;
     subscription.activationCodeId = code._id;
     await subscription.save();
@@ -279,6 +282,24 @@ export async function expireStaleCodes(): Promise<number> {
   return res.modifiedCount;
 }
 
+/** Whether the platform currently gates playback behind an active subscription. */
+export async function isSubscriptionRequired(): Promise<boolean> {
+  const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
+  const doc = await AppSetting.findOne({ key: 'subscription_required' }).lean().exec();
+  return doc ? !!doc.value : false;
+}
+
+/** Active subscription for a user (not expired), or null. */
+export async function getActiveSubscription(userId: string) {
+  return Subscription.findOne({
+    userId,
+    status: 'ACTIVE',
+    expiresAt: { $gt: new Date() },
+  })
+    .lean()
+    .exec();
+}
+
 async function recordRedemption(
   code: any,
   userId: string,
@@ -310,4 +331,6 @@ module.exports = {
   generateCodes,
   revokeCode,
   expireStaleCodes,
+  isSubscriptionRequired,
+  getActiveSubscription,
 };

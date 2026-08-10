@@ -11,6 +11,11 @@ const channelSchema = new Schema<IChannelDocument>(
       default: null,
       index: true,
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+      index: true,
+    },
     channelId: {
       type: String,
       required: true,
@@ -70,6 +75,10 @@ const channelSchema = new Schema<IChannelDocument>(
       lastTested: Date,
       isWorking: Boolean,
       responseTime: Number,
+      // Provenance for imported (Xtream) channels.
+      source: String,
+      xtreamSourceId: String,
+      xtreamStreamId: Number,
     },
     flaggedBad: {
       isFlagged: { type: Boolean, default: false },

@@ -64,4 +64,50 @@ router.delete('/devices/:deviceId', async (req, res) => {
   }
 });
 
+// GET /api/v1/me/notifications — sent notifications with per-user read state
+router.get('/notifications', async (req, res) => {
+  try {
+    const Notification = require('../models/Notification');
+    const UserNotification = require('../models/UserNotification');
+    const notifications = await Notification.find({ status: 'SENT' })
+      .sort({ sentAt: -1 })
+      .limit(50)
+      .lean();
+    const reads = await UserNotification.find({
+      userId: req.user.id,
+      notificationId: { $in: notifications.map((n) => n._id) },
+    })
+      .lean();
+    const readMap = new Map(reads.map((r) => [String(r.notificationId), r.readAt]));
+    const data = notifications.map((n) => ({
+      ...n,
+      read: readMap.has(String(n._id)) ? !!readMap.get(String(n._id)) : false,
+    }));
+    return res.json({ success: true, data });
+  } catch (err) {
+    console.error('[me] notifications error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /api/v1/me/notifications/:id/read — mark one notification as read
+router.post('/notifications/:id/read', async (req, res) => {
+  try {
+    const Notification = require('../models/Notification');
+    const UserNotification = require('../models/UserNotification');
+    const notification = await Notification.findById(req.params.id).lean();
+    if (!notification) return res.status(404).json({ success: false, error: 'Notification not found' });
+
+    await UserNotification.findOneAndUpdate(
+      { userId: req.user.id, notificationId: notification._id },
+      { $set: { readAt: new Date() } },
+      { upsert: true, setDefaultsOnInsert: true },
+    ).exec();
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[me] mark read error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
 module.exports = router;

@@ -55,5 +55,26 @@ async function resolveUser(req: Request, res: Response, next: NextFunction) {
   }
 }
 
-module.exports = { resolveUser };
-export { resolveUser };
+/**
+ * Optional auth: resolves the user when a session/JWT is present, otherwise
+ * continues anonymously (req.user = null). Used for browseable catalogs.
+ */
+async function optionalAuth(req: Request, res: Response, next: NextFunction) {
+  const sessionId = req.headers['x-session-id'] as string | undefined;
+  const auth = req.headers.authorization || '';
+  (req as any).user = null;
+  req.userId = undefined;
+  if (!sessionId && !auth.startsWith('Bearer ')) return next();
+
+  try {
+    await resolveUser(req, res, () => undefined);
+    return next();
+  } catch {
+    (req as any).user = null;
+    req.userId = undefined;
+    return next();
+  }
+}
+
+module.exports = { resolveUser, optionalAuth };
+export { resolveUser, optionalAuth };
