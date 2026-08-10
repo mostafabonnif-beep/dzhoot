@@ -20,7 +20,7 @@
     "test:backend": "npm run test -w @firevision/backend",
     "test:frontend": "npm run test -w @firevision/frontend",
     "test:e2e": "npx playwright test",
-    "typecheck": "npm run typecheck -w @firevision/shared && npm run typecheck -w @firevision/backend",
+    "typecheck": "npm run build -w @firevision/shared && npm run typecheck -w @firevision/shared && npm run typecheck -w @firevision/backend",
     "start": "npm run start -w @firevision/backend",
     "prepare": "husky"
   },
