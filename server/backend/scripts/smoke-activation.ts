@@ -214,6 +214,93 @@ async function main() {
     stats2.body,
   );
 
+  // 13. Stream authorization gate (E2E)
+  const ch = await jfetch(
+    '/api/v1/admin/channels',
+    { method: 'POST', body: JSON.stringify({ channelId: 'smoke-live-1', channelName: 'Smoke Live', channelUrl: 'http://stream.example/live.m3u8', channelGroup: 'Smoke' }) },
+    adminHeaders,
+  );
+  check('admin creates a live channel', ch.status === 201 || ch.status === 200, ch.body);
+  const channelId = ch.body?.data?._id || ch.body?.channel?._id || ch.body?.data?.channelId;
+
+  // Enable the subscription gate
+  const setFlag = await jfetch(
+    '/api/v1/admin/app-settings',
+    { method: 'PUT', body: JSON.stringify({ subscription_required: true }) },
+    adminHeaders,
+  );
+  check('admin enables subscription_required', setFlag.status === 200 && setFlag.body?.data?.subscription_required === true, setFlag.body);
+
+  // Without a subscription → 403 SUBSCRIPTION_EXPIRED (user has an ACTIVE sub now from step 11! create a fresh user)
+  const freshReg = await jfetch('/api/v1/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'gateguy', email: 'gate@dzhoof.test', password: 'SmokePass123!' }),
+  });
+  const gateLogin = await jfetch('/api/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: 'gateguy', password: 'SmokePass123!' }),
+  });
+  const gateHeaders = { 'x-session-id': gateLogin.body?.sessionId };
+
+  const denied = await jfetch(
+    '/api/v1/streams/authorize',
+    { method: 'POST', body: JSON.stringify({ contentType: 'LIVE', contentId: String(channelId) }) },
+    gateHeaders,
+  );
+  check('streams/authorize blocks unsubscribed user', denied.body?.code === 'SUBSCRIPTION_EXPIRED', denied.body);
+
+  // Subscribed user is allowed
+  const allowed = await jfetch(
+    '/api/v1/streams/authorize',
+    { method: 'POST', body: JSON.stringify({ contentType: 'LIVE', contentId: String(channelId) }) },
+    userHeaders,
+  );
+  check(
+    'streams/authorize allows active subscriber with URL',
+    allowed.status === 200 && allowed.body?.data?.url === 'http://stream.example/live.m3u8',
+    allowed.body,
+  );
+
+  // Admin bypasses the gate
+  const adminAllowed = await jfetch(
+    '/api/v1/streams/authorize',
+    { method: 'POST', body: JSON.stringify({ contentType: 'LIVE', contentId: String(channelId) }) },
+    adminHeaders,
+  );
+  check('admin bypasses the gate', adminAllowed.status === 200 && adminAllowed.body?.data?.authorized === true, adminAllowed.body);
+
+  // 14. Home endpoint
+  const home = await jfetch('/api/v1/home', {});
+  check('home endpoint returns sections', home.status === 200 && Array.isArray(home.body?.data?.latestMovies), home.body);
+
+  // 15. Notifications flow
+  const notif = await jfetch(
+    '/api/v1/admin/notifications',
+    { method: 'POST', body: JSON.stringify({ title: 'Welcome', body: 'Enjoy DZ HOOF' }) },
+    adminHeaders,
+  );
+  check('admin creates a notification', notif.status === 201 && notif.body?.success === true, notif.body);
+  const notifId = notif.body?.data?._id;
+  const sent = await jfetch(`/api/v1/admin/notifications/${notifId}/send`, { method: 'POST' }, adminHeaders);
+  check('admin sends the notification', sent.status === 200 && sent.body?.data?.status === 'SENT', sent.body);
+
+  const myNotifs = await jfetch('/api/v1/me/notifications', {}, userHeaders);
+  check(
+    'user sees the sent notification as unread',
+    myNotifs.status === 200 && myNotifs.body?.data?.[0]?.title === 'Welcome' && myNotifs.body?.data?.[0]?.read === false,
+    myNotifs.body,
+  );
+  const markRead = await jfetch(`/api/v1/me/notifications/${notifId}/read`, { method: 'POST' }, userHeaders);
+  check('user marks it read', markRead.status === 200 && markRead.body?.success === true, markRead.body);
+  const myNotifs2 = await jfetch('/api/v1/me/notifications', {}, userHeaders);
+  check('notification now read', myNotifs2.body?.data?.[0]?.read === true, myNotifs2.body);
+
+  // 16. Catalog + search (VOD empty here — no Xtream panel, but endpoints must respond)
+  const movies = await jfetch('/api/v1/catalog/movies', {});
+  check('catalog/movies responds', movies.status === 200 && Array.isArray(movies.body?.data), movies.body);
+  const search = await jfetch('/api/v1/catalog/search?q=smoke', {});
+  check('catalog/search responds', search.status === 200 && search.body?.data?.channels?.length >= 1, search.body);
+
   console.log(failures === 0 ? '\n🎉 ALL SMOKE CHECKS PASSED' : `\n💥 ${failures} CHECK(S) FAILED`);
   process.exit(failures === 0 ? 0 : 1);
 }

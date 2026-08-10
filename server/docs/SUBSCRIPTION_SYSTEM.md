@@ -66,3 +66,40 @@
 2. طبقة `POST /streams/authorize` (حماية روابط البث).
 3. Movies/Series + بحث موحّد.
 4. إشعارات FCM + 2FA للمشرف.
+
+---
+
+## إضافات 2026-08-10 (الجولة الثانية — إكمال النواقص)
+
+### استيراد Xtream Codes (`/api/v1/admin/xtream-sources`)
+- إضافة مصدر: `{ serverUrl, username, password }` — **البيانات مشفّرة AES-256-GCM** عند التخزين.
+- `POST /:id/test` — تحقق من الاعتماد (`player_api.php` → `user_info.auth == 1`).
+- `POST /:id/sync` — مزامنة كاملة: Live → قنوات الكتالوج، VOD → أفلام، Series → مسلسلات + مواسم + حلقات (مع حد تزامن للحلقات).
+- **Prune**: المحتوى الذي اختفى من البانل يُعطَّل تلقائيًا.
+- الأخطاء الجوهرية (فشل قوائم البث) تسجّل `syncStatus = error` — لا "نجاح" وهمي.
+
+### VOD / الكتالوج (`/api/v1/catalog`)
+- موديلات: `Movie`, `Series`, `Season`, `Episode` (فهارس فريدة sourceId+externalId).
+- مسارات: movies (+categories)، series (+categories)، series/:id/seasons، seasons/:id/episodes.
+- `GET /catalog/search?q=` — بحث موحّد (قنوات + أفلام + مسلسلات).
+- التصفح عام (auth اختياري)؛ حماية البث عبر `/streams/authorize`.
+
+### حماية البث (`/api/v1/streams/authorize`)
+- `POST { contentType: LIVE|MOVIE|EPISODE, contentId }` → يفحص: مستخدم ← اشتراك ← محتوى ← رابط.
+- عندما يكون إعداد `subscription_required` مفعّلًا (لوحة الأدمن)، المستخدم بلا اشتراك نشط يرفض بـ `403 SUBSCRIPTION_EXPIRED` — الأدمن يتجاوز.
+- الإعداد عبر `PUT /api/v1/admin/app-settings` `{ subscription_required: true }`.
+
+### Home ديناميكي (`GET /api/v1/home`)
+- أقسام: Featured (قنوات/أفلام/مسلسلات يحددها الأدمن عبر إعداد `home`) + Latest.
+- الإعداد: `PUT /api/v1/admin/app-settings { home: { featuredChannelIds: [], featuredMovieIds: [], featuredSeriesIds: [] } }`.
+
+### إشعارات
+- أدمن: `GET/POST /api/v1/admin/notifications` + `POST /:id/send` (FCM يُربط لاحقًا).
+- مستخدم: `GET /api/v1/me/notifications` (مع حالة القراءة) + `POST /me/notifications/:id/read`.
+
+### CI
+- `.github/workflows/ci.yml` على **جذر المستودع** (كانت workflows مدفونة داخل server/ ولا تشتغل): typecheck + lint + 114 اختبارًا + بناء الواجهة، تلقائيًا مع كل push/PR.
+
+### Android (تمت كتابته — البناء على جهازك)
+- **إكمال إعادة التسمية**: كل الملفات انتقلت إلى `com.dzhoof.iptv` (277 ملف، صفر مراجع `cadnative`)، والحزمة `applicationId = com.dzhoof.iptv` أصبحت متطابقة.
+- **قسم Subscription** في الإعدادات: تفعيل كود + عرض الباقة/الانتهاء/الأجهزة + إزالة جهاز (DTOs + API + Repository + ViewModel + Hilt).

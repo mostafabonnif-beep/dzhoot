@@ -29,6 +29,7 @@ export interface IAlternateStream {
 export interface IChannel {
   // null = shared admin catalog; a user id = a private channel owned by that user.
   ownerId?: Types.ObjectId | null;
+  isActive?: boolean;
   channelId: string;
   channelName: string;
   channelUrl: string;
@@ -51,6 +52,12 @@ export interface IChannel {
     lastTested?: Date;
     isWorking?: boolean;
     responseTime?: number;
+    /** Provenance: which pipeline imported this channel (e.g. "xtream"). */
+    source?: string;
+    /** Xtream source document id (when source === "xtream"). */
+    xtreamSourceId?: string;
+    /** Original stream_id on the Xtream panel. */
+    xtreamStreamId?: number;
   };
   flaggedBad?: IFlaggedBad;
   alternateStreams?: IAlternateStream[];

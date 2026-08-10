@@ -354,6 +354,14 @@ app.use('/api/v1/admin/plans', require('./routes/admin-plans'));
 app.use('/api/v1/admin/activation-codes', require('./routes/admin-activation-codes'));
 app.use('/api/v1/activation', require('./routes/activation'));
 app.use('/api/v1/me', require('./routes/me'));
+// Xtream Codes sources + VOD catalog
+app.use('/api/v1/admin/xtream-sources', require('./routes/admin-xtream-sources'));
+app.use('/api/v1/catalog', require('./routes/catalog'));
+// Stream authorization + dynamic home + notifications + runtime settings
+app.use('/api/v1/streams', require('./routes/streams'));
+app.use('/api/v1/home', require('./routes/home'));
+app.use('/api/v1/admin/notifications', require('./routes/admin-notifications'));
+app.use('/api/v1/admin/app-settings', require('./routes/admin-app-settings'));
 app.use('/api/v1/iptv-org', require('./routes/iptv-org'));
 app.use('/api/v1/external-sources', require('./routes/external-sources'));
 app.use('/api/v1/test', require('./routes/channel-test'));

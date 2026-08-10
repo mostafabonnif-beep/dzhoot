@@ -197,7 +197,7 @@ dependencies {
 
 sentry {
     includeSourceContext = true
-    org = "cadnative-design-solution"
+    org = "dzhoof"
     projectName = "firevisioniptv"
     authToken = System.getenv("SENTRY_AUTH_TOKEN")
 }
