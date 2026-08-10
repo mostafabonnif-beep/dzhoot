@@ -21,6 +21,8 @@ import {
   Activity,
   Clock,
   X,
+  CreditCard,
+  KeyRound,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
 
@@ -30,6 +32,8 @@ const adminLinks = [
   { href: '/admin/channels', label: 'Channels', icon: Tv },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/devices', label: 'Devices', icon: Smartphone },
+  { href: '/admin/plans', label: 'Plans', icon: CreditCard },
+  { href: '/admin/codes', label: 'Codes', icon: KeyRound },
   { href: '/admin/import', label: 'Import IPTV', icon: Globe },
   { href: '/admin/sources', label: 'Other Sources', icon: MonitorPlay },
   { href: '/admin/epg', label: 'EPG Guide', icon: Calendar },
@@ -47,6 +51,7 @@ const userLinks = [
   { href: '/user/import', label: 'Import IPTV', icon: Globe },
   { href: '/user/sources', label: 'Other Sources', icon: MonitorPlay },
   { href: '/user/devices', label: 'Pair Device', icon: Smartphone },
+  { href: '/user/subscription', label: 'Subscription', icon: CreditCard },
   { href: '/user/profile', label: 'My Profile', icon: UserCircle },
 ];
 

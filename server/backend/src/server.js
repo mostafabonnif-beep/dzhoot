@@ -349,6 +349,11 @@ app.use('/api/v1/favorites', require('./routes/favorites'));
 // App update routes (GitHub-based APK delivery)
 app.use('/api/v1/app', require('./routes/app-update'));
 app.use('/api/v1/admin', require('./routes/admin'));
+// Subscription & activation (commercial backbone)
+app.use('/api/v1/admin/plans', require('./routes/admin-plans'));
+app.use('/api/v1/admin/activation-codes', require('./routes/admin-activation-codes'));
+app.use('/api/v1/activation', require('./routes/activation'));
+app.use('/api/v1/me', require('./routes/me'));
 app.use('/api/v1/iptv-org', require('./routes/iptv-org'));
 app.use('/api/v1/external-sources', require('./routes/external-sources'));
 app.use('/api/v1/test', require('./routes/channel-test'));
