@@ -69,6 +69,18 @@ function episodeUrl(creds: XtreamCredentials, episodeId: string | number, ext: s
   return `${creds.serverUrl.replace(/\/+$/, '')}/series/${creds.username}/${creds.password}/${episodeId}.${ext}`;
 }
 
+export function buildXtreamStreamUrl(
+  creds: XtreamCredentials,
+  contentType: string,
+  streamId: string | number,
+  extension = 'm3u8',
+): string {
+  if (contentType === 'LIVE') return liveUrl(creds, streamId);
+  if (contentType === 'MOVIE') return vodUrl(creds, streamId, extension);
+  if (contentType === 'EPISODE') return episodeUrl(creds, streamId, extension);
+  throw new Error('Unsupported Xtream content type');
+}
+
 async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials) {
   const channelId = `xt:${String(sourceId)}:${item.stream_id}`;
   return Channel.findOneAndUpdate(
@@ -299,6 +311,7 @@ export async function syncXtreamSource(sourceId: string) {
 
 module.exports = {
   buildXtreamApiUrl,
+  buildXtreamStreamUrl,
   testXtreamConnection,
   syncXtreamSource,
   encryptSecret,

@@ -4,7 +4,8 @@ const mongoose = require('mongoose');
 const XtreamSource = require('../models/XtreamSource');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx } = require('../services/audit-log');
-const { testXtreamConnection, syncXtreamSource, encryptSecret } = require('../services/xtream-service');
+const { syncXtreamSource, encryptSecret } = require('../services/xtream-service');
+const { sanitizeXtreamTestResult, redactSensitiveText } = require('../utils/playback-security');
 
 // Admin-only Xtream source management: /api/v1/admin/xtream-sources
 router.use(requireAuth);
@@ -85,10 +86,14 @@ router.post('/:id/test', async (req, res) => {
       username: decryptSecret(source.usernameEncrypted),
       password: decryptSecret(source.passwordEncrypted),
     });
-    return res.json({ success: result.ok, data: result.ok ? { userInfo: result.userInfo } : null, error: result.error });
+    return res.json({
+      success: result.ok,
+      data: result.ok ? sanitizeXtreamTestResult(result) : null,
+      error: result.ok ? result.error : redactSensitiveText(result.error),
+    });
   } catch (err) {
     console.error('[xtream] test error:', err);
-    return res.status(500).json({ success: false, error: err.message || 'Test failed' });
+    return res.status(500).json({ success: false, error: redactSensitiveText(err.message || 'Test failed') });
   }
 });
 

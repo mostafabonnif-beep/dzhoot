@@ -9,6 +9,7 @@ const { escapeRegex } = require('../utils/escapeRegex');
 const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
 const { audit } = require('../services/audit-log');
 const { channelCache } = require('../services/cache');
+const { sanitizeChannel } = require('../utils/playback-security');
 
 // The shared admin/demo catalog is identical for every admin hit and is the heaviest
 // read. Cache it (10 min TTL via channelCache) and bust it on any catalog mutation.
@@ -108,7 +109,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     const payload = {
       success: true,
       count: channels.length,
-      data: channels.map(slimAlternates),
+      data: channels.map((channel) => sanitizeChannel(slimAlternates(channel), req)),
     };
 
     if (catalogView) await channelCache.set('catalog:list', payload);
@@ -151,7 +152,7 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
       if (!acc[group]) {
         acc[group] = [];
       }
-      acc[group].push(slimAlternates(channel));
+      acc[group].push(sanitizeChannel(slimAlternates(channel), req));
       return acc;
     }, {});
 
@@ -197,7 +198,7 @@ router.get('/playlist.m3u', async (req, res) => {
     // Rendered playlist is identical for every caller — cache it (busted with catalog:* on mutations).
     let m3uContent = await channelCache.get('catalog:m3u');
     if (!m3uContent) {
-      m3uContent = await Channel.generateM3UPlaylist();
+      m3uContent = await Channel.generateM3UPlaylist(`${req.protocol}://${req.get('host')}`);
       await channelCache.set('catalog:m3u', m3uContent);
     }
     res.setHeader('Content-Type', 'application/x-mpegurl');
@@ -246,7 +247,7 @@ router.get('/search', requireTvOrSessionAuth, async (req, res) => {
       .select(CHANNEL_LIST_FIELDS)
       .lean();
 
-    res.json({ success: true, count: channels.length, data: channels.map(slimAlternates) });
+    res.json({ success: true, count: channels.length, data: channels.map((channel) => sanitizeChannel(slimAlternates(channel), req)) });
   } catch (error) {
     console.error('Error searching channels:', error);
     res.status(500).json({ success: false, error: 'Failed to search channels' });
@@ -363,7 +364,7 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
     if (!channel) {
       return res.status(404).json({ success: false, error: 'Channel not found' });
     }
-    res.json({ success: true, data: slimAlternates(channel) });
+    res.json({ success: true, data: sanitizeChannel(slimAlternates(channel), req) });
   } catch (error) {
     console.error('Error fetching channel:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch channel' });
@@ -543,7 +544,7 @@ router.get('/:id/with-fallbacks', requireAuth, async (req, res) => {
       });
 
     channel.alternateStreams = viableAlternates;
-    res.json({ success: true, data: channel });
+    res.json({ success: true, data: sanitizeChannel(channel, req) });
   } catch (error) {
     console.error('Error fetching channel with fallbacks:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch channel' });

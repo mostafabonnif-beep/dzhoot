@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
-const AppSetting = require('../models/AppSetting');
-const Channel = require('../models/Channel');
-const Movie = require('../models/Movie');
-const Episode = require('../models/Episode');
 const { resolveUser } = require('../middleware/resolveUser');
+const {
+  buildPlaybackUrl,
+  isManagedContent,
+  resolvePlaybackContent,
+} = require('../utils/playback-security');
 const {
   isSubscriptionRequired,
   getActiveSubscription,
@@ -48,17 +49,8 @@ router.post('/authorize', async (req, res) => {
     }
 
     let content = null;
-    let url = null;
-
-    if (contentType === 'LIVE') {
-      content = await Channel.findOne({ _id: id, isActive: { $ne: false } }).lean();
-      if (content) url = content.channelUrl;
-    } else if (contentType === 'MOVIE') {
-      content = await Movie.findOne({ _id: id, isActive: true }).lean();
-      if (content) url = content.streamUrl;
-    } else if (contentType === 'EPISODE') {
-      content = await Episode.findById(id).lean();
-      if (content) url = content.streamUrl;
+    if (contentType === 'LIVE' || contentType === 'MOVIE' || contentType === 'EPISODE') {
+      content = await resolvePlaybackContent(contentType, contentId);
     } else {
       return res.status(400).json({ success: false, error: 'Unsupported contentType' });
     }
@@ -67,12 +59,18 @@ router.post('/authorize', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
     }
 
+    const playbackUrl = isManagedContent(content, contentType)
+      ? buildPlaybackUrl(req, contentType, id)
+      : contentType === 'LIVE'
+        ? content.channelUrl
+        : content.streamUrl;
+
     return res.json({
       success: true,
       data: {
         contentType,
         contentId: String(id),
-        url,
+        playbackUrl,
         authorized: true,
         subscriptionRequired,
         subscription: subscription

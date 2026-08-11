@@ -216,7 +216,7 @@ userSchema.methods.generateUserPlaylist = async function (
   m3uContent += `#PLAYLIST:${this.username}'s Channel List\n\n`;
 
   channels.forEach((channel: any) => {
-    m3uContent += channel.toM3U() + '\n\n';
+    m3uContent += channel.toM3U(baseUrl, this.channelListCode) + '\n\n';
   });
 
   return m3uContent;
