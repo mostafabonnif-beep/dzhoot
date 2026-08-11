@@ -1,6 +1,10 @@
 import axios from 'axios';
 import { useAuthStore } from '@/store/auth-store';
 
+function redirectToLogin(url: string): void {
+  window.location.replace(url);
+}
+
 const api = axios.create({
   baseURL: '/api/v1',
   headers: {
@@ -49,11 +53,13 @@ api.interceptors.response.use(
         const isInactive = data?.error === 'User account is inactive';
         if (isInactive) {
           const email = data?.adminEmail;
-          window.location.href = email
-            ? `/login?message=account_disabled&admin_email=${encodeURIComponent(email)}`
-            : '/login?message=account_disabled';
+          redirectToLogin(
+            email
+              ? `/login?message=account_disabled&admin_email=${encodeURIComponent(email)}`
+              : '/login?message=account_disabled',
+          );
         } else {
-          window.location.href = '/login';
+          redirectToLogin('/login');
         }
         // No timeout reset — module reloads on navigation, resetting isRedirecting naturally
       }

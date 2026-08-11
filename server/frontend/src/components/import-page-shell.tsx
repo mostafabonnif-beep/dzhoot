@@ -220,7 +220,6 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
     fetchInitial();
     if (isAdmin) fetchLivenessStats(controller.signal);
     return () => controller.abort();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
   async function fetchLivenessStats(signal?: AbortSignal) {
