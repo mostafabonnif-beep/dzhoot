@@ -6,6 +6,7 @@ const Series = require('../models/Series');
 const Season = require('../models/Season');
 const Episode = require('../models/Episode');
 const { optionalAuth } = require('../middleware/resolveUser');
+const { sanitizeManagedContent } = require('../utils/playback-security');
 
 // Browseable catalog (movies / series / seasons / episodes / unified search).
 // Auth is optional — anonymous browsing is allowed; subscription gating is
@@ -63,7 +64,13 @@ router.get('/movies', async (req, res) => {
       Movie.countDocuments(filter),
       Movie.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     ]);
-    return res.json({ success: true, data, totalCount, page, limit });
+    return res.json({
+      success: true,
+      data: data.map((movie) => sanitizeManagedContent(movie, 'MOVIE', req)),
+      totalCount,
+      page,
+      limit,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
@@ -76,7 +83,7 @@ router.get('/movies/:id', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid movie id' });
     const movie = await Movie.findOne({ _id: id, isActive: true }).lean();
     if (!movie) return res.status(404).json({ success: false, error: 'Movie not found' });
-    return res.json({ success: true, data: movie });
+    return res.json({ success: true, data: sanitizeManagedContent(movie, 'MOVIE', req) });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
@@ -111,7 +118,13 @@ router.get('/series', async (req, res) => {
       Series.countDocuments(filter),
       Series.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     ]);
-    return res.json({ success: true, data, totalCount, page, limit });
+    return res.json({
+      success: true,
+      data: data.map((series) => sanitizeManagedContent(series, 'SERIES', req)),
+      totalCount,
+      page,
+      limit,
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
@@ -124,7 +137,7 @@ router.get('/series/:id', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid series id' });
     const series = await Series.findOne({ _id: id, isActive: true }).lean();
     if (!series) return res.status(404).json({ success: false, error: 'Series not found' });
-    return res.json({ success: true, data: series });
+    return res.json({ success: true, data: sanitizeManagedContent(series, 'SERIES', req) });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
@@ -150,7 +163,10 @@ router.get('/seasons/:id/episodes', async (req, res) => {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid season id' });
     const episodes = await Episode.find({ seasonId: id }).sort({ episodeNumber: 1 }).lean();
-    return res.json({ success: true, data: episodes });
+    return res.json({
+      success: true,
+      data: episodes.map((episode) => sanitizeManagedContent(episode, 'EPISODE', req)),
+    });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }

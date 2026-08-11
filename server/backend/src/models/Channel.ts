@@ -1,5 +1,6 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import { IAlternateStream, IChannelDocument, IChannelModel } from '@firevision/shared';
+const { buildPlaybackUrlForBase, isXtreamChannel } = require('../utils/playback-security');
 
 const channelSchema = new Schema<IChannelDocument>(
   {
@@ -172,18 +173,23 @@ function buildM3ULine(ch: {
 }
 
 // Method to convert to M3U format entry
-channelSchema.methods.toM3U = function (this: IChannelDocument): string {
-  return buildM3ULine(this);
+channelSchema.methods.toM3U = function (this: IChannelDocument, baseUrl?: string, tvCode?: string): string {
+  const channel = this.toObject();
+  if (isXtreamChannel(channel)) {
+    channel.channelUrl = buildPlaybackUrlForBase(baseUrl, 'LIVE', channel._id, tvCode);
+    channel.alternateStreams = [];
+  }
+  return buildM3ULine(channel);
 };
 
 // Static method to generate full M3U playlist.
 // Streams via a lean cursor + field projection so we never hydrate tens of thousands
 // of full Mongoose documents into memory at once.
-channelSchema.statics.generateM3UPlaylist = async function (): Promise<string> {
+channelSchema.statics.generateM3UPlaylist = async function (baseUrl?: string, tvCode?: string): Promise<string> {
   const cursor = this.find({ ownerId: null })
     .select(
-      'channelId channelName channelUrl channelImg tvgLogo tvgName channelGroup ' +
-        'metadata.isWorking flaggedBad.isFlagged ' +
+      'channelId channelName channelUrl channelImg tvgLogo tvgName channelGroup _id ' +
+        'metadata.source metadata.xtreamSourceId metadata.isWorking flaggedBad.isFlagged ' +
         'alternateStreams.streamUrl alternateStreams.liveness.status alternateStreams.flaggedBad.isFlagged',
     )
     .sort({ channelGroup: 1, order: 1 })
@@ -202,11 +208,17 @@ channelSchema.statics.generateM3UPlaylist = async function (): Promise<string> {
           alt.liveness?.status === 'alive' && alt.flaggedBad?.isFlagged !== true,
       );
       if (viableAlt) {
-        m3uContent += buildM3ULine({ ...channel, channelUrl: viableAlt.streamUrl }) + '\n\n';
+        const playbackChannel = isXtreamChannel(channel)
+          ? { ...channel, channelUrl: buildPlaybackUrlForBase(baseUrl, 'LIVE', channel._id, tvCode), alternateStreams: [] }
+          : { ...channel, channelUrl: viableAlt.streamUrl };
+        m3uContent += buildM3ULine(playbackChannel) + '\n\n';
         continue;
       }
     }
-    m3uContent += buildM3ULine(channel) + '\n\n';
+    const playbackChannel = isXtreamChannel(channel)
+      ? { ...channel, channelUrl: buildPlaybackUrlForBase(baseUrl, 'LIVE', channel._id, tvCode), alternateStreams: [] }
+      : channel;
+    m3uContent += buildM3ULine(playbackChannel) + '\n\n';
   }
 
   return m3uContent;

@@ -38,7 +38,7 @@ export interface IUser {
 export interface IUserDocument extends IUser, Document {
   _id: Types.ObjectId;
   comparePassword(candidatePassword: string): Promise<boolean>;
-  generateUserPlaylist(): Promise<string>;
+  generateUserPlaylist(baseUrl?: string): Promise<string>;
 }
 
 export interface IUserModel {

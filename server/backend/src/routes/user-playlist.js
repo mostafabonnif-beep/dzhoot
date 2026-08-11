@@ -224,7 +224,7 @@ router.get('/me/playlist.m3u', requireAuth, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).send('#EXTM3U\n#ERROR:User not found');
 
-    const m3u = await user.generateUserPlaylist();
+    const m3u = await user.generateUserPlaylist(`${req.protocol}://${req.get('host')}`);
     res.setHeader('Content-Type', 'audio/x-mpegurl');
     const safeUsername = user.username.replace(/[^a-zA-Z0-9_-]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${safeUsername}-channels.m3u"`);

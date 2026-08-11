@@ -299,6 +299,19 @@ export async function getActiveSubscription(userId: string) {
     .lean()
     .exec();
 }
+/** Active subscription for a user (not expired), or null. */
+export async function authorizePlayback(user: { id: string | mongoose.Types.ObjectId; role?: string }) {
+  const subscriptionRequired = await isSubscriptionRequired();
+  if (!subscriptionRequired || user.role === 'Admin') {
+    return { allowed: true, subscriptionRequired, subscription: null };
+  }
+
+  const subscription = await getActiveSubscription(String(user.id));
+  if (!subscription) {
+    return { allowed: false, subscriptionRequired, subscription: null };
+  }
+  return { allowed: true, subscriptionRequired, subscription };
+}
 
 async function recordRedemption(
   code: any,
@@ -333,4 +346,5 @@ module.exports = {
   expireStaleCodes,
   isSubscriptionRequired,
   getActiveSubscription,
+  authorizePlayback,
 };

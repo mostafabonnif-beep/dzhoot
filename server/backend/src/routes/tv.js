@@ -7,11 +7,21 @@ const PairingRequest = require('../models/PairingRequest');
 const { epgService } = require('../services/epg-service');
 const { audit } = require('../services/audit-log');
 const { epgCache } = require('../services/cache');
+const { isSubscriptionRequired, getActiveSubscription } = require('../services/subscription-service');
+const { sanitizeChannel, buildPlaybackUrlForBase, resolveManagedPlayback, canonicalResourcePath } = require('../utils/playback-security');
+const { proxyResolvedStream } = require('../services/secure-playback-proxy');
 
 // Same cap as the /channels sync — the EPG only needs to cover what the TV can list.
 const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 2000;
 
-// NO authentication required for TV endpoints
+async function enforcePlaybackSubscription(user, res) {
+  const required = await isSubscriptionRequired();
+  if (!required || user.role === 'Admin') return true;
+  const subscription = await getActiveSubscription(String(user._id));
+  if (subscription) return true;
+  res.status(403).json({ success: false, error: 'Your subscription has expired. Activate a new code to continue watching.', code: 'SUBSCRIPTION_EXPIRED' });
+  return false;
+}
 
 // Load the channels relevant to a user's EPG, projected to only the fields the guide
 // needs, and pre-intersect candidate EPG ids against the ids that actually have guide
@@ -142,7 +152,7 @@ router.get('/playlist/:code/json', async (req, res) => {
         channelListCode: user.channelListCode,
       },
       count: channels.length,
-      channels: channels,
+      channels: channels.map((channel) => sanitizeChannel(channel, req, req.params.code)),
     });
   } catch (error) {
     console.error('Error fetching playlist JSON:', error);
@@ -160,7 +170,15 @@ router.get('/proxy-url/:code', async (req, res) => {
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
 
-    const { url } = req.query;
+    const { url, contentType, contentId } = req.query;
+    if (contentType && contentId) {
+      if (!['LIVE', 'MOVIE', 'EPISODE'].includes(String(contentType))) return res.status(400).json({ success: false, error: 'Unsupported contentType' });
+      if (!await enforcePlaybackSubscription(user, res)) return;
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+      const proxyUrl = buildPlaybackUrlForBase(baseUrl, contentType, contentId, req.params.code);
+      return res.json({ success: true, data: { proxyUrl } });
+    }
+
     if (!url) {
       return res.status(400).json({ success: false, error: 'url parameter is required' });
     }
@@ -174,7 +192,7 @@ router.get('/proxy-url/:code', async (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const proxyUrl = `${baseUrl}/api/v1/tv/stream/${req.params.code}?url=${encodeURIComponent(url)}`;
 
-    res.json({ success: true, data: { proxyUrl, originalUrl: url } });
+    res.json({ success: true, data: { proxyUrl } });
   } catch (error) {
     console.error('Error resolving proxy URL:', error);
     res.status(500).json({ success: false, error: 'Failed to resolve proxy URL' });
@@ -188,7 +206,18 @@ router.get('/stream/:code', async (req, res) => {
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
 
-    const { url } = req.query;
+    const { url, contentType, contentId, resource } = req.query;
+    if (contentType && contentId) {
+      if (!['LIVE', 'MOVIE', 'EPISODE'].includes(String(contentType))) return res.status(400).send('Unsupported contentType');
+      if (!await enforcePlaybackSubscription(user, res)) return;
+      const playback = await resolveManagedPlayback(contentType, contentId, resource);
+      if (!playback) return res.status(404).send('Managed content not found');
+      return proxyResolvedStream(req, res, playback.url, `/api/v1/tv/stream/${encodeURIComponent(req.params.code)}`, (absoluteUrl) => {
+        const resourcePath = canonicalResourcePath(absoluteUrl, playback.canonicalUrl, playback.content, contentType);
+        return `/api/v1/tv/stream/${encodeURIComponent(req.params.code)}?contentType=${encodeURIComponent(contentType)}&contentId=${encodeURIComponent(contentId)}&resource=${encodeURIComponent(resourcePath)}`;
+      });
+    }
+
     if (!url) {
       return res.status(400).send('URL parameter is required');
     }
@@ -199,129 +228,7 @@ router.get('/stream/:code', async (req, res) => {
       return res.status(400).send('Invalid URL format');
     }
 
-    const http = require('http');
-    const https = require('https');
-    const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
-    const ssrfCheck = await validateUrlForSSRF(url);
-    if (!ssrfCheck.safe) {
-      return res.status(403).send(ssrfCheck.reason);
-    }
-
-    const pinnedLookup = createPinnedLookup(ssrfCheck.resolvedAddresses);
-    const httpAgent = new http.Agent({ lookup: pinnedLookup });
-    const httpsAgent = new https.Agent({ lookup: pinnedLookup });
-
-    const axios = require('axios');
-    const response = await axios.get(url, {
-      responseType: 'stream',
-      timeout: 30000,
-      httpAgent,
-      httpsAgent,
-      headers: {
-        'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18',
-        Accept: '*/*',
-        'Accept-Encoding': 'gzip, deflate',
-        Connection: 'keep-alive',
-      },
-      maxRedirects: 5,
-      beforeRedirect: (options) => {
-        const hostname = (options.hostname || '').replace(/^\[|\]$/g, '');
-        if (
-          isPrivateIP(hostname) ||
-          ['localhost', 'metadata.google.internal'].includes(hostname.toLowerCase())
-        ) {
-          throw new Error('Redirect to private/internal address blocked');
-        }
-      },
-    });
-
-    const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || url;
-    const contentType = (response.headers['content-type'] || '').toLowerCase();
-    const isManifest =
-      url.includes('.m3u8') ||
-      finalUrl.includes('.m3u8') ||
-      contentType.includes('mpegurl') ||
-      contentType.includes('apple.mpegurl');
-
-    res.set({
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Range',
-      'Content-Type': isManifest
-        ? 'application/vnd.apple.mpegurl'
-        : response.headers['content-type'] || 'application/octet-stream',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-    });
-
-    if (isManifest) {
-      const MAX_MANIFEST_SIZE = 10 * 1024 * 1024;
-      let data = '';
-      let dataSize = 0;
-
-      response.data.on('data', (chunk) => {
-        dataSize += chunk.length;
-        if (dataSize > MAX_MANIFEST_SIZE) {
-          response.data.destroy();
-          if (!res.headersSent) res.status(413).send('Manifest too large');
-          return;
-        }
-        data += chunk.toString();
-      });
-
-      response.data.on('end', () => {
-        if (res.headersSent) return;
-        const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf('/') + 1);
-        const code = req.params.code;
-
-        function resolveAndProxy(rawUrl) {
-          const trimmed = rawUrl.trim();
-          if (!trimmed) return trimmed;
-          if (trimmed.includes('/api/v1/tv/stream/')) return trimmed;
-          let absolute;
-          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-            absolute = trimmed;
-          } else if (trimmed.startsWith('/')) {
-            try {
-              const parsed = new URL(finalUrl);
-              absolute = `${parsed.protocol}//${parsed.host}${trimmed}`;
-            } catch {
-              absolute = baseUrl + trimmed;
-            }
-          } else {
-            absolute = baseUrl + trimmed;
-          }
-          return `/api/v1/tv/stream/${code}?url=${encodeURIComponent(absolute)}`;
-        }
-
-        const lines = data.split('\n');
-        const rewrittenLines = lines.map((line) => {
-          const trimmedLine = line.trim();
-          if (trimmedLine === '') return line;
-          if (trimmedLine.startsWith('#')) {
-            return line.replace(/URI="([^"]+)"/gi, (match, uri) => {
-              return `URI="${resolveAndProxy(uri)}"`;
-            });
-          }
-          return resolveAndProxy(trimmedLine);
-        });
-
-        res.send(rewrittenLines.join('\n'));
-      });
-
-      response.data.on('error', (error) => {
-        console.error('TV stream error:', error);
-        if (!res.headersSent) res.status(500).send('Stream error');
-      });
-    } else {
-      response.data.pipe(res);
-      response.data.on('error', (error) => {
-        console.error('TV stream error:', error);
-        if (!res.headersSent) res.status(500).send('Stream error');
-      });
-      req.on('close', () => {
-        response.data.destroy();
-      });
-    }
+    return proxyResolvedStream(req, res, url, `/api/v1/tv/stream/${encodeURIComponent(req.params.code)}`);
   } catch (error) {
     console.error('TV proxy error:', error.message);
     if (res.headersSent) return;

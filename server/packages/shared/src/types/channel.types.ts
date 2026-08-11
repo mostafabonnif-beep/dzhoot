@@ -78,9 +78,9 @@ export interface IChannel {
 
 export interface IChannelDocument extends IChannel, Document {
   _id: Types.ObjectId;
-  toM3U(): string;
+  toM3U(baseUrl?: string, tvCode?: string): string;
 }
 
 export interface IChannelModel {
-  generateM3UPlaylist(): Promise<string>;
+  generateM3UPlaylist(baseUrl?: string, tvCode?: string): Promise<string>;
 }

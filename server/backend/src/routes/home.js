@@ -6,6 +6,7 @@ const Channel = require('../models/Channel');
 const Movie = require('../models/Movie');
 const Series = require('../models/Series');
 const { optionalAuth } = require('../middleware/resolveUser');
+const { sanitizeManagedContent } = require('../utils/playback-security');
 
 // Dynamic home: /api/v1/home
 // Sections are configured by the admin through AppSetting 'home':
@@ -41,41 +42,11 @@ router.get('/', async (req, res) => {
     return res.json({
       success: true,
       data: {
-        featuredChannels: featuredChannels.map((c) => ({
-          _id: c._id,
-          type: 'LIVE',
-          name: c.channelName,
-          logo: c.channelImg,
-          group: c.channelGroup,
-        })),
-        featuredMovies: featuredMovies.map((m) => ({
-          _id: m._id,
-          type: 'MOVIE',
-          name: m.title,
-          poster: m.poster,
-          category: m.category,
-        })),
-        featuredSeries: featuredSeries.map((s) => ({
-          _id: s._id,
-          type: 'SERIES',
-          name: s.title,
-          poster: s.poster,
-          category: s.category,
-        })),
-        latestMovies: latestMovies.map((m) => ({
-          _id: m._id,
-          type: 'MOVIE',
-          name: m.title,
-          poster: m.poster,
-          category: m.category,
-        })),
-        latestSeries: latestSeries.map((s) => ({
-          _id: s._id,
-          type: 'SERIES',
-          name: s.title,
-          poster: s.poster,
-          category: s.category,
-        })),
+        featuredChannels: featuredChannels.map((c) => sanitizeManagedContent(c, 'LIVE', req)),
+        featuredMovies: featuredMovies.map((m) => sanitizeManagedContent(m, 'MOVIE', req)),
+        featuredSeries: featuredSeries.map((s) => sanitizeManagedContent(s, 'SERIES', req)),
+        latestMovies: latestMovies.map((m) => sanitizeManagedContent(m, 'MOVIE', req)),
+        latestSeries: latestSeries.map((s) => sanitizeManagedContent(s, 'SERIES', req)),
       },
     });
   } catch (err) {
