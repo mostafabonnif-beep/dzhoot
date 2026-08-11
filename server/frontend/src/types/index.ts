@@ -48,6 +48,10 @@ export interface AlternateStream {
   demotedAt?: string | null;
 }
 
+export type ManagedPlaybackRef = { kind: 'managed'; contentType: 'LIVE' | 'MOVIE' | 'EPISODE'; contentId: string };
+export type RawPlaybackRef = { kind: 'raw'; url: string };
+export type PlaybackRef = ManagedPlaybackRef | RawPlaybackRef;
+
 export interface Channel {
   _id: string;
   channelId?: string;

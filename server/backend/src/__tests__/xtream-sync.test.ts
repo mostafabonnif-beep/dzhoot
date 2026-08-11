@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+
+process.env.XTREAM_SECRET_KEY ||= 'test-xtream-secret-key';
 import axios from 'axios';
 import XtreamSource from '../models/XtreamSource';
 import Channel from '../models/Channel';
@@ -109,7 +111,7 @@ describe('xtream-service', () => {
     const channels = await Channel.find({ ownerId: null, 'metadata.xtreamSourceId': String(source._id) }).lean();
     expect(channels).toHaveLength(2);
     const entv = channels.find((c) => c.channelName === 'ENTV')!;
-    expect(entv.channelUrl).toBe(`${SERVER}/live/${USER}/${PASS}/101.m3u8`);
+    expect(entv.channelUrl).toBe('');
     expect(entv.channelGroup).toBe('Algeria');
     expect(entv.tvgId).toBe('ENTV.epg');
     expect((entv.metadata as any).source).toBe('xtream');
@@ -117,7 +119,7 @@ describe('xtream-service', () => {
     // Movies
     const movies = await Movie.find({ sourceId: source._id }).lean();
     expect(movies).toHaveLength(1);
-    expect(movies[0].streamUrl).toBe(`${SERVER}/movie/${USER}/${PASS}/201.mp4`);
+    expect(movies[0].streamUrl).toBe('');
     expect(movies[0].title).toBe('Inception');
     expect(movies[0].rating).toBe(8.8);
 
@@ -128,7 +130,7 @@ describe('xtream-service', () => {
     expect(seasons).toHaveLength(1);
     const episodes = await Episode.find({ seriesId: seriesList[0]._id }).sort({ episodeNumber: 1 }).lean();
     expect(episodes).toHaveLength(2);
-    expect(episodes[0].streamUrl).toBe(`${SERVER}/series/${USER}/${PASS}/30101.mp4`);
+    expect(episodes[0].streamUrl).toBe('');
 
     const refreshed = await XtreamSource.findById(source._id).lean();
     expect(refreshed!.syncStatus).toBe('idle');

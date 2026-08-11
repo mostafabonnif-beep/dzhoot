@@ -10,6 +10,7 @@ async function validateRedirectTarget(options) {
   const target = `${protocol}//${hostname}${port}${options.path || '/'}`;
   const check = await validateUrlForSSRF(target);
   if (!check.safe) throw new Error(`Redirect blocked: ${check.reason}`);
+  options.lookup = createPinnedLookup(check.resolvedAddresses);
   return check;
 }
 
@@ -17,9 +18,8 @@ function rewriteManifest(data, finalUrl, proxyPath, resourceBuilder) {
   const rewrite = (raw) => {
     const trimmed = raw.trim();
     if (!trimmed) return trimmed;
-    if (resourceBuilder) return resourceBuilder(new URL(trimmed, finalUrl).toString(), finalUrl);
-    if (trimmed.startsWith(proxyPath) || trimmed.includes(proxyPath)) return trimmed;
-    return `${proxyPath}?url=${encodeURIComponent(new URL(trimmed, finalUrl).toString())}`;
+    if (!resourceBuilder) throw new Error('Managed playback requires a signed resource builder');
+    return resourceBuilder(new URL(trimmed, finalUrl).toString(), finalUrl);
   };
   return data.split('\n').map((line) => {
     const trimmed = line.trim();

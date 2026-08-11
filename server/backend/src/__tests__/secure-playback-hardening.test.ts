@@ -1,4 +1,7 @@
 import mongoose from 'mongoose';
+
+process.env.PLAYBACK_RESOURCE_SECRET ||= 'test-playback-resource-secret';
+process.env.XTREAM_SECRET_KEY ||= 'test-xtream-secret-key';
 import { rewriteManifest } from '../services/secure-playback-proxy';
 
 const {

@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Channel = require('../models/Channel');
 const { requireAuth } = require('./auth');
+const { sanitizeChannel } = require('../utils/playback-security');
 const { audit } = require('../services/audit-log');
 const {
   resolveChannelGroups,
@@ -32,7 +33,7 @@ router.get('/me/channels', requireAuth, async (req, res) => {
       '📋 Channel IDs in user.channels:',
       user.channels?.map((ch) => ch._id || ch).slice(0, 3),
     );
-    res.json({ success: true, channels: user.channels || [] });
+    res.json({ success: true, channels: (user.channels || []).map((channel) => sanitizeChannel(channel, req)) });
   } catch (error) {
     console.error('❌ Get my channels error:', error);
     res.status(500).json({ success: false, error: 'Failed to get channels' });
@@ -208,7 +209,7 @@ router.get('/me/channels-with-fallbacks', requireAuth, async (req, res) => {
       channelObj.alternateStreams = (channelObj.alternateStreams || []).filter(
         (alt) => alt.liveness?.status !== 'dead' && alt.flaggedBad?.isFlagged !== true,
       );
-      return channelObj;
+      return sanitizeChannel(channelObj, req);
     });
 
     res.json({ success: true, channels });

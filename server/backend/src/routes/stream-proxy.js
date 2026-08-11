@@ -1,44 +1,29 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('./auth');
-const { isManagedPlaybackRequest, resolveManagedPlayback, canonicalResourcePath } = require('../utils/playback-security');
+const { resolveManagedPlayback, canonicalResourcePath } = require('../utils/playback-security');
 const { proxyResolvedStream } = require('../services/secure-playback-proxy');
 
 router.use(requireAuth);
 
 router.get('/', async (req, res) => {
   try {
-    const managedRequest = isManagedPlaybackRequest(req);
-    if (managedRequest && req.query.url) {
-      return res.status(400).send('Managed playback cannot include a raw URL');
+    const { contentType, contentId, resource, url } = req.query;
+    if (url || !contentType || !contentId || !['LIVE', 'MOVIE', 'EPISODE'].includes(String(contentType))) {
+      return res.status(400).send('Managed playback requires contentType and contentId');
     }
 
-    let url = req.query.url;
-    let playback = null;
-    if (managedRequest) {
-      playback = await resolveManagedPlayback(req.query.contentType, req.query.contentId, req.query.resource);
-      if (!playback) return res.status(404).send('Managed content not found');
-      url = playback.url;
-    }
+    const playback = await resolveManagedPlayback(String(contentType), String(contentId), resource);
+    if (!playback) return res.status(404).send('Managed content not found');
 
-    if (!url) return res.status(400).send('URL parameter is required');
-    try {
-      new URL(url);
-    } catch {
-      return res.status(400).send('Invalid URL format');
-    }
-
-    if (!managedRequest) return proxyResolvedStream(req, res, url, '/api/v1/stream-proxy');
-
-    const { contentType, contentId } = req.query;
     return proxyResolvedStream(
       req,
       res,
-      url,
+      playback.url,
       '/api/v1/stream-proxy',
       (absoluteUrl) => {
-        const resourcePath = canonicalResourcePath(absoluteUrl, playback.canonicalUrl, playback.content, contentType);
-        return `/api/v1/stream-proxy?contentType=${encodeURIComponent(contentType)}&contentId=${encodeURIComponent(contentId)}&resource=${encodeURIComponent(resourcePath)}`;
+        const resourcePath = canonicalResourcePath(absoluteUrl, playback.canonicalUrl, playback.content, String(contentType));
+        return `/api/v1/stream-proxy?contentType=${encodeURIComponent(String(contentType))}&contentId=${encodeURIComponent(String(contentId))}&resource=${encodeURIComponent(resourcePath)}`;
       },
     );
   } catch (error) {
@@ -48,11 +33,6 @@ router.get('/', async (req, res) => {
 });
 
 router.options('/', (req, res) => {
-  res.set({
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Range',
-  });
   res.sendStatus(204);
 });
 

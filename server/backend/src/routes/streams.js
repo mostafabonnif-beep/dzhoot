@@ -6,6 +6,7 @@ const {
   buildPlaybackUrl,
   isManagedContent,
   resolvePlaybackContent,
+  resolveManagedPlayback,
 } = require('../utils/playback-security');
 const {
   isSubscriptionRequired,
@@ -59,11 +60,15 @@ router.post('/authorize', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
     }
 
-    const playbackUrl = isManagedContent(content, contentType)
-      ? buildPlaybackUrl(req, contentType, id)
-      : contentType === 'LIVE'
-        ? content.channelUrl
-        : content.streamUrl;
+    if (!isManagedContent(content, contentType)) {
+      return res.status(409).json({ success: false, error: 'Content is not managed playback', code: 'UNMANAGED_PLAYBACK' });
+    }
+
+    const playback = await resolveManagedPlayback(contentType, contentId);
+    if (!playback || !playback.url) {
+      return res.status(404).json({ success: false, error: 'Managed playback is unavailable', code: 'PLAYBACK_UNAVAILABLE' });
+    }
+    const playbackUrl = buildPlaybackUrl(req, contentType, id);
 
     return res.json({
       success: true,
