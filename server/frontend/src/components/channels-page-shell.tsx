@@ -42,6 +42,7 @@ interface Channel {
   channelName?: string;
   name?: string;
   channelUrl?: string;
+  playbackUrl?: string | null;
   url?: string;
   channelImg?: string;
   tvgLogo?: string;
@@ -1480,13 +1481,10 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             playStream(
               {
                 name: getName(c),
-                url: getUrl(c),
+                playbackUrl: c.playbackUrl,
+                managed: true,
                 channelId: c._id,
-                alternateUrls: c.alternateStreams
-                  ?.filter((a) => !a.flaggedBad?.isFlagged)
-                  .map((a) => a.streamUrl),
               },
-              { mode: 'direct-fallback' },
             ),
           onEdit: isAdmin ? () => openEdit(c) : undefined,
           onDelete: () => handleDelete(c._id),
@@ -1760,7 +1758,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 channelName: getName(detailChannel),
                 channelId: detailChannel.channelId,
                 tvgLogo: getLogo(detailChannel),
-                channelUrl: getUrl(detailChannel),
+                playbackUrl: detailChannel.playbackUrl,
                 summary: detailChannel.channelGroup || 'Uncategorized',
                 flaggedBad: detailChannel.flaggedBad,
                 alternateStreams: detailChannel.alternateStreams,
@@ -1775,14 +1773,11 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 playStream(
                   {
                     name: getName(detailChannel),
-                    url: getUrl(detailChannel),
+                    playbackUrl: detailChannel.playbackUrl,
+                    managed: true,
                     channelId: detailChannel._id,
-                    alternateUrls: detailChannel.alternateStreams
-                      ?.filter((a) => !a.flaggedBad?.isFlagged)
-                      .map((a) => a.streamUrl),
                   },
-                  { mode: 'direct-fallback' },
-                );
+                    );
                 setDetailChannel(null);
               }
             : undefined

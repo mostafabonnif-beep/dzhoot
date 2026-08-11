@@ -20,6 +20,7 @@ interface ChannelDetailModalProps {
     channelId?: string;
     tvgLogo?: string;
     channelUrl?: string;
+    playbackUrl?: string | null;
     summary?: string;
     flaggedBad?: FlaggedBad;
     alternateStreams?: AlternateStream[];
@@ -268,7 +269,7 @@ export default function ChannelDetailModal({
         )}
 
         <div className="flex items-center gap-3 pt-2">
-          {onPlay && channel.channelUrl && (
+          {onPlay && (channel.playbackUrl || channel.channelUrl) && (
             <button
               onClick={onPlay}
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"

@@ -14,7 +14,9 @@ const StreamPlayer = lazy(() => import('./stream-player'));
 
 interface StreamChannel {
   name: string;
-  url: string;
+  playbackUrl?: string | null;
+  url?: string;
+  managed?: boolean;
   logo?: string;
   channelId?: string;
   alternateUrls?: string[];
@@ -22,12 +24,11 @@ interface StreamChannel {
 
 interface StreamPlayerState {
   channel: StreamChannel | null;
-  mode: 'proxy' | 'direct-fallback';
 }
 
 interface StreamPlayerContextValue {
   /** Start playing a stream. Persists across page navigations until closed. */
-  playStream: (channel: StreamChannel, options?: { mode?: 'proxy' | 'direct-fallback' }) => void;
+  playStream: (channel: StreamChannel) => void;
   /** Close the stream player. */
   closeStream: () => void;
   /** Whether a stream is currently active. */
@@ -43,23 +44,17 @@ export function useStreamPlayer() {
 }
 
 export function StreamPlayerProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<StreamPlayerState>({
-    channel: null,
-    mode: 'proxy',
-  });
+  const [state, setState] = useState<StreamPlayerState>({ channel: null });
 
   const playStream = useCallback(
-    (channel: StreamChannel, options?: { mode?: 'proxy' | 'direct-fallback' }) => {
-      setState({
-        channel,
-        mode: options?.mode ?? 'proxy',
-      });
+    (channel: StreamChannel) => {
+      setState({ channel });
     },
     [],
   );
 
   const closeStream = useCallback(() => {
-    setState({ channel: null, mode: 'proxy' });
+    setState({ channel: null });
   }, []);
 
   return (
@@ -67,7 +62,7 @@ export function StreamPlayerProvider({ children }: { children: ReactNode }) {
       {children}
       {state.channel && (
         <Suspense fallback={null}>
-          <StreamPlayer channel={state.channel} onClose={closeStream} mode={state.mode} />
+          <StreamPlayer channel={state.channel} onClose={closeStream} />
         </Suspense>
       )}
     </StreamPlayerContext.Provider>
