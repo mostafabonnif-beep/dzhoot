@@ -570,8 +570,7 @@ export function RecommendationsStep({
                   <button
                     onClick={() =>
                       playStream(
-                        { name: ch.channelName, url: ch.channelUrl, logo: ch.tvgLogo },
-                        { mode: 'direct-fallback' },
+                        { name: ch.channelName, url: ch.channelUrl, managed: false, logo: ch.tvgLogo },
                       )
                     }
                     className="p-1.5 text-muted-foreground hover:text-primary transition-colors shrink-0"

@@ -191,9 +191,9 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
         {
           name: ch.channelName || 'Stream Preview',
           url: ch.channelUrl,
+          managed: false,
           logo: ch.tvgLogo ? proxyImageUrl(ch.tvgLogo) : undefined,
         },
-        { mode: 'direct-fallback' },
       );
     },
     [playStream],

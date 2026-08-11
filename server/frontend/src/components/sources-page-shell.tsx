@@ -44,9 +44,9 @@ export default function SourcesPageShell({ mode }: SourcesPageShellProps) {
         {
           name: ch.channelName || 'Stream Preview',
           url: ch.channelUrl,
+          managed: false,
           logo: ch.tvgLogo ? proxyImageUrl(ch.tvgLogo) : undefined,
         },
-        { mode: 'direct-fallback' },
       );
     },
     [playStream],

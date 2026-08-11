@@ -4,10 +4,13 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { X, Minimize2, Maximize2 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
 import api from '@/lib/api';
+import { resolvePlaybackSource } from '@/lib/playback-contract';
 
 interface StreamPlayerChannel {
   name: string;
-  url: string;
+  url?: string;
+  playbackUrl?: string | null;
+  managed?: boolean;
   logo?: string;
   channelId?: string;
   alternateUrls?: string[];
@@ -16,21 +19,19 @@ interface StreamPlayerChannel {
 interface StreamPlayerProps {
   channel: StreamPlayerChannel | null;
   onClose: () => void;
-  /** 'proxy' = only use proxy (default). 'direct-fallback' = try direct first, fallback to proxy. */
-  mode?: 'proxy' | 'direct-fallback';
 }
 
-export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: StreamPlayerProps) {
+export default function StreamPlayer({ channel, onClose }: StreamPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<{ destroy: () => void } | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState('Loading...');
   const [playerError, setPlayerError] = useState('');
-  const [activeSource, setActiveSource] = useState<'direct' | 'proxy'>('direct');
+  const [activeSource, setActiveSource] = useState<'secure' | 'local'>('secure');
   const [mini, setMini] = useState(false);
   const wasActiveRef = useRef(false); // tracks if player was already open (for swap vs fresh open)
   const playReportedRef = useRef<{ channelId: string; at: number } | null>(null);
-  const currentSourceRef = useRef<'direct' | 'proxy'>('proxy');
+  const currentSourceRef = useRef<'secure' | 'local'>('secure');
 
   // Drag position for mini player
   const [position, setPosition] = useState({ right: 16, bottom: 16 });
@@ -67,15 +68,20 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       wasActiveRef.current = false;
       return;
     }
-    const url = channel.url;
-    const directUrl = url;
-    const proxyUrl = `/api/v1/stream-proxy?url=${encodeURIComponent(url)}`;
-    const alternateUrls = channel.alternateUrls || [];
+    let source: { url: string; managed: boolean };
+    try {
+      source = resolvePlaybackSource(channel);
+    } catch (error) {
+      setPlayerError(error instanceof Error ? error.message : 'Secure playback is unavailable');
+      return;
+    }
+    const playbackUrl = source.url;
+    const alternateUrls = source.managed ? [] : channel.alternateUrls || [];
     let alternateIndex = 0;
     const sessionId = typeof window !== 'undefined' ? useAuthStore.getState().sessionId : null;
     let destroyed = false;
     let activeHls: { destroy: () => void } | null = null;
-    let currentSource: 'direct' | 'proxy' = mode === 'proxy' ? 'proxy' : 'direct';
+    let currentSource: 'secure' | 'local' = source.managed ? 'secure' : 'local';
     currentSourceRef.current = currentSource;
     // Native-HLS (Safari) listeners — hoisted so cleanup can remove them.
     let nativeLoadedMeta: (() => void) | null = null;
@@ -118,10 +124,10 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
           const tryHlsSource = (src: string, isProxy: boolean) => {
             if (destroyed) return;
             safeDestroyHls(activeHls);
-            currentSource = isProxy ? 'proxy' : 'direct';
+            currentSource = isProxy ? 'secure' : 'local';
             currentSourceRef.current = currentSource;
             setActiveSource(currentSource);
-            if (isProxy && mode === 'direct-fallback') setStatus('Trying proxy...');
+            if (isProxy) setStatus('Connecting securely...');
             setPlayerError('');
 
             const hls = new Hls({
@@ -136,8 +142,8 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
               levelLoadingMaxRetry: 2,
               fragLoadingTimeOut: 20000,
               fragLoadingMaxRetry: 2,
-              xhrSetup: (xhr: XMLHttpRequest, xhrUrl: string) => {
-                if (xhrUrl.includes('/api/v1/stream-proxy') && sessionId) {
+              xhrSetup: (xhr: XMLHttpRequest) => {
+                if (source.managed && sessionId) {
                   xhr.setRequestHeader('X-Session-Id', sessionId);
                 }
               },
@@ -160,18 +166,14 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
                   if (data.type === 'mediaError') {
                     setStatus('Media error — recovering...');
                     hls.recoverMediaError();
-                  } else if (!isProxy && mode === 'direct-fallback') {
-                    safeDestroyHls(hls);
-                    tryHlsSource(proxyUrl, true);
-                  } else if (data.type === 'networkError' && mode === 'proxy') {
+                  } else if (data.type === 'networkError' && source.managed) {
                     setStatus('Network error — retrying...');
                     hls.startLoad();
                   } else if (alternateIndex < alternateUrls.length) {
                     const altUrl = alternateUrls[alternateIndex++];
-                    const altProxy = `/api/v1/stream-proxy?url=${encodeURIComponent(altUrl)}`;
                     setStatus(`Trying alternate ${alternateIndex}/${alternateUrls.length}...`);
                     safeDestroyHls(hls);
-                    tryHlsSource(altProxy, true);
+                    tryHlsSource(altUrl, false);
                   } else {
                     setPlayerError(`Fatal error: ${data.details}`);
                     safeDestroyHls(hls);
@@ -181,14 +183,13 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             );
           };
 
-          tryHlsSource(mode === 'proxy' ? proxyUrl : directUrl, mode === 'proxy');
+          tryHlsSource(playbackUrl, source.managed);
         } else if (video!.canPlayType('application/vnd.apple.mpegurl')) {
-          const startUrl = mode === 'proxy' ? proxyUrl : directUrl;
-          currentSource = mode === 'proxy' ? 'proxy' : 'direct';
+          const startUrl = playbackUrl;
+          currentSource = source.managed ? 'secure' : 'local';
           currentSourceRef.current = currentSource;
           setActiveSource(currentSource);
           video!.src = startUrl;
-          let nativeFallback = false;
           nativeLoadedMeta = () => {
             if (!destroyed) {
               setStatus('Playing');
@@ -197,21 +198,13 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
           };
           nativeError = () => {
             if (destroyed) return;
-            if (!nativeFallback && mode === 'direct-fallback') {
-              nativeFallback = true;
-              currentSource = 'proxy';
-              currentSourceRef.current = currentSource;
-              setActiveSource(currentSource);
-              setStatus('Trying proxy...');
-              video!.src = proxyUrl;
-              video!.load();
-            } else if (alternateIndex < alternateUrls.length) {
+            if (alternateIndex < alternateUrls.length) {
               const altUrl = alternateUrls[alternateIndex++];
-              currentSource = 'proxy';
+              currentSource = 'local';
               currentSourceRef.current = currentSource;
               setActiveSource(currentSource);
               setStatus(`Trying alternate ${alternateIndex}/${alternateUrls.length}...`);
-              video!.src = `/api/v1/stream-proxy?url=${encodeURIComponent(altUrl)}`;
+              video!.src = altUrl;
               video!.load();
             } else {
               setPlayerError('Playback error');
@@ -243,7 +236,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       api
         .post(
           `/channels/${channel.channelId}/report-play`,
-          { deviceId, proxyPlay: currentSourceRef.current === 'proxy' },
+          { deviceId, proxyPlay: currentSourceRef.current === 'secure' },
           {
             headers: { 'X-Skip-Auth-Redirect': '1' },
             timeout: 10_000,
@@ -284,7 +277,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       video.removeAttribute('src');
       video.load();
     };
-  }, [channel, mode]);
+  }, [channel]);
 
   // Clean up drag listeners on unmount
   useEffect(() => {
@@ -335,7 +328,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       ? 'text-signal-green'
       : 'text-muted-foreground';
 
-  const sourceBadge = activeSource === 'proxy' ? 'proxy' : 'direct';
+  const sourceBadge = activeSource === 'secure' ? 'secure' : 'local';
 
   /*
    * Single return — the video/audio element is always at the same position
@@ -454,9 +447,9 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
               {!mini && (
                 <span
                   className={`truncate ${mini ? 'text-xs' : 'text-xs'} text-muted-foreground`}
-                  title={channel.url}
+                  title={activeSource === 'secure' ? 'Secure playback endpoint' : 'Local playback endpoint'}
                 >
-                  {channel.url}
+                  {activeSource === 'secure' ? 'Secure playback' : 'Local playback'}
                 </span>
               )}
               {!mini && (
