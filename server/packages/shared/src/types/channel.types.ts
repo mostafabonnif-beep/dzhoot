@@ -76,6 +76,19 @@ export interface IChannel {
   updatedAt: Date;
 }
 
+export interface ManagedPlaybackRef {
+  kind: 'managed';
+  contentType: 'LIVE' | 'MOVIE' | 'EPISODE';
+  contentId: string;
+}
+
+export interface RawPlaybackRef {
+  kind: 'raw';
+  url: string;
+}
+
+export type PlaybackRef = ManagedPlaybackRef | RawPlaybackRef;
+
 export interface IChannelDocument extends IChannel, Document {
   _id: Types.ObjectId;
   toM3U(baseUrl?: string, tvCode?: string): string;

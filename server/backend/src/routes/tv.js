@@ -170,7 +170,8 @@ router.get('/proxy-url/:code', async (req, res) => {
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
 
-    const { url, contentType, contentId } = req.query;
+    const { contentType, contentId } = req.query;
+    if (!contentType || !contentId) return res.status(400).json({ success: false, error: 'Managed playback requires contentType and contentId' });
     if (contentType && contentId) {
       if (!['LIVE', 'MOVIE', 'EPISODE'].includes(String(contentType))) return res.status(400).json({ success: false, error: 'Unsupported contentType' });
       if (!await enforcePlaybackSubscription(user, res)) return;
@@ -179,20 +180,7 @@ router.get('/proxy-url/:code', async (req, res) => {
       return res.json({ success: true, data: { proxyUrl } });
     }
 
-    if (!url) {
-      return res.status(400).json({ success: false, error: 'url parameter is required' });
-    }
-
-    try {
-      new URL(url);
-    } catch {
-      return res.status(400).json({ success: false, error: 'Invalid URL format' });
-    }
-
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
-    const proxyUrl = `${baseUrl}/api/v1/tv/stream/${req.params.code}?url=${encodeURIComponent(url)}`;
-
-    res.json({ success: true, data: { proxyUrl } });
+    return res.status(400).json({ success: false, error: 'Managed playback requires contentType and contentId' });
   } catch (error) {
     console.error('Error resolving proxy URL:', error);
     res.status(500).json({ success: false, error: 'Failed to resolve proxy URL' });
@@ -206,7 +194,8 @@ router.get('/stream/:code', async (req, res) => {
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
 
-    const { url, contentType, contentId, resource } = req.query;
+    const { contentType, contentId, resource } = req.query;
+    if (!contentType || !contentId) return res.status(400).send('Managed playback requires contentType and contentId');
     if (contentType && contentId) {
       if (!['LIVE', 'MOVIE', 'EPISODE'].includes(String(contentType))) return res.status(400).send('Unsupported contentType');
       if (!await enforcePlaybackSubscription(user, res)) return;
@@ -218,17 +207,7 @@ router.get('/stream/:code', async (req, res) => {
       });
     }
 
-    if (!url) {
-      return res.status(400).send('URL parameter is required');
-    }
-
-    try {
-      new URL(url);
-    } catch {
-      return res.status(400).send('Invalid URL format');
-    }
-
-    return proxyResolvedStream(req, res, url, `/api/v1/tv/stream/${encodeURIComponent(req.params.code)}`);
+    return res.status(400).send('Managed playback requires contentType and contentId');
   } catch (error) {
     console.error('TV proxy error:', error.message);
     if (res.headersSent) return;

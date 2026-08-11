@@ -7,7 +7,8 @@ import crypto from 'crypto';
  */
 
 function getKey(): Buffer {
-  const secret = process.env.XTREAM_SECRET_KEY || process.env.JWT_ACCESS_SECRET || 'dzhoof-dev-secret';
+  const secret = process.env.XTREAM_SECRET_KEY;
+  if (!secret) throw new Error('XTREAM_SECRET_KEY is not configured');
   return crypto.createHash('sha256').update(secret).digest();
 }
 
@@ -20,7 +21,7 @@ export function encryptSecret(plain: string): string {
 }
 
 export function decryptSecret(stored: string): string {
-  if (!stored.startsWith('enc:')) return stored; // legacy plaintext
+  if (!stored.startsWith('enc:')) throw new Error('Refusing to decrypt legacy plaintext Xtream credential');
   const [, ivB64, tagB64, dataB64] = stored.split(':');
   const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), Buffer.from(ivB64, 'base64'));
   decipher.setAuthTag(Buffer.from(tagB64, 'base64'));

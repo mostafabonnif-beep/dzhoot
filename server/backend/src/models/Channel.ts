@@ -188,7 +188,7 @@ channelSchema.methods.toM3U = function (this: IChannelDocument, baseUrl?: string
 channelSchema.statics.generateM3UPlaylist = async function (baseUrl?: string, tvCode?: string): Promise<string> {
   const cursor = this.find({ ownerId: null })
     .select(
-      'channelId channelName channelUrl channelImg tvgLogo tvgName channelGroup _id ' +
+      'channelId channelName channelUrl channelImg tvgLogo tvgName channelGroup _id ownerId ' +
         'metadata.source metadata.xtreamSourceId metadata.isWorking flaggedBad.isFlagged ' +
         'alternateStreams.streamUrl alternateStreams.liveness.status alternateStreams.flaggedBad.isFlagged',
     )

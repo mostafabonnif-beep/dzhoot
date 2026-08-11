@@ -25,8 +25,8 @@ function isXtreamChannel(channel) {
 function isManagedContent(content, contentType) {
   if (!content) return false;
   if (contentType === 'LIVE') return isXtreamChannel(content);
-  if (contentType === 'MOVIE') return Boolean(content.sourceId);
-  if (contentType === 'EPISODE') return Boolean(content.sourceId || content.seasonId);
+  if (contentType === 'MOVIE') return Boolean(content.sourceId && content.externalId);
+  if (contentType === 'EPISODE') return Boolean(content.externalId && (content.sourceId || content.seasonId || content.seriesId));
   return false;
 }
 
@@ -96,7 +96,9 @@ function parseManagedResource(resource) {
 }
 
 function resourceSignature(canonicalUrl, resource) {
-  return crypto.createHmac('sha256', process.env.PLAYBACK_RESOURCE_SECRET || process.env.JWT_ACCESS_SECRET || 'dzhoof-dev-secret')
+  const secret = process.env.PLAYBACK_RESOURCE_SECRET;
+  if (!secret) throw new Error('PLAYBACK_RESOURCE_SECRET is not configured');
+  return crypto.createHmac('sha256', secret)
     .update(`${new URL(canonicalUrl).origin}${resource}`)
     .digest('hex');
 }
@@ -149,6 +151,7 @@ async function resolveManagedPlayback(contentType, contentId, resource) {
     sourceId = series?.sourceId;
   }
   const streamId = streamIdFor(content, contentType);
+  if ((contentType === 'MOVIE' || contentType === 'EPISODE') && !content.externalId) return null;
   if (!sourceId || streamId === undefined || streamId === null || streamId === '') return null;
   const source = await XtreamSource.findOne({ _id: sourceId, status: 'Active' }).lean();
   if (!source) return null;
@@ -187,10 +190,17 @@ function canonicalResourcePath(rawUrl, canonicalUrl, content, contentType) {
 
 function sanitizeManagedContent(value, contentType, req, tvCode) {
   const output = toPlain(value);
-  if (!output || !isManagedContent(output, contentType)) return output;
+  if (!output) return output;
+  const managed = isManagedContent(output, contentType);
+  const hasManagedMarkers = contentType === 'LIVE'
+    ? isXtreamChannel(output)
+    : Boolean(output.sourceId || output.externalId || output.seasonId || output.seriesId);
+  if (!managed && !hasManagedMarkers) return output;
   delete output.streamUrl;
   delete output.channelUrl;
   delete output.originalUrl;
+  delete output.playbackUrl;
+  if (!managed) return output;
   const id = mongoose.Types.ObjectId.isValid(output._id) ? output._id : null;
   output.playbackUrl = id && req ? buildPlaybackUrl(req, contentType, id, tvCode) : null;
   if (contentType === 'LIVE') output.alternateStreams = [];

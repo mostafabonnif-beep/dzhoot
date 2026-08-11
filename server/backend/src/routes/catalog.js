@@ -6,7 +6,7 @@ const Series = require('../models/Series');
 const Season = require('../models/Season');
 const Episode = require('../models/Episode');
 const { optionalAuth } = require('../middleware/resolveUser');
-const { sanitizeManagedContent } = require('../utils/playback-security');
+const { sanitizeManagedContent, sanitizeChannel } = require('../utils/playback-security');
 
 // Browseable catalog (movies / series / seasons / episodes / unified search).
 // Auth is optional — anonymous browsing is allowed; subscription gating is
@@ -151,7 +151,10 @@ router.get('/series/:id/seasons', async (req, res) => {
     const series = await Series.findOne({ _id: id, isActive: true }).lean();
     if (!series) return res.status(404).json({ success: false, error: 'Series not found' });
     const seasons = await Season.find({ seriesId: id }).sort({ seasonNumber: 1 }).lean();
-    return res.json({ success: true, data: seasons });
+    return res.json({ success: true, data: seasons.map((season) => ({
+      ...season,
+      playbackUrl: null,
+    })) });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
@@ -196,6 +199,7 @@ router.get('/search', async (req, res) => {
       success: true,
       data: {
         channels: channels.map((c) => ({
+          ...sanitizeChannel(c, req),
           _id: c._id,
           type: 'LIVE',
           name: c.channelName,

@@ -81,7 +81,7 @@ export function buildXtreamStreamUrl(
   throw new Error('Unsupported Xtream content type');
 }
 
-async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials) {
+async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string) {
   const channelId = `xt:${String(sourceId)}:${item.stream_id}`;
   return Channel.findOneAndUpdate(
     { ownerId: null, channelId },
@@ -89,7 +89,7 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
       $set: {
         channelId,
         channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
-        channelUrl: liveUrl(creds, item.stream_id),
+        channelUrl: '',
         channelImg: item.stream_icon || '',
         channelGroup: group || 'Uncategorized',
         tvgId: item.epg_channel_id || '',
@@ -105,7 +105,7 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
   ).exec();
 }
 
-async function upsertMovie(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials) {
+async function upsertMovie(sourceId: mongoose.Types.ObjectId, item: any, group: string) {
   const ext = getContainerExt(item);
   return Movie.findOneAndUpdate(
     { sourceId, externalId: String(item.stream_id) },
@@ -119,7 +119,7 @@ async function upsertMovie(sourceId: mongoose.Types.ObjectId, item: any, group: 
         year: item.year ? Number(item.year) : null,
         duration: item.duration ? Number(item.duration) : null,
         rating: item.rating_5based ? Number(item.rating_5based) : null,
-        streamUrl: vodUrl(creds, item.stream_id, ext),
+        streamUrl: '',
         containerExtension: ext,
         isActive: true,
       },
@@ -180,7 +180,7 @@ async function syncSeriesEpisodes(sourceId: mongoose.Types.ObjectId, seriesDoc: 
               description: ep.info?.plot || '',
               thumbnail: ep.info?.movie_image || ep.info?.thumb || '',
               duration: ep.info?.duration ? Number(ep.info.duration) : null,
-              streamUrl: episodeUrl(creds, ep.id, String(ext).replace(/^\./, '')),
+              streamUrl: '',
               containerExtension: String(ext).replace(/^\./, ''),
             },
           },
@@ -246,7 +246,7 @@ export async function syncXtreamSource(sourceId: string) {
     const liveIds = new Set<string>();
     for (const item of Array.isArray(liveStreams) ? liveStreams : []) {
       const group = liveCatMap.get(String(item.category_id)) || 'Uncategorized';
-      await upsertChannel(id, item, group, creds);
+      await upsertChannel(id, item, group);
       liveIds.add(`xt:${String(id)}:${item.stream_id}`);
       channels += 1;
     }
@@ -255,7 +255,7 @@ export async function syncXtreamSource(sourceId: string) {
     const vodIds = new Set<string>();
     for (const item of Array.isArray(vodStreams) ? vodStreams : []) {
       const group = vodCatMap.get(String(item.category_id)) || 'Uncategorized';
-      await upsertMovie(id, item, group, creds);
+      await upsertMovie(id, item, group);
       vodIds.add(String(item.stream_id));
       movies += 1;
     }

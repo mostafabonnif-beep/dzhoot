@@ -24,6 +24,9 @@ Sentry.init({
     'JWT_ACCESS_SECRET',
     'JWT_REFRESH_SECRET',
     'SUPER_ADMIN_PASSWORD',
+    'XTREAM_SECRET_KEY',
+    'PLAYBACK_RESOURCE_SECRET',
+    'ALLOWED_ORIGINS',
   ];
   const missing = required.filter((key) => !process.env[key]);
   if (missing.length > 0) {
@@ -59,6 +62,12 @@ if (process.env.NODE_ENV === 'production') {
     problems.push('JWT_REFRESH_SECRET is a default/placeholder or shorter than 32 characters');
   if (process.env.SUPER_ADMIN_PASSWORD === 'admin123')
     problems.push('SUPER_ADMIN_PASSWORD is set to the default "admin123"');
+  if (isWeakSecret(process.env.XTREAM_SECRET_KEY))
+    problems.push('XTREAM_SECRET_KEY is a default/placeholder or shorter than 32 characters');
+  if (isWeakSecret(process.env.PLAYBACK_RESOURCE_SECRET))
+    problems.push('PLAYBACK_RESOURCE_SECRET is a default/placeholder or shorter than 32 characters');
+  if (process.env.ALLOWED_ORIGINS === '*')
+    problems.push('ALLOWED_ORIGINS must not be wildcard in production');
 
   if (problems.length > 0) {
     console.error(`[SECURITY] Refusing to start in production:\n  - ${problems.join('\n  - ')}`);

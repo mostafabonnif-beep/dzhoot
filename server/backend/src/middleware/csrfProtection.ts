@@ -82,13 +82,10 @@ const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
 
   const allowedOrigins = getAllowedOrigins();
 
-  // If ALLOWED_ORIGINS is '*' or no origins configured in production, skip validation
-  // (the operator has explicitly opted out of origin restrictions)
-  if (process.env.ALLOWED_ORIGINS === '*') {
-    return next();
+  if (process.env.NODE_ENV === 'production' && (process.env.ALLOWED_ORIGINS === '*' || allowedOrigins.size === 0)) {
+    return res.status(503).json({ success: false, error: 'CSRF validation is not configured' });
   }
 
-  // If no allowed origins are configured at all (shouldn't happen but be safe)
   if (allowedOrigins.size === 0) {
     return next();
   }
