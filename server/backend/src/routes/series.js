@@ -21,7 +21,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     addSearchFilter(query, req.query.search);
 
     const [seriesList, total] = await Promise.all([
-      Series.find(query).sort({ title: 1 }).skip(skip).limit(limit).lean(),
+      Series.find(query).select('-streamUrl').sort({ title: 1 }).skip(skip).limit(limit).lean(),
       Series.countDocuments(query),
     ]);
 
@@ -55,7 +55,7 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
   }
 
   try {
-    const series = await Series.findOne({ _id: req.params.id, isActive: true }).lean();
+    const series = await Series.findOne({ _id: req.params.id, isActive: true }).select('-streamUrl').lean();
     if (!series) {
       return res.status(404).json({ success: false, error: 'Series not found' });
     }
@@ -79,6 +79,7 @@ router.get('/seasons/:seasonId/episodes', requireTvOrSessionAuth, async (req, re
       return res.status(404).json({ success: false, error: 'Season not found' });
     }
     const episodes = await Episode.find({ seasonId: season._id, seriesId: season.seriesId })
+      .select('-streamUrl')
       .sort({ episodeNumber: 1 })
       .lean();
     return res.json({ success: true, data: episodes });

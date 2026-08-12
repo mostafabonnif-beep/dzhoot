@@ -67,12 +67,26 @@ router.post('/authorize', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
     }
 
+    const channelListCode = String(req.user?.channelListCode || '').trim();
+    if (!channelListCode) {
+      return res.status(403).json({
+        success: false,
+        error: 'A registered playback device is required',
+        code: 'PLAYBACK_DEVICE_REQUIRED',
+      });
+    }
+
+    // Never return the upstream URL: Xtream credentials are embedded in many
+    // live/VOD URLs. The TV proxy validates the user code and revalidates the
+    // upstream destination with SSRF protection on every request.
+    const playbackUrl = `/api/v1/tv/stream/${encodeURIComponent(channelListCode)}?url=${encodeURIComponent(url)}`;
+
     return res.json({
       success: true,
       data: {
         contentType,
         contentId: String(id),
-        url,
+        url: playbackUrl,
         authorized: true,
         subscriptionRequired,
         subscription: subscription
