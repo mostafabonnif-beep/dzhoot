@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
@@ -80,6 +81,7 @@ private val topNavItems = listOf(
     NavItem(Screen.Favorites, Icons.Default.Favorite, "Favorites"),
     NavItem(Screen.Search, Icons.Default.Search, "Search"),
     NavItem(Screen.Categories, Icons.Default.Category, "Categories"),
+    NavItem(Screen.Catalog, Icons.Default.Movie, "VOD"),
     NavItem(Screen.Guide, Icons.Default.GridView, "Guide"),
 )
 

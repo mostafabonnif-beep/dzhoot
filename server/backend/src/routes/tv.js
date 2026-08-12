@@ -258,7 +258,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     });
     return res.json({
       success: true,
-      data: { playbackUrl: `/api/v1/tv/playback/${token}`, expiresAt, slot },
+      data: { playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`, expiresAt, slot },
     });
   } catch (error) {
     console.error('Error issuing playback token:', error);

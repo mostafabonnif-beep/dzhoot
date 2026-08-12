@@ -23,6 +23,7 @@ import com.dzhoof.iptv.presentation.ui.animation.screenExitTransition
 import com.dzhoof.iptv.presentation.ui.animation.screenPopEnterTransition
 import com.dzhoof.iptv.presentation.ui.animation.screenPopExitTransition
 import com.dzhoof.iptv.presentation.ui.screens.CategoriesScreen
+import com.dzhoof.iptv.presentation.ui.screens.CatalogScreen
 import com.dzhoof.iptv.presentation.ui.screens.ChannelsScreen
 import com.dzhoof.iptv.presentation.ui.screens.FavoritesScreen
 import com.dzhoof.iptv.presentation.ui.screens.HomeScreen
@@ -30,6 +31,7 @@ import com.dzhoof.iptv.presentation.ui.screens.MultiviewScreen
 import com.dzhoof.iptv.presentation.ui.screens.guide.GuideScreen
 import com.dzhoof.iptv.presentation.ui.screens.PairingScreen
 import com.dzhoof.iptv.presentation.ui.screens.PlayerScreen
+import com.dzhoof.iptv.presentation.ui.screens.VodPlayerScreen
 import com.dzhoof.iptv.presentation.ui.screens.SearchScreen
 import com.dzhoof.iptv.presentation.ui.screens.AddSourceScreen
 import com.dzhoof.iptv.presentation.ui.screens.SettingsScreen
@@ -146,6 +148,18 @@ fun FireVisionNavGraph(
                 onCategoryClick = { category ->
                     navController.navigate(Screen.ChannelsByCategory.createRoute(category))
                 }
+            )
+        }
+
+        // ── VOD catalog ──────────────────────────────────────────────────
+        composable(route = Screen.Catalog.route) {
+            CatalogScreen(
+                onPlayMovie = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("MOVIE", id, title))
+                },
+                onPlayEpisode = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("EPISODE", id, title))
+                },
             )
         }
 
@@ -285,6 +299,30 @@ fun FireVisionNavGraph(
                     }
                 }
             )
+        }
+
+        // ── VOD player ───────────────────────────────────────────────────
+        composable(
+            route = Screen.VodPlayer.route,
+            arguments = listOf(
+                navArgument("contentType") { type = NavType.StringType },
+                navArgument("contentId") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { backStackEntry ->
+            val contentType = backStackEntry.arguments?.getString("contentType")
+            val contentId = backStackEntry.arguments?.getString("contentId")
+            val title = backStackEntry.arguments?.getString("title").orEmpty()
+            if (contentType.isNullOrBlank() || contentId.isNullOrBlank()) {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            } else {
+                VodPlayerScreen(
+                    contentType = contentType,
+                    contentId = contentId,
+                    title = title,
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
         }
 
         // ── Player ──────────────────────────────────────────────────────

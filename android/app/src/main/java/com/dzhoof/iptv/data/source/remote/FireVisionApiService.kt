@@ -16,6 +16,12 @@ import com.dzhoof.iptv.data.model.dto.DevicesResponse
 import com.dzhoof.iptv.data.model.dto.RegisterDeviceRequest
 import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
 import com.dzhoof.iptv.data.model.dto.PlaybackTokenResponse
+import com.dzhoof.iptv.data.model.dto.MoviePageResponse
+import com.dzhoof.iptv.data.model.dto.SeriesPageResponse
+import com.dzhoof.iptv.data.model.dto.SeasonsResponse
+import com.dzhoof.iptv.data.model.dto.EpisodesResponse
+import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationRequest
+import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -55,6 +61,33 @@ interface FireVisionApiService {
      */
     @GET("api/v1/channels/{id}")
     suspend fun getChannelById(@Path("id") id: String): Response<ChannelDto>
+
+    @GET("api/v1/catalog/movies")
+    suspend fun getMovies(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 30,
+        @Query("category") category: String? = null,
+        @Query("search") search: String? = null,
+    ): Response<MoviePageResponse>
+
+    @GET("api/v1/catalog/series")
+    suspend fun getSeries(
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 30,
+        @Query("category") category: String? = null,
+        @Query("search") search: String? = null,
+    ): Response<SeriesPageResponse>
+
+    @GET("api/v1/catalog/series/{seriesId}/seasons")
+    suspend fun getSeasons(@Path("seriesId") seriesId: String): Response<SeasonsResponse>
+
+    @GET("api/v1/catalog/seasons/{seasonId}/episodes")
+    suspend fun getEpisodes(@Path("seasonId") seasonId: String): Response<EpisodesResponse>
+
+    @POST("api/v1/streams/authorize")
+    suspend fun authorizePlayback(
+        @Body request: PlaybackAuthorizationRequest,
+    ): Response<PlaybackAuthorizationResponse>
     
     /**
      * Fetches all categories from the server.

@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Text
@@ -373,6 +374,7 @@ private val bottomNavItems = listOf(
     Triple(Screen.Home, Icons.Default.Home, "Home"),
     Triple(Screen.Favorites, Icons.Default.Favorite, "Favorites"),
     Triple(Screen.Categories, Icons.Default.Category, "Categories"),
+    Triple(Screen.Catalog, Icons.Default.Movie, "VOD"),
     Triple(Screen.Guide, Icons.Default.GridView, "Guide"),
     Triple(Screen.Settings, Icons.Default.Settings, "Settings"),
 )
