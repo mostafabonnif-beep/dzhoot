@@ -4,6 +4,10 @@ import { epgService } from './epg-service';
 import { streamHealthService } from './stream-health-service';
 import { ExternalSourceCacheMeta, ExternalSourceChannel } from '../models/ExternalSourceCache';
 import { IptvOrgChannel } from '../models/IptvOrgCache';
+import XtreamSource from '../models/XtreamSource';
+import M3USource from '../models/M3USource';
+import { syncXtreamSource } from './xtream-service';
+import { syncM3USource } from './m3u-service';
 
 export interface SubtaskResult {
   name: string;
@@ -40,6 +44,8 @@ const EPG_INTERVAL = intervalMs(process.env.EPG_REFRESH_INTERVAL_MS, 21600000);
 const CACHE_INTERVAL = intervalMs(process.env.CACHE_REFRESH_INTERVAL_MS, 3600000);
 const STREAM_HEALTH_INTERVAL = intervalMs(process.env.STREAM_HEALTH_CHECK_INTERVAL_MS, 14400000);
 const YOUTUBE_REFRESH_INTERVAL = intervalMs(process.env.YOUTUBE_REFRESH_INTERVAL_MS, 14400000);
+const XTREAM_SYNC_INTERVAL = intervalMs(process.env.XTREAM_SYNC_INTERVAL_MS, 21600000);
+const M3U_SYNC_INTERVAL = intervalMs(process.env.M3U_SYNC_INTERVAL_MS, 21600000);
 
 async function livenessHandler(): Promise<TaskResult> {
   const subtasks: SubtaskResult[] = [];
@@ -214,6 +220,57 @@ async function streamHealthHandler(): Promise<TaskResult> {
   }
 }
 
+async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskResult> {
+  const startedAt = Date.now();
+  const subtasks: SubtaskResult[] = [];
+  const sources = kind === 'xtream'
+    ? await XtreamSource.find({ status: 'Active' }, { _id: 1, name: 1 }).lean()
+    : await M3USource.find({ status: 'Active' }, { _id: 1, name: 1 }).lean();
+
+  for (const source of sources) {
+    const sourceStartedAt = Date.now();
+    try {
+      const result = kind === 'xtream'
+        ? await syncXtreamSource(String(source._id))
+        : await syncM3USource(String(source._id));
+      subtasks.push({
+        name: `${kind}:${source.name}`,
+        status: 'completed',
+        durationMs: Date.now() - sourceStartedAt,
+        result: result.stats,
+      });
+    } catch (err: any) {
+      subtasks.push({
+        name: `${kind}:${source.name}`,
+        status: 'failed',
+        durationMs: Date.now() - sourceStartedAt,
+        error: err.message,
+      });
+    }
+  }
+
+  const completed = subtasks.filter((s) => s.status === 'completed').length;
+  const failed = subtasks.filter((s) => s.status === 'failed').length;
+  return {
+    summary: {
+      sourceType: kind,
+      sources: sources.length,
+      completed,
+      failed,
+      durationMs: Date.now() - startedAt,
+    },
+    subtasks,
+  };
+}
+
+async function xtreamSyncHandler(): Promise<TaskResult> {
+  return catalogSourceSyncHandler('xtream');
+}
+
+async function m3uSyncHandler(): Promise<TaskResult> {
+  return catalogSourceSyncHandler('m3u');
+}
+
 async function youtubeUrlRefreshHandler(): Promise<TaskResult> {
   const start = Date.now();
   try {
@@ -273,6 +330,20 @@ const tasks: TaskDefinition[] = [
       'Check primary streams with alternates, auto-promote alive alternates when primary is dead/flagged',
     intervalMs: STREAM_HEALTH_INTERVAL,
     handler: streamHealthHandler,
+  },
+  {
+    name: 'xtream-sync',
+    displayName: 'Xtream Catalog Synchronization',
+    description: 'Synchronize active Xtream sources into Live TV, VOD, series, seasons, and episodes',
+    intervalMs: XTREAM_SYNC_INTERVAL,
+    handler: xtreamSyncHandler,
+  },
+  {
+    name: 'm3u-sync',
+    displayName: 'M3U Playlist Synchronization',
+    description: 'Download active M3U sources and synchronize their live channels securely',
+    intervalMs: M3U_SYNC_INTERVAL,
+    handler: m3uSyncHandler,
   },
   {
     name: 'youtube-url-refresh',

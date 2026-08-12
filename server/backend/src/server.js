@@ -356,6 +356,7 @@ app.use('/api/v1/activation', require('./routes/activation'));
 app.use('/api/v1/me', require('./routes/me'));
 // Xtream Codes sources + VOD catalog
 app.use('/api/v1/admin/xtream-sources', require('./routes/admin-xtream-sources'));
+app.use('/api/v1/admin/m3u-sources', require('./routes/admin-m3u-sources'));
 app.use('/api/v1/catalog', require('./routes/catalog'));
 // Stream authorization + dynamic home + notifications + runtime settings
 app.use('/api/v1/streams', require('./routes/streams'));
