@@ -6,8 +6,10 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
+const { randomUUID } = require('crypto');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
+const { redactSensitiveText } = require('./services/audit-log');
 
 Sentry.init({
   dsn: process.env.BACKEND_SENTRY_DSN,
@@ -125,6 +127,16 @@ app.use(
   }),
 );
 app.use(compression());
+
+// Attach a bounded correlation ID to every request so logs and support reports
+// can be joined without trusting arbitrary header content.
+app.use((req, res, next) => {
+  const incoming = String(req.get('x-request-id') || '').trim();
+  req.requestId = /^[A-Za-z0-9._:-]{1,128}$/.test(incoming) ? incoming : randomUUID();
+  res.setHeader('X-Request-ID', req.requestId);
+  next();
+});
+
 app.use(
   cors({
     origin: process.env.ALLOWED_ORIGINS
@@ -147,16 +159,19 @@ app.use('/api/v1/admin/channels/import-m3u', express.json({ limit: '50mb' }));
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
-// Redact session/JWT credentials that arrive as query params (image-proxy
-// accepts ?sid=/?token= for <img> tags) so they never leak into access logs.
+// Redact session/JWT credentials and upstream stream URLs from access logs.
 morgan.token('url-redacted', (req) =>
-  (req.originalUrl || req.url).replace(/([?&](?:sid|token)=)[^&]*/gi, '$1REDACTED'),
+  (req.originalUrl || req.url).replace(
+    /([?&](?:sid|token|url|username|password|api[_-]?key|secret)=)[^&]*/gi,
+    '$1REDACTED',
+  ),
 );
-// 'combined' format with the URL field swapped for the redacted variant.
+morgan.token('request-id', (req) => req.requestId || '-');
+// 'combined' format with the redacted URL and correlation ID.
 app.use(
   morgan(
     ':remote-addr - :remote-user [:date[clf]] ":method :url-redacted HTTP/:http-version" ' +
-      ':status :res[content-length] ":referrer" ":user-agent"',
+      ':status :res[content-length] ":referrer" ":user-agent" "rid=:request-id"',
   ),
 );
 
@@ -381,16 +396,119 @@ app.use('/api/v1/scheduler', require('./routes/scheduler'));
 const { getRedisClient, isRedisReady, closeRedis } = require('./services/redis');
 getRedisClient();
 
-// Health check
-app.get('/health', (req, res) => {
+function summarizeSourceHealth(sources) {
+  const active = sources.filter((source) => source.status === 'Active').length;
+  const syncing = sources.filter((source) => source.syncStatus === 'syncing').length;
+  const errors = sources.filter((source) => source.syncStatus === 'error').length;
+  const latest = sources
+    .filter((source) => source.lastSyncAt)
+    .sort((a, b) => new Date(b.lastSyncAt).getTime() - new Date(a.lastSyncAt).getTime())[0];
+  return {
+    total: sources.length,
+    active,
+    syncing,
+    errors,
+    lastSyncAt: latest?.lastSyncAt || null,
+    lastError: latest?.lastError ? redactSensitiveText(latest.lastError) : null,
+  };
+}
+
+async function collectHealthDetails() {
+  const mongoHealthy = mongoose.connection.readyState === 1;
+  const details = {
+    sources: {
+      m3uActive: null,
+      xtreamActive: null,
+      m3u: null,
+      xtream: null,
+    },
+    epg: { programs: null, channels: null },
+    scheduler: { enabled: process.env.DISABLE_SCHEDULER !== 'true', tasks: [] },
+  };
+  if (!mongoHealthy) return details;
+
+  const [M3USource, XtreamSource, EpgProgram] = [
+    require('./models/M3USource'),
+    require('./models/XtreamSource'),
+    require('./models/EpgProgram'),
+  ];
+  const [m3uSources, xtreamSources, programs, epgChannels] = await Promise.all([
+    M3USource.find().select('status syncStatus lastSyncAt lastError').lean(),
+    XtreamSource.find().select('status syncStatus lastSyncAt lastError').lean(),
+    EpgProgram.countDocuments(),
+    EpgProgram.distinct('channelEpgId').then((ids) => ids.length),
+  ]);
+  const m3uHealth = summarizeSourceHealth(m3uSources);
+  const xtreamHealth = summarizeSourceHealth(xtreamSources);
+  details.sources = {
+    m3uActive: m3uHealth.active,
+    xtreamActive: xtreamHealth.active,
+    m3u: m3uHealth,
+    xtream: xtreamHealth,
+  };
+  details.epg = { programs, channels: epgChannels };
+
+  try {
+    const { schedulerService } = require('./services/scheduler-service');
+    const tasks = await schedulerService.getTasksWithStatus();
+    details.scheduler.tasks = tasks.map((task) => ({
+      name: task.name,
+      displayName: task.displayName,
+      intervalMs: task.intervalMs,
+      isRunning: task.isRunning,
+      nextRunAt: task.nextRunAt,
+      lastRun: task.lastRun
+        ? {
+            status: task.lastRun.status,
+            startedAt: task.lastRun.startedAt,
+            completedAt: task.lastRun.completedAt,
+            durationMs: task.lastRun.durationMs,
+            error: task.lastRun.error ? redactSensitiveText(task.lastRun.error) : null,
+          }
+        : null,
+    }));
+  } catch (error) {
+    details.scheduler.error = redactSensitiveText(error);
+  }
+  return details;
+}
+
+// Liveness never depends on MongoDB or Redis and is suitable for process probes.
+app.get('/health/live', (req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), requestId: req.requestId });
+});
+
+// Readiness requires MongoDB; Redis is optional for this application.
+app.get('/health/ready', (req, res) => {
+  const ready = mongoose.connection.readyState === 1;
+  res.status(ready ? 200 : 503).json({
+    status: ready ? 'ok' : 'degraded',
+    mongodb: ready ? 'connected' : 'disconnected',
+    redis: isRedisReady() ? 'connected' : 'disconnected',
+    requestId: req.requestId,
+  });
+});
+
+// Health check. Add ?details=true for non-sensitive source, EPG and scheduler metrics.
+app.get('/health', async (req, res) => {
   const healthy = mongoose.connection.readyState === 1;
-  res.status(healthy ? 200 : 503).json({
+  const response = {
     status: healthy ? 'ok' : 'degraded',
     uptime: process.uptime(),
     version: process.env.APP_VERSION || '0.0.0',
     mongodb: healthy ? 'connected' : 'disconnected',
     redis: isRedisReady() ? 'connected' : 'disconnected',
-  });
+    requestId: req.requestId,
+  };
+  if (req.query.details === 'true') {
+    try {
+      response.details = await collectHealthDetails();
+    } catch (error) {
+      response.details = { error: redactSensitiveText(error) };
+      response.status = 'degraded';
+    }
+  }
+  res.status(healthy ? 200 : 503).json(response);
 });
 
 // Sentry error handler must come before the default error handler
@@ -398,7 +516,7 @@ app.use(Sentry.expressErrorHandler());
 
 // Error handling middleware
 app.use((err, req, res, _next) => {
-  console.error(err.stack);
+  console.error(JSON.stringify({ level: 'error', requestId: req.requestId, message: redactSensitiveText(err) }));
   const status = err.status || 500;
   res.status(status).json({
     error: {

@@ -10,6 +10,7 @@ import Season from '../models/Season';
 import Episode from '../models/Episode';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
+import { redactSensitiveText } from './audit-log';
 
 const API_TIMEOUT_MS = 30000;
 
@@ -319,7 +320,7 @@ export async function syncXtreamSource(sourceId: string) {
     return { ok: true, stats: source.stats };
   } catch (err: any) {
     source.syncStatus = 'error';
-    source.lastError = (err as Error).message;
+    source.lastError = redactSensitiveText(err);
     await source.save();
     throw err;
   }

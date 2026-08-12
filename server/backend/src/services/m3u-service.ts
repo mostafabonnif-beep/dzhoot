@@ -8,6 +8,7 @@ import Channel from '../models/Channel';
 import { clubByChannelId, extractExtinfTitle, resolveChannelGroups } from './import-helpers';
 import { decryptSecret, encryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
+import { redactSensitiveText } from './audit-log';
 
 const PLAYLIST_TIMEOUT_MS = 30000;
 const MAX_PLAYLIST_BYTES = 50 * 1024 * 1024;
@@ -196,7 +197,7 @@ export async function syncM3USource(sourceId: string) {
     return { ok: true, stats };
   } catch (error: any) {
     source.syncStatus = 'error';
-    source.lastError = error.message || 'M3U sync failed';
+    source.lastError = redactSensitiveText(error);
     await source.save();
     throw error;
   }
