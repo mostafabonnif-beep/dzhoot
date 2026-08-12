@@ -22,7 +22,7 @@
     "test:e2e": "npx playwright test",
     "typecheck": "npm run build -w @firevision/shared && npm run typecheck -w @firevision/shared && npm run typecheck -w @firevision/backend",
     "start": "npm run start -w @firevision/backend",
-    "prepare": "husky"
+    "prepare": "husky || true"
   },
   "keywords": [
     "iptv",
