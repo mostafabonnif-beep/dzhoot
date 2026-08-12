@@ -1,5 +1,3 @@
-'use client';
-
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -27,166 +25,117 @@ import {
 import { useUIStore } from '@/store/ui-store';
 
 const adminLinks = [
-  { href: '/admin', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/admin/quick-pick', label: 'Quick Pick', icon: Zap },
-  { href: '/admin/channels', label: 'Channels', icon: Tv },
-  { href: '/admin/users', label: 'Users', icon: Users },
-  { href: '/admin/devices', label: 'Devices', icon: Smartphone },
-  { href: '/admin/plans', label: 'Plans', icon: CreditCard },
-  { href: '/admin/codes', label: 'Codes', icon: KeyRound },
-  { href: '/admin/import', label: 'Import IPTV', icon: Globe },
-  { href: '/admin/sources', label: 'Other Sources', icon: MonitorPlay },
-  { href: '/admin/epg', label: 'EPG Guide', icon: Calendar },
-  { href: '/admin/versions', label: 'App Versions', icon: Package },
-  { href: '/admin/stats', label: 'Statistics', icon: BarChart3 },
-  { href: '/admin/activity', label: 'Activity', icon: Activity },
-  { href: '/admin/scheduler', label: 'Scheduler', icon: Clock },
-  { href: '/admin/settings', label: 'Settings', icon: Settings },
+  { href: '/admin', label: 'لوحة التحكم', icon: LayoutDashboard },
+  { href: '/admin/quick-pick', label: 'اختيار سريع', icon: Zap },
+  { href: '/admin/channels', label: 'القنوات', icon: Tv },
+  { href: '/admin/users', label: 'المستخدمون', icon: Users },
+  { href: '/admin/devices', label: 'الأجهزة', icon: Smartphone },
+  { href: '/admin/plans', label: 'الباقات', icon: CreditCard },
+  { href: '/admin/codes', label: 'أكواد التفعيل', icon: KeyRound },
+  { href: '/admin/import', label: 'استيراد IPTV', icon: Globe },
+  { href: '/admin/sources', label: 'مصادر أخرى', icon: MonitorPlay },
+  { href: '/admin/epg', label: 'دليل البرامج (EPG)', icon: Calendar },
+  { href: '/admin/versions', label: 'إصدارات التطبيق', icon: Package },
+  { href: '/admin/stats', label: 'الإحصائيات', icon: BarChart3 },
+  { href: '/admin/activity', label: 'سجل النشاط', icon: Activity },
+  { href: '/admin/scheduler', label: 'جدول المهام', icon: Clock },
+  { href: '/admin/settings', label: 'الإعدادات', icon: Settings },
 ];
 
 const userLinks = [
-  { href: '/user', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/user/quick-pick', label: 'Quick Pick', icon: Zap },
-  { href: '/user/channels', label: 'My Channels', icon: Tv },
-  { href: '/user/import', label: 'Import IPTV', icon: Globe },
-  { href: '/user/sources', label: 'Other Sources', icon: MonitorPlay },
-  { href: '/user/devices', label: 'Pair Device', icon: Smartphone },
-  { href: '/user/subscription', label: 'Subscription', icon: CreditCard },
-  { href: '/user/profile', label: 'My Profile', icon: UserCircle },
+  { href: '/user', label: 'لوحة التحكم', icon: LayoutDashboard },
+  { href: '/user/quick-pick', label: 'اختيار سريع', icon: Zap },
+  { href: '/user/channels', label: 'قنواتـي', icon: Tv },
+  { href: '/user/import', label: 'استيراد IPTV', icon: Globe },
+  { href: '/user/sources', label: 'مصادر أخرى', icon: MonitorPlay },
+  { href: '/user/devices', label: 'ربط الجهاز', icon: Smartphone },
+  { href: '/user/subscription', label: 'الاشتراك', icon: CreditCard },
+  { href: '/user/profile', label: 'الملف الشخصي', icon: UserCircle },
 ];
 
 export function Sidebar({ role }: { role: 'admin' | 'user' }) {
   const pathname = usePathname();
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
+
   const links = role === 'admin' ? adminLinks : userLinks;
 
   return (
     <>
-      {/* Mobile overlay backdrop */}
+      {/* Mobile Backdrop */}
       {mobileSidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-foreground/50 md:hidden"
+          className="fixed inset-0 z-45 bg-black/50 lg:hidden"
           onClick={() => setMobileSidebarOpen(false)}
-          aria-hidden="true"
         />
       )}
 
-      {/* Sidebar */}
       <aside
-        className={`
-          fixed inset-y-0 left-0 z-50 flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-transform duration-200 ease-in-out w-64
-          ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          md:relative md:z-auto md:translate-x-0 md:transition-[width,padding] md:duration-200
-          ${sidebarCollapsed ? 'md:w-14' : 'md:w-52'}
-        `}
+        className={`fixed inset-y-0 right-0 z-50 flex flex-col border-l bg-card transition-all duration-300 lg:static lg:z-auto ${
+          sidebarCollapsed ? 'w-20' : 'w-64'
+        } ${
+          mobileSidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
+        }`}
       >
-        <div className="flex h-11 items-center border-b border-sidebar-border px-4">
-          <span className="text-sm font-display font-bold tracking-tight md:hidden">
-            Dzhoof<span className="text-sidebar-primary"> IPTV</span>
-          </span>
-          <span className="text-sm font-display font-bold tracking-tight hidden md:inline">
-            {!sidebarCollapsed ? (
-              <>
-                Dzhoof<span className="text-sidebar-primary"> IPTV</span>
-              </>
-            ) : (
-              <>
-                D<span className="text-sidebar-primary">Z</span>
-              </>
-            )}
-          </span>
-          {/* Mobile close button */}
+        {/* Sidebar Header */}
+        <div className="flex h-16 items-center justify-between px-4 border-b">
+          {!sidebarCollapsed && (
+            <Link href={role === 'admin' ? '/admin' : '/user'} className="flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg">
+                DZ
+              </div>
+              <span className="font-bold text-lg tracking-tight">DZ HOOT</span>
+            </Link>
+          )}
+          {sidebarCollapsed && (
+            <Link href={role === 'admin' ? '/admin' : '/user'} className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg">
+              DZ
+            </Link>
+          )}
           <button
             onClick={() => setMobileSidebarOpen(false)}
-            className="ml-auto flex h-8 w-8 items-center justify-center text-sidebar-foreground/60 hover:text-sidebar-foreground md:hidden"
-            aria-label="Close sidebar"
+            className="lg:hidden p-1 rounded-md text-muted-foreground hover:bg-accent"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-3 px-2" aria-label="Main navigation">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 px-2 md:hidden">
-            Navigation
-          </p>
-          {!sidebarCollapsed && (
-            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 px-2 hidden md:block">
-              Navigation
-            </p>
-          )}
-          <ul className="space-y-0.5">
-            {links.map((link) => {
-              const isActive =
-                link.href === '/admin' || link.href === '/user'
-                  ? pathname === link.href
-                  : pathname.startsWith(link.href);
-              const Icon = link.icon;
-              return (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    onClick={() => setMobileSidebarOpen(false)}
-                    aria-current={isActive ? 'page' : undefined}
-                    className={`flex items-center gap-2.5 py-2 text-xs transition-colors px-2.5 ${
-                      sidebarCollapsed ? 'md:justify-center md:px-2' : 'md:px-2.5'
-                    } ${
-                      isActive
-                        ? 'bg-sidebar-accent text-sidebar-accent-foreground border-l-2 border-sidebar-primary font-medium'
-                        : 'text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 border-l-2 border-transparent'
-                    }`}
-                    title={sidebarCollapsed ? link.label : undefined}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                    <span className="uppercase tracking-[0.05em] md:hidden">{link.label}</span>
-                    <span
-                      className={`uppercase tracking-[0.05em] hidden md:inline ${sidebarCollapsed ? 'md:sr-only' : ''}`}
-                    >
-                      {link.label}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
+        {/* Navigation Links */}
+        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+          {links.map((link) => {
+            const Icon = link.icon;
+            const isActive = pathname === link.href || (link.href !== '/admin' && link.href !== '/user' && pathname.startsWith(link.href));
 
-        <div className="border-t border-sidebar-border py-2 px-2 space-y-0.5">
-          <a
-            href="https://github.com/ddssssc/dzhoof/issues"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={`flex items-center gap-2.5 py-2 text-xs text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors px-2.5 ${
-              sidebarCollapsed ? 'md:justify-center md:px-2' : 'md:px-2.5'
-            }`}
-            title={sidebarCollapsed ? 'Raise Issue' : undefined}
-          >
-            <Bug className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="uppercase tracking-[0.05em] md:hidden">
-              Raise Issue
-              <span className="sr-only"> (opens in new tab)</span>
-            </span>
-            <span
-              className={`uppercase tracking-[0.05em] hidden md:inline ${sidebarCollapsed ? 'md:sr-only' : ''}`}
-            >
-              Raise Issue
-              <span className="sr-only"> (opens in new tab)</span>
-            </span>
-          </a>
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                title={sidebarCollapsed ? link.label : undefined}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                }`}
+              >
+                <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                {!sidebarCollapsed && <span className="truncate">{link.label}</span>}
+              </Link>
+            );
+          })}
         </div>
 
-        {/* Desktop collapse toggle - hidden on mobile */}
-        <button
-          onClick={toggleSidebar}
-          aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-expanded={!sidebarCollapsed}
-          className="absolute -right-3 top-[44px] hidden md:flex h-6 w-6 items-center justify-center border border-sidebar-border bg-sidebar text-sidebar-foreground/60 shadow-sm hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-primary transition-colors"
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="h-3 w-3" />
-          ) : (
-            <ChevronLeft className="h-3 w-3" />
+        {/* Sidebar Footer / Collapse Toggle */}
+        <div className="p-3 border-t hidden lg:flex items-center justify-between">
+          {!sidebarCollapsed && (
+            <span className="text-xs text-muted-foreground px-2">v1.0.0 Production</span>
           )}
-        </button>
+          <button
+            onClick={toggleSidebar}
+            className="p-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground mx-auto lg:mx-0"
+            title={sidebarCollapsed ? 'توسيع القائمة' : 'تصغير القائمة'}
+          >
+            {sidebarCollapsed ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+          </button>
+        </div>
       </aside>
     </>
   );
