@@ -424,6 +424,7 @@ async function collectHealthDetails() {
     },
     epg: { programs: null, channels: null },
     scheduler: { enabled: process.env.DISABLE_SCHEDULER !== 'true', tasks: [] },
+    alerting: { webhookConfigured: Boolean(String(process.env.ALERT_WEBHOOK_URL || '').trim()) },
   };
   if (!mongoHealthy) return details;
 
@@ -498,6 +499,7 @@ app.get('/health', async (req, res) => {
     version: process.env.APP_VERSION || '0.0.0',
     mongodb: healthy ? 'connected' : 'disconnected',
     redis: isRedisReady() ? 'connected' : 'disconnected',
+    alertingConfigured: Boolean(String(process.env.ALERT_WEBHOOK_URL || '').trim()),
     requestId: req.requestId,
   };
   if (req.query.details === 'true') {

@@ -1,5 +1,6 @@
 import { ScheduledTaskRun } from '../models/ScheduledTaskRun';
 import { getAllTasks, getTask } from './task-registry';
+import { sendOperationalAlert } from './alert-notifier';
 
 const LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes — stale locks are auto-released
 const HEARTBEAT_MS = 60 * 1000; // refresh the lock every minute while a task runs
@@ -191,6 +192,19 @@ class SchedulerService {
         },
       );
 
+      const failedSubtasks = result.subtasks.filter((subtask) => subtask.status === 'failed');
+      if (failedSubtasks.length > 0) {
+        void sendOperationalAlert({
+          event: `scheduler:${taskName}:partial-failure`,
+          severity: 'warning',
+          message: `${taskDef.displayName} completed with ${failedSubtasks.length} failed subtask(s)`,
+          details: {
+            taskName,
+            failedSubtasks: failedSubtasks.map((subtask) => subtask.name),
+          },
+        });
+      }
+
       console.log(
         `[scheduler] '${taskDef.displayName}' completed in ${(durationMs / 1000).toFixed(1)}s`,
       );
@@ -209,6 +223,12 @@ class SchedulerService {
         },
       );
 
+      void sendOperationalAlert({
+        event: `scheduler:${taskName}:failure`,
+        severity: 'critical',
+        message: `${taskDef.displayName} failed: ${err.message}`,
+        details: { taskName },
+      });
       console.error(`[scheduler] '${taskDef.displayName}' failed: ${err.message}`);
       throw err;
     } finally {
