@@ -3,6 +3,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Tv,
+  Film,
   Users,
   Settings,
   BarChart3,
@@ -27,7 +28,9 @@ import { useUIStore } from '@/store/ui-store';
 const adminLinks = [
   { href: '/admin', label: 'لوحة التحكم', icon: LayoutDashboard },
   { href: '/admin/quick-pick', label: 'اختيار سريع', icon: Zap },
-  { href: '/admin/channels', label: 'القنوات', icon: Tv },
+  { href: '/admin/channels', label: 'القنوات المباشرة', icon: Tv },
+  { href: '/admin/movies', label: 'الأفلام (VOD)', icon: Film },
+  { href: '/admin/series', label: 'المسلسلات', icon: MonitorPlay },
   { href: '/admin/users', label: 'المستخدمون', icon: Users },
   { href: '/admin/devices', label: 'الأجهزة', icon: Smartphone },
   { href: '/admin/plans', label: 'الباقات', icon: CreditCard },
