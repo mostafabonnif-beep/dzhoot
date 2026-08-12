@@ -14,6 +14,12 @@ router.use(requireAuth);
  * GET /api/v1/stream-proxy?url=<stream_url>
  */
 router.get('/', async (req, res) => {
+  if (process.env.ALLOW_LEGACY_RAW_PROXY !== 'true') {
+    return res.status(410).json({
+      success: false,
+      error: 'Legacy raw proxy disabled; use a playback token',
+    });
+  }
   let httpAgent;
   let httpsAgent;
   try {

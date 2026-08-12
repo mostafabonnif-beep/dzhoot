@@ -58,11 +58,12 @@ setInterval(
 // Filter alternateStreams to viable entries for client consumption.
 // Keeps full objects (liveness, flaggedBad, etc.) so web frontend can display rich details.
 function slimAlternates(channel) {
-  if (!channel.alternateStreams?.length) return channel;
-  channel.alternateStreams = channel.alternateStreams
+  const safeChannel = { ...channel, channelUrl: '' };
+  safeChannel.alternateStreams = (channel.alternateStreams || [])
     .filter((alt) => alt.liveness?.status !== 'dead' && alt.flaggedBad?.isFlagged !== true)
-    .slice(0, 10);
-  return channel;
+    .slice(0, 10)
+    .map((alt) => ({ ...alt, streamUrl: '' }));
+  return safeChannel;
 }
 
 // Whitelist projection for the list endpoints (/, /grouped, /search) — verified against what
@@ -175,6 +176,9 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
 // Get M3U playlist (requires global playlist code - LEGACY ENDPOINT)
 router.get('/playlist.m3u', async (req, res) => {
   try {
+    if (process.env.ALLOW_LEGACY_RAW_PLAYLIST !== 'true') {
+      return res.status(410).json({ success: false, error: 'Legacy raw playlist disabled; use an authenticated playlist' });
+    }
     const providedCode = req.query.code || req.headers['x-playlist-code'];
     const requiredCode = process.env.PLAYLIST_CODE || process.env.SUPER_ADMIN_CHANNEL_LIST_CODE;
 
@@ -543,7 +547,7 @@ router.get('/:id/with-fallbacks', requireAuth, async (req, res) => {
       });
 
     channel.alternateStreams = viableAlternates;
-    res.json({ success: true, data: channel });
+    res.json({ success: true, data: slimAlternates(channel) });
   } catch (error) {
     console.error('Error fetching channel with fallbacks:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch channel' });

@@ -327,7 +327,7 @@ Returns the authenticated user's M3U playlist.
 ```m3u
 #EXTM3U
 #EXTINF:-1 tvg-id="hbo-hd" tvg-name="HBO HD" tvg-logo="http://example.com/logos/hbo.png" group-title="Movies",HBO HD
-http://example.com/stream/hbo.m3u8
+https://iptv.example.com/api/v1/tv/playback/{short-lived-token}
 ```
 
 ---
@@ -666,7 +666,7 @@ Endpoints for users to manage their own channel playlists.
     {
       "id": "64f7a8b9c1d2e3f4a5b6c7d8",
       "channelName": "HBO HD",
-      "channelUrl": "http://example.com/stream/hbo.m3u8",
+      "channelUrl": "https://iptv.example.com/api/v1/tv/playback/{short-lived-token}",
       "channelImg": "http://example.com/logos/hbo.png",
       "channelGroup": "Movies"
     }
@@ -814,7 +814,7 @@ Returns the authenticated user's channels as an M3U playlist file.
 ```m3u
 #EXTM3U
 #EXTINF:-1 tvg-id="hbo-hd" tvg-name="HBO HD" tvg-logo="http://example.com/logos/hbo.png" group-title="Movies",HBO HD
-http://example.com/stream/hbo.m3u8
+https://iptv.example.com/api/v1/tv/playback/{short-lived-token}
 ```
 
 ---
@@ -840,7 +840,7 @@ http://example.com/stream/hbo.m3u8
       "id": "64f7a8b9c1d2e3f4a5b6c7d8",
       "channelId": "hbo-hd",
       "channelName": "HBO HD",
-      "channelUrl": "http://example.com/stream/hbo.m3u8",
+      "channelUrl": "https://iptv.example.com/api/v1/tv/playback/{short-lived-token}",
       "channelImg": "http://example.com/logos/hbo.png",
       "channelGroup": "Movies",
       "isActive": true,
@@ -874,7 +874,7 @@ http://example.com/stream/hbo.m3u8
       {
         "id": "64f7a8b9c1d2e3f4a5b6c7d8",
         "channelName": "HBO HD",
-        "channelUrl": "http://example.com/stream/hbo.m3u8"
+        "channelUrl": "https://iptv.example.com/api/v1/tv/playback/{short-lived-token}"
       }
     ],
     "Sports": []
@@ -1296,7 +1296,7 @@ Get M3U playlist for a user by their 6-character playlist code.
 ```m3u
 #EXTM3U
 #EXTINF:-1 tvg-id="hbo-hd" tvg-name="HBO HD" tvg-logo="http://example.com/logos/hbo.png" group-title="Movies",HBO HD
-http://example.com/stream/hbo.m3u8
+https://iptv.example.com/api/v1/tv/playback/{short-lived-token}
 ```
 
 ---
@@ -1319,7 +1319,7 @@ http://example.com/stream/hbo.m3u8
   "channels": [
     {
       "channelName": "HBO HD",
-      "channelUrl": "http://example.com/stream/hbo.m3u8",
+      "channelUrl": "https://iptv.example.com/api/v1/tv/playback/{short-lived-token}",
       "channelGroup": "Movies"
     }
   ]
@@ -1391,10 +1391,10 @@ All are public and keyed by the 6-char playlist `:code`.
 | ------ | -------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------- |
 | GET    | `/tv/epg/:code`            | XMLTV (`application/xml`)                  | EPG guide for the code's channels; `?hours=` (default 24, max 72); cached ~300s |
 | GET    | `/tv/epg/:code/json`       | JSON                                       | Same EPG as JSON (`{ hours, channelCount, programCount, channels[] }`)          |
-| GET    | `/tv/proxy-url/:code?url=` | JSON `{ data: { proxyUrl, originalUrl } }` | Resolve a server-proxy URL for a stream when direct playback fails              |
-| GET    | `/tv/stream/:code?url=`    | Proxied stream (binary / rewritten M3U)    | SSRF-guarded stream proxy scoped to a valid code                                |
+| GET    | `/tv/proxy-url/:code?url=` | `410 Gone` by default | Legacy raw proxy disabled; use `POST /tv/playback-token` and `/tv/playback/:token` instead |
+| GET    | `/tv/stream/:code?url=`    | `410 Gone` by default                   | Legacy raw stream disabled; use `/tv/playback/:token`                                |
 
-The M3U from `/tv/playlist/:code` embeds an `x-tvg-url` pointing at `/tv/epg/:code`. The QR-code TV pairing shown in the dashboard is built client-side from the PIN pairing flow above (no dedicated QR endpoint).
+The M3U from `/tv/playlist/:code` embeds an `x-tvg-url` pointing at `/tv/epg/:code`, and its stream entries use short-lived playback tokens. The QR-code TV pairing shown in the dashboard is built client-side from the PIN pairing flow above (no dedicated QR endpoint).
 
 ---
 
@@ -1708,16 +1708,11 @@ Admin-only helpers: `GET /image-proxy/stats` (reports redirect mode) and `DELETE
 
 **GET** `/stream-proxy?url=<encoded_url>`
 
-Proxies HLS and other media streams with CORS headers.
+Legacy raw proxy endpoint. It returns `410 Gone` by default because upstream URLs must not be placed in client-visible query strings. Use `POST /tv/playback-token` followed by `/tv/playback/:token` instead.
 
 **Auth Required:** Yes
-**Headers:** `X-Session-Id: <session_id>`
 
-**Query Parameters:**
-
-- `url` (required): URL-encoded stream URL
-
-**Response:** Proxied stream content with CORS headers.
+**Compatibility:** Set `ALLOW_LEGACY_RAW_PROXY=true` only for a controlled migration of an old client, then disable it again.
 
 ---
 

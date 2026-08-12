@@ -2,14 +2,49 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Channel = require('../models/Channel');
+const XtreamSource = require('../models/XtreamSource');
 const EpgProgram = require('../models/EpgProgram');
 const PairingRequest = require('../models/PairingRequest');
 const { epgService } = require('../services/epg-service');
 const { audit } = require('../services/audit-log');
+const { issuePlaybackToken, verifyPlaybackToken } = require('../services/playback-token');
+const { proxyUpstreamStream } = require('../services/upstream-proxy');
+const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { epgCache } = require('../services/cache');
+const { decryptSecret } = require('../utils/crypto');
+const { getPublicBaseUrl } = require('../utils/public-url');
 
 // Same cap as the /channels sync — the EPG only needs to cover what the TV can list.
 const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 2000;
+
+async function tokenizeChannelForClient(channel, user, baseUrl) {
+  const source = channel.toObject ? channel.toObject() : channel;
+  const safe = { ...source, channelUrl: '' };
+  if (!user.channelListCode) return safe;
+  if (source.channelUrl) {
+    const { token } = issuePlaybackToken({
+      userId: String(user._id),
+      channelListCode: user.channelListCode,
+      streamUrl: source.channelUrl,
+    });
+    safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}`;
+  }
+  safe.alternateStreams = await Promise.all(
+    (source.alternateStreams || [])
+      .filter((alternate) => alternate.liveness?.status !== 'dead' && alternate.flaggedBad?.isFlagged !== true)
+      .slice(0, 10)
+      .map(async (alternate) => {
+        if (!alternate.streamUrl) return { ...alternate, streamUrl: '' };
+        const { token } = issuePlaybackToken({
+          userId: String(user._id),
+          channelListCode: user.channelListCode,
+          streamUrl: alternate.streamUrl,
+        });
+        return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}` };
+      }),
+  );
+  return safe;
+}
 
 // NO authentication required for TV endpoints
 
@@ -97,7 +132,7 @@ router.get('/playlist/:code', async (req, res) => {
     if (!user) return;
 
     // Generate M3U playlist for this user (with EPG URL)
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = getPublicBaseUrl(req);
     const m3uContent = await user.generateUserPlaylist(baseUrl);
 
     // Set response headers for M3U
@@ -135,14 +170,18 @@ router.get('/playlist/:code/json', async (req, res) => {
       }).sort({ channelGroup: 1, order: 1 });
     }
 
+    const baseUrl = getPublicBaseUrl(req);
+    const tokenizedChannels = await Promise.all(
+      channels.map((channel) => tokenizeChannelForClient(channel, user, baseUrl)),
+    );
     res.json({
       success: true,
       user: {
         username: user.username,
         channelListCode: user.channelListCode,
       },
-      count: channels.length,
-      channels: channels,
+      count: tokenizedChannels.length,
+      channels: tokenizedChannels,
     });
   } catch (error) {
     console.error('Error fetching playlist JSON:', error);
@@ -153,10 +192,87 @@ router.get('/playlist/:code/json', async (req, res) => {
   }
 });
 
-// Resolve proxy URL for a channel (TV app calls this when direct playback fails)
+// Issue a short-lived encrypted playback token for a catalog channel.
+// The client sends only its channel reference and never submits an upstream URL.
+router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
+  try {
+    const channelRef = String(req.body?.channelId || '').trim();
+    const slot = Number(req.body?.slot ?? 0);
+    const catchupStartMs = Number(req.body?.catchupStartMs ?? 0);
+    const catchupDurationMin = Math.min(Math.max(Number(req.body?.catchupDurationMin ?? 0), 1), 24 * 60);
+    if (!Number.isFinite(catchupStartMs) || catchupStartMs < 0 || !Number.isFinite(catchupDurationMin)) {
+      return res.status(400).json({ success: false, error: 'Invalid catch-up parameters' });
+    }
+    if (!channelRef || channelRef.length > 200 || !Number.isInteger(slot) || slot < 0 || slot > 3) {
+      return res.status(400).json({ success: false, error: 'channelId and a valid slot are required' });
+    }
+
+    const user = req.user;
+    const { isSubscriptionRequired, getActiveSubscription } = require('../services/subscription-service');
+    if (await isSubscriptionRequired() && user.role !== 'Admin' && !(await getActiveSubscription(user.id))) {
+      return res.status(403).json({
+        success: false,
+        error: 'Your subscription has expired. Activate a new code to continue watching.',
+        code: 'SUBSCRIPTION_EXPIRED',
+      });
+    }
+
+    const channel = await Channel.findOne({ channelId: channelRef, isActive: { $ne: false } }).lean();
+    if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
+
+    const isCatalogUser = user.role === 'Admin' || user.allCatalog === true;
+    const assigned = (user.channels || []).some((id) => String(id) === String(channel._id));
+    if (!isCatalogUser && !assigned) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+
+    const viableAlternates = (channel.alternateStreams || []).filter(
+      (alternate) => alternate.liveness?.status !== 'dead' && alternate.flaggedBad?.isFlagged !== true,
+    );
+    let streamUrl = slot === 0 ? channel.channelUrl : viableAlternates[slot - 1]?.streamUrl;
+    if (catchupStartMs > 0) {
+      const sourceId = channel.metadata?.xtreamSourceId;
+      const streamId = channel.metadata?.xtreamStreamId;
+      if (!sourceId || streamId === undefined || streamId === null) {
+        return res.status(404).json({ success: false, error: 'Catch-up is not available for this channel' });
+      }
+      const source = await XtreamSource.findOne({ _id: sourceId, status: 'Active' }).lean();
+      if (!source) return res.status(404).json({ success: false, error: 'Xtream source is unavailable' });
+      const host = String(source.serverUrl).replace(/\/+$/, '');
+      const username = decryptSecret(source.usernameEncrypted);
+      const password = decryptSecret(source.passwordEncrypted);
+      const start = new Date(catchupStartMs);
+      if (Number.isNaN(start.getTime())) {
+        return res.status(400).json({ success: false, error: 'Invalid catch-up start time' });
+      }
+      const pad = (value) => String(value).padStart(2, '0');
+      const formatted = `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-${pad(start.getUTCDate())}:${pad(start.getUTCHours())}-${pad(start.getUTCMinutes())}`;
+      streamUrl = `${host}/timeshift/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${catchupDurationMin}/${formatted}/${streamId}.m3u8`;
+    }
+    if (!streamUrl) return res.status(404).json({ success: false, error: 'Stream slot not found' });
+
+    const { token, expiresAt } = issuePlaybackToken({
+      userId: String(user.id),
+      channelListCode: String(user.channelListCode || ''),
+      streamUrl,
+    });
+    return res.json({
+      success: true,
+      data: { playbackUrl: `/api/v1/tv/playback/${token}`, expiresAt, slot },
+    });
+  } catch (error) {
+    console.error('Error issuing playback token:', error);
+    return res.status(500).json({ success: false, error: 'Failed to issue playback token' });
+  }
+});
+
+// Resolve proxy URL for a channel (legacy clients only; new clients use playback-token).
 // GET /tv/proxy-url/:code?url=<stream_url>
 router.get('/proxy-url/:code', async (req, res) => {
   try {
+    if (process.env.ALLOW_LEGACY_RAW_PROXY !== 'true') {
+      return res.status(410).json({ success: false, error: 'Legacy raw proxy disabled; request a playback token' });
+    }
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
 
@@ -171,7 +287,7 @@ router.get('/proxy-url/:code', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid URL format' });
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = getPublicBaseUrl(req);
     const proxyUrl = `${baseUrl}/api/v1/tv/stream/${req.params.code}?url=${encodeURIComponent(url)}`;
 
     res.json({ success: true, data: { proxyUrl } });
@@ -181,157 +297,52 @@ router.get('/proxy-url/:code', async (req, res) => {
   }
 });
 
-// TV stream proxy — authenticates via channel list code in URL path
+// Tokenized TV stream proxy. The token carries an encrypted upstream URL and expires quickly.
+// GET /tv/playback/:token
+router.get('/playback/:token', async (req, res) => {
+  try {
+    const payload = verifyPlaybackToken(req.params.token);
+    if (!payload) return res.status(401).send('Playback token expired or invalid');
+
+    const user = await User.findOne({
+      _id: payload.userId,
+      channelListCode: payload.channelListCode,
+      isActive: true,
+    }).select('_id channelListCode');
+    if (!user) return res.status(401).send('Playback authorization revoked');
+
+    return proxyUpstreamStream(req, res, payload.streamUrl, {
+      userId: String(user._id),
+      channelListCode: user.channelListCode,
+    });
+  } catch (error) {
+    console.error('Tokenized TV proxy error:', error);
+    if (!res.headersSent) res.status(502).send('Bad Gateway');
+  }
+});
+
+// Legacy TV stream proxy. Kept temporarily for old clients; new clients must use
+// /playback/:token so upstream credentials never appear in a client-visible URL.
 // GET /tv/stream/:code?url=<stream_url>
 router.get('/stream/:code', async (req, res) => {
   try {
+    if (process.env.ALLOW_LEGACY_RAW_PROXY !== 'true') {
+      return res.status(410).send('Legacy raw proxy disabled; request a playback token');
+    }
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
-
     const { url } = req.query;
-    if (!url) {
-      return res.status(400).send('URL parameter is required');
-    }
-
-    try {
-      new URL(url);
-    } catch {
-      return res.status(400).send('Invalid URL format');
-    }
-
-    const http = require('http');
-    const https = require('https');
-    const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
-    const ssrfCheck = await validateUrlForSSRF(url);
-    if (!ssrfCheck.safe) {
-      return res.status(403).send(ssrfCheck.reason);
-    }
-
-    const pinnedLookup = createPinnedLookup(ssrfCheck.resolvedAddresses);
-    const httpAgent = new http.Agent({ lookup: pinnedLookup });
-    const httpsAgent = new https.Agent({ lookup: pinnedLookup });
-
-    const axios = require('axios');
-    const response = await axios.get(url, {
-      responseType: 'stream',
-      timeout: 30000,
-      httpAgent,
-      httpsAgent,
-      headers: {
-        'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18',
-        Accept: '*/*',
-        'Accept-Encoding': 'gzip, deflate',
-        Connection: 'keep-alive',
-      },
-      maxRedirects: 5,
-      beforeRedirect: (options) => {
-        const hostname = (options.hostname || '').replace(/^\[|\]$/g, '');
-        if (
-          isPrivateIP(hostname) ||
-          ['localhost', 'metadata.google.internal'].includes(hostname.toLowerCase())
-        ) {
-          throw new Error('Redirect to private/internal address blocked');
-        }
-      },
-    });
-
-    const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || url;
-    const contentType = (response.headers['content-type'] || '').toLowerCase();
-    const isManifest =
-      url.includes('.m3u8') ||
-      finalUrl.includes('.m3u8') ||
-      contentType.includes('mpegurl') ||
-      contentType.includes('apple.mpegurl');
-
-    res.set({
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Range',
-      'Content-Type': isManifest
-        ? 'application/vnd.apple.mpegurl'
-        : response.headers['content-type'] || 'application/octet-stream',
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-    });
-
-    if (isManifest) {
-      const MAX_MANIFEST_SIZE = 10 * 1024 * 1024;
-      let data = '';
-      let dataSize = 0;
-
-      response.data.on('data', (chunk) => {
-        dataSize += chunk.length;
-        if (dataSize > MAX_MANIFEST_SIZE) {
-          response.data.destroy();
-          if (!res.headersSent) res.status(413).send('Manifest too large');
-          return;
-        }
-        data += chunk.toString();
-      });
-
-      response.data.on('end', () => {
-        if (res.headersSent) return;
-        const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf('/') + 1);
-        const code = req.params.code;
-
-        function resolveAndProxy(rawUrl) {
-          const trimmed = rawUrl.trim();
-          if (!trimmed) return trimmed;
-          if (trimmed.includes('/api/v1/tv/stream/')) return trimmed;
-          let absolute;
-          if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-            absolute = trimmed;
-          } else if (trimmed.startsWith('/')) {
-            try {
-              const parsed = new URL(finalUrl);
-              absolute = `${parsed.protocol}//${parsed.host}${trimmed}`;
-            } catch {
-              absolute = baseUrl + trimmed;
-            }
-          } else {
-            absolute = baseUrl + trimmed;
-          }
-          return `/api/v1/tv/stream/${code}?url=${encodeURIComponent(absolute)}`;
-        }
-
-        const lines = data.split('\n');
-        const rewrittenLines = lines.map((line) => {
-          const trimmedLine = line.trim();
-          if (trimmedLine === '') return line;
-          if (trimmedLine.startsWith('#')) {
-            return line.replace(/URI="([^"]+)"/gi, (match, uri) => {
-              return `URI="${resolveAndProxy(uri)}"`;
-            });
-          }
-          return resolveAndProxy(trimmedLine);
-        });
-
-        res.send(rewrittenLines.join('\n'));
-      });
-
-      response.data.on('error', (error) => {
-        console.error('TV stream error:', error);
-        if (!res.headersSent) res.status(500).send('Stream error');
-      });
-    } else {
-      response.data.pipe(res);
-      response.data.on('error', (error) => {
-        console.error('TV stream error:', error);
-        if (!res.headersSent) res.status(500).send('Stream error');
-      });
-      req.on('close', () => {
-        response.data.destroy();
-      });
-    }
+    if (!url) return res.status(400).send('URL parameter is required');
+    return proxyUpstreamStream(
+      req,
+      res,
+      String(url),
+      { userId: String(user._id), channelListCode: user.channelListCode },
+      req.params.code,
+    );
   } catch (error) {
-    console.error('TV proxy error:', error.message);
-    if (res.headersSent) return;
-    if (error.response) {
-      res.status(error.response.status).send(error.response.statusText);
-    } else if (error.code === 'ECONNABORTED') {
-      res.status(504).send('Gateway Timeout');
-    } else {
-      res.status(502).send('Bad Gateway');
-    }
+    console.error('Legacy TV proxy error:', error);
+    if (!res.headersSent) res.status(502).send('Bad Gateway');
   }
 });
 

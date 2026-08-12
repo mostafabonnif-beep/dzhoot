@@ -2,6 +2,7 @@ import mongoose, { Schema, Model } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { IUserDocument, IUserModel } from '@firevision/shared';
+import { issuePlaybackToken } from '../services/playback-token';
 
 const userSchema = new Schema<IUserDocument>(
   {
@@ -215,9 +216,22 @@ userSchema.methods.generateUserPlaylist = async function (
   let m3uContent = m3uHeader;
   m3uContent += `#PLAYLIST:${this.username}'s Channel List\n\n`;
 
-  channels.forEach((channel: any) => {
-    m3uContent += channel.toM3U() + '\n\n';
-  });
+  for (const channel of channels as any[]) {
+    const primaryDead = channel.metadata?.isWorking === false;
+    const primaryFlagged = channel.flaggedBad?.isFlagged === true;
+    const viableAlternate = (channel.alternateStreams || []).find(
+      (alternate: any) => alternate.liveness?.status === 'alive' && alternate.flaggedBad?.isFlagged !== true,
+    );
+    const sourceUrl = primaryDead || primaryFlagged ? viableAlternate?.streamUrl : channel.channelUrl;
+    if (!sourceUrl || !this.channelListCode) continue;
+    const { token } = issuePlaybackToken({
+      userId: String(this._id),
+      channelListCode: this.channelListCode,
+      streamUrl: sourceUrl,
+    });
+    const playbackUrl = `${baseUrl || ''}/api/v1/tv/playback/${token}`;
+    m3uContent += `${channel.toM3U().replace(channel.channelUrl, playbackUrl)}\n\n`;
+  }
 
   return m3uContent;
 };
