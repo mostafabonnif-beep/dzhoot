@@ -19,7 +19,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     addSearchFilter(query, req.query.search);
 
     const [movies, total] = await Promise.all([
-      Movie.find(query).sort({ title: 1 }).skip(skip).limit(limit).lean(),
+      Movie.find(query).select('-streamUrl').sort({ title: 1 }).skip(skip).limit(limit).lean(),
       Movie.countDocuments(query),
     ]);
 
@@ -53,7 +53,7 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
   }
 
   try {
-    const movie = await Movie.findOne({ _id: req.params.id, isActive: true }).lean();
+    const movie = await Movie.findOne({ _id: req.params.id, isActive: true }).select('-streamUrl').lean();
     if (!movie) {
       return res.status(404).json({ success: false, error: 'Movie not found' });
     }

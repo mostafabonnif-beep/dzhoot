@@ -174,7 +174,7 @@ router.get('/proxy-url/:code', async (req, res) => {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     const proxyUrl = `${baseUrl}/api/v1/tv/stream/${req.params.code}?url=${encodeURIComponent(url)}`;
 
-    res.json({ success: true, data: { proxyUrl, originalUrl: url } });
+    res.json({ success: true, data: { proxyUrl } });
   } catch (error) {
     console.error('Error resolving proxy URL:', error);
     res.status(500).json({ success: false, error: 'Failed to resolve proxy URL' });
