@@ -370,6 +370,8 @@ app.use('/api/v1/stream-proxy', require('./routes/stream-proxy'));
 app.use('/api/v1/users', require('./routes/users'));
 app.use('/api/v1/tv', require('./routes/tv'));
 app.use('/api/v1/epg', require('./routes/epg'));
+app.use('/api/v1/movies', require('./routes/movies'));
+app.use('/api/v1/series', require('./routes/series'));
 app.use('/api/v1/config', require('./routes/config'));
 app.use('/api/v1/activity', require('./routes/activity'));
 app.use('/api/v1/scheduler', require('./routes/scheduler'));
