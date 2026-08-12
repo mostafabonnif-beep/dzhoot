@@ -67,8 +67,17 @@ internal fun prepareChannelStream(
 
         val slots = mutableListOf<ErrorRecoveryManager.StreamSlot>()
         slots.add(ErrorRecoveryManager.StreamSlot(url, buildProxyUrl(url), isPrimary = true))
-        channel.alternateStreamUrls.take(3).forEach { altUrl ->
-            slots.add(ErrorRecoveryManager.StreamSlot(altUrl, buildProxyUrl(altUrl), isPrimary = false))
+        channel.alternateStreamUrls.orEmpty().take(3).forEach { alternate ->
+            val resolvedAlternate = StreamUrlTemplate.resolve(context, alternate).trim()
+            if (resolvedAlternate.isNotEmpty() && resolvedAlternate != url) {
+                slots.add(
+                    ErrorRecoveryManager.StreamSlot(
+                        resolvedAlternate,
+                        buildProxyUrl(resolvedAlternate),
+                        isPrimary = false,
+                    ),
+                )
+            }
         }
         errorRecoveryManager.setStreamSlots(slots)
 
