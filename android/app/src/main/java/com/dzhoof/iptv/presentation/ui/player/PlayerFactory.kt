@@ -2,6 +2,8 @@ package com.dzhoof.iptv.presentation.ui.player
 
 import android.app.ActivityManager
 import android.content.Context
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
@@ -31,6 +33,7 @@ import javax.inject.Singleton
  *    killing the channel (common on cheap Fire TV sticks).
  */
 @Singleton
+@OptIn(UnstableApi::class)
 class PlayerFactory @Inject constructor(
     @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient

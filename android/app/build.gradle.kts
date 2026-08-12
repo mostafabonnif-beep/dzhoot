@@ -4,11 +4,23 @@ plugins {
     alias(libs.plugins.kotlin.kapt)
     id("kotlin-parcelize")
     alias(libs.plugins.hilt)
-    id("com.google.gms.google-services")
-    id("com.google.firebase.crashlytics")
-    id("com.google.firebase.firebase-perf")
     id("io.sentry.android.gradle")
     id("jacoco")
+}
+
+// Firebase plugins require a real google-services.json, which is intentionally
+// not committed. Keep local debug/unit builds reproducible without secrets;
+// CI/release builds enable Firebase automatically when the file is provided.
+val googleServicesAvailable = listOf(
+    "google-services.json",
+    "src/debug/google-services.json",
+    "src/release/google-services.json",
+).any { file(it).exists() }
+
+if (googleServicesAvailable) {
+    apply(plugin = "com.google.gms.google-services")
+    apply(plugin = "com.google.firebase.crashlytics")
+    apply(plugin = "com.google.firebase.firebase-perf")
 }
 
 android {

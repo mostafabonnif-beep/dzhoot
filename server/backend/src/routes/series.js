@@ -4,78 +4,87 @@ const Series = require('../models/Series');
 const Season = require('../models/Season');
 const Episode = require('../models/Episode');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
+const {
+  addSearchFilter,
+  isValidObjectId,
+  parsePagination,
+} = require('./catalog-helpers');
 
-// Get all series with pagination and search
 router.get('/', requireTvOrSessionAuth, async (req, res) => {
   try {
-    const { page = 1, limit = 50, category, search } = req.query;
+    const { page, limit, skip } = parsePagination(req.query);
     const query = { isActive: true };
 
-    if (category && category !== 'All') {
-      query.category = category;
+    if (req.query.category && String(req.query.category) !== 'All') {
+      query.category = String(req.query.category).trim().slice(0, 100);
     }
+    addSearchFilter(query, req.query.search);
 
-    if (search) {
-      query.title = { $regex: String(search), $options: 'i' };
-    }
-
-    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const [seriesList, total] = await Promise.all([
-      Series.find(query).sort({ title: 1 }).skip(skip).limit(parseInt(limit, 10)).lean(),
+      Series.find(query).sort({ title: 1 }).skip(skip).limit(limit).lean(),
       Series.countDocuments(query),
     ]);
 
-    res.json({
+    return res.json({
       success: true,
       data: seriesList,
-      pagination: {
-        total,
-        page: parseInt(page, 10),
-        limit: parseInt(limit, 10),
-        pages: Math.ceil(total / parseInt(limit, 10)),
-      },
+      pagination: { total, page, limit, pages: Math.ceil(total / limit) },
     });
   } catch (error) {
     console.error('Error fetching series:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch series' });
+    return res.status(500).json({ success: false, error: 'Failed to fetch series' });
   }
 });
 
-// Get series categories
-router.get('/categories', requireTvOrSessionAuth, async (req, res) => {
+router.get('/categories', requireTvOrSessionAuth, async (_req, res) => {
   try {
     const categories = await Series.distinct('category', { isActive: true });
-    res.json({ success: true, data: categories.sort() });
+    return res.json({
+      success: true,
+      data: categories.filter(Boolean).map(String).sort((a, b) => a.localeCompare(b)),
+    });
   } catch (error) {
     console.error('Error fetching series categories:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch categories' });
+    return res.status(500).json({ success: false, error: 'Failed to fetch categories' });
   }
 });
 
-// Get single series detail with seasons
 router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return res.status(400).json({ success: false, error: 'Invalid series id' });
+  }
+
   try {
-    const series = await Series.findById(req.params.id).lean();
+    const series = await Series.findOne({ _id: req.params.id, isActive: true }).lean();
     if (!series) {
       return res.status(404).json({ success: false, error: 'Series not found' });
     }
 
     const seasons = await Season.find({ seriesId: series._id }).sort({ seasonNumber: 1 }).lean();
-    res.json({ success: true, data: { ...series, seasons } });
+    return res.json({ success: true, data: { ...series, seasons } });
   } catch (error) {
     console.error('Error fetching series detail:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch series detail' });
+    return res.status(500).json({ success: false, error: 'Failed to fetch series detail' });
   }
 });
 
-// Get episodes for a specific season
 router.get('/seasons/:seasonId/episodes', requireTvOrSessionAuth, async (req, res) => {
+  if (!isValidObjectId(req.params.seasonId)) {
+    return res.status(400).json({ success: false, error: 'Invalid season id' });
+  }
+
   try {
-    const episodes = await Episode.find({ seasonId: req.params.seasonId }).sort({ episodeNumber: 1 }).lean();
-    res.json({ success: true, data: episodes });
+    const season = await Season.findById(req.params.seasonId).select('_id seriesId').lean();
+    if (!season) {
+      return res.status(404).json({ success: false, error: 'Season not found' });
+    }
+    const episodes = await Episode.find({ seasonId: season._id, seriesId: season.seriesId })
+      .sort({ episodeNumber: 1 })
+      .lean();
+    return res.json({ success: true, data: episodes });
   } catch (error) {
     console.error('Error fetching episodes:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch episodes' });
+    return res.status(500).json({ success: false, error: 'Failed to fetch episodes' });
   }
 });
 

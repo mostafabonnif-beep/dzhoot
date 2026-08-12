@@ -280,6 +280,22 @@ class ErrorRecoveryManagerTest {
         assertNull(manager.activeStreamUrl)
     }
 
+    // ── Unresponsive buffering ────────────────────────────────────
+
+    @Test
+    fun `long buffering reports unresponsive and starts automatic recovery`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(listOf(primarySlot()))
+        every { player.playbackState } returns Player.STATE_BUFFERING
+
+        listenerSlot.captured.onPlaybackStateChanged(Player.STATE_BUFFERING)
+        advanceTimeBy(30_000)
+        runCurrent()
+
+        assertEquals(true, onStreamUnresponsiveCalled)
+        assertEquals(1, onRecoveringAttempts.size)
+    }
+
     // ── maxTotalAttempts ─────────────────────────────────────────
 
     @Test

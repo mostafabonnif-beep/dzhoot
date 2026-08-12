@@ -56,7 +56,7 @@ class ErrorRecoveryManager(
         }
 
     val maxTotalAttempts: Int
-        get() = streamSlots.sumOf { maxAttemptsForSlot(streamSlots.indexOf(it)) }
+        get() = streamSlots.mapIndexed { index, _ -> maxAttemptsForSlot(index) }.sum()
 
     private fun maxAttemptsForSlot(slotIndex: Int): Int {
         val slot = streamSlots.getOrNull(slotIndex) ?: return 0
@@ -109,6 +109,11 @@ class ErrorRecoveryManager(
             delay(unresponsiveThresholdMs)
             if (player.playbackState == Player.STATE_BUFFERING) {
                 onStreamUnresponsive?.invoke()
+                if (totalAttempts < maxTotalAttempts) {
+                    attemptReconnect()
+                } else {
+                    onStreamDead("Stream unresponsive (buffering timeout)")
+                }
             }
         }
     }

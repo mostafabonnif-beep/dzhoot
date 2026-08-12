@@ -1,10 +1,15 @@
 import axios from 'axios';
+import http from 'http';
+import https from 'https';
 import { XMLParser } from 'fast-xml-parser';
 import { createGunzip } from 'zlib';
 import EpgProgram from '../models/EpgProgram';
+import M3USource from '../models/M3USource';
 import { epgCache } from './cache';
-
+import { decryptSecret } from '../utils/crypto';
+import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 const Channel = require('../models/Channel');
+
 
 const EPG_REFRESH_INTERVAL = parseInt(process.env.EPG_REFRESH_INTERVAL_MS || '21600000', 10); // 6 hours
 const EPG_FETCH_CONCURRENCY = 5;
@@ -38,7 +43,7 @@ interface EpgStats {
   refreshInProgress: boolean;
 }
 
-class EpgService {
+export class EpgService {
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private refreshPromise: Promise<void> | null = null;
   private lastRefreshedAt: Date | null = null;
@@ -128,7 +133,7 @@ class EpgService {
               }
               return 0;
             } catch (err: any) {
-              console.warn(`[epg-service] Failed to fetch ${source.url}: ${err.message}`);
+              console.warn(`[epg-service] Failed to fetch ${source.source}: ${err.message}`);
               return 0;
             }
           }),
@@ -224,6 +229,38 @@ class EpgService {
       }
     }
 
+    // Add custom XMLTV URLs configured on active M3U sources. These sources
+    // are intentionally read from the encrypted value and are validated again
+    // at fetch time, so a changed DNS record cannot turn the scheduler into an
+    // internal network proxy.
+    const customM3USources = await M3USource.find({
+      status: 'Active',
+      epgUrlEncrypted: { $nin: [null, ''] },
+    }).lean();
+
+    for (const source of customM3USources) {
+      try {
+        const url = decryptSecret(source.epgUrlEncrypted || '');
+        if (!url || seenUrls.has(url)) continue;
+        const sourceChannels = channels.filter(
+          (channel: any) => String(channel.metadata?.m3uSourceId || '') === String(source._id),
+        );
+        const coveredChannelIds = sourceChannels
+          .flatMap((channel: any) => [channel.tvgId, channel.channelId])
+          .filter(Boolean)
+          .map(String);
+        if (coveredChannelIds.length === 0) continue;
+        seenUrls.add(url);
+        sources.push({
+          url,
+          coveredChannelIds,
+          source: `m3u:${source._id}`,
+        });
+      } catch {
+        console.warn(`[epg-service] Invalid encrypted XMLTV URL for M3U source ${source._id}`);
+      }
+    }
+
     // Add iptv-epg.org sources per country
     for (const [country, channelIds] of countryToChannelIds) {
       const url = `${IPTV_EPG_BASE}/epg-${country}.xml.gz`;
@@ -243,11 +280,25 @@ class EpgService {
     const isGzip = url.endsWith('.gz');
 
     // Stream the response to avoid holding compressed + decompressed buffers simultaneously
+    const validation = await validateUrlForSSRF(url);
+    if (!validation.safe || !validation.resolvedAddresses?.length) {
+      throw new Error(`EPG URL rejected: ${validation.reason || 'unsafe URL'}`);
+    }
+
+    const parsedUrl = new URL(url);
+    const lookup = createPinnedLookup(validation.resolvedAddresses);
+    const agent = parsedUrl.protocol === 'https:'
+      ? new https.Agent({ lookup: lookup as any })
+      : new http.Agent({ lookup: lookup as any });
+
     const response = await axios.get(url, {
       timeout: 120000,
       responseType: 'stream',
       maxContentLength: 100 * 1024 * 1024,
-      maxRedirects: 5,
+      maxBodyLength: 100 * 1024 * 1024,
+      maxRedirects: 0,
+      httpAgent: parsedUrl.protocol === 'http:' ? agent : undefined,
+      httpsAgent: parsedUrl.protocol === 'https:' ? agent : undefined,
       headers: { 'User-Agent': 'FireVision IPTV/1.0' },
     });
 
