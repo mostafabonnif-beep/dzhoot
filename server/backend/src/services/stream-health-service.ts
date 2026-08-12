@@ -1,6 +1,7 @@
 import Channel from '../models/Channel';
 import { probeStream } from './stream-prober';
 import { channelCache } from './cache';
+import { redactSensitiveText } from './audit-log';
 import type { IChannelDocument } from '@firevision/shared';
 
 const BATCH_SIZE = 200;
@@ -60,7 +61,7 @@ class StreamHealthService {
             else if (result === 'all-dead') stats.allDead++;
             else if (result === 'flagged-skipped') stats.flaggedSkipped++;
           } catch (err: unknown) {
-            const message = err instanceof Error ? err.message : String(err);
+            const message = redactSensitiveText(err);
             console.error(`[stream-health] Error checking channel ${channel.channelId}:`, message);
             stats.checked++;
           }
@@ -204,9 +205,7 @@ class StreamHealthService {
 
     await channel.save();
 
-    console.log(
-      `[stream-health] Promoted alternate for ${channel.channelId}: ${promotedAlt.streamUrl}`,
-    );
+    console.log(`[stream-health] Promoted alternate for ${channel.channelId}`);
 
     return 'promoted';
   }

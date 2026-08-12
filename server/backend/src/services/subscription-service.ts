@@ -1,9 +1,11 @@
+import crypto from 'crypto';
 import mongoose from 'mongoose';
 import Plan from '../models/Plan';
 import ActivationCode from '../models/ActivationCode';
 import ActivationRedemption from '../models/ActivationRedemption';
 import Subscription from '../models/Subscription';
 import Device from '../models/Device';
+import { getRedisClient, isRedisReady } from './redis';
 import {
   normalizeActivationCode,
   generateActivationCode,
@@ -13,6 +15,62 @@ import {
 } from '../utils/code-generator';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const DEVICE_LOCK_TTL_MS = 15_000;
+const DEVICE_LOCK_WAIT_MS = 5_000;
+const localDeviceLocks = new Map<string, Promise<void>>();
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withDeviceLock<T>(userId: string, task: () => Promise<T>): Promise<T> {
+  const previous = localDeviceLocks.get(userId) || Promise.resolve();
+  let releaseLocal!: () => void;
+  const current = new Promise<void>((resolve) => {
+    releaseLocal = resolve;
+  });
+  const chain = previous.then(() => current);
+  localDeviceLocks.set(userId, chain);
+  await previous;
+
+  const redis = isRedisReady() ? getRedisClient() : null;
+  const lockKey = `firevision:device-lock:${userId}`;
+  const lockToken = crypto.randomBytes(16).toString('hex');
+  const startedAt = Date.now();
+  let redisLocked = false;
+
+  try {
+    if (redis) {
+      while (Date.now() - startedAt < DEVICE_LOCK_WAIT_MS) {
+        const acquired = await redis.set(lockKey, lockToken, 'PX', DEVICE_LOCK_TTL_MS, 'NX');
+        if (acquired === 'OK') {
+          redisLocked = true;
+          break;
+        }
+        await sleep(100);
+      }
+      if (!redisLocked) {
+        const error = new Error('Device registration is busy; retry shortly');
+        (error as any).code = 'DEVICE_REGISTRATION_BUSY';
+        throw error;
+      }
+    }
+    return await task();
+  } finally {
+    if (redis && redisLocked) {
+      await redis
+        .eval(
+          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+          1,
+          lockKey,
+          lockToken,
+        )
+        .catch(() => undefined);
+    }
+    releaseLocal();
+    if (localDeviceLocks.get(userId) === chain) localDeviceLocks.delete(userId);
+  }
+}
 
 export type RedeemResult =
   | {
@@ -165,47 +223,59 @@ export async function getUserSubscription(userId: string) {
  */
 export async function registerDevice(userId: string, info: DeviceInfo, maxDevices?: number) {
   const { deviceId, name, platform, appVersion } = info;
-  if (!deviceId) {
-    return { ok: false as const, error: 'DEVICE_ID_REQUIRED', message: 'deviceId is required' };
+  const normalizedDeviceId = typeof deviceId === 'string' ? deviceId.trim() : '';
+  if (!normalizedDeviceId || normalizedDeviceId.length > 200) {
+    return { ok: false as const, error: 'DEVICE_ID_REQUIRED', message: 'deviceId must be a non-empty string up to 200 characters' };
   }
 
-  const existing = await Device.findOne({ userId, deviceId }).exec();
-  if (existing) {
-    existing.name = name || existing.name;
-    existing.platform = platform || existing.platform;
-    existing.appVersion = appVersion || existing.appVersion;
-    existing.lastSeenAt = new Date();
-    await existing.save();
-    return { ok: true as const, device: existing };
-  }
+  return withDeviceLock(userId, async () => {
+    const existing = await Device.findOne({ userId, deviceId: normalizedDeviceId }).exec();
+    if (existing) {
+      existing.name = name || existing.name;
+      existing.platform = platform || existing.platform;
+      existing.appVersion = appVersion || existing.appVersion;
+      existing.lastSeenAt = new Date();
+      await existing.save();
+      return { ok: true as const, device: existing };
+    }
 
-  let limit = maxDevices;
-  if (limit == null) {
-    const subscription = await Subscription.findOne({ userId, status: 'ACTIVE' }).lean().exec();
-    const plan = subscription ? await Plan.findById(subscription.planId).lean().exec() : null;
-    limit = plan?.maxDevices ?? 0;
-  }
+    let limit = maxDevices;
+    if (limit == null) {
+      const subscription = await Subscription.findOne({ userId, status: 'ACTIVE' }).lean().exec();
+      const plan = subscription ? await Plan.findById(subscription.planId).lean().exec() : null;
+      limit = plan?.maxDevices ?? 0;
+    }
 
-  const devicesUsed = await Device.countDocuments({ userId }).exec();
-  if (limit > 0 && devicesUsed >= limit) {
-    return {
-      ok: false as const,
-      error: 'DEVICE_LIMIT_REACHED',
-      message: 'Device limit reached for your subscription',
-      devicesUsed,
-      maxDevices: limit,
-    };
-  }
+    const devicesUsed = await Device.countDocuments({ userId }).exec();
+    if (limit > 0 && devicesUsed >= limit) {
+      return {
+        ok: false as const,
+        error: 'DEVICE_LIMIT_REACHED',
+        message: 'Device limit reached for your subscription',
+        devicesUsed,
+        maxDevices: limit,
+      };
+    }
 
-  const device = await Device.create({
-    userId,
-    deviceId,
-    name: name || '',
-    platform: platform || '',
-    appVersion: appVersion || '',
-    lastSeenAt: new Date(),
+    try {
+      const device = await Device.create({
+        userId,
+        deviceId: normalizedDeviceId,
+        name: name || '',
+        platform: platform || '',
+        appVersion: appVersion || '',
+        lastSeenAt: new Date(),
+      });
+      return { ok: true as const, device };
+    } catch (error: any) {
+      // A second API replica may have won the unique (userId, deviceId) race.
+      if (error?.code === 11000) {
+        const duplicate = await Device.findOne({ userId, deviceId: normalizedDeviceId }).exec();
+        if (duplicate) return { ok: true as const, device: duplicate };
+      }
+      throw error;
+    }
   });
-  return { ok: true as const, device };
 }
 
 /** Generate a batch of codes. Plaintext codes are returned exactly once. */

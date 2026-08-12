@@ -10,6 +10,13 @@ const RefreshToken = require('../models/RefreshToken');
 const { audit } = require('../services/audit-log');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/email');
 
+function buildOwnedOtherSessionsFilter(userId, currentSessionId) {
+  return {
+    userId,
+    sessionId: { $ne: currentSessionId },
+  };
+}
+
 // Input validation helpers
 const USERNAME_REGEX = /^[a-zA-Z0-9_.-]+$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -690,11 +697,9 @@ router.post('/cleanup-sessions', requireAuth, requireAdmin, async (req, res) => 
 /**
  * Revoke all sessions except the current one
  */
-router.post('/revoke-other-sessions', requireAuth, requireAdmin, async (req, res) => {
+router.post('/revoke-other-sessions', requireAuth, async (req, res) => {
   try {
-    const result = await Session.deleteMany({
-      sessionId: { $ne: req.sessionId },
-    });
+    const result = await Session.deleteMany(buildOwnedOtherSessionsFilter(req.user.id, req.sessionId));
     audit({
       userId: req.user.id,
       action: 'revoke_other_sessions',
@@ -1681,4 +1686,4 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
-module.exports = { router, requireAuth, requireAdmin };
+module.exports = { router, requireAuth, requireAdmin, buildOwnedOtherSessionsFilter };

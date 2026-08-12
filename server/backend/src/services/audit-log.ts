@@ -22,6 +22,16 @@ const NOISY_ACTIONS = new Set([
   'check_liveness_batch',
 ]);
 
+/** Remove credentials, bearer tokens and common secret query parameters from diagnostics. */
+export function redactSensitiveText(value: unknown): string {
+  let text = value instanceof Error ? value.message : String(value ?? 'Unknown error');
+  text = text.replace(/(https?:\/\/)([^\s/@:]+):([^\s/@:]+)@/gi, '$1[redacted]@');
+  text = text.replace(/([?&](?:username|user|password|pass|token|api[_-]?key|secret|auth)=)[^&\s]+/gi, '$1[redacted]');
+  text = text.replace(/((?:password|passwd|secret|token|api[_-]?key|authorization)\s*[:=]\s*)(["']?)[^\s,"']+/gi, '$1$2[redacted]');
+  text = text.replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[redacted]');
+  return text.slice(0, 1000);
+}
+
 /** Fire-and-forget audit log entry. Never throws. */
 export function audit(opts: LogOptions): void {
   if (NOISY_ACTIONS.has(opts.action)) return;
@@ -35,7 +45,7 @@ export function audit(opts: LogOptions): void {
     ipAddress: opts.ipAddress,
     userAgent: opts.userAgent,
     status: opts.status || 'success',
-    errorMessage: opts.errorMessage,
+    errorMessage: opts.errorMessage ? redactSensitiveText(opts.errorMessage) : undefined,
   }).catch((err: Error) => {
     console.error('[audit] Failed to write audit log:', err.message);
   });
@@ -50,4 +60,4 @@ export function reqCtx(req: any) {
   };
 }
 
-module.exports = { audit, reqCtx };
+module.exports = { audit, reqCtx, redactSensitiveText };

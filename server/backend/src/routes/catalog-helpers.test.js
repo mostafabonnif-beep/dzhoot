@@ -1,3 +1,5 @@
+/* eslint-env jest */
+
 const {
   addSearchFilter,
   isValidObjectId,

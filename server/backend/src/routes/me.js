@@ -35,7 +35,8 @@ router.post('/devices', async (req, res) => {
     const { deviceId, name, platform, appVersion } = req.body || {};
     const result = await registerDevice(req.user.id, { deviceId, name, platform, appVersion });
     if (!result.ok) {
-      return res.status(403).json({
+      const status = result.error === 'DEVICE_REGISTRATION_BUSY' ? 503 : 403;
+      return res.status(status).json({
         success: false,
         error: result.message,
         code: result.error,

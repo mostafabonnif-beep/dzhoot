@@ -2,7 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const M3USource = require('../models/M3USource');
 const { requireAuth, requireAdmin } = require('./auth');
-const { audit, reqCtx } = require('../services/audit-log');
+const { audit, reqCtx, redactSensitiveText } = require('../services/audit-log');
 const {
   testM3UConnection,
   syncM3USource,
@@ -95,9 +95,18 @@ router.post('/:id/test', async (req, res) => {
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
     const result = await testM3UConnection(decryptSecret(source.playlistUrlEncrypted));
+    audit({
+      ...reqCtx(req),
+      action: 'M3U_SOURCE_TEST',
+      resource: 'M3USource',
+      resourceId: String(id),
+      status: result.ok ? 'success' : 'failure',
+      changes: { after: { ok: result.ok, channelCount: result.channelCount } },
+      errorMessage: result.error || undefined,
+    });
     return res.json({ success: result.ok, data: result, error: result.error });
   } catch (err) {
-    console.error('[m3u] test error:', err);
+    console.error('[m3u] test error:', redactSensitiveText(err));
     return res.status(500).json({ success: false, error: 'M3U test failed' });
   }
 });
@@ -119,7 +128,17 @@ router.post('/:id/sync', async (req, res) => {
           changes: { after: result.stats },
         });
       })
-      .catch((err) => console.error(`[m3u] sync failed for ${id}:`, err.message));
+      .catch((err) => {
+        audit({
+          ...reqCtx(req),
+          action: 'M3U_SOURCE_SYNC',
+          resource: 'M3USource',
+          resourceId: String(id),
+          status: 'failure',
+          errorMessage: err.message,
+        });
+        console.error(`[m3u] sync failed for ${id}:`, redactSensitiveText(err));
+      });
 
     return res.json({ success: true, data: { syncing: true, message: 'Sync started' } });
   } catch (err) {

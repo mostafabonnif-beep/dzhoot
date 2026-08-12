@@ -3,7 +3,7 @@ const router = express.Router();
 const mongoose = require('mongoose');
 const XtreamSource = require('../models/XtreamSource');
 const { requireAuth, requireAdmin } = require('./auth');
-const { audit, reqCtx } = require('../services/audit-log');
+const { audit, reqCtx, redactSensitiveText } = require('../services/audit-log');
 const { testXtreamConnection, syncXtreamSource, encryptSecret } = require('../services/xtream-service');
 
 // Admin-only Xtream source management: /api/v1/admin/xtream-sources
@@ -85,10 +85,20 @@ router.post('/:id/test', async (req, res) => {
       username: decryptSecret(source.usernameEncrypted),
       password: decryptSecret(source.passwordEncrypted),
     });
+    audit({
+      ...reqCtx(req),
+      action: 'XTREAM_SOURCE_TEST',
+      resource: 'XtreamSource',
+      resourceId: String(id),
+      status: result.ok ? 'success' : 'failure',
+      changes: { after: { ok: result.ok } },
+      errorMessage: result.error || undefined,
+    });
     return res.json({ success: result.ok, data: result.ok ? { userInfo: result.userInfo } : null, error: result.error });
   } catch (err) {
-    console.error('[xtream] test error:', err);
-    return res.status(500).json({ success: false, error: err.message || 'Test failed' });
+    const safeError = redactSensitiveText(err);
+    console.error('[xtream] test error:', safeError);
+    return res.status(500).json({ success: false, error: safeError || 'Test failed' });
   }
 });
 
@@ -112,7 +122,15 @@ router.post('/:id/sync', async (req, res) => {
         });
       })
       .catch((err) => {
-        console.error(`[xtream] sync failed for ${id}:`, err.message);
+        audit({
+          ...reqCtx(req),
+          action: 'XTREAM_SOURCE_SYNC',
+          resource: 'XtreamSource',
+          resourceId: String(id),
+          status: 'failure',
+          errorMessage: err.message,
+        });
+        console.error(`[xtream] sync failed for ${id}:`, redactSensitiveText(err));
       });
 
     return res.json({ success: true, data: { syncing: true, message: 'Sync started' } });
