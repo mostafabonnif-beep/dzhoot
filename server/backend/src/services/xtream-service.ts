@@ -1,4 +1,6 @@
 import axios from 'axios';
+import http from 'http';
+import https from 'https';
 import mongoose from 'mongoose';
 import XtreamSource from '../models/XtreamSource';
 import Channel from '../models/Channel';
@@ -7,14 +9,36 @@ import Series from '../models/Series';
 import Season from '../models/Season';
 import Episode from '../models/Episode';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
+import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
+
+const API_TIMEOUT_MS = 30000;
+
+async function safeAxiosGet(url: string) {
+  const validation = await validateUrlForSSRF(url);
+  if (!validation.safe || !validation.resolvedAddresses?.length) {
+    throw new Error(`Xtream URL rejected: ${validation.reason || 'unsafe URL'}`);
+  }
+
+  const parsed = new URL(url);
+  const lookup = createPinnedLookup(validation.resolvedAddresses);
+  const agent = parsed.protocol === 'https:'
+    ? new https.Agent({ lookup: lookup as any })
+    : new http.Agent({ lookup: lookup as any });
+
+  return axios.get(url, {
+    timeout: API_TIMEOUT_MS,
+    maxRedirects: 0,
+    httpAgent: parsed.protocol === 'http:' ? agent : undefined,
+    httpsAgent: parsed.protocol === 'https:' ? agent : undefined,
+    validateStatus: (status) => status >= 200 && status < 300,
+  });
+}
 
 /**
  * Xtream Codes API integration.
  * player_api.php is the well-known endpoint exposed by Xtream Codes panels:
  *   GET {server}/player_api.php?username=U&password=P&action=...
  */
-
-const API_TIMEOUT_MS = 30000;
 
 export interface XtreamCredentials {
   serverUrl: string;
@@ -36,7 +60,7 @@ export function buildXtreamApiUrl(
 
 async function apiGet(creds: XtreamCredentials, action?: string, extra: Record<string, string | number> = {}) {
   const url = buildXtreamApiUrl(creds, action, extra);
-  const res = await axios.get(url, { timeout: API_TIMEOUT_MS });
+  const res = await safeAxiosGet(url);
   return res.data;
 }
 
@@ -258,7 +282,11 @@ export async function syncXtreamSource(sourceId: string) {
     }
 
     // Episodes — bounded concurrency to avoid hammering the source panel.
-    const seriesDocs = await Series.find({ sourceId: id, isActive: true }).lean().exec();
+    const seriesDocs = await Series.find({
+      sourceId: id,
+      isActive: true,
+      externalId: { $in: [...seriesExternalIds] },
+    }).lean().exec();
     const CONCURRENCY = 3;
     let idx = 0;
     const worker = async () => {

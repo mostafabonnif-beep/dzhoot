@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Loader2,
   Tv,
-  Search,
   LayoutGrid,
   List,
 } from 'lucide-react';
@@ -32,10 +31,10 @@ export default function SeriesPageShell() {
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState('All');
   const [categories, setCategories] = useState<string[]>([]);
-  const { searchTerm, setSearchTerm } = useDebouncedSearch('');
+  const { search: searchTerm, debouncedSearch, handleSearchChange: setSearchTerm } = useDebouncedSearch('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  const fetchSeries = async () => {
+  const fetchSeries = useCallback(async () => {
     setLoading(true);
     try {
       const res = await api.get('/api/v1/series', {
@@ -43,7 +42,7 @@ export default function SeriesPageShell() {
           page,
           limit: PAGE_SIZE,
           category: category === 'All' ? undefined : category,
-          search: searchTerm || undefined,
+          search: debouncedSearch || undefined,
         },
       });
       if (res.data.success) {
@@ -55,7 +54,7 @@ export default function SeriesPageShell() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [category, debouncedSearch, page]);
 
   const fetchCategories = async () => {
     try {
@@ -74,7 +73,7 @@ export default function SeriesPageShell() {
 
   useEffect(() => {
     fetchSeries();
-  }, [page, category, searchTerm]);
+  }, [fetchSeries]);
 
   return (
     <div className="p-6 space-y-6">
@@ -109,7 +108,7 @@ export default function SeriesPageShell() {
         <div className="md:col-span-2">
           <SearchInput
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(value) => setSearchTerm(value)}
             placeholder="ابحث عن اسم المسلسل..."
           />
         </div>
@@ -189,7 +188,7 @@ export default function SeriesPageShell() {
                 <tr key={series._id} className="hover:bg-accent/50 transition-colors">
                   <td className="p-3 flex items-center gap-3">
                     <div className="h-10 w-7 bg-muted rounded overflow-hidden flex-shrink-0">
-                      <img src={series.poster} className="object-cover w-full h-full" />
+                      <img src={series.poster} alt={series.title} className="object-cover w-full h-full" />
                     </div>
                     <span className="font-medium">{series.title}</span>
                   </td>
@@ -205,8 +204,9 @@ export default function SeriesPageShell() {
 
       <div className="flex justify-center py-4">
         <Pagination
-          currentPage={page}
-          totalPages={Math.ceil(total / PAGE_SIZE)}
+          page={page}
+          pageSize={PAGE_SIZE}
+          totalCount={total}
           onPageChange={setPage}
         />
       </div>

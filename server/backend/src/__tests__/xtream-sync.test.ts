@@ -10,6 +10,10 @@ import { syncXtreamSource, buildXtreamApiUrl } from '../services/xtream-service'
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 
 jest.mock('axios');
+jest.mock('../utils/ssrf-guard', () => ({
+  validateUrlForSSRF: jest.fn(async () => ({ safe: true, resolvedAddresses: ['198.51.100.10'] })),
+  createPinnedLookup: jest.fn(() => undefined),
+}));
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 

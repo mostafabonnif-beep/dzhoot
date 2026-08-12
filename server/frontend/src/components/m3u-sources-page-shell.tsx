@@ -1,0 +1,204 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { CheckCircle2, Link2, Loader2, Play, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import api from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
+
+interface M3USource {
+  _id: string;
+  name: string;
+  hasEpgUrl: boolean;
+  status: 'Active' | 'Inactive';
+  syncStatus: 'idle' | 'syncing' | 'error';
+  lastSyncAt?: string | null;
+  lastError?: string | null;
+  stats?: { channels: number; blocked: number; duplicates: number };
+}
+
+export default function M3USourcesPageShell() {
+  const { toast } = useToast();
+  const [sources, setSources] = useState<M3USource[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: '', playlistUrl: '', epgUrl: '' });
+
+  const loadSources = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await api.get('/admin/m3u-sources');
+      setSources(response.data.data || []);
+    } catch {
+      toast('تعذر تحميل مصادر M3U', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    loadSources();
+  }, [loadSources]);
+
+  async function addSource(event: React.FormEvent) {
+    event.preventDefault();
+    if (!form.name.trim() || !form.playlistUrl.trim()) {
+      toast('اسم المصدر ورابط M3U مطلوبان', 'error');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await api.post('/admin/m3u-sources', {
+        name: form.name.trim(),
+        playlistUrl: form.playlistUrl.trim(),
+        epgUrl: form.epgUrl.trim() || undefined,
+      });
+      setForm({ name: '', playlistUrl: '', epgUrl: '' });
+      toast('تمت إضافة مصدر M3U بنجاح', 'success');
+      await loadSources();
+    } catch {
+      toast('تعذرت إضافة المصدر', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function testSource(source: M3USource) {
+    try {
+      const response = await api.post(`/admin/m3u-sources/${source._id}/test`);
+      const result = response.data.data;
+      toast(
+        result?.ok ? `الاتصال ناجح: ${result.channelCount} قناة` : result?.error || 'فشل اختبار المصدر',
+        result?.ok ? 'success' : 'error',
+      );
+    } catch {
+      toast('تعذر اختبار مصدر M3U', 'error');
+    }
+  }
+
+  async function syncSource(source: M3USource) {
+    try {
+      await api.post(`/admin/m3u-sources/${source._id}/sync`);
+      toast('بدأت مزامنة مصدر M3U في الخلفية', 'info');
+      await loadSources();
+    } catch {
+      toast('تعذر بدء المزامنة', 'error');
+    }
+  }
+
+  async function toggleSource(source: M3USource) {
+    try {
+      await api.patch(`/admin/m3u-sources/${source._id}`, {
+        status: source.status === 'Active' ? 'Inactive' : 'Active',
+      });
+      toast(source.status === 'Active' ? 'تم إيقاف المصدر' : 'تم تفعيل المصدر', 'success');
+      await loadSources();
+    } catch {
+      toast('تعذر تحديث حالة المصدر', 'error');
+    }
+  }
+
+  async function deleteSource(source: M3USource) {
+    if (!window.confirm(`هل تريد حذف المصدر «${source.name}»؟ سيتم إخفاء قنواته.`)) return;
+    try {
+      await api.delete(`/admin/m3u-sources/${source._id}`);
+      toast('تم حذف المصدر', 'success');
+      await loadSources();
+    } catch {
+      toast('تعذر حذف المصدر', 'error');
+    }
+  }
+
+  return (
+    <div className="space-y-6 p-6" dir="rtl">
+      <div>
+        <h1 className="flex items-center gap-2 text-2xl font-bold">
+          <Link2 className="h-6 w-6 text-primary" />
+          مصادر M3U التلقائية
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          أضف روابط M3U القانونية ليتم تنزيلها وتحليلها وتحديث القنوات تلقائياً.
+        </p>
+      </div>
+
+      <form onSubmit={addSource} className="grid gap-4 rounded-lg border bg-card p-5 md:grid-cols-4">
+        <input
+          value={form.name}
+          onChange={(event) => setForm({ ...form, name: event.target.value })}
+          placeholder="اسم المصدر"
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        />
+        <input
+          value={form.playlistUrl}
+          onChange={(event) => setForm({ ...form, playlistUrl: event.target.value })}
+          placeholder="رابط M3U أو M3U8"
+          type="url"
+          dir="ltr"
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        />
+        <input
+          value={form.epgUrl}
+          onChange={(event) => setForm({ ...form, epgUrl: event.target.value })}
+          placeholder="رابط XMLTV اختياري"
+          type="url"
+          dir="ltr"
+          className="h-10 rounded-md border bg-background px-3 text-sm"
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+          إضافة مصدر
+        </button>
+      </form>
+
+      {loading ? (
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : sources.length === 0 ? (
+        <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
+          لا توجد مصادر M3U مضافة بعد.
+        </div>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {sources.map((source) => (
+            <div key={source._id} className="rounded-lg border bg-card p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="font-semibold">{source.name}</h2>
+                  <p className="mt-1 text-xs text-muted-foreground" dir="ltr">
+                    {source.hasEpgUrl ? 'M3U + XMLTV' : 'M3U فقط'}
+                  </p>
+                </div>
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${source.status === 'Active' ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground'}`}>
+                  {source.status === 'Active' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+                  {source.status === 'Active' ? 'نشط' : 'متوقف'}
+                </span>
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.channels ?? 0}</strong>قنوات</div>
+                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.duplicates ?? 0}</strong>مكرر</div>
+                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.blocked ?? 0}</strong>محظور</div>
+              </div>
+
+              <p className="mt-3 text-xs text-muted-foreground">
+                الحالة: {source.syncStatus === 'syncing' ? 'جارٍ التحديث…' : source.syncStatus === 'error' ? `خطأ: ${source.lastError || 'غير معروف'}` : source.lastSyncAt ? `آخر تحديث: ${new Date(source.lastSyncAt).toLocaleString('ar-DZ')}` : 'لم تتم المزامنة بعد'}
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button onClick={() => testSource(source)} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted"><Play className="h-3.5 w-3.5" /> اختبار</button>
+                <button onClick={() => syncSource(source)} disabled={source.syncStatus === 'syncing'} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} /> مزامنة الآن</button>
+                <button onClick={() => toggleSource(source)} className="rounded-md border px-3 py-2 text-xs hover:bg-muted">{source.status === 'Active' ? 'إيقاف' : 'تفعيل'}</button>
+                <button onClick={() => deleteSource(source)} className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"><Trash2 className="h-3.5 w-3.5" /> حذف</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
