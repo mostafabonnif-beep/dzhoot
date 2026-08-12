@@ -10,6 +10,7 @@ const {
   isSubscriptionRequired,
   getActiveSubscription,
 } = require('../services/subscription-service');
+const { issuePlaybackToken } = require('../services/playback-token');
 
 // Stream authorization: /api/v1/streams
 // The client requests a playable URL here instead of using raw catalog URLs,
@@ -37,6 +38,9 @@ router.post('/authorize', async (req, res) => {
     // Subscription gate (skipped for admins, and while the flag is off).
     let subscription = null;
     if (subscriptionRequired && !isAdmin) {
+      if (!req.user) {
+        return res.status(401).json({ success: false, error: 'Authentication required' });
+      }
       subscription = await getActiveSubscription(req.user.id);
       if (!subscription) {
         return res.status(403).json({
@@ -52,7 +56,14 @@ router.post('/authorize', async (req, res) => {
 
     if (contentType === 'LIVE') {
       content = await Channel.findOne({ _id: id, isActive: { $ne: false } }).lean();
-      if (content) url = content.channelUrl;
+      if (content) {
+        const canAccessCatalog = isAdmin || req.user?.allCatalog === true;
+        const assigned = (req.user?.channels || []).some((channelId) => String(channelId) === String(content._id));
+        if (!canAccessCatalog && !assigned) {
+          return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
+        }
+        url = content.channelUrl;
+      }
     } else if (contentType === 'MOVIE') {
       content = await Movie.findOne({ _id: id, isActive: true }).lean();
       if (content) url = content.streamUrl;
@@ -76,10 +87,14 @@ router.post('/authorize', async (req, res) => {
       });
     }
 
-    // Never return the upstream URL: Xtream credentials are embedded in many
-    // live/VOD URLs. The TV proxy validates the user code and revalidates the
-    // upstream destination with SSRF protection on every request.
-    const playbackUrl = `/api/v1/tv/stream/${encodeURIComponent(channelListCode)}?url=${encodeURIComponent(url)}`;
+    // Never return or place the upstream URL in a client-visible URL. The
+    // encrypted, short-lived token is resolved only by the server-side proxy.
+    const { token, expiresAt } = issuePlaybackToken({
+      userId: String(req.user.id),
+      channelListCode,
+      streamUrl: url,
+    });
+    const playbackUrl = `/api/v1/tv/playback/${token}`;
 
     return res.json({
       success: true,
@@ -87,6 +102,7 @@ router.post('/authorize', async (req, res) => {
         contentType,
         contentId: String(id),
         url: playbackUrl,
+        expiresAt,
         authorized: true,
         subscriptionRequired,
         subscription: subscription

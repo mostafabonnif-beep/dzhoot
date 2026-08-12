@@ -14,6 +14,8 @@ import com.dzhoof.iptv.data.model.dto.RedeemCodeRequest
 import com.dzhoof.iptv.data.model.dto.RedeemResponseDto
 import com.dzhoof.iptv.data.model.dto.DevicesResponse
 import com.dzhoof.iptv.data.model.dto.RegisterDeviceRequest
+import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
+import com.dzhoof.iptv.data.model.dto.PlaybackTokenResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -39,6 +41,11 @@ interface FireVisionApiService {
      */
     @GET("api/v1/channels")
     suspend fun getChannels(): Response<ChannelsResponse>
+
+    @POST("api/v1/tv/playback-token")
+    suspend fun issuePlaybackToken(
+        @Body request: PlaybackTokenRequest
+    ): Response<PlaybackTokenResponse>
     
     /**
      * Fetches a specific channel by its ID.

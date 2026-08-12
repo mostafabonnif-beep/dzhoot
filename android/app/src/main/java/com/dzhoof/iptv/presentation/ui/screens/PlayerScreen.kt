@@ -169,8 +169,13 @@ fun PlayerScreen(
     LaunchedEffect(uiState.channel) {
         uiState.channel?.let { channel ->
             val prepared = prepareChannelStream(
-                context, exoPlayer, errorRecoveryManager, channel,
-                catchupStartMs, catchupDurationMin
+                context = context,
+                exoPlayer = exoPlayer,
+                errorRecoveryManager = errorRecoveryManager,
+                channel = channel,
+                catchupStartMs = catchupStartMs,
+                catchupDurationMin = catchupDurationMin,
+                resolvePlaybackUrl = viewModel::requestPlaybackUrl,
             )
             if (!prepared) {
                 viewModel.onStreamDead("Invalid stream URL")

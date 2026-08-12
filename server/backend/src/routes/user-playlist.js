@@ -5,6 +5,35 @@ const User = require('../models/User');
 const Channel = require('../models/Channel');
 const { requireAuth } = require('./auth');
 const { audit } = require('../services/audit-log');
+const { issuePlaybackToken } = require('../services/playback-token');
+const { getPublicBaseUrl } = require('../utils/public-url');
+function tokenizeUserChannel(channel, user, baseUrl) {
+  const source = channel.toObject ? channel.toObject() : channel;
+  const safe = { ...source, channelUrl: '' };
+  if (!user.channelListCode) return safe;
+  if (source.channelUrl) {
+    const { token } = issuePlaybackToken({
+      userId: String(user._id),
+      channelListCode: user.channelListCode,
+      streamUrl: source.channelUrl,
+    });
+    safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}`;
+  }
+  safe.alternateStreams = (source.alternateStreams || [])
+    .filter((alternate) => alternate.liveness?.status !== 'dead' && alternate.flaggedBad?.isFlagged !== true)
+    .slice(0, 10)
+    .map((alternate) => {
+      if (!alternate.streamUrl) return { ...alternate, streamUrl: '' };
+      const { token } = issuePlaybackToken({
+        userId: String(user._id),
+        channelListCode: user.channelListCode,
+        streamUrl: alternate.streamUrl,
+      });
+      return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}` };
+    });
+  return safe;
+}
+
 const {
   resolveChannelGroups,
   clubByChannelId,
@@ -32,7 +61,9 @@ router.get('/me/channels', requireAuth, async (req, res) => {
       '📋 Channel IDs in user.channels:',
       user.channels?.map((ch) => ch._id || ch).slice(0, 3),
     );
-    res.json({ success: true, channels: user.channels || [] });
+    const baseUrl = getPublicBaseUrl(req);
+    const channels = (user.channels || []).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    res.json({ success: true, channels });
   } catch (error) {
     console.error('❌ Get my channels error:', error);
     res.status(500).json({ success: false, error: 'Failed to get channels' });
@@ -202,15 +233,8 @@ router.get('/me/channels-with-fallbacks', requireAuth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    const channels = (user.channels || []).map((ch) => {
-      const channelObj = ch.toObject ? ch.toObject() : ch;
-      // Filter alternates: only alive + non-flagged
-      channelObj.alternateStreams = (channelObj.alternateStreams || []).filter(
-        (alt) => alt.liveness?.status !== 'dead' && alt.flaggedBad?.isFlagged !== true,
-      );
-      return channelObj;
-    });
-
+    const baseUrl = getPublicBaseUrl(req);
+    const channels = (user.channels || []).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
     res.json({ success: true, channels });
   } catch (error) {
     console.error('Get channels with fallbacks error:', error);
@@ -224,7 +248,8 @@ router.get('/me/playlist.m3u', requireAuth, async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).send('#EXTM3U\n#ERROR:User not found');
 
-    const m3u = await user.generateUserPlaylist();
+    const baseUrl = getPublicBaseUrl(req);
+    const m3u = await user.generateUserPlaylist(baseUrl);
     res.setHeader('Content-Type', 'audio/x-mpegurl');
     const safeUsername = user.username.replace(/[^a-zA-Z0-9_-]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${safeUsername}-channels.m3u"`);

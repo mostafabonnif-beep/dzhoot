@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const router = express.Router();
 const User = require('../models/User');
+const { getPublicBaseUrl } = require('../utils/public-url');
 const RefreshToken = require('../models/RefreshToken');
 const {
   signAccessToken,
@@ -136,7 +137,8 @@ router.get('/playlist.m3u', requireJwtAuth, async (req, res) => {
     if (!user) {
       return res.status(404).send('#EXTM3U\n#ERROR:User not found');
     }
-    const m3u = await user.generateUserPlaylist();
+    const baseUrl = getPublicBaseUrl(req);
+    const m3u = await user.generateUserPlaylist(baseUrl);
     res.setHeader('Content-Type', 'audio/x-mpegurl');
     const safeUsername = user.username.replace(/[^a-zA-Z0-9_-]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${safeUsername}-channels.m3u"`);

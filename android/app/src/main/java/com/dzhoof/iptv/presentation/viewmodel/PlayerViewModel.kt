@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
+import com.dzhoof.iptv.data.source.remote.FireVisionApiService
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.model.EpgProgram
@@ -77,7 +79,8 @@ class PlayerViewModel @Inject constructor(
     private val getGuideProgramsUseCase: GetGuideProgramsUseCase,
     private val analyticsHelper: AnalyticsHelper,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val playerFactory: PlayerFactory
+    private val playerFactory: PlayerFactory,
+    private val apiService: FireVisionApiService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -85,6 +88,30 @@ class PlayerViewModel @Inject constructor(
 
     /** Builds an IPTV-tuned ExoPlayer (buffers, timeouts, decoder fallback). */
     fun createPlayer(): ExoPlayer = playerFactory.create()
+
+    /**
+     * Requests a short-lived server-side playback URL. The app sends only the
+     * catalog channel reference and slot; upstream credentials never leave the server.
+     */
+    suspend fun requestPlaybackUrl(
+        channelId: String,
+        slot: Int = 0,
+        catchupStartMs: Long = 0L,
+        catchupDurationMin: Int = 0,
+    ): String? {
+        return try {
+            val response = apiService.issuePlaybackToken(
+                PlaybackTokenRequest(channelId, slot, catchupStartMs, catchupDurationMin),
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                response.body()?.data?.playbackUrl
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     init {
         viewModelScope.launch {

@@ -23,7 +23,8 @@ import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
 import com.dzhoof.iptv.presentation.viewmodel.PlayerViewModel
-import java.net.URLEncoder
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /**
  * Point the player at a channel: builds the live stream slots (primary +
@@ -31,56 +32,79 @@ import java.net.URLEncoder
  * archive URL, arms the recovery manager, and prepares playback.
  * Returns false when the channel has no usable stream URL.
  */
-internal fun prepareChannelStream(
+internal suspend fun prepareChannelStream(
     context: Context,
     exoPlayer: ExoPlayer,
     errorRecoveryManager: ErrorRecoveryManager,
     channel: ChannelUiModel,
     catchupStartMs: Long,
-    catchupDurationMin: Int
+    catchupDurationMin: Int,
+    resolvePlaybackUrl: suspend (channelId: String, slot: Int, catchupStartMs: Long, catchupDurationMin: Int) -> String?,
 ): Boolean {
+    errorRecoveryManager.reset()
+    val serverUrl = AppPreferences.getServerUrl(context).trimEnd('/')
+    val tvCode = AppPreferences.getTvCode(context)
+    val useTokenizedServerPlayback = serverUrl.isNotBlank() && tvCode.isNotEmpty()
+
+    if (useTokenizedServerPlayback) {
+        if (catchupStartMs > 0) {
+            val catchupUrl = resolvePlaybackUrl(channel.id, 0, catchupStartMs, catchupDurationMin)
+                ?: return false
+            errorRecoveryManager.setStreamSlots(
+                listOf(ErrorRecoveryManager.StreamSlot(catchupUrl, null, isPrimary = true)),
+            )
+            exoPlayer.setMediaItem(MediaItem.Builder().setUri(catchupUrl).build())
+        } else {
+            val slotUrls = coroutineScope {
+                (0..3).map { slot ->
+                    async { resolvePlaybackUrl(channel.id, slot, 0L, 0) }
+                }.mapNotNull { it.await() }
+            }
+            val primaryUrl = slotUrls.firstOrNull() ?: return false
+            val slots = slotUrls.mapIndexed { index, playbackUrl ->
+                ErrorRecoveryManager.StreamSlot(
+                    directUrl = playbackUrl,
+                    proxyUrl = null,
+                    isPrimary = index == 0,
+                )
+            }
+            errorRecoveryManager.setStreamSlots(slots)
+            exoPlayer.setMediaItem(MediaItem.Builder().setUri(primaryUrl).build())
+        }
+        exoPlayer.prepare()
+        return true
+    }
+
     val url = channel.streamUrl?.let { StreamUrlTemplate.resolve(context, it) }
     if (url.isNullOrEmpty()) return false
-    errorRecoveryManager.reset()
 
-    // Catch-up: play the Xtream timeshift archive URL for a past program.
+    // Local/demo playback may use its configured direct source. Paired server
+    // playback always takes the tokenized branch above and never reaches here.
     val catchupUrl = if (catchupStartMs > 0) {
         buildCatchupUrl(context, channel.id, catchupStartMs, catchupDurationMin)
     } else null
 
     if (catchupUrl != null) {
-        // Single archive stream — no live alternates/proxy.
         errorRecoveryManager.setStreamSlots(
-            listOf(ErrorRecoveryManager.StreamSlot(catchupUrl, null, isPrimary = true))
+            listOf(ErrorRecoveryManager.StreamSlot(catchupUrl, null, isPrimary = true)),
         )
         exoPlayer.setMediaItem(MediaItem.Builder().setUri(catchupUrl).build())
     } else {
-        // Build stream slots: primary + alternates, each with optional proxy
-        val serverUrl = AppPreferences.getServerUrl(context).trimEnd('/')
-        val tvCode = AppPreferences.getTvCode(context)
-        val canProxy = tvCode.isNotEmpty() && !AppPreferences.isDemoMode(context)
-
-        fun buildProxyUrl(streamUrl: String): String? {
-            if (!canProxy) return null
-            return "$serverUrl/api/v1/tv/stream/$tvCode?url=${URLEncoder.encode(streamUrl, "UTF-8")}"
-        }
-
         val slots = mutableListOf<ErrorRecoveryManager.StreamSlot>()
-        slots.add(ErrorRecoveryManager.StreamSlot(url, buildProxyUrl(url), isPrimary = true))
+        slots.add(ErrorRecoveryManager.StreamSlot(url, null, isPrimary = true))
         channel.alternateStreamUrls.orEmpty().take(3).forEach { alternate ->
             val resolvedAlternate = StreamUrlTemplate.resolve(context, alternate).trim()
             if (resolvedAlternate.isNotEmpty() && resolvedAlternate != url) {
                 slots.add(
                     ErrorRecoveryManager.StreamSlot(
                         resolvedAlternate,
-                        buildProxyUrl(resolvedAlternate),
+                        null,
                         isPrimary = false,
                     ),
                 )
             }
         }
         errorRecoveryManager.setStreamSlots(slots)
-
         exoPlayer.setMediaItem(MediaItem.Builder().setUri(url).build())
     }
     exoPlayer.prepare()

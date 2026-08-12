@@ -6,6 +6,7 @@ const Series = require('../models/Series');
 const Season = require('../models/Season');
 const Episode = require('../models/Episode');
 const { optionalAuth } = require('../middleware/resolveUser');
+const { escapeRegex } = require('../utils/escapeRegex');
 
 // Browseable catalog (movies / series / seasons / episodes / unified search).
 // Auth is optional — anonymous browsing is allowed; subscription gating is
@@ -25,11 +26,12 @@ function paginate(query) {
 function buildSearchFilter(search) {
   if (!search) return {};
   const q = String(search).trim();
-  if (!q) return {};
+  if (!q || q.length > 500) return {};
+  const escaped = escapeRegex(q);
   return {
     $or: [
-      { title: { $regex: q, $options: 'i' } },
-      { description: { $regex: q, $options: 'i' } },
+      { title: { $regex: escaped, $options: 'i' } },
+      { description: { $regex: escaped, $options: 'i' } },
     ],
   };
 }
@@ -61,7 +63,7 @@ router.get('/movies', async (req, res) => {
 
     const [totalCount, data] = await Promise.all([
       Movie.countDocuments(filter),
-      Movie.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Movie.find(filter).select('-streamUrl').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     ]);
     return res.json({ success: true, data, totalCount, page, limit });
   } catch (err) {
@@ -74,7 +76,7 @@ router.get('/movies/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid movie id' });
-    const movie = await Movie.findOne({ _id: id, isActive: true }).lean();
+    const movie = await Movie.findOne({ _id: id, isActive: true }).select('-streamUrl').lean();
     if (!movie) return res.status(404).json({ success: false, error: 'Movie not found' });
     return res.json({ success: true, data: movie });
   } catch (err) {
@@ -109,7 +111,7 @@ router.get('/series', async (req, res) => {
 
     const [totalCount, data] = await Promise.all([
       Series.countDocuments(filter),
-      Series.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Series.find(filter).select('-streamUrl').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     ]);
     return res.json({ success: true, data, totalCount, page, limit });
   } catch (err) {
@@ -122,7 +124,7 @@ router.get('/series/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid series id' });
-    const series = await Series.findOne({ _id: id, isActive: true }).lean();
+    const series = await Series.findOne({ _id: id, isActive: true }).select('-streamUrl').lean();
     if (!series) return res.status(404).json({ success: false, error: 'Series not found' });
     return res.json({ success: true, data: series });
   } catch (err) {
@@ -149,7 +151,7 @@ router.get('/seasons/:id/episodes', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid season id' });
-    const episodes = await Episode.find({ seasonId: id }).sort({ episodeNumber: 1 }).lean();
+    const episodes = await Episode.find({ seasonId: id }).select('-streamUrl').sort({ episodeNumber: 1 }).lean();
     return res.json({ success: true, data: episodes });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
@@ -163,9 +165,12 @@ router.get('/search', async (req, res) => {
     if (!q) {
       return res.json({ success: true, data: { channels: [], movies: [], series: [] } });
     }
+    if (q.length > 500) {
+      return res.status(400).json({ success: false, error: 'Search query too long' });
+    }
 
     const Channel = require('../models/Channel');
-    const regex = { $regex: q, $options: 'i' };
+    const regex = { $regex: escapeRegex(q), $options: 'i' };
 
     const [channels, movies, series] = await Promise.all([
       Channel.find({ isActive: { $ne: false }, ownerId: null, channelName: regex })
