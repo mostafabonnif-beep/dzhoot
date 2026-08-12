@@ -11,6 +11,7 @@ sealed class Screen(val route: String) {
     object Home : Screen("home")
     object Channels : Screen("channels")
     object Categories : Screen("categories")
+    object Catalog : Screen("catalog")
     object Guide : Screen("guide")
     object Multiview : Screen("multiview?channelId={channelId}") {
         fun createRoute(channelId: String? = null) =
@@ -20,6 +21,10 @@ sealed class Screen(val route: String) {
     object Favorites : Screen("favorites")
     object Settings : Screen("settings")
     object AddSource : Screen("add_source")
+    object VodPlayer : Screen("vod_player/{contentType}/{contentId}?title={title}") {
+        fun createRoute(contentType: String, contentId: String, title: String): String =
+            "vod_player/${URLEncoder.encode(contentType, "UTF-8")}/${URLEncoder.encode(contentId, "UTF-8")}?title=${URLEncoder.encode(title, "UTF-8")}"
+    }
     object Player : Screen("player/{channelId}?catchupStart={catchupStart}&catchupDur={catchupDur}") {
         fun createRoute(channelId: String) = "player/$channelId"
 
@@ -41,7 +46,7 @@ sealed class Screen(val route: String) {
 
     companion object {
         /** Route strings for top-level screens that show the sidebar navigation rail. */
-        val sidebarRoutes = setOf("home", "channels", "categories", "guide", "search", "favorites", "settings", "channels/category/{categoryId}")
+        val sidebarRoutes = setOf("home", "channels", "categories", "catalog", "guide", "search", "favorites", "settings", "channels/category/{categoryId}")
 
         /** Routes where the mobile Search FAB is offered (excludes Search itself + Settings). */
         val searchableRoutes = setOf("home", "channels", "categories", "guide", "favorites", "channels/category/{categoryId}")

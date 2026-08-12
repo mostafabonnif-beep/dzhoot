@@ -5,17 +5,25 @@ const AppSetting = require('../models/AppSetting');
 const Channel = require('../models/Channel');
 const Movie = require('../models/Movie');
 const Episode = require('../models/Episode');
+const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { resolveUser } = require('../middleware/resolveUser');
 const {
   isSubscriptionRequired,
   getActiveSubscription,
 } = require('../services/subscription-service');
 const { issuePlaybackToken } = require('../services/playback-token');
+const { getPublicBaseUrl } = require('../utils/public-url');
 
 // Stream authorization: /api/v1/streams
 // The client requests a playable URL here instead of using raw catalog URLs,
 // so the backend can enforce subscription state per playback.
-router.use(resolveUser);
+router.use((req, res, next) => {
+  const hasBearer = String(req.headers.authorization || '').startsWith('Bearer ');
+  const hasTvOrSession = Boolean(req.headers['x-tv-code'] || req.headers['x-session-id']);
+  return hasBearer && !hasTvOrSession
+    ? resolveUser(req, res, next)
+    : requireTvOrSessionAuth(req, res, next);
+});
 
 function parseId(id) {
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
@@ -94,7 +102,7 @@ router.post('/authorize', async (req, res) => {
       channelListCode,
       streamUrl: url,
     });
-    const playbackUrl = `/api/v1/tv/playback/${token}`;
+    const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`;
 
     return res.json({
       success: true,

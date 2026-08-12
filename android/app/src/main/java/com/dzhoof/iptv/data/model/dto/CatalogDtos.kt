@@ -1,0 +1,99 @@
+package com.dzhoof.iptv.data.model.dto
+
+import com.google.gson.annotations.SerializedName
+
+data class MovieDto(
+    @SerializedName("_id") val id: String,
+    val title: String,
+    val category: String = "Uncategorized",
+    val poster: String? = null,
+    val backdrop: String? = null,
+    val description: String? = null,
+    val year: Int? = null,
+    val duration: Int? = null,
+    val rating: Double? = null,
+)
+
+data class SeriesDto(
+    @SerializedName("_id") val id: String,
+    val title: String,
+    val category: String = "Uncategorized",
+    val poster: String? = null,
+    val backdrop: String? = null,
+    val plot: String? = null,
+    val cast: String? = null,
+    val director: String? = null,
+    val genre: String? = null,
+    val releaseDate: String? = null,
+    val rating: Double? = null,
+)
+
+data class SeasonDto(
+    @SerializedName("_id") val id: String,
+    val seriesId: String,
+    val seasonNumber: Int,
+    val name: String = "",
+    val cover: String? = null,
+)
+
+data class EpisodeDto(
+    @SerializedName("_id") val id: String,
+    val seriesId: String,
+    val seasonId: String,
+    val episodeNumber: Int = 0,
+    val title: String,
+    val description: String? = null,
+    val thumbnail: String? = null,
+    val duration: Int? = null,
+)
+
+data class MoviePageResponse(
+    val success: Boolean = false,
+    val data: List<MovieDto> = emptyList(),
+    val totalCount: Int = 0,
+    val page: Int = 1,
+    val limit: Int = 30,
+    val error: String? = null,
+)
+
+data class SeriesPageResponse(
+    val success: Boolean = false,
+    val data: List<SeriesDto> = emptyList(),
+    val totalCount: Int = 0,
+    val page: Int = 1,
+    val limit: Int = 30,
+    val error: String? = null,
+)
+
+data class SeasonsResponse(
+    val success: Boolean = false,
+    val data: List<SeasonDto> = emptyList(),
+    val error: String? = null,
+)
+
+data class EpisodesResponse(
+    val success: Boolean = false,
+    val data: List<EpisodeDto> = emptyList(),
+    val error: String? = null,
+)
+
+data class PlaybackAuthorizationRequest(
+    val contentType: String,
+    val contentId: String,
+)
+
+data class PlaybackAuthorizationResponse(
+    val success: Boolean = false,
+    val data: PlaybackAuthorizationData? = null,
+    val error: String? = null,
+    val code: String? = null,
+)
+
+data class PlaybackAuthorizationData(
+    val contentType: String,
+    val contentId: String,
+    val url: String,
+    val expiresAt: Long,
+    val authorized: Boolean = false,
+    val subscriptionRequired: Boolean = false,
+)
