@@ -90,7 +90,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
       <body className={`${spaceGrotesk.variable} ${manrope.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
