@@ -8,11 +8,13 @@ import android.content.pm.PackageManager
 import com.dzhoof.iptv.MainDispatcherRule
 import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.repository.PlayerKeyAction
 import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
 import com.dzhoof.iptv.domain.service.ChannelHealthScanner
 import com.dzhoof.iptv.domain.service.ScanProgress
 import com.dzhoof.iptv.domain.usecase.RefreshChannelsUseCase
+import com.dzhoof.iptv.update.AppUpdater
 import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
 import io.mockk.coEvery
@@ -49,6 +51,8 @@ class SettingsViewModelTest {
     private val application: Application = mockk(relaxed = true)
     private val channelHealthScanner: ChannelHealthScanner = mockk(relaxed = true)
     private val refreshChannelsUseCase: RefreshChannelsUseCase = mockk()
+    private val epgRepository: EpgRepository = mockk(relaxed = true)
+    private val appUpdater: AppUpdater = mockk(relaxed = true)
 
     private val mockContext: Context = mockk(relaxed = true)
     private val mockPrefs: SharedPreferences = mockk(relaxed = true)
@@ -112,7 +116,9 @@ class SettingsViewModelTest {
         userPreferencesRepository = userPreferencesRepository,
         application = application,
         channelHealthScanner = channelHealthScanner,
-        refreshChannelsUseCase = refreshChannelsUseCase
+        refreshChannelsUseCase = refreshChannelsUseCase,
+        epgRepository = epgRepository,
+        appUpdater = appUpdater
     )
 
     @Test

@@ -148,7 +148,7 @@ class AppUpdater @Inject constructor(
                     val cursor = downloadManager.query(DownloadManager.Query().apply { setFilterById(downloadId) })
                     try {
                         if (cursor.moveToFirst()) {
-                            val status = cursor.getInt(cursor.getColumnIndex(DownloadManager.COLUMN_STATUS))
+                            val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                             if (status == DownloadManager.STATUS_SUCCESSFUL) {
                                 onState(installUpdate())
                             } else {
