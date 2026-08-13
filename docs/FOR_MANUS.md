@@ -111,17 +111,17 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 
 ---
 
-### WP4 — إشعارات FCM حقيقية 🟠
+### WP4 — إشعارات FCM حقيقية 🟠 (تنفيذ backend وAndroid مكتمل؛ تحقق الجهاز الفعلي متبقٍ)
 
 **الهدف:** إيصال الإشعارات للهواتف فعليًا.
 
 **المهام:**
-1. Android: أضف `com.google.firebase:firebase-messaging` (BOM موجود)، `FirebaseMessagingService` + `onNewToken`، وسجّل التوكن عند الخادم (أضف حقل `pushToken` إلى `POST /api/v1/me/devices` أو مسار `/me/push-token`).
-2. Backend: خدمة إرسال FCM (HTTP v1 مع service account JSON كـenv var، أو legacy API)، واربطها بـ`admin-notifications.js /send` و`/me/notifications` (أعد `unreadCount`).
-3. `google-services.json` يبقى **خارج git** (مؤكد gitignored) — وثّق خطوة وضع الملف في runbook البناء.
-4. Deep link: اجعل `deepLink` في الإشعار يفتح قناة/فيلم داخل التطبيق.
+1. Android: أضيفت تبعية `com.google.firebase:firebase-messaging`، وخدمة `DzHoofFirebaseMessagingService` مع `onNewToken` وتخزين محلي للتوكن، ويرسله `POST /api/v1/me/devices` عند التسجيل أو التحديث.
+2. Backend: أضيفت خدمة `fcm-service.ts` لإرسال FCM HTTP v1 باستخدام `FCM_PROJECT_ID` و`FCM_CLIENT_EMAIL` و`FCM_PRIVATE_KEY` server-only، وربطت بـ`admin-notifications.js /send` مع إبقاء الإشعار الداخلي وحالة القراءة.
+3. `google-services.json` يبقى **خارج git** (مؤكد gitignored)، ومتغيرات FCM موثقة في `server/.env.production.example`.
+4. Deep link: payload يرسل `deepLink` داخل بيانات FCM؛ ما زال يلزم تحقق فتح الوجهة داخل التطبيق على جهاز فعلي.
 
-**تعريف الإنجاز:** إشعار من اللوحة يصل لهاتف فعلي خلال ثوانٍ، مع حالة قراءة متزامنة.
+**التحقق المنفذ:** `npm run typecheck` و`npm run lint` نجحا، واختبارات backend نجحت بنتيجة 149/149، وSmoke نجح بالكامل. **المتبقي لإغلاق WP4:** توفير إعداد Firebase الحقيقي في بيئة النشر، وضع `google-services.json` في build secret، واختبار وصول إشعار من اللوحة إلى هاتف فعلي خلال ثوانٍ.
 
 ---
 ### WP5 — فرض بوابة الاشتراك في التطبيق من طرف لطرف 🟠

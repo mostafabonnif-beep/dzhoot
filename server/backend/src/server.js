@@ -344,6 +344,21 @@ const pairingStatusLimiter = rateLimit({
 });
 app.use('/api/v1/tv/pairing/status', pairingStatusLimiter);
 
+// Strict activation-code redemption limiter: 5 attempts per 10 minutes per user/IP.
+// This protects hashed codes from online guessing without changing redemption semantics.
+const activationRedeemLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const userId = req.user?.id || req.headers['x-session-id'] || 'anonymous';
+    return `activation-redeem:${userId}:${clientIp(req)}`;
+  },
+  message: { success: false, error: 'Too many activation attempts, please try again later', code: 'RATE_LIMITED' },
+});
+app.use('/api/v1/activation/redeem', activationRedeemLimiter);
+
 // Static files for uploads
 app.use('/uploads', express.static(path.join(PROJECT_ROOT, 'uploads')));
 
