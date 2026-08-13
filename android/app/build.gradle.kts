@@ -38,8 +38,19 @@ android {
             "1.5"
         }
         
-        // API Base URL configuration
-        buildConfigField("String", "API_BASE_URL", "\"https://dzhoof.example/\"")
+        // API Base URL configuration — overridable at build time via the
+        // `dzhoofApiUrl` Gradle property or the DZHOOF_API_URL env var so real
+        // APKs can point at a real server without editing source. HTTPS required.
+        val configuredApiUrl = providers.gradleProperty("dzhoofApiUrl")
+            .orElse(providers.environmentVariable("DZHOOF_API_URL"))
+            .orElse("https://dzhoof.example/")
+            .get()
+            .trim()
+            .let { if (it.endsWith("/")) it else "$it/" }
+        require(configuredApiUrl.startsWith("https://")) {
+            "DZHOOF_API_URL / dzhoofApiUrl must use HTTPS (got: $configuredApiUrl)"
+        }
+        buildConfigField("String", "API_BASE_URL", "\"$configuredApiUrl\"")
         manifestPlaceholders["sentryDsn"] = System.getenv("SENTRY_DSN") ?: ""
         manifestPlaceholders["sentryEnvironment"] = "debug"
     }
