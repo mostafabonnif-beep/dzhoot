@@ -22,6 +22,8 @@ interface Series {
   year?: number;
   rating?: number;
   description?: string;
+  sourceId?: string;
+  isActive: boolean;
 }
 
 const PAGE_SIZE = 24;
@@ -34,6 +36,9 @@ export default function SeriesPageShell() {
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState('All');
   const [categories, setCategories] = useState<string[]>([]);
+  const [sources, setSources] = useState<{ _id: string; name: string }[]>([]);
+  const [sourceId, setSourceId] = useState('All');
+  const [status, setStatus] = useState<'active' | 'inactive' | 'all'>('active');
   const { search: searchTerm, debouncedSearch, handleSearchChange: setSearchTerm } = useDebouncedSearch('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
@@ -47,6 +52,8 @@ export default function SeriesPageShell() {
           limit: PAGE_SIZE,
           category: category === 'All' ? undefined : category,
           search: debouncedSearch || undefined,
+          sourceId: sourceId === 'All' ? undefined : sourceId,
+          status,
         },
       });
       if (res.data.success) {
@@ -59,7 +66,16 @@ export default function SeriesPageShell() {
     } finally {
       setLoading(false);
     }
-  }, [category, debouncedSearch, page]);
+  }, [category, debouncedSearch, page, sourceId, status]);
+
+  const fetchSources = async () => {
+    try {
+      const res = await api.get('/admin/xtream-sources');
+      if (res.data.success) setSources((res.data.data || []).map((source: { _id: string; name: string }) => ({ _id: source._id, name: source.name })));
+    } catch (error) {
+      console.error('Error fetching Xtream sources:', error);
+    }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -74,6 +90,7 @@ export default function SeriesPageShell() {
 
   useEffect(() => {
     fetchCategories();
+    fetchSources();
   }, []);
 
   useEffect(() => {
@@ -109,7 +126,7 @@ export default function SeriesPageShell() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="md:col-span-2">
           <SearchInput
             value={searchTerm}
@@ -117,6 +134,31 @@ export default function SeriesPageShell() {
             placeholder="ابحث عن اسم المسلسل..."
           />
         </div>
+        <select
+          value={sourceId}
+          onChange={(e) => {
+            setSourceId(e.target.value);
+            setPage(1);
+          }}
+          aria-label="فلترة حسب المصدر"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <option value="All">جميع المصادر</option>
+          {sources.map((source) => <option key={source._id} value={source._id}>{source.name}</option>)}
+        </select>
+        <select
+          value={status}
+          onChange={(e) => {
+            setStatus(e.target.value as 'active' | 'inactive' | 'all');
+            setPage(1);
+          }}
+          aria-label="فلترة حسب الحالة"
+          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          <option value="active">نشط</option>
+          <option value="inactive">غير نشط</option>
+          <option value="all">كل الحالات</option>
+        </select>
         <select
           value={category}
           onChange={(e) => {
