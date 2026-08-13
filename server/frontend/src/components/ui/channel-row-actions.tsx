@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode } from 'react';
+import { useLocale } from '@/components/locale-provider';
 import { Eye, Play, Zap, Pencil, Trash2, Loader2 } from 'lucide-react';
 
 interface ChannelRowActionsProps {
@@ -25,13 +26,15 @@ export default function ChannelRowActions({
   testing,
   children,
 }: ChannelRowActionsProps) {
+  const { locale } = useLocale();
+  const label = (ar: string, en: string, fr: string) => locale === 'ar' ? ar : locale === 'fr' ? fr : en;
   return (
     <div className="flex items-center justify-end gap-1">
       {onDetail && (
         <button
           onClick={onDetail}
           className={`${btnBase} hover:text-foreground`}
-          aria-label="View details"
+          aria-label={label('عرض التفاصيل', 'View details', 'Voir les détails')}
         >
           <Eye className="h-4 w-4" />
         </button>
@@ -40,7 +43,7 @@ export default function ChannelRowActions({
         <button
           onClick={onPlay}
           className={`${btnBase} hover:text-primary`}
-          aria-label="Play stream"
+          aria-label={label('تشغيل البث', 'Play stream', 'Lire le flux')}
         >
           <Play className="h-4 w-4" />
         </button>
@@ -50,7 +53,7 @@ export default function ChannelRowActions({
           onClick={onTest}
           disabled={testing}
           className={`${btnBase} hover:text-primary disabled:opacity-50`}
-          aria-label="Test stream"
+          aria-label={label('اختبار البث', 'Test stream', 'Tester le flux')}
         >
           {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
         </button>
@@ -59,7 +62,7 @@ export default function ChannelRowActions({
         <button
           onClick={onEdit}
           className={`${btnBase} hover:text-foreground`}
-          aria-label="Edit channel"
+          aria-label={label('تعديل القناة', 'Edit channel', 'Modifier la chaîne')}
         >
           <Pencil className="h-4 w-4" />
         </button>
@@ -68,7 +71,7 @@ export default function ChannelRowActions({
         <button
           onClick={onDelete}
           className={`${btnBase} hover:text-destructive`}
-          aria-label="Delete channel"
+          aria-label={label('حذف القناة', 'Delete channel', 'Supprimer la chaîne')}
         >
           <Trash2 className="h-4 w-4" />
         </button>

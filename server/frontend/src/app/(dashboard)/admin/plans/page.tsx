@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import Modal from '@/components/ui/modal';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 import DataTable, { type DataTableColumn } from '@/components/ui/data-table';
+import { useLocale } from '@/components/locale-provider';
 
 interface PlanData {
   _id: string;
@@ -48,6 +49,7 @@ const inputClass =
 
 export default function PlansPage() {
   const { toast } = useToast();
+  const { t } = useLocale();
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -272,7 +274,7 @@ export default function PlansPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">الباقات</h1>
+          <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">{t('admin.plans')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {totalCount} باقة اشتراك
           </p>
@@ -282,7 +284,7 @@ export default function PlansPage() {
           className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          باقة جديدة
+          {t('admin.newPlan')}
         </button>
       </div>
 
@@ -297,7 +299,7 @@ export default function PlansPage() {
         data={plans}
         gridTemplate="minmax(180px,1.6fr) 100px 80px 110px 110px 100px 120px"
         ariaLabel="الباقات"
-        emptyMessage="لا توجد باقات بعد. أنشئ أول باقة اشتراك."
+        emptyMessage={t('common.noData')}
         rowKey={(p) => p._id}
       />
 
@@ -305,7 +307,7 @@ export default function PlansPage() {
       <Modal
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        title={editingId ? 'تعديل الباقة' : 'باقة جديدة'}
+        title={editingId ? t('common.edit') : t('admin.newPlan')}
       >
         <div className="p-5 space-y-4">
           {formError && (
@@ -321,7 +323,7 @@ export default function PlansPage() {
               className={inputClass}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="3 Months"
+              placeholder="3 أشهر / 3 Months"
             />
           </div>
           <div className="space-y-1.5">
@@ -332,7 +334,7 @@ export default function PlansPage() {
               className={`${inputClass} h-auto py-2`}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="90 days of access on 1 device"
+              placeholder="وصف الباقة / Plan description"
               rows={2}
             />
           </div>
@@ -408,14 +410,14 @@ export default function PlansPage() {
               disabled={saving || !form.name.trim()}
               className="inline-flex items-center px-6 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
-              {saving ? 'جارٍ الحفظ...' : 'حفظ'}
+              {saving ? t('common.loading') : t('common.save')}
             </button>
             <button
               onClick={() => setFormOpen(false)}
               disabled={saving}
               className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
             >
-              إلغاء
+              {t('common.cancel')}
             </button>
           </div>
         </div>

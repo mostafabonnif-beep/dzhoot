@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useLocale } from '@/components/locale-provider';
 
 interface ServerInfo {
   name: string;
@@ -21,6 +22,7 @@ interface CacheEntry {
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const { t, locale } = useLocale();
   const [info, setInfo] = useState<ServerInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [playlistUrl, setPlaylistUrl] = useState('');
@@ -172,20 +174,20 @@ export default function SettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Server configuration and info</p>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">{t('settings.title')}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t('settings.server')}</p>
       </div>
 
       {info && (
         <div className="border border-border">
           <div className="px-4 py-2 bg-muted/50 border-b border-border">
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Server Info
+              {locale === 'ar' ? 'معلومات الخادم' : locale === 'fr' ? 'Informations du serveur' : 'Server info'}
             </h2>
           </div>
           <dl className="divide-y divide-border">
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Name</dt>
+              <dt className="text-sm text-muted-foreground">{t('common.name')}</dt>
               <dd className="text-sm font-medium">{info.name}</dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
@@ -193,7 +195,7 @@ export default function SettingsPage() {
               <dd className="text-sm font-medium">{info.version}</dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Status</dt>
+              <dt className="text-sm text-muted-foreground">{t('common.status')}</dt>
               <dd className="relative inline-flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-signal-green" />
                 <span className="text-sm font-medium capitalize">{info.status}</span>
@@ -223,7 +225,7 @@ export default function SettingsPage() {
         <div className="border border-border">
           <div className="px-4 py-2 bg-muted/50 border-b border-border">
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Global Playlist
+              {locale === 'ar' ? 'قائمة التشغيل العامة' : locale === 'fr' ? 'Playlist globale' : 'Global playlist'}
             </h2>
           </div>
           <div className="px-4 py-4 space-y-3">
@@ -244,7 +246,7 @@ export default function SettingsPage() {
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
-                {copied ? 'Copied' : 'Copy'}
+                {copied ? t('common.copied') : t('common.copy')}
               </button>
             </div>
           </div>
@@ -309,7 +311,7 @@ export default function SettingsPage() {
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border">
           <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Session Management
+            {locale === 'ar' ? 'إدارة الجلسات' : locale === 'fr' ? 'Gestion des sessions' : 'Session management'}
           </h2>
         </div>
         <div className="px-4 py-4 space-y-4">
@@ -357,7 +359,7 @@ export default function SettingsPage() {
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border flex items-center justify-between">
           <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            IPTV-Org Cache
+            {locale === 'ar' ? 'ذاكرة IPTV-Org المؤقتة' : locale === 'fr' ? 'Cache IPTV-Org' : 'IPTV-Org cache'}
           </h2>
           <button
             onClick={handleClearCache}
@@ -370,7 +372,7 @@ export default function SettingsPage() {
             ) : (
               <Trash2 className="h-3 w-3" />
             )}
-            Clear Cache
+            {t('common.clear')}
           </button>
         </div>
         <div className="divide-y divide-border">
