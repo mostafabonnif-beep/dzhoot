@@ -1,6 +1,9 @@
 <resources>
 
-    <style name="Theme.FireVisionIPTV" parent="@style/Theme.Leanback">
+    <style name="Theme.DzHoofIPTV" parent="@style/Theme.Leanback">
         <item name="android:windowBackground">@color/background_dark</item>
     </style>
+
+    <!-- Compatibility alias for legacy internal references. -->
+    <style name="Theme.FireVisionIPTV" parent="@style/Theme.DzHoofIPTV" />
 </resources>

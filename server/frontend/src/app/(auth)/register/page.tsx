@@ -58,7 +58,7 @@ function RegisterContent() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError('كلمتا المرور غير متطابقتين');
       return;
     }
 
@@ -70,12 +70,12 @@ function RegisterContent() {
       await api.post('/auth/register', { username, email, password, recaptchaToken });
       const loginUrl =
         '/login?message=' +
-        encodeURIComponent('Account created! Check your email to verify before signing in.') +
+        encodeURIComponent('تم إنشاء الحساب! تحقق من بريدك الإلكتروني قبل تسجيل الدخول.') +
         (redirect ? '&redirect=' + encodeURIComponent(redirect) : '');
       router.push(loginUrl);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || 'Registration failed');
+      setError(axiosErr.response?.data?.error || 'فشل إنشاء الحساب');
     } finally {
       setLoading(false);
     }
@@ -100,15 +100,15 @@ function RegisterContent() {
       <div className="lg:hidden mb-10">
         <Link href="/">
           <span className="text-lg font-display font-bold tracking-tight">
-            Dzhoof<span className="text-primary"> IPTV</span>
+            DZ HOOF<span className="text-primary"> IPTV</span>
           </span>
         </Link>
       </div>
 
       <div className="mb-8">
-        <h1 className="text-xl font-display font-bold uppercase tracking-wider">Register</h1>
+        <h1 className="text-xl font-display font-bold uppercase tracking-wider">إنشاء حساب</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Create your account to manage channels and pair your TV
+          أنشئ حسابك لإدارة القنوات وربط جهاز التلفاز
         </p>
       </div>
 
@@ -128,7 +128,7 @@ function RegisterContent() {
             htmlFor="username"
             className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Username
+            اسم المستخدم
           </label>
           <input
             id="username"
@@ -145,7 +145,7 @@ function RegisterContent() {
             autoComplete="username"
             aria-required="true"
             className="flex h-10 w-full border border-border bg-card px-3 py-2 text-sm transition-colors placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
-            aria-label="Username"
+            aria-label="اسم المستخدم"
           />
         </div>
 
@@ -154,7 +154,7 @@ function RegisterContent() {
             htmlFor="email"
             className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Email
+            البريد الإلكتروني
           </label>
           <input
             id="email"
@@ -169,7 +169,7 @@ function RegisterContent() {
             autoComplete="email"
             aria-required="true"
             className="flex h-10 w-full border border-border bg-card px-3 py-2 text-sm transition-colors placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
-            aria-label="Email address"
+            aria-label="البريد الإلكتروني"
           />
         </div>
 
@@ -178,7 +178,7 @@ function RegisterContent() {
             htmlFor="password"
             className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Password
+            كلمة المرور
           </label>
           <div className="relative">
             <input
@@ -195,16 +195,16 @@ function RegisterContent() {
               autoComplete="new-password"
               aria-required="true"
               className="flex h-10 w-full border border-border bg-card px-3 py-2 text-sm transition-colors placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
-              placeholder="8+ characters"
-              aria-label="Password"
+              placeholder="8 أحرف على الأقل"
+              aria-label="كلمة المرور"
               aria-describedby="password-hint"
             />
             <button
               type="button"
               className="absolute right-1 top-1/2 -translate-y-1/2 p-2.5"
               onClick={() => setShowPassword(!showPassword)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              title={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
             >
               {showPassword ? (
                 <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
@@ -214,7 +214,7 @@ function RegisterContent() {
             </button>
           </div>
           <p id="password-hint" className="text-xs text-muted-foreground mt-1">
-            Minimum 8 characters
+            الحد الأدنى 8 أحرف
           </p>
         </div>
 
@@ -223,7 +223,7 @@ function RegisterContent() {
             htmlFor="confirmPassword"
             className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Confirm Password
+            تأكيد كلمة المرور
           </label>
           <div className="relative">
             <input
@@ -244,15 +244,15 @@ function RegisterContent() {
                   ? 'border-destructive focus-visible:border-destructive focus-visible:ring-destructive'
                   : 'border-border'
               }`}
-              placeholder="Re-enter your password"
-              aria-label="Confirm password"
+              placeholder="أعد إدخال كلمة المرور"
+              aria-label="تأكيد كلمة المرور"
             />
             <button
               type="button"
               className="absolute right-1 top-1/2 -translate-y-1/2 p-2.5"
               onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-              aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
-              title={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+              aria-label={showConfirmPassword ? 'إخفاء تأكيد كلمة المرور' : 'إظهار تأكيد كلمة المرور'}
+              title={showConfirmPassword ? 'إخفاء تأكيد كلمة المرور' : 'إظهار تأكيد كلمة المرور'}
             >
               {showConfirmPassword ? (
                 <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
@@ -262,7 +262,7 @@ function RegisterContent() {
             </button>
           </div>
           {confirmPassword && confirmPassword !== password && (
-            <p className="text-xs text-destructive mt-1">Passwords do not match</p>
+            <p className="text-xs text-destructive mt-1">كلمتا المرور غير متطابقتين</p>
           )}
         </div>
 
@@ -272,19 +272,19 @@ function RegisterContent() {
           aria-busy={loading}
           className="flex h-10 w-full items-center justify-center bg-primary text-sm font-semibold text-primary-foreground uppercase tracking-wider transition-colors hover:bg-primary/90 active:bg-primary/80 disabled:pointer-events-none disabled:opacity-50"
         >
-          {loading ? 'Creating account...' : 'Create Account'}
+          {loading ? 'جارٍ إنشاء الحساب...' : 'إنشاء الحساب'}
         </button>
 
         {recaptchaSiteKey && (
           <p className="text-[10px] text-muted-foreground/60 leading-snug">
-            Protected by reCAPTCHA.{' '}
+            محمِي بواسطة reCAPTCHA.{' '}
             <a
               href="https://policies.google.com/privacy"
               target="_blank"
               rel="noopener noreferrer"
               className="underline"
             >
-              Privacy
+              الخصوصية
             </a>{' '}
             &{' '}
             <a
@@ -293,7 +293,7 @@ function RegisterContent() {
               rel="noopener noreferrer"
               className="underline"
             >
-              Terms
+              الشروط
             </a>
           </p>
         )}
@@ -305,13 +305,13 @@ function RegisterContent() {
             <div className="w-full border-t border-border" />
           </div>
           <span className="relative bg-background px-3 text-xs text-muted-foreground">
-            Or sign up with
+            أو التسجيل باستخدام
           </span>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <a
             href="/api/v1/auth/google"
-            aria-label="Sign up with Google"
+            aria-label="التسجيل باستخدام Google"
             className="flex h-10 items-center justify-center gap-2 border border-border bg-card text-sm font-medium transition-colors hover:bg-muted"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
@@ -336,7 +336,7 @@ function RegisterContent() {
           </a>
           <a
             href="/api/v1/auth/github"
-            aria-label="Sign up with GitHub"
+            aria-label="التسجيل باستخدام GitHub"
             className="flex h-10 items-center justify-center gap-2 border border-border bg-card text-sm font-medium transition-colors hover:bg-muted"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
@@ -348,12 +348,12 @@ function RegisterContent() {
       </div>
 
       <p className="mt-6 text-sm text-muted-foreground">
-        Already registered?{' '}
+        لديك حساب بالفعل؟{' '}
         <Link
           href={redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : '/login'}
           className="font-medium text-foreground hover:text-primary transition-colors"
         >
-          Sign In
+          تسجيل الدخول
         </Link>
       </p>
     </div>
@@ -363,7 +363,7 @@ function RegisterContent() {
 export default function RegisterPage() {
   return (
     <div className="h-screen overflow-y-auto flex">
-      <AuthSidePanel footer="Create an account to access stream management and device provisioning tools." />
+      <AuthSidePanel footer="أنشئ حسابًا للوصول إلى أدوات إدارة البث وربط الأجهزة." />
 
       <div className="flex-1 flex items-center justify-center px-6 bg-background">
         <Suspense fallback={null}>

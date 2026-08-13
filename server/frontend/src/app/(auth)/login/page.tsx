@@ -11,11 +11,11 @@ import { AuthSidePanel } from '@/components/layout/auth-side-panel';
 // Whitelist of known message codes → fixed copy. Prevents arbitrary `?message=`
 // text (phishing) from being rendered in trusted UI chrome.
 const MESSAGE_STRINGS: Record<string, string> = {
-  session_expired: 'Your session has expired. Please sign in again.',
-  logged_out: 'You have been signed out.',
-  registration_success: 'Account created. Please sign in.',
-  password_reset: 'Your password has been reset. Please sign in.',
-  email_verified: 'Your email has been verified. Please sign in.',
+  session_expired: 'انتهت جلستك. يُرجى تسجيل الدخول مجددًا.',
+  logged_out: 'تم تسجيل خروجك.',
+  registration_success: 'تم إنشاء الحساب. يُرجى تسجيل الدخول.',
+  password_reset: 'تمت إعادة تعيين كلمة المرور. يُرجى تسجيل الدخول.',
+  email_verified: 'تم التحقق من بريدك الإلكتروني. يُرجى تسجيل الدخول.',
 };
 
 function LoginContent() {
@@ -41,12 +41,12 @@ function LoginContent() {
     if (oauthError) {
       if (oauthError === 'account_inactive') {
         setError(
-          'Your account has been disabled. Please contact the server administrator to restore access.',
+          'تم تعطيل حسابك. يُرجى التواصل مع مسؤول الخادم لإعادة تفعيله.',
         );
         const email = searchParams.get('admin_email');
         if (email) setAdminEmail(email);
       } else {
-        setError('OAuth authentication failed. Try a different sign-in method or contact support.');
+        setError('فشلت المصادقة الخارجية. جرّب طريقة دخول أخرى أو تواصل مع الدعم.');
       }
       return;
     }
@@ -75,15 +75,15 @@ function LoginContent() {
           )?.response;
           if (resp?.status === 429) {
             setError(
-              'Too many requests — you have been rate-limited. Please wait a few minutes and try again.',
+              'عدد المحاولات كبير جدًا. انتظر بضع دقائق ثم حاول مجددًا.',
             );
           } else if (resp?.status === 403 && resp?.data?.code === 'ACCOUNT_DISABLED') {
             setError(
-              'Your account has been disabled. Please contact the server administrator to restore access.',
+              'تم تعطيل حسابك. يُرجى التواصل مع مسؤول الخادم لإعادة تفعيله.',
             );
             if (resp.data.adminEmail) setAdminEmail(resp.data.adminEmail);
           } else {
-            setError('OAuth login failed. The code may have expired — please try again.');
+            setError('فشل تسجيل الدخول الخارجي. ربما انتهت صلاحية الرمز، حاول مجددًا.');
           }
           setLoading(false);
         });
@@ -116,15 +116,15 @@ function LoginContent() {
       )?.response;
       if (resp?.status === 429) {
         setError(
-          'Too many requests — you have been rate-limited. Please wait a few minutes and try again.',
+          'عدد المحاولات كبير جدًا. انتظر بضع دقائق ثم حاول مجددًا.',
         );
       } else if (resp?.status === 403 && resp?.data?.code === 'ACCOUNT_DISABLED') {
         setError(
-          'Your account has been disabled. Please contact the server administrator to restore access.',
+          'تم تعطيل حسابك. يُرجى التواصل مع مسؤول الخادم لإعادة تفعيله.',
         );
         if (resp.data.adminEmail) setAdminEmail(resp.data.adminEmail);
       } else {
-        setError('Invalid username or password');
+        setError('اسم المستخدم أو كلمة المرور غير صحيحة');
       }
     } finally {
       setLoading(false);
@@ -132,18 +132,19 @@ function LoginContent() {
   }
 
   return (
-    <div className="w-full max-w-sm">
-      <div className="lg:hidden mb-10">
+    <div className="w-full max-w-md rounded-[2rem] border border-border/70 bg-card/80 p-6 shadow-2xl shadow-slate-900/10 backdrop-blur-xl sm:p-9">
+      <div className="mb-8 lg:hidden">
         <Link href="/">
           <span className="text-lg font-display font-bold tracking-tight">
-            Dzhoof<span className="text-primary"> IPTV</span>
+            DZ HOOF<span className="text-primary"> IPTV</span>
           </span>
         </Link>
       </div>
 
-      <div className="mb-8">
-        <h1 className="text-xl font-display font-bold uppercase tracking-wider">Sign In</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Access your IPTV management console</p>
+      <div className="mb-8 border-b border-border/70 pb-6">
+        <div className="mb-3 inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">مرحبًا بعودتك</div>
+        <h1 className="text-3xl font-display font-bold tracking-tight">تسجيل الدخول</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">أدخل بياناتك للوصول إلى لوحة إدارة القنوات والأجهزة.</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
@@ -159,12 +160,11 @@ function LoginContent() {
             {message === 'account_disabled' ? (
               <>
                 <p>
-                  Your account has been disabled. Please contact the server administrator to restore
-                  access.
+                  تم تعطيل حسابك. يُرجى التواصل مع مسؤول الخادم لإعادة تفعيله.
                 </p>
                 {searchParams.get('admin_email') && (
                   <p className="mt-1.5">
-                    Contact:{' '}
+                    التواصل:{' '}
                     <a
                       href={`mailto:${searchParams.get('admin_email')}`}
                       className="underline hover:text-destructive/80"
@@ -189,7 +189,7 @@ function LoginContent() {
             <p>{error}</p>
             {adminEmail && (
               <p className="mt-1.5">
-                Contact:{' '}
+                التواصل:{' '}
                 <a href={`mailto:${adminEmail}`} className="underline hover:text-destructive/80">
                   {adminEmail}
                 </a>
@@ -203,7 +203,7 @@ function LoginContent() {
             htmlFor="username"
             className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Username
+            اسم المستخدم
           </label>
           <input
             id="username"
@@ -217,8 +217,8 @@ function LoginContent() {
             disabled={loading}
             autoComplete="username"
             aria-required="true"
-            className="flex h-10 w-full border border-border bg-card px-3 py-2 text-sm transition-colors placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
-            aria-label="Username"
+            className="flex h-12 w-full rounded-xl border border-border/80 bg-background/70 px-4 py-2 text-sm transition-all placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
+            aria-label="اسم المستخدم"
           />
         </div>
 
@@ -227,7 +227,7 @@ function LoginContent() {
             htmlFor="password"
             className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
           >
-            Password
+            كلمة المرور
           </label>
           <div className="relative">
             <input
@@ -242,15 +242,15 @@ function LoginContent() {
               disabled={loading}
               autoComplete="current-password"
               aria-required="true"
-              className="flex h-10 w-full border border-border bg-card px-3 py-2 text-sm transition-colors placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary disabled:cursor-not-allowed disabled:text-muted-foreground"
-              aria-label="Password"
+              className="flex h-12 w-full rounded-xl border border-border/80 bg-background/70 px-4 py-2 text-sm transition-all placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
+              aria-label="كلمة المرور"
             />
             <button
               type="button"
               className="absolute right-1 top-1/2 -translate-y-1/2 p-2.5"
               onClick={() => setShowPassword(!showPassword)}
-              aria-label={showPassword ? 'Hide password' : 'Show password'}
-              title={showPassword ? 'Hide password' : 'Show password'}
+              aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
             >
               {showPassword ? (
                 <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
@@ -265,9 +265,9 @@ function LoginContent() {
           type="submit"
           disabled={loading}
           aria-busy={loading}
-          className="flex h-10 w-full items-center justify-center bg-primary text-sm font-semibold text-primary-foreground uppercase tracking-wider transition-colors hover:bg-primary/90 active:bg-primary/80 disabled:pointer-events-none disabled:opacity-50"
+          className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:bg-primary/90 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
         >
-          {loading ? 'Authenticating...' : 'Sign In'}
+          {loading ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
         </button>
       </form>
 
@@ -277,14 +277,14 @@ function LoginContent() {
             <div className="w-full border-t border-border" />
           </div>
           <span className="relative bg-background px-3 text-xs text-muted-foreground">
-            Or continue with
+            أو المتابعة باستخدام
           </span>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <a
             href="/api/v1/auth/google"
-            aria-label="Sign in with Google"
-            className="flex h-10 items-center justify-center gap-2 border border-border bg-card text-sm font-medium transition-colors hover:bg-muted"
+            aria-label="تسجيل الدخول باستخدام Google"
+            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-border/80 bg-background/60 text-sm font-semibold transition-all hover:-translate-y-0.5 hover:bg-muted"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
               <path
@@ -308,8 +308,8 @@ function LoginContent() {
           </a>
           <a
             href="/api/v1/auth/github"
-            aria-label="Sign in with GitHub"
-            className="flex h-10 items-center justify-center gap-2 border border-border bg-card text-sm font-medium transition-colors hover:bg-muted"
+            aria-label="تسجيل الدخول باستخدام GitHub"
+            className="flex h-11 items-center justify-center gap-2 rounded-xl border border-border/80 bg-background/60 text-sm font-semibold transition-all hover:-translate-y-0.5 hover:bg-muted"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
@@ -320,12 +320,12 @@ function LoginContent() {
       </div>
 
       <p className="mt-6 text-sm text-muted-foreground">
-        No account?{' '}
+        ليس لديك حساب؟{' '}
         <Link
           href={redirect ? `/register?redirect=${encodeURIComponent(redirect)}` : '/register'}
           className="font-medium text-foreground hover:text-primary transition-colors"
         >
-          Register
+          إنشاء حساب
         </Link>
       </p>
     </div>
@@ -335,13 +335,13 @@ function LoginContent() {
 export default function LoginPage() {
   return (
     <div className="h-screen overflow-y-auto flex">
-      <AuthSidePanel footer="Secure access to your channel management and device provisioning infrastructure." />
+      <AuthSidePanel footer="وصول آمن إلى إدارة القنوات وربط الأجهزة في منصتك." />
 
-      <div className="flex-1 flex items-center justify-center px-6 bg-background">
-        <Suspense fallback={null}>
+      <div className="relative flex-1 overflow-y-auto bg-gradient-to-br from-background via-background to-primary/5 px-4 py-8 sm:px-8 lg:px-12">
+        <div className="mx-auto flex min-h-full max-w-2xl items-center justify-center py-6"><Suspense fallback={null}>
           <LoginContent />
-        </Suspense>
-      </div>
+</Suspense></div>
+        </div>
     </div>
   );
 }

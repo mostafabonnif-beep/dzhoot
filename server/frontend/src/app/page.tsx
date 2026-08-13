@@ -4,24 +4,24 @@ import { ExternalLink, Download } from 'lucide-react';
 
 const capabilities = [
   {
-    title: 'Channel Management',
-    desc: 'Add, organize, and test IPTV channels with M3U import, DRM support, and live stream preview',
+    title: 'إدارة القنوات',
+    desc: 'أضف قنوات IPTV ونظّمها واختبرها مع استيراد M3U ومعاينة البث المباشر.',
   },
   {
-    title: 'Multi-Source Import',
-    desc: 'Import from IPTV-org, Pluto TV, and Samsung TV Plus with region-based filtering',
+    title: 'استيراد من مصادر متعددة',
+    desc: 'استورد من IPTV-org وPluto TV وSamsung TV Plus مع تصفية حسب المنطقة.',
   },
   {
-    title: 'Device Pairing',
-    desc: 'Provision and manage Fire TV devices with pairing codes, status tracking, and user assignment',
+    title: 'ربط الأجهزة',
+    desc: 'اربط أجهزة التلفاز عبر رموز الاقتران وتابع حالتها وعيّنها للمستخدمين.',
   },
   {
-    title: 'User & Access Control',
-    desc: 'Role-based user management with channel list codes, session tracking, and activity monitoring',
+    title: 'المستخدمون والتحكم في الوصول',
+    desc: 'أدر المستخدمين حسب الصلاحيات مع رموز قوائم القنوات وتتبع الجلسات والنشاط.',
   },
   {
-    title: 'System Analytics',
-    desc: 'Real-time dashboard with channel, user, device, and session metrics across your infrastructure',
+    title: 'تحليلات النظام',
+    desc: 'لوحة لحظية لمؤشرات القنوات والمستخدمين والأجهزة والجلسات.',
   },
 ];
 
@@ -31,23 +31,23 @@ export default function Home() {
     '@graph': [
       {
         '@type': 'SoftwareApplication',
-        name: 'Dzhoof IPTV',
+        name: 'DZ HOOF IPTV',
         description:
           'Self-hosted IPTV management console for Android TV and Fire TV. Import M3U playlists, manage channels, pair devices, and monitor streams.',
         applicationCategory: 'MultimediaApplication',
         operatingSystem: 'Android TV, Fire OS',
-        url: 'https://dzhoof.example',
-        downloadUrl: 'https://github.com/ddssssc/DzhoofIPTV/releases/latest',
+        url: 'https://github.com/merci1994dz/dzhoot',
+        downloadUrl: 'https://github.com/merci1994dz/dzhoot/releases/latest',
         softwareVersion: '1.0.1',
         author: {
           '@type': 'Person',
-          name: 'Akshay Nikhare',
-          url: 'https://github.com/ddssssc',
+          name: 'merci1994dz',
+          url: 'https://github.com/merci1994dz',
         },
         publisher: {
           '@type': 'Organization',
-          name: 'Dzhoof',
-          url: 'https://dzhoof.example',
+          name: 'DZ HOOF',
+          url: 'https://github.com/merci1994dz/dzhoot',
         },
         offers: {
           '@type': 'Offer',
@@ -63,17 +63,17 @@ export default function Home() {
           'Real-time analytics dashboard',
           'Self-hosted deployment',
         ],
-        screenshot: 'https://dzhoof.example/og-image.png',
-        license: 'https://github.com/ddssssc/DzhoofIPTV/blob/main/LICENSE',
+        screenshot: 'https://github.com/merci1994dz/dzhoot/og-image.png',
+        license: 'https://github.com/merci1994dz/dzhoot/blob/main/LICENSE',
       },
       {
         '@type': 'WebSite',
-        name: 'Dzhoof IPTV',
-        url: 'https://dzhoof.example',
+        name: 'DZ HOOF IPTV',
+        url: 'https://github.com/merci1994dz/dzhoot',
         description: 'Self-hosted IPTV management console for Android TV and Fire TV.',
         publisher: {
           '@type': 'Organization',
-          name: 'Dzhoof',
+          name: 'DZ HOOF',
         },
       },
       {
@@ -81,42 +81,42 @@ export default function Home() {
         mainEntity: [
           {
             '@type': 'Question',
-            name: 'What is Dzhoof IPTV?',
+            name: 'What is DZ HOOF IPTV?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'Dzhoof IPTV is a free, open-source, self-hosted IPTV management console. It provides an Android TV / Fire TV player app and a web-based admin dashboard for managing channels, devices, and users.',
+              text: 'DZ HOOF IPTV is a free, open-source, self-hosted IPTV management console. It provides an Android TV / Fire TV player app and a web-based admin dashboard for managing channels, devices, and users.',
             },
           },
           {
             '@type': 'Question',
-            name: 'What devices does Dzhoof IPTV support?',
+            name: 'What devices does DZ HOOF IPTV support?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'Dzhoof IPTV supports Amazon Fire TV, Fire TV Stick, and Android TV devices. The management console runs as a self-hosted web application accessible from any browser.',
+              text: 'DZ HOOF IPTV supports Amazon Fire TV, Fire TV Stick, and Android TV devices. The management console runs as a self-hosted web application accessible from any browser.',
             },
           },
           {
             '@type': 'Question',
-            name: 'Can I import M3U playlists into Dzhoof IPTV?',
+            name: 'Can I import M3U playlists into DZ HOOF IPTV?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'Yes. Dzhoof IPTV supports M3U playlist import, along with built-in sources like IPTV-org, Pluto TV, and Samsung TV Plus with region-based filtering.',
+              text: 'Yes. DZ HOOF IPTV supports M3U playlist import, along with built-in sources like IPTV-org, Pluto TV, and Samsung TV Plus with region-based filtering.',
             },
           },
           {
             '@type': 'Question',
-            name: 'Is Dzhoof IPTV free?',
+            name: 'Is DZ HOOF IPTV free?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'Yes, Dzhoof IPTV is completely free and open source. You can self-host the server using Docker and download the Android TV app from GitHub releases.',
+              text: 'Yes, DZ HOOF IPTV is completely free and open source. You can self-host the server using Docker and download the Android TV app from GitHub releases.',
             },
           },
           {
             '@type': 'Question',
-            name: 'How do I deploy Dzhoof IPTV?',
+            name: 'How do I deploy DZ HOOF IPTV?',
             acceptedAnswer: {
               '@type': 'Answer',
-              text: 'Dzhoof IPTV can be deployed using Docker Compose. The project includes production-ready Docker configurations. Visit the GitHub repository for the deployment guide.',
+              text: 'DZ HOOF IPTV can be deployed using Docker Compose. The project includes production-ready Docker configurations. Visit the GitHub repository for the deployment guide.',
             },
           },
         ],
@@ -151,40 +151,39 @@ export default function Home() {
                 priority
               />
               <h1 className="text-5xl sm:text-6xl lg:text-[5.5rem] font-display font-bold tracking-tight leading-none text-primary">
-                Dzhoof IPTV
+                DZ HOOF IPTV
               </h1>
 
               <p className="mt-4 text-sm uppercase tracking-widest text-muted-foreground font-medium">
-                IPTV Management Console
+                لوحة إدارة IPTV
               </p>
 
               <p className="mt-6 text-muted-foreground max-w-md leading-relaxed">
-                Centralized channel management, device provisioning, and stream monitoring for your
-                IPTV infrastructure.
+                إدارة مركزية للقنوات وربط الأجهزة ومراقبة البث ضمن منصتك.
               </p>
 
-              <nav aria-label="Get started" className="flex flex-wrap items-center gap-3 mt-10">
+              <nav aria-label="ابدأ الآن" className="flex flex-wrap items-center gap-3 mt-10">
                 <Link
                   href="/login"
                   className="inline-flex items-center bg-primary text-primary-foreground px-8 py-3 text-sm font-semibold uppercase tracking-widest transition-colors hover:bg-primary/90 active:bg-primary/80"
                 >
-                  Sign In
+                  تسجيل الدخول
                 </Link>
                 <Link
                   href="/register"
                   className="inline-flex items-center border border-border px-8 py-3 text-sm font-semibold uppercase tracking-widest text-muted-foreground transition-colors hover:text-foreground hover:border-foreground/20 active:bg-secondary"
                 >
-                  Register
+                  إنشاء حساب
                 </Link>
               </nav>
               <a
-                href="https://github.com/ddssssc/DzhoofIPTV/releases/latest"
+                href="https://github.com/merci1994dz/dzhoot/releases/latest"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-3 mt-4 border-2 border-primary/30 bg-primary/5 px-8 py-4 text-sm font-semibold uppercase tracking-widest text-foreground hover:bg-primary/10 hover:border-primary/50 transition-colors"
               >
                 <Download className="h-5 w-5 text-primary" aria-hidden="true" />
-                <span>Download Android TV APK</span>
+                <span>تنزيل تطبيق Android TV</span>
                 <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />
                 <span className="sr-only"> (opens in new tab)</span>
               </a>
@@ -192,7 +191,7 @@ export default function Home() {
 
             <div className="border-l border-border pl-8 hidden lg:block">
               <p className="text-xs uppercase tracking-widest text-muted-foreground mb-8">
-                Capabilities
+                المزايا
               </p>
               <ol className="space-y-6">
                 {capabilities.map((cap, i) => (
@@ -227,15 +226,15 @@ export default function Home() {
       <footer className="relative z-10 border-t border-border">
         <div className="max-w-6xl mx-auto px-6 lg:px-10 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <span className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} Dzhoof IPTV <span aria-hidden="true">&bull;</span>{' '}
-            Open Source Project
+            &copy; {new Date().getFullYear()} DZ HOOF IPTV <span aria-hidden="true">&bull;</span>{' '}
+            مشروع مفتوح المصدر
           </span>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
             <Link
               href="/privacy"
               className="text-xs text-muted-foreground hover:text-primary transition-colors"
             >
-              Privacy Policy
+              سياسة الخصوصية
             </Link>
             <span className="text-muted-foreground/40 hidden sm:inline" aria-hidden="true">
               &bull;
@@ -244,18 +243,18 @@ export default function Home() {
               href="/terms"
               className="text-xs text-muted-foreground hover:text-primary transition-colors"
             >
-              Terms of Service
+              شروط الاستخدام
             </Link>
             <span className="text-muted-foreground/40 hidden sm:inline" aria-hidden="true">
               &bull;
             </span>
             <a
-              href="https://github.com/ddssssc/DzhoofIPTV"
+              href="https://github.com/merci1994dz/dzhoot"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
             >
-              View Source Code
+              عرض الشيفرة المصدرية
               <ExternalLink className="h-3 w-3" aria-hidden="true" />
               <span className="sr-only"> (opens in new tab)</span>
             </a>
@@ -263,12 +262,12 @@ export default function Home() {
               &bull;
             </span>
             <a
-              href="https://github.com/ddssssc/"
+              href="https://github.com/merci1994dz"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
             >
-              Built by Akshay Nikhare
+              طوّره فريق DZ HOOF
               <ExternalLink className="h-3 w-3" aria-hidden="true" />
               <span className="sr-only"> (opens in new tab)</span>
             </a>

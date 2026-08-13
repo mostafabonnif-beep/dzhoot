@@ -21,16 +21,16 @@ interface EpgSource {
 }
 
 function formatRelativeTime(dateStr: string | null) {
-  if (!dateStr) return 'Never';
+  if (!dateStr) return 'لم يحدث بعد';
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMin = Math.floor(diffMs / 60000);
   const diffHr = Math.floor(diffMin / 60);
 
-  if (diffMin < 1) return 'Just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffMin < 1) return 'الآن';
+  if (diffMin < 60) return `منذ ${diffMin} د`;
+  if (diffHr < 24) return `منذ ${diffHr} س`;
   return date.toLocaleDateString([], {
     month: 'short',
     day: 'numeric',
@@ -40,16 +40,16 @@ function formatRelativeTime(dateStr: string | null) {
 }
 
 function formatFutureTime(dateStr: string | null) {
-  if (!dateStr) return 'Not scheduled';
+  if (!dateStr) return 'غير مجدول';
   const date = new Date(dateStr);
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
   const diffMin = Math.floor(diffMs / 60000);
   const diffHr = Math.floor(diffMin / 60);
 
-  if (diffMin < 1) return 'Imminent';
-  if (diffMin < 60) return `In ${diffMin}m`;
-  if (diffHr < 24) return `In ${diffHr}h ${diffMin % 60}m`;
+  if (diffMin < 1) return 'قريبًا';
+  if (diffMin < 60) return `خلال ${diffMin} د`;
+  if (diffHr < 24) return `خلال ${diffHr} س و${diffMin % 60} د`;
   return date.toLocaleDateString([], {
     month: 'short',
     day: 'numeric',
@@ -74,7 +74,7 @@ export default function EpgPage() {
         setStats(res.data.data);
       }
     } catch {
-      setError('Failed to load EPG stats');
+      setError('تعذر تحميل إحصائيات دليل البرامج');
     }
   }, []);
 
@@ -127,7 +127,7 @@ export default function EpgPage() {
         setRefreshing(false);
       }, 2000);
     } catch {
-      setError('Failed to trigger EPG refresh');
+      setError('تعذر بدء تحديث دليل البرامج');
       setRefreshing(false);
     }
   }
@@ -157,16 +157,16 @@ export default function EpgPage() {
 
   const metrics = [
     {
-      label: 'Total Programs',
+      label: 'إجمالي البرامج',
       value: stats?.totalPrograms.toLocaleString() ?? '0',
-      sub: 'In database',
+      sub: 'في قاعدة البيانات',
       color: 'bg-signal-blue',
       icon: Calendar,
     },
     {
-      label: 'EPG Coverage',
+      label: 'تغطية دليل البرامج',
       value: `${coveragePercent}%`,
-      sub: `${stats?.channelsWithEpg ?? 0} of ${stats?.totalSystemChannels ?? 0} channels`,
+      sub: `${stats?.channelsWithEpg ?? 0} من أصل ${stats?.totalSystemChannels ?? 0} قناة`,
       color:
         coveragePercent > 50
           ? 'bg-signal-green'
@@ -176,16 +176,16 @@ export default function EpgPage() {
       icon: Tv,
     },
     {
-      label: 'Sources',
+      label: 'المصادر',
       value: stats?.sourcesDiscovered ?? 0,
-      sub: 'Auto-discovered',
+      sub: 'مكتشفة تلقائيًا',
       color: 'bg-primary',
       icon: Globe,
     },
     {
-      label: 'Last Refresh',
+      label: 'آخر تحديث',
       value: formatRelativeTime(stats?.lastRefreshedAt ?? null),
-      sub: `Next: ${formatFutureTime(stats?.nextRefreshAt ?? null)}`,
+      sub: `التالي: ${formatFutureTime(stats?.nextRefreshAt ?? null)}`,
       color: stats?.lastRefreshedAt ? 'bg-signal-green' : 'bg-signal-red',
       icon: Clock,
     },
@@ -195,19 +195,19 @@ export default function EpgPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between ">
         <div>
-          <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">EPG Guide</h1>
+          <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">دليل البرامج الإلكتروني</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Automatic Electronic Program Guide management
+            إدارة دليل البرامج الإلكتروني تلقائيًا
           </p>
         </div>
         <button
           onClick={handleRefresh}
           disabled={!!isRefreshing}
-          aria-label="Refresh EPG data"
+          aria-label="تحديث بيانات دليل البرامج"
           className="flex items-center gap-2 px-3 py-1.5 text-xs uppercase tracking-[0.1em] font-medium border border-border hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
-          {isRefreshing ? 'Refreshing...' : 'Refresh Now'}
+          {isRefreshing ? 'جارٍ التحديث...' : 'تحديث الآن'}
         </button>
       </div>
 
@@ -225,7 +225,7 @@ export default function EpgPage() {
         <div className="border border-signal-blue/30 bg-signal-blue/5 px-4 py-3 flex items-center gap-3 ">
           <Loader2 className="h-4 w-4 animate-spin text-signal-blue" />
           <p className="text-sm">
-            EPG refresh in progress. Fetching program data from discovered sources...
+            جارٍ تحديث دليل البرامج وجلب البيانات من المصادر المكتشفة...
           </p>
         </div>
       )}
@@ -264,35 +264,32 @@ export default function EpgPage() {
       {/* How it works */}
       <div className="border border-border ">
         <div className="border-b border-border px-4 py-2.5">
-          <h2 className="text-xs font-bold uppercase tracking-[0.15em]">How EPG Works</h2>
+          <h2 className="text-xs font-bold uppercase tracking-[0.15em]">كيف يعمل دليل البرامج؟</h2>
         </div>
         <div className="p-4 space-y-2 text-sm text-muted-foreground">
           <p>
-            EPG data is{' '}
-            <strong className="text-foreground">automatically discovered and fetched</strong> based
-            on the channels in your system:
+            يتم اكتشاف بيانات دليل البرامج {' '}
+            <strong className="text-foreground">واستقدامها تلقائيًا</strong> بناءً على القنوات الموجودة في نظامك:
           </p>
           <ul className="list-disc list-inside space-y-1 ml-2">
             <li>
-              Channels from <strong className="text-foreground">iptv-org</strong> are matched
-              against their guides database
+              تتم مطابقة القنوات من <strong className="text-foreground">iptv-org</strong> مع قاعدة أدلة البرامج الخاصة بها
             </li>
             <li>
-              <strong className="text-foreground">Pluto TV</strong> and{' '}
-              <strong className="text-foreground">Samsung TV Plus</strong> EPG is fetched from
+              <strong className="text-foreground">Pluto TV</strong> و{' '}
+              <strong className="text-foreground">Samsung TV Plus</strong> ويتم جلب دليل البرامج من
               i.mjh.nz
             </li>
             <li>
-              Data refreshes automatically every{' '}
-              <strong className="text-foreground">6 hours</strong>
+              يتم تحديث البيانات تلقائيًا كل {' '}
+              <strong className="text-foreground">6 ساعات</strong>
             </li>
-            <li>Old programs are automatically cleaned up after 48 hours</li>
+            <li>تُنظف البرامج القديمة تلقائيًا بعد 48 ساعة</li>
           </ul>
           <p className="pt-1">
-            IPTV players access EPG via the{' '}
+            تصل تطبيقات IPTV إلى دليل البرامج عبر{' '}
             <code className="text-xs bg-muted px-1.5 py-0.5 font-mono">/api/v1/tv/epg/:code</code>{' '}
-            endpoint using the channel list code. The M3U playlist header includes the EPG URL
-            automatically.
+            باستخدام رمز قائمة القنوات، ويضيف رأس قائمة M3U رابط دليل البرامج تلقائيًا.
           </p>
         </div>
       </div>
@@ -300,7 +297,7 @@ export default function EpgPage() {
       {/* Discovered Sources */}
       <div className="border border-border ">
         <div className="border-b border-border px-4 py-2.5 flex items-center justify-between">
-          <h2 className="text-xs font-bold uppercase tracking-[0.15em]">Discovered EPG Sources</h2>
+          <h2 className="text-xs font-bold uppercase tracking-[0.15em]">مصادر دليل البرامج المكتشفة</h2>
           <button
             onClick={fetchSources}
             disabled={sourcesLoading}
@@ -313,9 +310,9 @@ export default function EpgPage() {
         {sources.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
             <Calendar className="h-8 w-8 mx-auto mb-2 opacity-30" />
-            <p>No EPG sources discovered yet.</p>
+            <p>لم يتم اكتشاف مصادر دليل البرامج بعد.</p>
             <p className="text-xs mt-1">
-              Import channels first, then EPG sources will be auto-detected.
+              استورد القنوات أولًا، ثم سيتم اكتشاف مصادر دليل البرامج تلقائيًا.
             </p>
           </div>
         ) : (
@@ -342,7 +339,7 @@ export default function EpgPage() {
                 <div className="flex items-center gap-1.5 shrink-0 ml-4">
                   <Tv className="h-3 w-3 text-muted-foreground" />
                   <span className="text-xs tabular-nums">{source.coveredChannels}</span>
-                  <span className="text-xs text-muted-foreground">channels</span>
+                  <span className="text-xs text-muted-foreground">قنوات</span>
                 </div>
               </div>
             ))}

@@ -44,10 +44,10 @@ interface StreamHealthData {
 }
 
 const quickActions = [
-  { label: 'Quick Pick', href: '/admin/quick-pick', icon: Zap },
-  { label: 'Manage Channels', href: '/admin/channels', icon: Tv },
-  { label: 'Manage Users', href: '/admin/users', icon: Users },
-  { label: 'Manage Devices', href: '/admin/devices', icon: Smartphone },
+  { label: 'اختيار سريع', href: '/admin/quick-pick', icon: Zap },
+  { label: 'إدارة القنوات', href: '/admin/channels', icon: Tv },
+  { label: 'إدارة المستخدمين', href: '/admin/users', icon: Users },
+  { label: 'إدارة الأجهزة', href: '/admin/devices', icon: Smartphone },
 ];
 
 function formatTime(timestamp: string) {
@@ -60,8 +60,8 @@ function formatDate(timestamp: string) {
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
+  if (days === 0) return 'اليوم';
+  if (days === 1) return 'أمس';
   return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
@@ -135,7 +135,7 @@ export default function AdminDashboard() {
         });
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'CanceledError') return;
-        setError('Failed to load dashboard data');
+        setError('تعذر تحميل بيانات لوحة التحكم');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
@@ -166,30 +166,30 @@ export default function AdminDashboard() {
 
   const metrics = [
     {
-      label: 'Channels',
+      label: 'القنوات',
       value: stats?.channels.total ?? 0,
-      sub: `${stats?.channels.active ?? 0} active`,
+      sub: `${stats?.channels.active ?? 0} نشطة`,
       color: 'bg-signal-green',
       href: '/admin/channels',
     },
     {
-      label: 'Users',
+      label: 'المستخدمون',
       value: stats?.users.total ?? 0,
-      sub: `${stats?.users.active ?? 0} active`,
+      sub: `${stats?.users.active ?? 0} نشطون`,
       color: 'bg-signal-green',
       href: '/admin/users',
     },
     {
-      label: 'Sessions',
+      label: 'الجلسات',
       value: stats?.sessions.active ?? 0,
-      sub: `${stats?.sessions.total ?? 0} total`,
+      sub: `${stats?.sessions.total ?? 0} إجمالي`,
       color: 'bg-signal-blue',
       href: '/admin/devices',
     },
     {
-      label: 'Pairings',
+      label: 'عمليات الربط',
       value: stats?.pairings.today ?? 0,
-      sub: `${stats?.pairings.pending ?? 0} pending`,
+      sub: `${stats?.pairings.pending ?? 0} معلقة`,
       color: 'bg-primary',
       href: '/admin/devices',
     },
@@ -198,17 +198,18 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-8">
       <div className="">
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">Overview</h1>
-        <p className="text-sm text-muted-foreground mt-1">System status and recent activity</p>
+        <div className="mb-3 inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">مركز العمليات</div>
+        <h1 className="text-3xl font-display font-bold tracking-tight">نظرة عامة</h1>
+        <p className="mt-2 text-sm text-muted-foreground">تابع حالة المنصة والنشاط الأخير من مكان واحد.</p>
       </div>
 
-      <div className="border border-border ">
+      <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/60 shadow-sm">
         <div className="grid grid-cols-2 md:grid-cols-4">
           {metrics.map((metric, i) => (
             <Link
               key={metric.label}
               href={metric.href}
-              className={`p-4 transition-colors hover:bg-muted/50 ${i % 2 !== 0 ? 'border-l border-border' : ''} ${
+              className={`p-5 transition-all hover:bg-primary/[0.04] hover:-translate-y-0.5 ${i % 2 !== 0 ? 'border-l border-border' : ''} ${
                 i >= 2 ? 'border-t border-border md:border-t-0' : ''
               } ${i === 2 ? 'md:border-l' : ''}`}
             >
@@ -228,7 +229,7 @@ export default function AdminDashboard() {
       {streamHealth && (
         <Link
           href="/admin/stats"
-          className="block border border-border hover:border-primary/30 transition-colors"
+          className="block overflow-hidden rounded-3xl border border-border/70 bg-card/60 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30"
         >
           <div className="px-4 py-2 bg-muted/50 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">

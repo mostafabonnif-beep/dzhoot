@@ -201,7 +201,7 @@ class ComposeMainActivity : ComponentActivity() {
 
                         if (exitArmed) {
                             OverlayToast(
-                                text = "Press back again to exit",
+                                text = "اضغط رجوع مرة أخرى للخروج",
                                 modifier = Modifier
                                     .align(Alignment.BottomCenter)
                                     .padding(bottom = 48.dp)
@@ -354,7 +354,7 @@ private fun FireVisionAppShell(
                             containerColor = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         ) {
-                            Icon(Icons.Default.Search, contentDescription = "Search")
+                            Icon(Icons.Default.Search, contentDescription = "بحث")
                         }
                     }
                 }
@@ -371,12 +371,12 @@ private fun FireVisionAppShell(
 }
 
 private val bottomNavItems = listOf(
-    Triple(Screen.Home, Icons.Default.Home, "Home"),
-    Triple(Screen.Favorites, Icons.Default.Favorite, "Favorites"),
-    Triple(Screen.Categories, Icons.Default.Category, "Categories"),
-    Triple(Screen.Catalog, Icons.Default.Movie, "VOD"),
-    Triple(Screen.Guide, Icons.Default.GridView, "Guide"),
-    Triple(Screen.Settings, Icons.Default.Settings, "Settings"),
+    Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
+    Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
+    Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
+    Triple(Screen.Catalog, Icons.Default.Movie, "فيديو"),
+    Triple(Screen.Guide, Icons.Default.GridView, "الدليل"),
+    Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
 )
 
 @Composable

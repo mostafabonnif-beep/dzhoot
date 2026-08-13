@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Space_Grotesk, Manrope } from 'next/font/google';
+import { Space_Grotesk, Manrope, Noto_Sans_Arabic } from 'next/font/google';
 import { GoogleAnalytics } from '@next/third-parties/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
@@ -17,14 +17,20 @@ const manrope = Manrope({
   display: 'swap',
 });
 
+const notoArabic = Noto_Sans_Arabic({
+  subsets: ['arabic'],
+  variable: '--font-arabic',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
-  metadataBase: new URL('https://dzhoof.example'),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001'),
   title: {
-    default: 'Dzhoof IPTV — Self-Hosted Android TV IPTV Player & Management Console',
-    template: '%s | Dzhoof IPTV',
+    default: 'DZ HOOF IPTV — منصة إدارة وتشغيل القنوات',
+    template: '%s | DZ HOOF IPTV',
   },
   description:
-    'Dzhoof IPTV is a self-hosted IPTV management console for Android TV and Fire TV. Import M3U playlists, manage channels, pair devices, and monitor streams — all from one dashboard.',
+    'منصة DZ HOOF لإدارة وتشغيل مصادر IPTV المصرح بها، واستيراد قوائم M3U وإدارة القنوات وربط الأجهزة ومراقبة البث من لوحة واحدة.',
   keywords: [
     'IPTV',
     'Android TV',
@@ -40,7 +46,7 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: 'DZ HOOF', url: 'https://github.com/merci1994dz/dzhoot' }],
   creator: 'DZ HOOF',
-  publisher: 'Dzhoof',
+  publisher: 'DZ HOOF',
   alternates: {
     canonical: 'https://github.com/merci1994dz/dzhoot',
     types: {
@@ -62,7 +68,7 @@ export const metadata: Metadata = {
     title: 'Dzhoof IPTV — Self-Hosted IPTV for Android TV',
     description:
       'Import M3U playlists, pair Fire TV devices, manage channels, and monitor streams. Open-source and self-hosted.',
-    url: 'https://dzhoof.example',
+    url: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001',
     siteName: 'Dzhoof IPTV',
     images: [
       {
@@ -72,7 +78,7 @@ export const metadata: Metadata = {
         alt: 'Dzhoof IPTV — Self-hosted IPTV management console with channel management, device pairing, and stream monitoring',
       },
     ],
-    locale: 'en_US',
+    locale: 'ar_DZ',
     type: 'website',
   },
   twitter: {
@@ -91,7 +97,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
-      <body className={`${spaceGrotesk.variable} ${manrope.variable} antialiased`}>
+      <body className={`${spaceGrotesk.variable} ${manrope.variable} ${notoArabic.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

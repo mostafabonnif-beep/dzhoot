@@ -4,12 +4,12 @@ import Home from '../app/page';
 describe('Home page', () => {
   it('renders the heading', () => {
     render(<Home />);
-    expect(screen.getByText('Dzhoof IPTV')).toBeInTheDocument();
+    expect(screen.getByText('DZ HOOF IPTV')).toBeInTheDocument();
   });
 
   it('renders sign in and register links', () => {
     render(<Home />);
-    expect(screen.getByText('Sign In')).toBeInTheDocument();
-    expect(screen.getByText('Register')).toBeInTheDocument();
+    expect(screen.getByText('تسجيل الدخول')).toBeInTheDocument();
+    expect(screen.getByText('إنشاء حساب')).toBeInTheDocument();
   });
 });

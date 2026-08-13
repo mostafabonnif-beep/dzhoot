@@ -41,7 +41,7 @@ export function Header() {
       <button
         onClick={toggleMobileSidebar}
         className="flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary md:hidden"
-        aria-label="Open navigation menu"
+        aria-label="فتح قائمة التنقل"
       >
         <Menu className="h-5 w-5" />
       </button>
@@ -49,7 +49,7 @@ export function Header() {
         <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           className="relative flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
-          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          aria-label={`التبديل إلى الوضع ${theme === 'dark' ? 'الفاتح' : 'الداكن'}`}
           aria-pressed={theme === 'dark'}
         >
           <Sun className="h-4 w-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
@@ -62,7 +62,7 @@ export function Header() {
               /* eslint-disable-next-line @next/next/no-img-element -- dynamic external URL with onError fallback */
               <img
                 src={profilePic}
-                alt={`${user.username}'s profile picture`}
+                alt={`صورة الملف الشخصي للمستخدم ${user.username}`}
                 loading="lazy"
                 width={24}
                 height={24}
@@ -79,7 +79,7 @@ export function Header() {
         <button
           onClick={handleLogout}
           className="flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
-          aria-label="Sign out"
+          aria-label="تسجيل الخروج"
         >
           <LogOut className="h-4 w-4" />
         </button>

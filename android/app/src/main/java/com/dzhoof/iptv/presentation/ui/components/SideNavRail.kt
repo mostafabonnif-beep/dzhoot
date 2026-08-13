@@ -77,15 +77,15 @@ private data class NavItem(
 )
 
 private val topNavItems = listOf(
-    NavItem(Screen.Home, Icons.Default.Home, "Home"),
-    NavItem(Screen.Favorites, Icons.Default.Favorite, "Favorites"),
-    NavItem(Screen.Search, Icons.Default.Search, "Search"),
-    NavItem(Screen.Categories, Icons.Default.Category, "Categories"),
-    NavItem(Screen.Catalog, Icons.Default.Movie, "VOD"),
-    NavItem(Screen.Guide, Icons.Default.GridView, "Guide"),
+    NavItem(Screen.Home, Icons.Default.Home, "الرئيسية"),
+    NavItem(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
+    NavItem(Screen.Search, Icons.Default.Search, "بحث"),
+    NavItem(Screen.Categories, Icons.Default.Category, "التصنيفات"),
+    NavItem(Screen.Catalog, Icons.Default.Movie, "فيديو"),
+    NavItem(Screen.Guide, Icons.Default.GridView, "الدليل"),
 )
 
-private val bottomNavItem = NavItem(Screen.Settings, Icons.Default.Settings, "Settings")
+private val bottomNavItem = NavItem(Screen.Settings, Icons.Default.Settings, "الإعدادات")
 
 private fun NavItem.isSelectedFor(currentRoute: String?): Boolean =
     currentRoute == screen.route ||
@@ -158,12 +158,12 @@ fun SideNavRail(
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                contentDescription = "FireVision",
+                contentDescription = "DZ HOOF",
                 modifier = Modifier.size(if (compact) Dimens.NavRailBrandIconMobile else Dimens.NavRailBrandIconTv)
             )
             AnimatedVisibility(visible = isExpanded, enter = labelEnter, exit = labelExit) {
                 Text(
-                    text = "FireVision",
+                    text = "DZ HOOF",
                     color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.ExtraBold,
