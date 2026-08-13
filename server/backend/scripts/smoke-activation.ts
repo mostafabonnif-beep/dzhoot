@@ -117,6 +117,7 @@ async function main() {
     body: JSON.stringify({ username: 'smokeuser', email: 'smoke@dzhoof.test', password: 'SmokePass123!' }),
   });
   check('user registers', reg.status === 201 && reg.body?.success === true, reg.body);
+  const smokeUserId = reg.body?.user?.id;
 
   const userLogin = await jfetch('/api/v1/auth/login', {
     method: 'POST',
@@ -236,11 +237,21 @@ async function main() {
     method: 'POST',
     body: JSON.stringify({ username: 'gateguy', email: 'gate@dzhoof.test', password: 'SmokePass123!' }),
   });
+  const gateUserId = freshReg.body?.user?.id;
   const gateLogin = await jfetch('/api/v1/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username: 'gateguy', password: 'SmokePass123!' }),
   });
   const gateHeaders = { 'x-session-id': gateLogin.body?.sessionId };
+
+  // Channel access is provisioned per user: grant the subscriber the full catalog
+  // (admin API) — mirrors the production provisioning flow.
+  const grant = await jfetch(
+    `/api/v1/users/${gateUserId}`,
+    { method: 'PUT', body: JSON.stringify({ allCatalog: true }) },
+    adminHeaders,
+  );
+  check('admin grants subscriber catalog access', grant.status === 200, grant.body);
 
   const denied = await jfetch(
     '/api/v1/streams/authorize',
@@ -249,15 +260,25 @@ async function main() {
   );
   check('streams/authorize blocks unsubscribed user', denied.body?.code === 'SUBSCRIPTION_EXPIRED', denied.body);
 
-  // Subscribed user is allowed
+  // Subscribed user with catalog access is allowed (channel access is provisioned per user)
+  const grantSub = await jfetch(
+    `/api/v1/users/${smokeUserId}`,
+    { method: 'PUT', body: JSON.stringify({ allCatalog: true }) },
+    adminHeaders,
+  );
+  check('admin grants subscriber catalog access', grantSub.status === 200, grantSub.body);
+
   const allowed = await jfetch(
     '/api/v1/streams/authorize',
     { method: 'POST', body: JSON.stringify({ contentType: 'LIVE', contentId: String(channelId) }) },
     userHeaders,
   );
   check(
-    'streams/authorize allows active subscriber with URL',
-    allowed.status === 200 && allowed.body?.data?.url === 'http://stream.example/live.m3u8',
+    'streams/authorize allows active subscriber with tokenized URL',
+    allowed.status === 200 &&
+      allowed.body?.data?.authorized === true &&
+      typeof allowed.body?.data?.url === 'string' &&
+      allowed.body?.data?.url.length > 0,
     allowed.body,
   );
 
