@@ -109,7 +109,7 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 3. أتمتة النسخ الاحتياطي: cron لـ`server/scripts/backup.sh` + نسخة دورية لمجلد uploads + اختبار `restore-drill.sh` بعد كل تغيير schema.
 4. `.env.production` بأسماء متغيرة: `XTREAM_SECRET_KEY` قوية (تشفير الاعتمادات)، `JWT_*`، `SUPER_ADMIN_PASSWORD`، وقرر `subscription_required` حسب السياسة التجارية.
 5. Health checks + مراقبة (Sentry موجود؛ أضف تنبيهات HTTP/SMTP لانقطاع الخدمة — `OBSERVABILITY.md` مرجع).
-6. وثّق runbook نشر في `server/docs/workflow/DEPLOYMENT_GUIDE.md` (المسار موجود).
+6. وثّق runbook نشر في `server/docs/workflow/DEPLOYMENT_GUIDE.md` (المسار موجود). **التقدم الحالي:** أضيف `server/docs/RELEASE_RUNBOOK.md`، وتم تمرير أسرار playback وXtream وTOTP وFCM وCORS وalerts إلى Compose، وإضافة placeholders صريحة للصور ومتغيرات backup؛ تبقى عملية النشر على VPS وRestore Drill الحقيقي.
 
 **تعريف الإنجاز:** `https://api.example.com/health` أخضر، تسجيل دخول فعلي، إضافة مصدر Xtream حقيقي + مزامنة + تفعيل كود من التطبيق، واستعادة ناجحة من نسخة احتياطية موثقة.
 
@@ -168,7 +168,7 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 5. **منع تخمين الأكواد**: الـhash SHA-256 مع `codeLast4` للبحث — لا تسريب؛ أضف تأخيرًا/rate-limit (أعلاه) وفكّر بفترة سريان للكود (`codeExpiresAt` موجود — استخدمه افتراضيًا).
 6. مراجعة أمنية: `npm audit` (بعد الترقية الحالية: 32 ثغرة production، منها 1 حرجة و12 عالية)، ترقية `multer` (من 1.4.5-lts.1 إلى 2.2.0 تمت في PR #11). ما زالت ترقيات `axios` و`fast-xml-parser` و`handlebars` و`nodemailer` و`next` و`postcss` تحتاج مراجعة توافق مستقلة قبل تطبيقها.
 
-**تعريف الإنجاز:** قائمة فحص أمني موثقة، واللوحة تتطلب 2FA، والتخمين محجوب، ووثيقة `server/docs/security/` محدثة. **التقدم الحالي:** rate-limit لتسجيل الدخول واسترداد الأكواد موجود، وmulter 2.x مرفوع في PR #11، و2FA المشفر مدمج في develop عبر PR #15؛ تبقى صفحة إعداد 2FA في اللوحة ومراجعة الاعتماديات المؤجلة.
+**تعريف الإنجاز:** قائمة فحص أمني موثقة، واللوحة تتطلب 2FA، والتخمين محجوب، ووثيقة `server/docs/security/` محدثة. **التقدم الحالي:** rate-limit لتسجيل الدخول واسترداد الأكواد موجود، وmulter 2.x مرفوع في PR #11، و2FA المشفر مع واجهة setup/confirm/disable مدمج في develop عبر PR #20؛ تبقى مراجعة الاعتماديات المؤجلة واختبار تدفق الدخول على بيئة نشر حقيقية.
 
 ---
 
