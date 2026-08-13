@@ -19,12 +19,21 @@ object AppPreferences {
     private const val XTREAM_HOST_KEY = "xtream_host"
     private const val XTREAM_USER_KEY = "xtream_user"
     private const val XTREAM_PASS_KEY = "xtream_pass"
+    private const val PARENTAL_PIN_HASH_KEY = "parental_pin_hash"
+    private const val PARENTAL_LOCK_ENABLED_KEY = "parental_lock_enabled"
     const val DEFAULT_SERVER_URL = "https://dzhoof.example"
 
     /** Playlist source types. PAIRED = managed server (default); M3U/XTREAM = bring-your-own. */
     const val SOURCE_PAIRED = "paired"
     const val SOURCE_M3U = "m3u"
     const val SOURCE_XTREAM = "xtream"
+
+    /**
+     * Parental unlock is session-scoped: a successful PIN entry unlocks playback
+     * for the rest of the process and resets on the next app launch.
+     */
+    @Volatile
+    private var parentalUnlockedThisSession = false
 
     fun getServerUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -185,5 +194,52 @@ object AppPreferences {
             .remove(TV_CODE_KEY)
             .remove(DEMO_MODE_KEY)
             .apply()
+    }
+
+    // ─── Parental controls ─────────────────────────────────────────────
+
+    /** Store a new parental PIN (hashed). Returns false for invalid input. */
+    fun setParentalPin(context: Context, pin: String): Boolean {
+        if (!ParentalPinUtils.isValidPin(pin)) return false
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(PARENTAL_PIN_HASH_KEY, ParentalPinUtils.hashPin(pin))
+            .apply()
+        return true
+    }
+
+    fun clearParentalPin(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(PARENTAL_PIN_HASH_KEY)
+            .apply()
+    }
+
+    fun hasParentalPin(context: Context): Boolean =
+        getParentalPinHash(context) != null
+
+    private fun getParentalPinHash(context: Context): String? =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(PARENTAL_PIN_HASH_KEY, null)
+
+    fun verifyParentalPin(context: Context, pin: String): Boolean =
+        ParentalPinUtils.verifyPin(pin, getParentalPinHash(context))
+
+    fun isParentalLockEnabled(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(PARENTAL_LOCK_ENABLED_KEY, false)
+
+    fun setParentalLockEnabled(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PARENTAL_LOCK_ENABLED_KEY, enabled)
+            .apply()
+    }
+
+    /** True after a successful PIN entry in this app process. */
+    fun isParentalUnlockedThisSession(): Boolean = parentalUnlockedThisSession
+
+    fun setParentalUnlockedThisSession(unlocked: Boolean) {
+        parentalUnlockedThisSession = unlocked
     }
 }

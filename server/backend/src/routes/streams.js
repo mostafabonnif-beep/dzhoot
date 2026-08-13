@@ -12,6 +12,7 @@ const {
   getActiveSubscription,
 } = require('../services/subscription-service');
 const { issuePlaybackToken } = require('../services/playback-token');
+const { registerStreamSession } = require('../services/stream-session-service');
 const { getPublicBaseUrl } = require('../utils/public-url');
 
 // Stream authorization: /api/v1/streams
@@ -104,6 +105,13 @@ router.post('/authorize', async (req, res) => {
     });
     const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`;
 
+    // Per-user concurrent stream limit (oldest evicted; no-op without Redis).
+    const session = await registerStreamSession({
+      userId: String(req.user.id),
+      sessionId: token,
+      ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+    });
+
     return res.json({
       success: true,
       data: {
@@ -113,6 +121,7 @@ router.post('/authorize', async (req, res) => {
         expiresAt,
         authorized: true,
         subscriptionRequired,
+        streamLimit: { max: session.max, active: session.active },
         subscription: subscription
           ? { status: subscription.status, expiresAt: subscription.expiresAt }
           : null,

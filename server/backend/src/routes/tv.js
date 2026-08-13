@@ -13,6 +13,7 @@ const {
   isCatchupSupported,
   buildCatchupUrlForChannel,
 } = require('../services/catchup-service');
+const { registerStreamSession } = require('../services/stream-session-service');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { epgCache } = require('../services/cache');
 const { decryptSecret } = require('../utils/crypto');
@@ -299,9 +300,23 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
     });
+
+    // Enforce the per-user concurrent stream limit (oldest session is evicted
+    // when exceeded; no-op when Redis is not configured).
+    const session = await registerStreamSession({
+      userId: String(user.id),
+      sessionId: token,
+      ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+    });
+
     return res.json({
       success: true,
-      data: { playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`, expiresAt, slot },
+      data: {
+        playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`,
+        expiresAt,
+        slot,
+        streamLimit: { max: session.max, active: session.active },
+      },
     });
   } catch (error) {
     console.error('Error issuing playback token:', error);

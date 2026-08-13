@@ -33,7 +33,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.ui.PlayerView
 import com.dzhoof.iptv.ComposeMainActivity
+import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.presentation.ui.components.ChannelOverlay
+import com.dzhoof.iptv.presentation.ui.components.ParentalPinDialog
 import com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.screens.player.ASPECT_MODES
@@ -132,6 +134,11 @@ fun PlayerScreen(
     // Audio/subtitle track selection panel visibility
     var showTracksPanel by remember { mutableStateOf(false) }
 
+    // Parental lock gate: when enabled and not yet unlocked this session,
+    // playback stays suspended until the correct PIN is entered.
+    var parentalUnlocked by remember { mutableStateOf(AppPreferences.isParentalUnlockedThisSession()) }
+    val parentalLocked = AppPreferences.isParentalLockEnabled(context) && !parentalUnlocked
+
     // Sleep timer expiry: pause playback while the "Still watching?" prompt shows
     LaunchedEffect(uiState.sleepTimerExpired) {
         if (uiState.sleepTimerExpired) exoPlayer.pause()
@@ -161,8 +168,9 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(channelId) {
-        viewModel.loadChannel(channelId)
+    LaunchedEffect(channelId, parentalLocked) {
+        // Do not load the channel while the parental PIN gate is up.
+        if (!parentalLocked) viewModel.loadChannel(channelId)
     }
 
     // Set up media item when channel loads
@@ -424,6 +432,18 @@ fun PlayerScreen(
                 onInteraction = { viewModel.resetAutoHideTimer() },
                 onDismiss = { viewModel.hideOverlay() },
                 modifier = Modifier.fillMaxSize()
+            )
+        }
+
+        if (parentalLocked) {
+            ParentalPinDialog(
+                title = "Parental lock",
+                verify = { AppPreferences.verifyParentalPin(context, it) },
+                onSuccess = {
+                    AppPreferences.setParentalUnlockedThisSession(true)
+                    parentalUnlocked = true
+                },
+                onDismiss = onNavigateBack
             )
         }
     }
