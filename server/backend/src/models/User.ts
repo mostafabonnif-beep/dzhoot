@@ -115,6 +115,18 @@ const userSchema = new Schema<IUserDocument>(
       type: Date,
       default: null,
     },
+    totpEnabled: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    totpSecretEncrypted: {
+      type: String,
+      select: false,
+    },
+    totpEnabledAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
@@ -244,6 +256,7 @@ userSchema.methods.toJSON = function (this: IUserDocument) {
   delete obj.emailVerificationExpires;
   delete obj.passwordResetToken;
   delete obj.passwordResetExpires;
+  delete obj.totpSecretEncrypted;
   delete obj.googleId;
   delete obj.githubId;
   return obj;
