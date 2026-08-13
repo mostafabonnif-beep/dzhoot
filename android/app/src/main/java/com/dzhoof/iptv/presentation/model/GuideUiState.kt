@@ -29,7 +29,9 @@ data class GuideRowUiModel(
     val logoUrl: String?,
     val category: String,
     val programs: List<GuideProgramUiModel>,
-    val isHydrated: Boolean = false
+    val isHydrated: Boolean = false,
+    /** Whether this channel advertises catch-up (timeshift) playback. */
+    val supportsCatchup: Boolean = false
 )
 
 /** Identifies the program currently focused, used to drive the detail panel. */

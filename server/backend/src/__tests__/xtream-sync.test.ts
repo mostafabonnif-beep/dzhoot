@@ -117,6 +117,9 @@ describe('xtream-service', () => {
     expect(entv.channelGroup).toBe('Algeria');
     expect(entv.tvgId).toBe('ENTV.epg');
     expect((entv.metadata as any).source).toBe('xtream');
+    // Xtream channels are flagged catch-up capable with the timeshift window.
+    expect((entv.catchup as any).type).toBe('timeshift');
+    expect((entv.catchup as any).days).toBeGreaterThan(0);
 
     // Movies
     const movies = await Movie.find({ sourceId: source._id }).lean();

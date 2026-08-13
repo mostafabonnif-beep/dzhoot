@@ -5,12 +5,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.presentation.model.ErrorType
 import com.dzhoof.iptv.presentation.ui.components.EmptyState
 import com.dzhoof.iptv.presentation.ui.components.ErrorState
@@ -36,11 +33,6 @@ fun GuideScreen(
     viewModel: GuideViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
-    // Catch-up is only deterministic for Xtream sources (timeshift URL).
-    val catchupEnabled = remember {
-        AppPreferences.getPlaylistSourceType(context) == AppPreferences.SOURCE_XTREAM
-    }
 
     BackHandler(enabled = true) { onNavigateBack() }
 
@@ -66,9 +58,11 @@ fun GuideScreen(
             else ->
                 GuideContent(
                     state = uiState,
-                    onProgramSelected = { channelId, program ->
+                    onProgramSelected = { channelId, program, supportsCatchup ->
                         val ended = program.endTime.isBefore(java.time.Instant.now())
-                        if (catchupEnabled && ended) {
+                        // Catch-up is per-channel: only when the server advertises it
+                        // (M3U catchup attrs or Xtream timeshift) and the program ended.
+                        if (supportsCatchup && ended) {
                             val durationMinutes = java.time.Duration
                                 .between(program.startTime, program.endTime)
                                 .toMinutes().toInt().coerceAtLeast(1)

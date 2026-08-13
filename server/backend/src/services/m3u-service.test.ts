@@ -38,4 +38,39 @@ describe('parseM3U', () => {
     const content = ['#EXTM3U', ...Array.from({ length: 100001 }, () => '#comment')].join('\n');
     expect(() => parseM3U(content, 'source-3')).toThrow('too many lines');
   });
+
+  it('parses catch-up attributes (catchup, catchup-source, catchup-days)', () => {
+    const content = [
+      '#EXTM3U',
+      '#EXTINF:-1 tvg-id="news" group-title="News" catchup="append" catchup-days="7" catchup-source="https://cdn.example/catchup/news.m3u8?utc={utc}&lutc={lutc}&duration={duration}",News Channel',
+      'https://stream.example/live/news.m3u8',
+      '#EXTINF:-1 group-title="Plain",Plain Channel',
+      'https://stream.example/live/plain.m3u8',
+    ].join('\n');
+
+    const channels = parseM3U(content, 'source-4');
+
+    expect(channels).toHaveLength(2);
+    expect(channels[0].catchup).toEqual({
+      type: 'append',
+      source: 'https://cdn.example/catchup/news.m3u8?utc={utc}&lutc={lutc}&duration={duration}',
+      days: 7,
+    });
+    // Channels without catchup attributes carry no catchup field at all.
+    expect(channels[1].catchup).toBeUndefined();
+  });
+
+  it('normalizes malformed catchup-days to null', () => {
+    const content = [
+      '#EXTM3U',
+      '#EXTINF:-1 catchup="timeshift" catchup-days="abc",Broken Days',
+      'https://stream.example/live/broken.m3u8',
+      '#EXTINF:-1 catchup="timeshift" catchup-days="-3",Negative Days',
+      'https://stream.example/live/negative.m3u8',
+    ].join('\n');
+
+    const channels = parseM3U(content, 'source-5');
+    expect(channels[0].catchup).toEqual({ type: 'timeshift', source: null, days: null });
+    expect(channels[1].catchup).toEqual({ type: 'timeshift', source: null, days: null });
+  });
 });

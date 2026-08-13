@@ -37,6 +37,7 @@ data class ChannelDto(
     val tvgName: String? = null,
     val isActive: Boolean = true,
     val metadata: ChannelMetadataDto? = null,
+    val catchup: ChannelCatchupDto? = null,
     val alternateStreams: List<AlternateStreamDto>? = null
 ) {
     /** Resolved logo URL: prefers tvgLogo, falls back to channelImg */
@@ -47,6 +48,17 @@ data class ChannelDto(
 data class ChannelMetadataDto(
     @SerializedName("language")
     val language: String? = null
+)
+
+/**
+ * Catch-up (timeshift) capability advertised by the server for this channel.
+ * The server never exposes the raw catchup-source template — only type/days.
+ */
+data class ChannelCatchupDto(
+    @SerializedName("type")
+    val type: String? = null,
+    @SerializedName("days")
+    val days: Int? = null
 )
 
 data class AlternateStreamDto(

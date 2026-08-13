@@ -52,6 +52,12 @@ export function parseM3U(content: string, sourceId: string): any[] {
       const tvgLogo = readAttribute(line, 'tvg-logo');
       const groupTitle = readAttribute(line, 'group-title');
       const displayName = extractExtinfTitle(line);
+      // Catch-up / timeshift attributes (IPTV catchup spec).
+      // catchup-source may embed credentials — stored server-side only, never
+      // exposed through the API (see routes/channels.js slimAlternates).
+      const catchupType = readAttribute(line, 'catchup');
+      const catchupDaysRaw = readAttribute(line, 'catchup-days');
+      const catchupDays = catchupDaysRaw ? Number.parseInt(catchupDaysRaw, 10) : NaN;
 
       pending = {
         channelId: tvgId ? `m3u:${sourceId}:${stableId(sourceId, `tvg:${tvgId}`)}` : '',
@@ -63,6 +69,13 @@ export function parseM3U(content: string, sourceId: string): any[] {
         channelName: displayName || tvgName || 'Unknown',
         order: channels.length,
       };
+      if (catchupType) {
+        pending.catchup = {
+          type: catchupType,
+          source: readAttribute(line, 'catchup-source') || null,
+          days: Number.isFinite(catchupDays) && catchupDays > 0 ? catchupDays : null,
+        };
+      }
       continue;
     }
 

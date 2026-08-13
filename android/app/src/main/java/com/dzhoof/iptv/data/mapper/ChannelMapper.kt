@@ -41,7 +41,9 @@ class ChannelMapper @Inject constructor() {
             country = entity.country,
             tvgId = entity.tvgId,
             isFavorite = isFavorite,
-            alternateStreamUrls = alternateStreamUrls
+            alternateStreamUrls = alternateStreamUrls,
+            catchupType = entity.catchupType,
+            catchupDays = entity.catchupDays
         )
     }
     
@@ -63,6 +65,8 @@ class ChannelMapper @Inject constructor() {
             groupTitle = dto.groupTitle,
             tvgId = dto.tvgId,
             tvgName = dto.tvgName,
+            catchupType = dto.catchup?.type,
+            catchupDays = dto.catchup?.days,
             isActive = true, // API channels are always active; Gson ignores Kotlin defaults
             lastUpdated = System.currentTimeMillis()
         )
@@ -86,6 +90,8 @@ class ChannelMapper @Inject constructor() {
             groupTitle = channel.category,
             tvgId = null,
             tvgName = null,
+            catchupType = channel.catchupType,
+            catchupDays = channel.catchupDays,
             isActive = true,
             lastUpdated = System.currentTimeMillis()
         )

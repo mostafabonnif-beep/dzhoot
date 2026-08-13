@@ -64,6 +64,24 @@ const channelSchema = new Schema<IChannelDocument>(
       type: Number,
       default: 0,
     },
+    // Catch-up / timeshift support. Populated from M3U #EXTINF attributes
+    // (catchup=, catchup-source=, catchup-days=) or set for Xtream channels.
+    // `source` holds the upstream URL template and may contain credentials —
+    // never serialize it to clients (see routes/channels.js slimAlternates).
+    catchup: {
+      type: {
+        type: String,
+        default: null,
+      },
+      source: {
+        type: String,
+        default: null,
+      },
+      days: {
+        type: Number,
+        default: null,
+      },
+    },
     metadata: {
       country: String,
       language: String,
@@ -155,6 +173,7 @@ function buildM3ULine(ch: {
   channelImg?: string;
   channelGroup?: string;
   channelUrl: string;
+  catchup?: { type?: string | null; source?: string | null; days?: number | null };
 }): string {
   // Escape double quotes in interpolated values to prevent M3U attribute injection
   const esc = (s: string | undefined) => (s ?? '').replace(/"/g, "'");
@@ -165,6 +184,11 @@ function buildM3ULine(ch: {
   if (ch.tvgName || ch.channelName) m3uLine += ` tvg-name="${esc(ch.tvgName || ch.channelName)}"`;
   if (ch.tvgLogo || ch.channelImg) m3uLine += ` tvg-logo="${esc(ch.tvgLogo || ch.channelImg)}"`;
   if (ch.channelGroup) m3uLine += ` group-title="${esc(ch.channelGroup)}"`;
+  if (ch.catchup?.type) {
+    m3uLine += ` catchup="${esc(ch.catchup.type)}"`;
+    if (ch.catchup.source) m3uLine += ` catchup-source="${esc(ch.catchup.source)}"`;
+    if (ch.catchup.days) m3uLine += ` catchup-days="${ch.catchup.days}"`;
+  }
 
   m3uLine += `,${ch.channelName}\n${ch.channelUrl}`;
 
@@ -183,6 +207,7 @@ channelSchema.statics.generateM3UPlaylist = async function (): Promise<string> {
   const cursor = this.find({ ownerId: null })
     .select(
       'channelId channelName channelUrl channelImg tvgLogo tvgName channelGroup ' +
+        'catchup.type catchup.source catchup.days ' +
         'metadata.isWorking flaggedBad.isFlagged ' +
         'alternateStreams.streamUrl alternateStreams.liveness.status alternateStreams.flaggedBad.isFlagged',
     )
