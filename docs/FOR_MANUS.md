@@ -148,7 +148,7 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 
 **المهام:**
 1. صفحة إدارة مصادر Xtream (`/admin/xtream-sources`): إنشاء (serverUrl/user/pass)، اختبار اتصال، زر Sync مع مؤشر `syncStatus`/`lastError`/`lastSyncAt`/stats.
-2. في صفحات Movies/Series الموجودة: أضف فلتر مصدر، حالة المحتوى المعطّل (isActive)، وزر إعادة مزامنة.
+2. في صفحات Movies/Series الموجودة: أضيفت مرشحات مصدر وحالة مرتبطة بالـAPI، مع قصر عرض المحتوى غير النشط على المشرف، بينما يبقى المستخدم العادي على المحتوى النشط فقط. زر إعادة المزامنة موجود في صفحة مصادر Xtream.
 3. مؤشرات خطأ واضحة عند فشل المزامنة (حاليًا `syncStatus: 'error'` + `lastError` في الـmodel — اعرضهما).
 4. (تحسين) جدولة مزامنة تلقائية دورية (cron-style عبر scheduler الموجود).
 
