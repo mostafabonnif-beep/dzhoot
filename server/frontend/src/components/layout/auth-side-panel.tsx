@@ -3,50 +3,55 @@ import Link from 'next/link';
 const features = [
   {
     num: '01',
-    title: 'Stream Management',
-    desc: 'Import, organize, and monitor live IPTV channels with real-time health checks.',
+    title: 'إدارة البث',
+    desc: 'استورد القنوات المباشرة ونظّمها وراقب حالتها لحظيًا.',
   },
   {
     num: '02',
-    title: 'Device Provisioning',
-    desc: 'Pair and manage connected devices across your network with ease.',
+    title: 'ربط الأجهزة',
+    desc: 'اربط الأجهزة المتصلة بشبكتك وأدرها بسهولة.',
   },
   {
     num: '03',
-    title: 'EPG & Scheduling',
-    desc: 'Deliver electronic program guides and schedule content for your viewers.',
+    title: 'دليل البرامج والجدولة',
+    desc: 'وفّر دليل البرامج الإلكتروني وجدول المحتوى للمشاهدين.',
   },
 ];
 
 export function AuthSidePanel({ footer }: { footer: string }) {
   return (
-    <div className="hidden lg:flex lg:w-[420px] flex-col justify-between border-r border-border bg-card p-10">
-      <div>
-        <Link href="/" className="inline-block">
-          <span className="text-lg font-display font-bold tracking-tight">
-            Dzhoof<span className="text-primary"> IPTV</span>
+    <div className="relative hidden lg:flex lg:w-[460px] flex-col justify-between overflow-hidden border-l border-white/10 bg-[#0b1020] p-10 text-white">
+      <div className="relative z-10">
+        <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
+        <div className="absolute -left-24 top-52 h-56 w-56 rounded-full bg-cyan-400/10 blur-3xl" />
+        <Link href="/" className="relative inline-flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-lg font-black text-primary-foreground shadow-lg shadow-primary/30">DZ</span>
+          <span className="text-xl font-display font-bold tracking-tight">
+            DZ HOOF<span className="text-primary"> IPTV</span>
           </span>
         </Link>
-        <p className="mt-4 text-xs uppercase tracking-widest text-muted-foreground">
-          IPTV Management Console
-        </p>
+        <div className="mt-10 max-w-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">منصة بث ذكية</p>
+          <h2 className="mt-4 text-4xl font-display font-bold leading-tight">كل قنواتك، في تجربة واحدة.</h2>
+          <p className="mt-4 text-sm leading-7 text-white/60">إدارة المصادر والأجهزة والمحتوى من لوحة عربية واضحة صُممت لتكبر مع مشروعك.</p>
+        </div>
 
-        <div className="mt-10 space-y-4">
+        <div className="mt-10 space-y-3">
           {features.map((f) => (
-            <div key={f.num} className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center border border-primary/30 bg-primary/10 text-primary text-xs font-semibold">
+            <div key={f.num} className="group flex items-start gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition-colors hover:bg-white/[0.08]">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/15 text-primary text-xs font-bold">
                 {f.num}
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">{f.title}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">{f.desc}</p>
+                <p className="text-sm font-semibold text-white">{f.title}</p>
+                <p className="mt-1 text-xs leading-6 text-white/55">{f.desc}</p>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      <p className="text-xs text-muted-foreground leading-relaxed">{footer}</p>
+      <div className="relative z-10 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-xs leading-6 text-white/55"><span className="mb-2 block h-1 w-10 rounded-full bg-primary" />{footer}</div>
     </div>
   );
 }

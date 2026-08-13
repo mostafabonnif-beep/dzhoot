@@ -388,7 +388,7 @@ export default function StatsPage() {
         if (schedulerRes) setSchedulerTasks(schedulerRes.data?.data || []);
       } catch {
         if (controller.signal.aborted) return;
-        setError('Failed to load statistics');
+        setError('تعذر تحميل الإحصائيات');
       } finally {
         setLoading(false);
       }
@@ -460,29 +460,29 @@ export default function StatsPage() {
 
   const channelGroups = normalizeByGroup(stats?.channels.byGroup || []);
   const locationData = (stats?.sessions.byLocation || []).map((l) => ({
-    name: l._id || 'Unknown',
+    name: l._id || 'غير معروف',
     value: l.count,
   }));
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">Statistics</h1>
-        <p className="text-sm text-muted-foreground mt-1">System metrics and trends</p>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">الإحصائيات</h1>
+        <p className="text-sm text-muted-foreground mt-1">مؤشرات النظام واتجاهاته</p>
       </div>
 
       {/* Overview cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Channels" value={stats?.channels.total ?? 0} icon={Tv} />
-        <StatCard label="Total Users" value={stats?.users.total ?? 0} icon={Users} />
-        <StatCard label="Active Sessions" value={stats?.sessions.active ?? 0} icon={Activity} />
-        <StatCard label="Pairings Today" value={stats?.pairings.today ?? 0} icon={Smartphone} />
+        <StatCard label="إجمالي القنوات" value={stats?.channels.total ?? 0} icon={Tv} />
+        <StatCard label="إجمالي المستخدمين" value={stats?.users.total ?? 0} icon={Users} />
+        <StatCard label="الجلسات النشطة" value={stats?.sessions.active ?? 0} icon={Activity} />
+        <StatCard label="عمليات الربط اليوم" value={stats?.pairings.today ?? 0} icon={Smartphone} />
       </div>
 
       {/* Charts row: Pie + Bar */}
       <div className="grid md:grid-cols-2 gap-6">
-        <ChartCard title="Channels by Group">
+        <ChartCard title="القنوات حسب المجموعة">
           {channelGroups.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No channel data</p>
+            <p className="text-sm text-muted-foreground text-center py-8">لا توجد بيانات قنوات</p>
           ) : (
             <div className="flex flex-col items-center">
               <ResponsiveContainer width="100%" height={240}>
@@ -523,9 +523,9 @@ export default function StatsPage() {
           )}
         </ChartCard>
 
-        <ChartCard title="Sessions by Location">
+        <ChartCard title="الجلسات حسب الموقع">
           {locationData.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">No location data</p>
+            <p className="text-sm text-muted-foreground text-center py-8">لا توجد بيانات مواقع</p>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={locationData} layout="vertical" margin={{ left: 10, right: 20 }}>
@@ -568,12 +568,12 @@ export default function StatsPage() {
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Trends Over Time
+            الاتجاهات بمرور الوقت
           </h2>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
           <TrendChart
-            title="User Signups"
+            title="تسجيلات المستخدمين"
             data={userTrend}
             color="hsl(38, 75%, 38%)"
             range={userRange}
@@ -587,7 +587,7 @@ export default function StatsPage() {
             onRangeChange={setSessionRange}
           />
           <TrendChart
-            title="Device Pairings"
+            title="ربط الأجهزة"
             data={pairingTrend}
             color="hsl(142, 60%, 34%)"
             range={pairingRange}
@@ -606,13 +606,13 @@ export default function StatsPage() {
           </div>
           <dl className="divide-y divide-border">
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Active</dt>
+              <dt className="text-sm text-muted-foreground">نشطة</dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.channels.active}
               </dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Inactive</dt>
+              <dt className="text-sm text-muted-foreground">غير نشطة</dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.channels.inactive}
               </dd>
@@ -623,24 +623,24 @@ export default function StatsPage() {
         <div className="border border-border">
           <div className="px-4 py-2 bg-muted/50 border-b border-border">
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Device Pairings
+              ربط الأجهزة
             </h2>
           </div>
           <dl className="divide-y divide-border">
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Total</dt>
+              <dt className="text-sm text-muted-foreground">الإجمالي</dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.pairings.total}
               </dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Completed</dt>
+              <dt className="text-sm text-muted-foreground">مكتملة</dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.pairings.completed}
               </dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Pending</dt>
+              <dt className="text-sm text-muted-foreground">معلقة</dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.pairings.pending}
               </dd>
@@ -649,13 +649,13 @@ export default function StatsPage() {
         </div>
       </div>
 
-      {/* Stream Health */}
+      {/* سلامة البث */}
       {streamHealth && (
         <div>
           <div className="flex items-center gap-2 mb-4">
             <Radio className="h-5 w-5 text-muted-foreground" />
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Stream Health
+              سلامة البث
             </h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -663,31 +663,31 @@ export default function StatsPage() {
             <div className="border border-border">
               <div className="px-4 py-2 bg-muted/50 border-b border-border">
                 <h3 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                  Local Channels
+                  القنوات المحلية
                 </h3>
               </div>
               <div className="p-4 space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Working</span>
+                  <span className="text-muted-foreground">تعمل</span>
                   <span className="font-display font-bold tabular-nums text-[hsl(var(--signal-green))]">
                     {streamHealth.channels.working}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Failing</span>
+                  <span className="text-muted-foreground">متوقفة</span>
                   <span className="font-display font-bold tabular-nums text-[hsl(var(--signal-red))]">
                     {streamHealth.channels.failing}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Untested</span>
+                  <span className="text-muted-foreground">غير مختبرة</span>
                   <span className="font-display font-bold tabular-nums">
                     {streamHealth.channels.untested}
                   </span>
                 </div>
                 {streamHealth.channels.avgResponseTime != null && (
                   <div className="flex items-center justify-between text-sm pt-1 border-t border-border">
-                    <span className="text-muted-foreground">Avg Response</span>
+                    <span className="text-muted-foreground">متوسط الاستجابة</span>
                     <span className="font-display font-bold tabular-nums">
                       {formatMs(streamHealth.channels.avgResponseTime)}
                     </span>
@@ -740,12 +740,12 @@ export default function StatsPage() {
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Unknown</span>
+                    <span className="text-muted-foreground">غير معروف</span>
                     <span className="font-display font-bold tabular-nums">{src.unknown}</span>
                   </div>
                   {src.avgResponseTime != null && (
                     <div className="flex items-center justify-between text-sm pt-1 border-t border-border">
-                      <span className="text-muted-foreground">Avg Response</span>
+                      <span className="text-muted-foreground">متوسط الاستجابة</span>
                       <span className="font-display font-bold tabular-nums">
                         {formatMs(src.avgResponseTime)}
                       </span>
@@ -786,22 +786,22 @@ export default function StatsPage() {
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <StatCard
-              label="Total Alive"
+              label="الإجمالي Alive"
               value={streamHealth.channels.totalAliveCount ?? 0}
               icon={Radio}
             />
             <StatCard
-              label="Total Dead"
+              label="الإجمالي Dead"
               value={streamHealth.channels.totalDeadCount ?? 0}
               icon={Radio}
             />
             <StatCard
-              label="Total Unresponsive"
+              label="الإجمالي Unresponsive"
               value={streamHealth.channels.totalUnresponsiveCount ?? 0}
               icon={Radio}
             />
             <StatCard
-              label="Total Plays"
+              label="الإجمالي Plays"
               value={streamHealth.channels.totalPlayCount ?? 0}
               icon={Radio}
             />
@@ -813,26 +813,26 @@ export default function StatsPage() {
           </div>
 
           <div className="grid md:grid-cols-2 gap-6">
-            {/* Most Failing */}
-            <ChartCard title="Most Failing Streams">
+            {/* القنوات الأكثر توقفًا */}
+            <ChartCard title="القنوات الأكثر توقفًا Streams">
               {streamHealth.metrics.mostFailing.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No failing streams</p>
+                <p className="text-sm text-muted-foreground text-center py-4">لا توجد قنوات متوقفة</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border">
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Channel
+                          القناة
                         </th>
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          Group
+                          المجموعة
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Dead
+                          متوقفة
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          Last Dead
+                          آخر توقف
                         </th>
                       </tr>
                     </thead>
@@ -840,7 +840,7 @@ export default function StatsPage() {
                       {streamHealth.metrics.mostFailing.map((ch) => (
                         <tr key={ch._id}>
                           <td className="py-2 font-medium truncate max-w-[160px]">
-                            {ch.channelName || 'Unknown'}
+                            {ch.channelName || 'غير معروف'}
                           </td>
                           <td className="py-2 text-muted-foreground truncate max-w-[100px] hidden sm:table-cell">
                             {ch.channelGroup || '—'}
@@ -860,25 +860,25 @@ export default function StatsPage() {
             </ChartCard>
 
             {/* Most Popular */}
-            <ChartCard title="Most Popular Streams">
+            <ChartCard title="القنوات الأكثر تشغيلًا">
               {streamHealth.metrics.mostPopular.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">No play data</p>
+                <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات تشغيل</p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border">
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Channel
+                          القناة
                         </th>
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          Group
+                          المجموعة
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Plays
+                          مرات التشغيل
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          Last Played
+                          آخر تشغيل
                         </th>
                       </tr>
                     </thead>
@@ -886,7 +886,7 @@ export default function StatsPage() {
                       {streamHealth.metrics.mostPopular.map((ch) => (
                         <tr key={ch._id}>
                           <td className="py-2 font-medium truncate max-w-[160px]">
-                            {ch.channelName || 'Unknown'}
+                            {ch.channelName || 'غير معروف'}
                           </td>
                           <td className="py-2 text-muted-foreground truncate max-w-[100px] hidden sm:table-cell">
                             {ch.channelGroup || '—'}
@@ -917,16 +917,16 @@ export default function StatsPage() {
                     <thead>
                       <tr className="border-b border-border">
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Channel
+                          القناة
                         </th>
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          Group
+                          المجموعة
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Dead
+                          متوقفة
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Plays
+                          مرات التشغيل
                         </th>
                       </tr>
                     </thead>
@@ -934,7 +934,7 @@ export default function StatsPage() {
                       {streamHealth.metrics.removalCandidates.map((ch) => (
                         <tr key={ch._id}>
                           <td className="py-2 font-medium truncate max-w-[160px]">
-                            {ch.channelName || 'Unknown'}
+                            {ch.channelName || 'غير معروف'}
                           </td>
                           <td className="py-2 text-muted-foreground truncate max-w-[100px] hidden sm:table-cell">
                             {ch.channelGroup || '—'}
@@ -965,10 +965,10 @@ export default function StatsPage() {
                     <thead>
                       <tr className="border-b border-border">
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Channel
+                          القناة
                         </th>
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          Group
+                          المجموعة
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
                           Count
@@ -982,7 +982,7 @@ export default function StatsPage() {
                       {streamHealth.metrics.unresponsiveStreams.map((ch) => (
                         <tr key={ch._id}>
                           <td className="py-2 font-medium truncate max-w-[160px]">
-                            {ch.channelName || 'Unknown'}
+                            {ch.channelName || 'غير معروف'}
                           </td>
                           <td className="py-2 text-muted-foreground truncate max-w-[100px] hidden sm:table-cell">
                             {ch.channelGroup || '—'}
@@ -1083,7 +1083,7 @@ export default function StatsPage() {
         </div>
       )}
 
-      {/* Recent Users / Active Sessions / Recent Pairings */}
+      {/* Recent Users / الجلسات النشطة / Recent Pairings */}
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Recent Users */}
         <ChartCard title="Recent Users">
@@ -1109,8 +1109,8 @@ export default function StatsPage() {
           )}
         </ChartCard>
 
-        {/* Active Sessions */}
-        <ChartCard title="Active Sessions">
+        {/* الجلسات النشطة */}
+        <ChartCard title="الجلسات النشطة">
           {(stats?.sessions.activeSessions?.length ?? 0) === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-4">No active sessions</p>
           ) : (
@@ -1123,9 +1123,9 @@ export default function StatsPage() {
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">{s.username}</p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {s.location && s.location !== 'Unknown'
+                      {s.location && s.location !== 'غير معروف'
                         ? s.location
-                        : s.ipAddress || 'Unknown'}
+                        : s.ipAddress || 'غير معروف'}
                     </p>
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
@@ -1150,7 +1150,7 @@ export default function StatsPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">
-                      {p.deviceName || p.deviceModel || 'Unknown Device'}
+                      {p.deviceName || p.deviceModel || 'غير معروف Device'}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
                       {p.username || 'Unpaired'}

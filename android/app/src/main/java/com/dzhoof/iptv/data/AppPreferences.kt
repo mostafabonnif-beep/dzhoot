@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.data
 
 import android.content.Context
+import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.security.SecurePreferences
 
 /**
@@ -21,7 +22,8 @@ object AppPreferences {
     private const val XTREAM_PASS_KEY = "xtream_pass"
     private const val PARENTAL_PIN_HASH_KEY = "parental_pin_hash"
     private const val PARENTAL_LOCK_ENABLED_KEY = "parental_lock_enabled"
-    const val DEFAULT_SERVER_URL = "https://dzhoof.example"
+    val DEFAULT_SERVER_URL: String
+        get() = BuildConfig.API_BASE_URL.trimEnd('/')
 
     /** Playlist source types. PAIRED = managed server (default); M3U/XTREAM = bring-your-own. */
     const val SOURCE_PAIRED = "paired"

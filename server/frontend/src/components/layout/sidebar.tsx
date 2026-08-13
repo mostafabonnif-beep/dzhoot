@@ -74,24 +74,24 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
       )}
 
       <aside
-        className={`fixed inset-y-0 right-0 z-50 flex flex-col border-l bg-card transition-all duration-300 lg:static lg:z-auto ${
+        className={`fixed inset-y-0 right-0 z-50 flex flex-col border-l border-border/70 bg-card/95 shadow-2xl shadow-slate-900/10 backdrop-blur-xl transition-all duration-300 lg:static lg:z-auto ${
           sidebarCollapsed ? 'w-20' : 'w-64'
         } ${
           mobileSidebarOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'
         }`}
       >
         {/* Sidebar Header */}
-        <div className="flex h-16 items-center justify-between px-4 border-b">
+        <div className="flex h-20 items-center justify-between border-b border-border/70 px-4">
           {!sidebarCollapsed && (
             <Link href={role === 'admin' ? '/admin' : '/user'} className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-lg shadow-lg shadow-primary/25">
                 DZ
               </div>
-              <span className="font-bold text-lg tracking-tight">DZ HOOT</span>
+              <span className="font-display font-bold tracking-tight">DZ HOOF<span className="text-primary"> IPTV</span></span>
             </Link>
           )}
           {sidebarCollapsed && (
-            <Link href={role === 'admin' ? '/admin' : '/user'} className="mx-auto flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg">
+            <Link href={role === 'admin' ? '/admin' : '/user'} className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-lg shadow-lg shadow-primary/25">
               DZ
             </Link>
           )}
@@ -104,7 +104,7 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
         </div>
 
         {/* Navigation Links */}
-        <div className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        <div className="flex-1 overflow-y-auto px-3 py-5 space-y-1.5">
           {links.map((link) => {
             const Icon = link.icon;
             const isActive = pathname === link.href || (link.href !== '/admin' && link.href !== '/user' && pathname.startsWith(link.href));
@@ -114,10 +114,10 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
                 key={link.href}
                 href={link.href}
                 title={sidebarCollapsed ? link.label : undefined}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
                   isActive
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                    : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground'
                 }`}
               >
                 <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
@@ -128,9 +128,9 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
         </div>
 
         {/* Sidebar Footer / Collapse Toggle */}
-        <div className="p-3 border-t hidden lg:flex items-center justify-between">
+        <div className="border-t border-border/70 p-3 hidden lg:flex items-center justify-between">
           {!sidebarCollapsed && (
-            <span className="text-xs text-muted-foreground px-2">v1.0.0 Production</span>
+            <span className="text-xs text-muted-foreground px-2">نسخة التطوير 1.0.0</span>
           )}
           <button
             onClick={toggleSidebar}

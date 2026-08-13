@@ -45,4 +45,7 @@
 
     <!-- Settings -->
     <string name="registration_qr_code">Registration QR Code</string>
+    <string name="pair_device">Pair Device</string>
+    <string name="tv_input_label">DZ HOOF IPTV</string>
+    <string name="tv_setup_label">DZ HOOF Channel Setup</string>
 </resources>
