@@ -52,7 +52,7 @@ import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
         StreamMetricsEntity::class,
         EpgProgramEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class FireVisionDatabase : RoomDatabase() {
@@ -209,6 +209,14 @@ abstract class FireVisionDatabase : RoomDatabase() {
                     )
                 """.trimIndent())
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_epg_programs_endTimeMs` ON `epg_programs` (`endTimeMs`)")
+            }
+        }
+
+        /** v8→v9: Add catch-up capability columns to channels (timeshift support). */
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `catchupType` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `catchupDays` INTEGER DEFAULT NULL")
             }
         }
     }

@@ -40,6 +40,12 @@ data class ChannelEntity(
     
     val tvgName: String?,
     
+    /** Catch-up capability ("append" / "timeshift" / …), null when unsupported. */
+    val catchupType: String? = null,
+    
+    /** Catch-up history window in days (null = server default). */
+    val catchupDays: Int? = null,
+    
     val isActive: Boolean = true,
     
     val lastUpdated: Long = System.currentTimeMillis()

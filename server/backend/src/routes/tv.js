@@ -9,6 +9,10 @@ const { epgService } = require('../services/epg-service');
 const { audit } = require('../services/audit-log');
 const { issuePlaybackToken, verifyPlaybackToken } = require('../services/playback-token');
 const { proxyUpstreamStream } = require('../services/upstream-proxy');
+const {
+  isCatchupSupported,
+  buildCatchupUrlForChannel,
+} = require('../services/catchup-service');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { epgCache } = require('../services/cache');
 const { decryptSecret } = require('../utils/crypto');
@@ -20,6 +24,18 @@ const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 2000;
 async function tokenizeChannelForClient(channel, user, baseUrl) {
   const source = channel.toObject ? channel.toObject() : channel;
   const safe = { ...source, channelUrl: '' };
+  // Never expose the raw catchup-source template (may embed credentials) —
+  // only the capability flags.
+  const stored = source.catchup;
+  const legacyXtream =
+    source.metadata?.source === 'xtream' &&
+    source.metadata?.xtreamStreamId !== undefined &&
+    source.metadata?.xtreamStreamId !== null;
+  safe.catchup = stored?.type
+    ? { type: stored.type, days: stored.days || null }
+    : legacyXtream
+      ? { type: 'timeshift', days: null }
+      : null;
   if (!user.channelListCode) return safe;
   if (source.channelUrl) {
     const { token } = issuePlaybackToken({
@@ -231,23 +247,50 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     );
     let streamUrl = slot === 0 ? channel.channelUrl : viableAlternates[slot - 1]?.streamUrl;
     if (catchupStartMs > 0) {
-      const sourceId = channel.metadata?.xtreamSourceId;
-      const streamId = channel.metadata?.xtreamStreamId;
-      if (!sourceId || streamId === undefined || streamId === null) {
-        return res.status(404).json({ success: false, error: 'Catch-up is not available for this channel' });
+      // Xtream channels resolve their timeshift URL from the panel credentials
+      // (fetched only when this channel actually came from an Xtream source).
+      const isXtreamChannel =
+        channel.metadata?.source === 'xtream' &&
+        channel.metadata?.xtreamSourceId &&
+        channel.metadata?.xtreamStreamId !== undefined &&
+        channel.metadata?.xtreamStreamId !== null;
+
+      if (!isCatchupSupported(channel) && !isXtreamChannel) {
+        return res.status(404).json({
+          success: false,
+          error: 'Catch-up is not available for this channel',
+          code: 'CATCHUP_UNAVAILABLE',
+        });
       }
-      const source = await XtreamSource.findOne({ _id: sourceId, status: 'Active' }).lean();
-      if (!source) return res.status(404).json({ success: false, error: 'Xtream source is unavailable' });
-      const host = String(source.serverUrl).replace(/\/+$/, '');
-      const username = decryptSecret(source.usernameEncrypted);
-      const password = decryptSecret(source.passwordEncrypted);
-      const start = new Date(catchupStartMs);
-      if (Number.isNaN(start.getTime())) {
-        return res.status(400).json({ success: false, error: 'Invalid catch-up start time' });
+
+      let xtreamCreds = null;
+      if (isXtreamChannel) {
+        const source = await XtreamSource.findOne({ _id: channel.metadata.xtreamSourceId, status: 'Active' }).lean();
+        if (!source) {
+          return res.status(404).json({
+            success: false,
+            error: 'Xtream source is unavailable',
+            code: 'XTREAM_SOURCE_UNAVAILABLE',
+          });
+        }
+        xtreamCreds = {
+          serverUrl: source.serverUrl,
+          username: decryptSecret(source.usernameEncrypted),
+          password: decryptSecret(source.passwordEncrypted),
+        };
       }
-      const pad = (value) => String(value).padStart(2, '0');
-      const formatted = `${start.getUTCFullYear()}-${pad(start.getUTCMonth() + 1)}-${pad(start.getUTCDate())}:${pad(start.getUTCHours())}-${pad(start.getUTCMinutes())}`;
-      streamUrl = `${host}/timeshift/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${catchupDurationMin}/${formatted}/${streamId}.m3u8`;
+
+      const built = buildCatchupUrlForChannel(channel, {
+        startMs: catchupStartMs,
+        durationMin: catchupDurationMin,
+        nowMs: Date.now(),
+        xtreamCreds,
+      });
+      if (!built.ok) {
+        const status = built.code === 'INVALID_CATCHUP_TIME' ? 400 : 404;
+        return res.status(status).json({ success: false, error: built.error, code: built.code });
+      }
+      streamUrl = built.url;
     }
     if (!streamUrl) return res.status(404).json({ success: false, error: 'Stream slot not found' });
 

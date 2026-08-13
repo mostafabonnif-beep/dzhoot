@@ -63,6 +63,20 @@ function slimAlternates(channel) {
     .filter((alt) => alt.liveness?.status !== 'dead' && alt.flaggedBad?.isFlagged !== true)
     .slice(0, 10)
     .map((alt) => ({ ...alt, streamUrl: '' }));
+  // Expose only the catch-up CAPABILITY — never the raw source template, which
+  // may embed upstream credentials (catchup-source="http://user:pass@…").
+  // Legacy Xtream channels (pre-catch-up sync) are reported as capable so the
+  // app can offer timeshift playback even before the backfill migration runs.
+  const stored = channel.catchup;
+  const legacyXtream =
+    channel.metadata?.source === 'xtream' &&
+    channel.metadata?.xtreamStreamId !== undefined &&
+    channel.metadata?.xtreamStreamId !== null;
+  safeChannel.catchup = stored?.type
+    ? { type: stored.type, days: stored.days || null }
+    : legacyXtream
+      ? { type: 'timeshift', days: null }
+      : null;
   return safeChannel;
 }
 
@@ -75,6 +89,8 @@ const CHANNEL_LIST_FIELDS = [
   'channelDrmType order isActive',
   'metadata.country metadata.language metadata.quality',
   'metadata.isWorking metadata.lastTested metadata.responseTime',
+  'metadata.source metadata.xtreamStreamId',
+  'catchup.type catchup.days',
   'flaggedBad.isFlagged flaggedBad.reason',
   'alternateStreams.streamUrl alternateStreams.quality',
   'alternateStreams.liveness.status alternateStreams.liveness.responseTimeMs',

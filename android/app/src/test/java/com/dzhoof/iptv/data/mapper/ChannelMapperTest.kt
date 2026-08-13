@@ -30,7 +30,9 @@ class ChannelMapperTest {
         country: String? = "US",
         groupTitle: String? = "News",
         tvgId: String? = "tvg1",
-        tvgName: String? = "Test Channel"
+        tvgName: String? = "Test Channel",
+        catchupType: String? = null,
+        catchupDays: Int? = null
     ) = ChannelEntity(
         id = id,
         name = name,
@@ -41,7 +43,9 @@ class ChannelMapperTest {
         country = country,
         groupTitle = groupTitle,
         tvgId = tvgId,
-        tvgName = tvgName
+        tvgName = tvgName,
+        catchupType = catchupType,
+        catchupDays = catchupDays
     )
 
     private fun buildDto(
@@ -158,5 +162,66 @@ class ChannelMapperTest {
         assertEquals("US", entity.country)
         assertNull(entity.tvgId)
         assertNull(entity.tvgName)
+    }
+
+    // Catch-up capability tests
+
+    @Test
+    fun `toEntity maps catchup capability from dto`() {
+        val dto = buildDto().copy(
+            catchup = com.dzhoof.iptv.data.model.dto.ChannelCatchupDto(type = "timeshift", days = 3)
+        )
+
+        val entity = mapper.toEntity(dto)
+
+        assertEquals("timeshift", entity.catchupType)
+        assertEquals(3, entity.catchupDays)
+    }
+
+    @Test
+    fun `toEntity leaves catchup null when dto has none`() {
+        val entity = mapper.toEntity(buildDto())
+
+        assertNull(entity.catchupType)
+        assertNull(entity.catchupDays)
+    }
+
+    @Test
+    fun `toDomain exposes supportsCatchup from entity`() {
+        val entity = buildEntity(catchupType = "append", catchupDays = 7)
+
+        val channel = mapper.toDomain(entity)
+
+        assertTrue(channel.supportsCatchup)
+        assertEquals("append", channel.catchupType)
+        assertEquals(7, channel.catchupDays)
+    }
+
+    @Test
+    fun `toDomain reports no catchup when entity lacks it`() {
+        val channel = mapper.toDomain(buildEntity())
+
+        assertFalse(channel.supportsCatchup)
+        assertNull(channel.catchupType)
+    }
+
+    @Test
+    fun `fromDomain carries catchup fields to entity`() {
+        val channel = Channel(
+            id = "ch1",
+            name = "Test Channel",
+            streamUrl = "http://stream.example.com/test.m3u8",
+            logoUrl = null,
+            category = "News",
+            language = null,
+            country = null,
+            catchupType = "timeshift",
+            catchupDays = 3
+        )
+
+        val entity = mapper.fromDomain(channel)
+
+        assertEquals("timeshift", entity.catchupType)
+        assertEquals(3, entity.catchupDays)
     }
 }

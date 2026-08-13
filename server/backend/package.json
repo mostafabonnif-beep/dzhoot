@@ -19,7 +19,8 @@
     "migrate:epg-trim": "tsx src/scripts/migrations/0006-epg-trim.ts",
     "migrate:prune-orphan-refs": "tsx src/scripts/migrations/0007-prune-orphan-refs.ts",
     "migrate:categorize-patterns": "tsx src/scripts/migrations/0008-categorize-patterns.ts",
-    "migrate:fix-names": "tsx src/scripts/migrations/0009-fix-channel-names.ts"
+    "migrate:fix-names": "tsx src/scripts/migrations/0009-fix-channel-names.ts",
+    "migrate:catchup-backfill": "tsx src/scripts/migrations/0010-catchup-backfill.ts"
   },
   "dependencies": {
     "@firevision/shared": "*",

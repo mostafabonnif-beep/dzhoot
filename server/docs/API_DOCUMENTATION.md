@@ -1396,6 +1396,26 @@ All are public and keyed by the 6-char playlist `:code`.
 
 The M3U from `/tv/playlist/:code` embeds an `x-tvg-url` pointing at `/tv/epg/:code`, and its stream entries use short-lived playback tokens. The QR-code TV pairing shown in the dashboard is built client-side from the PIN pairing flow above (no dedicated QR endpoint).
 
+### 5.1 Catch-up (timeshift) playback
+
+**POST** `/tv/playback-token` accepts two optional catch-up fields alongside `channelId`/`slot`:
+
+```json
+{
+  "channelId": "xt:…:101",
+  "slot": 0,
+  "catchupStartMs": 1786532400000,
+  "catchupDurationMin": 90
+}
+```
+
+- **M3U channels**: the stored `catchup-source` template is expanded with `{utc}`, `{lutc}`, `{start}`, `{end}`, `{duration}` (epoch seconds). Only channels whose playlist advertised `catchup=`/`catchup-days=` are eligible.
+- **Xtream channels**: the panel `/timeshift/<user>/<pass>/<duration>/<YYYY-MM-DD:HH-MM>/<streamId>.m3u8` URL is built server-side from the encrypted source credentials.
+- The requested start must fall inside the provider's timeshift window (`catchup-days`, default 7); sessions are clamped to 24 h.
+- Errors: `CATCHUP_UNAVAILABLE` (404), `CATCHUP_OUT_OF_WINDOW` (404), `INVALID_CATCHUP_TIME` (400), `XTREAM_SOURCE_UNAVAILABLE` (404).
+- Channel list/detail responses include `catchup: { "type": "append"|"timeshift"|…, "days": n|null }` so clients know which channels offer catch-up. The raw `catchup-source` template is **never** exposed to clients.
+
+
 ---
 
 ## PIN-Based TV Pairing

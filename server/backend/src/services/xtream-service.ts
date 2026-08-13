@@ -94,6 +94,9 @@ function episodeUrl(creds: XtreamCredentials, episodeId: string | number, ext: s
   return `${creds.serverUrl.replace(/\/+$/, '')}/series/${creds.username}/${creds.password}/${episodeId}.${ext}`;
 }
 
+/** Default timeshift window assumed for Xtream channels (days). */
+const XTREAM_TIMESHIFT_DAYS = Number(process.env.XTREAM_TIMESHIFT_DAYS) || 3;
+
 async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials) {
   const channelId = `xt:${String(sourceId)}:${item.stream_id}`;
   return Channel.findOneAndUpdate(
@@ -112,6 +115,10 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
         'metadata.source': 'xtream',
         'metadata.xtreamSourceId': String(sourceId),
         'metadata.xtreamStreamId': Number(item.stream_id),
+        // Xtream panels expose catch-up via the /timeshift/ endpoint — flag it
+        // so clients know this channel can play past programs.
+        'catchup.type': 'timeshift',
+        'catchup.days': XTREAM_TIMESHIFT_DAYS,
       },
     },
     { upsert: true, setDefaultsOnInsert: true },

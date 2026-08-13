@@ -43,7 +43,7 @@ import kotlinx.coroutines.delay
 @Composable
 internal fun GuideContent(
     state: GuideUiState,
-    onProgramSelected: (channelId: String, program: com.dzhoof.iptv.presentation.model.GuideProgramUiModel) -> Unit,
+    onProgramSelected: (channelId: String, program: com.dzhoof.iptv.presentation.model.GuideProgramUiModel, supportsCatchup: Boolean) -> Unit,
     onChannelSelected: (channelId: String) -> Unit,
     onSelectFilter: (com.dzhoof.iptv.presentation.model.GuideFilter) -> Unit,
     onVisibleRangeChanged: (first: Int, last: Int) -> Unit,
@@ -84,7 +84,11 @@ internal fun GuideContent(
             windowEnd = state.windowEnd,
             now = now,
             onProgramFocused = { focused = it },
-            onProgramSelected = onProgramSelected,
+            onProgramSelected = { channelId, program ->
+                // Per-channel catch-up capability, from the row's channel metadata.
+                val supportsCatchup = state.rows.firstOrNull { it.channelId == channelId }?.supportsCatchup == true
+                onProgramSelected(channelId, program, supportsCatchup)
+            },
             onChannelSelected = onChannelSelected,
             onVisibleRangeChanged = onVisibleRangeChanged,
             modifier = Modifier.fillMaxSize()

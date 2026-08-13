@@ -26,7 +26,8 @@ class GuideUiMapper @Inject constructor() {
                 logoUrl = channel.logoUrl,
                 category = channel.category,
                 programs = emptyList(),
-                isHydrated = false
+                isHydrated = false,
+                supportsCatchup = channel.supportsCatchup
             )
         }
 

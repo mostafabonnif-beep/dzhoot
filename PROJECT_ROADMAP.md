@@ -158,6 +158,26 @@ DZ HOOF لا يوفر قنوات أو أفلامًا أو اشتراكات جا�
 
 الدفع الإلكتروني يبقى خارج هذه المرحلة حتى تتحدد الدولة والأسواق ومزود الدفع والالتزامات القانونية.
 
+### المرحلة 5.5 — Catch-up / Timeshift ✅ (أُنجزت النواة في 2026-08-12)
+
+الهدف: تمكين المشترك من مشاهدة برامج سابقة على القنوات الداعمة.
+
+- [x] قراءة خصائص catchup من M3U (`catchup=` / `catchup-source=` / `catchup-days=`).
+- [x] تخزين catchup في موديل القناة + تمريره في تصدير M3U.
+- [x] Xtream: علامة timeshift لكل قناة + بناء `/timeshift/...` URL من بيانات المصدر المشفرة.
+- [x] `POST /tv/playback-token`: دعم `catchupStartMs`/`catchupDurationMin` (M3U قالب أو Xtream) مع:
+  - استبدال `{utc}` `{lutc}` `{start}` `{end}` `{duration}`.
+  - فرض نافذة المزود (catchup-days) وحد أقصى 24 ساعة للجلسة.
+  - أخطاء: `CATCHUP_UNAVAILABLE` / `CATCHUP_OUT_OF_WINDOW` / `INVALID_CATCHUP_TIME`.
+- [x] API القنوات: حقل `catchup: {type, days}` في القوائم والتفاصيل — **دون كشف `catchup-source`** (قد يحتوي بيانات اعتماد).
+- [x] أندرويد: حقل catchup في DTO/Domain/Room (migration v9) + الـ Guide يعرض Catch-up **لكل قناة** بدل تفعيله العام لـ Xtream.
+- [x] اختبارات: 144/144 (catchup-service، M3U parse، Xtream sync).
+
+قبل التشغيل بعد الترقية، نفّذ مرة واحدة لترقية القنوات القديمة:
+`cd server && npm run migrate:catchup-backfill -- --commit`
+
+الملاحظة: دعم `catchup="default"` (إعادة نفس البث) يعتمد على قالب المزود نفسه؛ لا حاجة لكود إضافي.
+
 ### المرحلة 6 — الإنتاج والنشر
 
 - [ ] إعداد VPS وDomain وHTTPS.

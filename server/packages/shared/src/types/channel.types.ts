@@ -41,6 +41,17 @@ export interface IChannel {
   tvgName: string;
   tvgLogo: string;
   order: number;
+  /**
+   * Catch-up (timeshift) capability, populated from M3U attributes
+   * (catchup= / catchup-source= / catchup-days=) or set for Xtream channels.
+   * `source` is the raw upstream template and may embed credentials —
+   * it MUST never be exposed to clients; only `type`/`days` leave the server.
+   */
+  catchup?: {
+    type?: string | null;
+    source?: string | null;
+    days?: number | null;
+  };
   metadata?: {
     country?: string;
     language?: string;
