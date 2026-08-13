@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Loader2,
@@ -161,13 +162,13 @@ export default function SeriesPageShell() {
             <div key={series._id} className="group relative rounded-lg overflow-hidden border bg-card hover:shadow-lg transition-all">
               <div className="aspect-[2/3] bg-muted relative">
                 {series.poster ? (
-                  <img
+                  <Image
                     src={series.poster}
                     alt={series.title}
-                    className="object-cover w-full h-full"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://placehold.co/400x600?text=No+Poster';
-                    }}
+                    fill
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 16vw"
+                    unoptimized
+                    className="object-cover"
                   />
                 ) : (
                   <div className="flex items-center justify-center h-full text-muted-foreground">
@@ -205,8 +206,15 @@ export default function SeriesPageShell() {
               {seriesList.map((series) => (
                 <tr key={series._id} className="hover:bg-accent/50 transition-colors">
                   <td className="p-3 flex items-center gap-3">
-                    <div className="h-10 w-7 bg-muted rounded overflow-hidden flex-shrink-0">
-                      <img src={series.poster} alt={series.title} className="object-cover w-full h-full" />
+                    <div className="relative h-10 w-7 bg-muted rounded overflow-hidden flex-shrink-0">
+                      <Image
+                        src={series.poster || 'https://placehold.co/400x600?text=No+Poster'}
+                        alt={series.title}
+                        fill
+                        sizes="28px"
+                        unoptimized
+                        className="object-cover"
+                      />
                     </div>
                     <span className="font-medium">{series.title}</span>
                   </td>
