@@ -38,7 +38,7 @@ export default function MoviesPageShell() {
   const fetchMovies = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/api/v1/movies', {
+      const res = await api.get('/movies', {
         params: {
           page,
           limit: PAGE_SIZE,
@@ -59,7 +59,7 @@ export default function MoviesPageShell() {
 
   const fetchCategories = async () => {
     try {
-      const res = await api.get('/api/v1/movies/categories');
+      const res = await api.get('/movies/categories');
       if (res.data.success) {
         setCategories(['All', ...res.data.data]);
       }
