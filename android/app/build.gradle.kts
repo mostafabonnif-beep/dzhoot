@@ -136,6 +136,7 @@ dependencies {
     // Firebase - using BoM for version management
     implementation(platform("com.google.firebase:firebase-bom:33.1.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-perf")
     implementation("com.google.firebase:firebase-database")

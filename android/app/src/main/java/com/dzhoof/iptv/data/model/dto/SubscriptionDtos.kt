@@ -88,4 +88,5 @@ data class RegisterDeviceRequest(
     @SerializedName("name") val name: String? = null,
     @SerializedName("platform") val platform: String? = null,
     @SerializedName("appVersion") val appVersion: String? = null,
+    @SerializedName("pushToken") val pushToken: String? = null,
 )

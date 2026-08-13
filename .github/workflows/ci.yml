@@ -1,9 +1,9 @@
 name: CI
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 jobs:
   backend:
@@ -22,6 +22,33 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:backend
+      - name: E2E smoke (subscription loop)
+        run: npx tsx scripts/smoke-activation.ts
+        working-directory: server/backend
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - name: Run Android unit tests
+        working-directory: android
+        run: ./gradlew testDebugUnitTest --stacktrace
+      - name: Assemble Android debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --stacktrace
+      - name: Upload Android debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dzhoof-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
