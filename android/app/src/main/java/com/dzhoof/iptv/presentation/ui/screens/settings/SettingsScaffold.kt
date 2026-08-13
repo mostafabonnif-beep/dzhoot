@@ -72,6 +72,7 @@ internal enum class SettingsSection(val label: String) {
     Connection("Connection"),
     Channels("Channels"),
     Controls("Controls"),
+    Parental("Parental"),
     Appearance("Appearance"),
     Subscription("Subscription"),
     About("About")
@@ -306,6 +307,7 @@ private fun SectionContent(
             onInfoBarTimeoutChange = actions.onInfoBarTimeoutChange,
             modifier = modifier
         )
+        SettingsSection.Parental -> ParentalSection(modifier = modifier)
         SettingsSection.Appearance -> AppearanceSection(
             currentTheme = uiState.theme,
             onThemeChange = actions.onThemeChange,

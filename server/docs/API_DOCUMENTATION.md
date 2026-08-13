@@ -1415,6 +1415,21 @@ The M3U from `/tv/playlist/:code` embeds an `x-tvg-url` pointing at `/tv/epg/:co
 - Errors: `CATCHUP_UNAVAILABLE` (404), `CATCHUP_OUT_OF_WINDOW` (404), `INVALID_CATCHUP_TIME` (400), `XTREAM_SOURCE_UNAVAILABLE` (404).
 - Channel list/detail responses include `catchup: { "type": "append"|"timeshift"|…, "days": n|null }` so clients know which channels offer catch-up. The raw `catchup-source` template is **never** exposed to clients.
 
+### 5.2 Concurrent stream limit
+
+`POST /tv/playback-token` and `POST /streams/authorize` enforce a per-user
+concurrent stream limit (`MAX_CONCURRENT_STREAMS_PER_USER`, default `2`).
+When a user exceeds the limit, the **oldest** active session is evicted (the
+newest playback wins — standard IPTV behavior). Sessions auto-expire after
+the playback token's TTL plus a grace period. Both responses include:
+
+```json
+"streamLimit": { "max": 2, "active": 1 }
+```
+
+The limit is enforced via Redis only; when `REDIS_URL` is not configured the
+fields report `max` with `active: 0` and playback is never blocked.
+
 
 ---
 
