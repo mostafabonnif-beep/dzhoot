@@ -176,8 +176,8 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 
 **المهام:**
 1. ملفات i18n كاملة (العربية تمت؛ أضف الفرنسية والإنجليزية) للوحة والتطبيق.
-2. حالات Loading/Empty/Error موحدة في كل الشاشات الجديدة (Skeleton بدل "Loading...").
-3. توحيد الألوان/الخطوط عبر Design Tokens (يوجد قرار `002-unified-color-palette.md` — طبّقه على الصفحات الجديدة).
+2. حالات Loading/Empty/Error موحدة في كل الشاشات الجديدة (Skeleton بدل "Loading..."). **التقدم الحالي:** صفحات Movies وSeries تحتوي الآن على loading قابل للوصول، empty state واضح، error panel مع retry، وصور Next Image محسّنة؛ بقية الشاشات تحتاج تطبيق النمط نفسه.
+3. توحيد الألوان/الخطوط عبر Design Tokens (يوجد قرار `002-unified-color-palette.md` — طبّقه على الصفحات الجديدة). **ملاحظة:** lint وbuild للواجهة يمران بلا تحذيرات lint بعد تحسين Movies وSeries.
 
 ---
 
