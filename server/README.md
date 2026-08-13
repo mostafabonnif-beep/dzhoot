@@ -1,12 +1,9 @@
-# FireVision IPTV Server
+# DZ HOOF Server
 
-[![Build & Deploy](https://github.com/akshaynikhare/FireVisionIPTVServer/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/akshaynikhare/FireVisionIPTVServer/actions/workflows/docker-publish.yml)
-[![CI](https://github.com/akshaynikhare/FireVisionIPTVServer/actions/workflows/ci.yml/badge.svg)](https://github.com/akshaynikhare/FireVisionIPTVServer/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/akshaynikhare/FireVisionIPTVServer)](https://github.com/akshaynikhare/FireVisionIPTVServer/releases/latest)
-[![License](https://img.shields.io/github/license/akshaynikhare/FireVisionIPTVServer)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-ghcr.io-blue?logo=docker)](https://github.com/akshaynikhare/FireVisionIPTVServer/pkgs/container/firevisioniptvserver)
+[![CI](https://github.com/merci1994dz/dzhoot/actions/workflows/ci.yml/badge.svg)](https://github.com/merci1994dz/dzhoot/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/merci1994dz/dzhoot)](LICENSE)
 
-**Self-hosted IPTV channel management platform.** Manage channels, users, EPG, and paired devices from a single admin panel — then stream directly to your Fire TV with the [companion Android app](https://github.com/akshaynikhare/FireVisionIPTV).
+**Self-hosted IPTV channel management platform.** Manage authorized channels, users, EPG, and paired devices from a single admin panel with the companion Android TV app in this repository.
 
 > Your server. Your channels. No subscriptions.
 
@@ -77,8 +74,8 @@
 
 ```bash
 # 1. Clone and configure
-git clone https://github.com/akshaynikhare/FireVisionIPTVServer.git
-cd FireVisionIPTVServer
+git clone https://github.com/merci1994dz/dzhoot.git
+cd dzhoot/server
 cp .env.example .env
 ```
 
@@ -146,7 +143,7 @@ x
 
 ## Android Client
 
-Pair with the [FireVision IPTV](https://github.com/akshaynikhare/FireVisionIPTV) app — open-source IPTV player for Amazon Fire TV and Android TV.
+The Android and Android TV client is included in this repository under `../android/`.
 
 Features: HLS live streaming via ExoPlayer, D-pad navigation, server-synced favorites, background health scanning, OTA updates.
 

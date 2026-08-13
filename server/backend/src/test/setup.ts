@@ -1,10 +1,14 @@
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
 
-let mongoServer: MongoMemoryServer;
+let mongoServer: MongoMemoryServer | undefined;
 
 beforeAll(async () => {
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryServer.create({
+    instance: {
+      args: ['--wiredTigerCacheSizeGB', '0.25'],
+    },
+  });
   const uri = mongoServer.getUri();
   await mongoose.connect(uri);
   // Build schema indexes (incl. unique constraints) up front so tests that rely on
@@ -15,7 +19,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await mongoose.disconnect();
-  await mongoServer.stop();
+  await mongoServer?.stop();
 });
 
 afterEach(async () => {

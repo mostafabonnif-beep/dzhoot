@@ -4,20 +4,35 @@ const axios = require('axios');
 
 // GitHub APK update routes
 
-const GITHUB_OWNER = process.env.GH_APP_OWNER || 'akshaynikhare';
-const GITHUB_REPO = process.env.GH_APP_REPO || 'FireVisionIPTV';
+const GITHUB_OWNER = process.env.GH_APP_OWNER || 'merci1994dz';
+const GITHUB_REPO = process.env.GH_APP_REPO || 'dzhoot';
 const GITHUB_APK_PATTERN = process.env.GH_APP_APK_PATTERN || '.apk';
 const GITHUB_TOKEN = process.env.GH_APP_TOKEN;
 
 // APP_VERSION is injected at build time via Docker build arg (e.g. "1.2.3")
 const APP_VERSION = process.env.APP_VERSION || '0.0.0';
+function normalizeVersion(version) {
+  return String(version || '')
+    .trim()
+    .replace(/^v/i, '')
+    .split('-')[0];
+}
+
+function compareVersions(left, right) {
+  const a = normalizeVersion(left).split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const b = normalizeVersion(right).split('.').map((part) => Number.parseInt(part, 10) || 0);
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) - (b[index] || 0);
+  }
+  return 0;
+}
 
 async function fetchLatestRelease() {
   const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
   const headers = {
     Accept: 'application/vnd.github+json',
-    'User-Agent': 'FireVisionIPTVServer',
+    'User-Agent': 'DZ-HOOF-Server',
   };
 
   if (GITHUB_TOKEN) {
@@ -64,13 +79,20 @@ router.get('/version', async (req, res) => {
       });
     }
 
-    const latestVersionName = release.tag_name || release.name || APP_VERSION;
-    const updateAvailable = latestVersionName !== String(currentVersionCode);
+    const latestVersionName = normalizeVersion(release.tag_name || release.name || APP_VERSION);
+    const latestVersionCode = Number.parseInt(latestVersionName.split('.')[0], 10) || currentVersionCode;
+    const updateAvailable = latestVersionCode > currentVersionCode || compareVersions(latestVersionName, APP_VERSION) > 0;
 
     return res.json({
       success: true,
       updateAvailable,
-      latestVersion: latestVersionName,
+      latestVersion: {
+        versionName: latestVersionName,
+        versionCode: latestVersionCode,
+        releaseNotes: release.body || '',
+        apkFileSize: apkAsset.size,
+        downloadUrl: apkAsset.browser_download_url,
+      },
       currentVersion: currentVersionCode,
       isMandatory: false,
       releaseNotes: release.body || '',
