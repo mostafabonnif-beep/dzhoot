@@ -46,6 +46,8 @@ async function resolveUser(req: Request, res: Response, next: NextFunction) {
       channelListCode: user.channelListCode,
       isActive: user.isActive,
       emailVerified: user.emailVerified,
+      allCatalog: user.allCatalog === true,
+      channels: user.channels || [],
     };
     req.userId = String(user._id);
 
