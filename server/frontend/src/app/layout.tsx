@@ -38,11 +38,11 @@ export const metadata: Metadata = {
     'Fire TV IPTV app',
     'open source IPTV',
   ],
-  authors: [{ name: 'Akshay Nikhare', url: 'https://github.com/ddssssc' }],
-  creator: 'Akshay Nikhare',
+  authors: [{ name: 'DZ HOOF', url: 'https://github.com/merci1994dz/dzhoot' }],
+  creator: 'DZ HOOF',
   publisher: 'Dzhoof',
   alternates: {
-    canonical: 'https://dzhoof.example',
+    canonical: 'https://github.com/merci1994dz/dzhoot',
     types: {
       'text/plain': '/llms.txt',
     },
