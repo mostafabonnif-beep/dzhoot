@@ -37,7 +37,7 @@ export default function SeriesPageShell() {
   const fetchSeries = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/api/v1/series', {
+      const res = await api.get('/series', {
         params: {
           page,
           limit: PAGE_SIZE,
@@ -58,7 +58,7 @@ export default function SeriesPageShell() {
 
   const fetchCategories = async () => {
     try {
-      const res = await api.get('/api/v1/series/categories');
+      const res = await api.get('/series/categories');
       if (res.data.success) {
         setCategories(['All', ...res.data.data]);
       }

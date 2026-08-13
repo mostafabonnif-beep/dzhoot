@@ -18,13 +18,20 @@ describe('EpgService XMLTV ingestion', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('parses XMLTV, respects channel scope, and preserves timezone/title metadata', async () => {
+    const startTime = new Date(Date.now() + 60 * 60 * 1000);
+    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+    const toXmltvDate = (date: Date) => {
+      const local = new Date(date.getTime() + 60 * 60 * 1000);
+      const pad = (value: number) => String(value).padStart(2, '0');
+      return `${local.getUTCFullYear()}${pad(local.getUTCMonth() + 1)}${pad(local.getUTCDate())}${pad(local.getUTCHours())}${pad(local.getUTCMinutes())}${pad(local.getUTCSeconds())} +0100`;
+    };
     const xml = `<?xml version="1.0"?><tv>
-      <programme start="20260812080000 +0100" stop="20260812090000 +0100" channel="news.dz">
+      <programme start="${toXmltvDate(startTime)}" stop="${toXmltvDate(endTime)}" channel="news.dz">
         <title lang="ar">أخبار الصباح</title>
         <desc lang="ar">ملخص الأخبار</desc>
         <category>News</category>
       </programme>
-      <programme start="20260812080000 +0100" stop="20260812090000 +0100" channel="ignored.dz">
+      <programme start="${toXmltvDate(startTime)}" stop="${toXmltvDate(endTime)}" channel="ignored.dz">
         <title>Ignored</title>
       </programme>
     </tv>`;
@@ -43,7 +50,7 @@ describe('EpgService XMLTV ingestion', () => {
       category: ['News'],
       language: 'ar',
     });
-    expect(programs[0].startTime.toISOString()).toBe('2026-08-12T07:00:00.000Z');
+    expect(programs[0].startTime.getTime()).toBe(Math.floor(startTime.getTime() / 1000) * 1000);
   });
 
   it('rejects unsafe XMLTV URLs before making a network request', async () => {

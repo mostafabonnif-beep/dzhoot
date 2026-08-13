@@ -32,8 +32,8 @@ router.get('/devices', async (req, res) => {
 // POST /api/v1/me/devices — register/update a device (enforces subscription cap)
 router.post('/devices', async (req, res) => {
   try {
-    const { deviceId, name, platform, appVersion } = req.body || {};
-    const result = await registerDevice(req.user.id, { deviceId, name, platform, appVersion });
+    const { deviceId, name, platform, appVersion, pushToken } = req.body || {};
+    const result = await registerDevice(req.user.id, { deviceId, name, platform, appVersion, pushToken });
     if (!result.ok) {
       const status = result.error === 'DEVICE_REGISTRATION_BUSY' ? 503 : 403;
       return res.status(status).json({
@@ -44,7 +44,9 @@ router.post('/devices', async (req, res) => {
         maxDevices: result.maxDevices,
       });
     }
-    return res.status(201).json({ success: true, data: result.device });
+    const device = result.device?.toObject ? result.device.toObject() : { ...result.device };
+    delete device.pushToken;
+    return res.status(201).json({ success: true, data: device });
   } catch (err) {
     console.error('[me] register device error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });

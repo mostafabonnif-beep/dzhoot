@@ -1,7 +1,13 @@
 # DZ HOOF — تقرير التطوير الاحترافي (للتسليم إلى Manus)
 
-**التاريخ:** 2026-08-13 · **المستودع:** github.com/merci1994dz/dzhoot · **الفرع:** main (`df20384`)
+**التاريخ:** 2026-08-13 · **المستودع:** github.com/merci1994dz/dzhoot · **الفرع المرجعي:** main (`df20384`)
+
+> **حالة التنفيذ الحالية:** ✅ WP1 وWP2 منفذتان على فرع `feature/ci-android-smoke`. أضيف Android CI مع Java 17 وSDK 34 واختبار APK، وأضيف Smoke E2E إلى CI. محليًا نجح typecheck وlint و149 اختبار Backend وSmoke E2E (33/33). تعذر بناء Android محليًا فقط لأن البيئة لا تحتوي Android SDK؛ سيُتحقق منه داخل GitHub Actions.
 **الغرض:** هذا التقرير هو المرجع الكامل للعمل على المشروع. نفّذ حزم العمل (WP) بالترتيب، واتبع `AGENTS.md` في جذر المستودع، ولا تتجاوز البنية المعتمدة.
+
+### تحديث Priority 0 — إصلاح مسارات لوحة الإدارة
+
+أُصلح في الفرع `fix/priority0-admin-routes` تكرار بادئة `/api/v1` في صفحات Movies وSeries، وهو ما كان يسبب طلبات runtime غير صحيحة من نوع `/api/v1/api/v1/...`. كما أُصلحت أخطاء lint في صفحة Xtream Sources، وأضيف اختبار Playwright يغطي الصفحة الرئيسية وتسجيل الدخول ومسارات الإدارة التسعة عشر. التحقق اليدوي بعد دخول المشرف أكد تحميل `/admin/movies` و`/admin/series` مع حالات الفراغ دون 502. نتائج backend: 149/149 وSmoke كامل. تشغيل Playwright محليًا يحتاج بيئة webServer مستقرة وChromium مثبتًا؛ يجب اعتماد نتيجة CI قبل إغلاق الاختبار نهائيًا. التغيير مرفوع في Pull Request #10 إلى `develop`.
 
 ---
 
@@ -53,7 +59,7 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 ---
 ## 4. حزم العمل المقترحة (نفّذ بالترتيب)
 
-### WP1 — بناء Android في CI والتحقق من الترجمة 🔴 (أولوية قصوى)
+### WP1 — بناء Android في CI والتحقق من الترجمة 🔴 (أولوية قصوى) ✅ منفذ على فرع feature/ci-android-smoke
 
 **الهدف:** ضمان أن كل تغيير Android يُترجم فعليًا قبل الدمج.
 
@@ -69,11 +75,11 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 3. أضف `./gradlew test` إذا وُجدت اختبارات JVM (SettingsViewModelTest موجود في `app/src/test`).
 4. (اختياري) job `assembleRelease` بدون توقيع للكشف عن مشاكل R8/obfuscation.
 
-**تعريف الإنجاز:** job أخضر ينتج APK قابلًا للتثبيت، وأي push مستقبلي لملفات Android يفشل البناء إن كُسرت.
+**تعريف الإنجاز:** job أخضر ينتج APK قابلًا للتثبيت، وأي push مستقبلي لملفات Android يفشل البناء إن كُسرت. **التنفيذ:** أضيف job `android` إلى CI باستخدام Java 17 وAndroid SDK 34، مع `testDebugUnitTest` و`assembleDebug` ورفع APK كـartifact. البناء المحلي غير ممكن لغياب SDK، وسيكون تحقق النجاح النهائي عبر GitHub Actions.
 
 ---
 
-### WP2 — إدخال Smoke E2E في CI 🔴
+### WP2 — إدخال Smoke E2E في CI 🔴 ✅ منفذ على فرع feature/ci-android-smoke
 
 **الهدف:** تشغيل الدورة التجارية الكاملة تلقائيًا مع كل push.
 
@@ -89,7 +95,7 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 2. تأكد أن `mongodb-memory-server` يحمّل ثنائي mongod في CI (سيُحمَّل تلقائيًا عند أول تشغيل؛ إن فشل، أضف `MONGOMS_SYSTEM_BINARY` أو اترك سكربتات الحزمة تعمل أثناء `npm ci`).
 3. وسّع السكربت تدريجيًا: سيناريو Xtream sync (مع mock HTTP)، إشعارات، أجهزة، حد الأجهزة (موجود جزئيًا — أكمل).
 
-**تعريف الإنجاز:** CI يفشل تلقائيًا إذا انكسرت دورة (أدمن → باقة → أكواد → تفعيل → اشتراك → تشغيل → أجهزة → إلغاء).
+**تعريف الإنجاز:** CI يفشل تلقائيًا إذا انكسرت دورة (أدمن → باقة → أكواد → تفعيل → اشتراك → تشغيل → أجهزة → إلغاء). **التنفيذ:** أضيفت خطوة `npx tsx scripts/smoke-activation.ts` إلى job الخادم، ونجح التشغيل المحلي بنتيجة 33/33.
 
 ---
 
@@ -109,17 +115,17 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 
 ---
 
-### WP4 — إشعارات FCM حقيقية 🟠
+### WP4 — إشعارات FCM حقيقية 🟠 (تنفيذ backend وAndroid مكتمل؛ تحقق الجهاز الفعلي متبقٍ)
 
 **الهدف:** إيصال الإشعارات للهواتف فعليًا.
 
 **المهام:**
-1. Android: أضف `com.google.firebase:firebase-messaging` (BOM موجود)، `FirebaseMessagingService` + `onNewToken`، وسجّل التوكن عند الخادم (أضف حقل `pushToken` إلى `POST /api/v1/me/devices` أو مسار `/me/push-token`).
-2. Backend: خدمة إرسال FCM (HTTP v1 مع service account JSON كـenv var، أو legacy API)، واربطها بـ`admin-notifications.js /send` و`/me/notifications` (أعد `unreadCount`).
-3. `google-services.json` يبقى **خارج git** (مؤكد gitignored) — وثّق خطوة وضع الملف في runbook البناء.
-4. Deep link: اجعل `deepLink` في الإشعار يفتح قناة/فيلم داخل التطبيق.
+1. Android: أضيفت تبعية `com.google.firebase:firebase-messaging`، وخدمة `DzHoofFirebaseMessagingService` مع `onNewToken` وتخزين محلي للتوكن، ويرسله `POST /api/v1/me/devices` عند التسجيل أو التحديث.
+2. Backend: أضيفت خدمة `fcm-service.ts` لإرسال FCM HTTP v1 باستخدام `FCM_PROJECT_ID` و`FCM_CLIENT_EMAIL` و`FCM_PRIVATE_KEY` server-only، وربطت بـ`admin-notifications.js /send` مع إبقاء الإشعار الداخلي وحالة القراءة.
+3. `google-services.json` يبقى **خارج git** (مؤكد gitignored)، ومتغيرات FCM موثقة في `server/.env.production.example`.
+4. Deep link: payload يرسل `deepLink` داخل بيانات FCM؛ ما زال يلزم تحقق فتح الوجهة داخل التطبيق على جهاز فعلي.
 
-**تعريف الإنجاز:** إشعار من اللوحة يصل لهاتف فعلي خلال ثوانٍ، مع حالة قراءة متزامنة.
+**التحقق المنفذ:** `npm run typecheck` و`npm run lint` نجحا، واختبارات backend نجحت بنتيجة 149/149، وSmoke نجح بالكامل. **المتبقي لإغلاق WP4:** توفير إعداد Firebase الحقيقي في بيئة النشر، وضع `google-services.json` في build secret، واختبار وصول إشعار من اللوحة إلى هاتف فعلي خلال ثوانٍ.
 
 ---
 ### WP5 — فرض بوابة الاشتراك في التطبيق من طرف لطرف 🟠
@@ -160,9 +166,9 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 3. **Device lock** (اختياري لكل باقة): ربط الاشتراك بأول جهاز يفعّل (حقل `lockedDeviceId` في Subscription) — فكرة من XtreamPulsar (BSL — تنفيذ ذاتي).
 4. **VPN/DC IP blocking** اختياري لكل باقة (قاعدة IP datacenter + GeoIP) — يقلل إعادة البث.
 5. **منع تخمين الأكواد**: الـhash SHA-256 مع `codeLast4` للبحث — لا تسريب؛ أضف تأخيرًا/rate-limit (أعلاه) وفكّر بفترة سريان للكود (`codeExpiresAt` موجود — استخدمه افتراضيًا).
-6. مراجعة أمنية: `npm audit` (41 ثغرة معلنة — منها حرجة)، ترقية `multer` (إصدار قديم بثغرات معروفة).
+6. مراجعة أمنية: `npm audit` (بعد الترقية الحالية: 32 ثغرة production، منها 1 حرجة و12 عالية)، ترقية `multer` (من 1.4.5-lts.1 إلى 2.2.0 تمت في PR #11). ما زالت ترقيات `axios` و`fast-xml-parser` و`handlebars` و`nodemailer` و`next` و`postcss` تحتاج مراجعة توافق مستقلة قبل تطبيقها.
 
-**تعريف الإنجاز:** قائمة فحص أمني موثقة، واللوحة تتطلب 2FA، والتخمين محجوب، ووثيقة `server/docs/security/` محدثة.
+**تعريف الإنجاز:** قائمة فحص أمني موثقة، واللوحة تتطلب 2FA، والتخمين محجوب، ووثيقة `server/docs/security/` محدثة. **التقدم الحالي:** rate-limit لتسجيل الدخول واسترداد الأكواد موجود، وmulter 2.x مرفوع في PR #11؛ 2FA وترقيات الاعتماديات المتبقية لم تُغلق بعد.
 
 ---
 
