@@ -11,8 +11,13 @@ const {
 router.get('/', requireTvOrSessionAuth, async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
-    const query = { isActive: true };
+    const requestedStatus = String(req.query.status || 'active');
+    const isAdmin = req.user?.role === 'Admin';
+    const query = { isActive: requestedStatus === 'all' && isAdmin ? { $in: [true, false] } : requestedStatus === 'inactive' && isAdmin ? false : true };
 
+    if (req.query.sourceId && isValidObjectId(String(req.query.sourceId))) {
+      query.sourceId = String(req.query.sourceId);
+    }
     if (req.query.category && String(req.query.category) !== 'All') {
       query.category = String(req.query.category).trim().slice(0, 100);
     }
