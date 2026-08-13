@@ -357,6 +357,11 @@ export async function expireStaleCodes(): Promise<number> {
 
 /** Whether the platform currently gates playback behind an active subscription. */
 export async function isSubscriptionRequired(): Promise<boolean> {
+  const envValue = process.env.SUBSCRIPTION_REQUIRED?.trim().toLowerCase();
+  if (envValue === 'true' || envValue === 'false') {
+    return envValue === 'true';
+  }
+
   const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
   const doc = await AppSetting.findOne({ key: 'subscription_required' }).lean().exec();
   return doc ? !!doc.value : false;
