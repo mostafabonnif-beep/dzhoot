@@ -12,6 +12,7 @@ node_modules/
 build/
 */build/
 server/frontend/.next/
+server/backend/.next/
 server/backend/dist/
 server/packages/*/dist/
 
