@@ -18,6 +18,7 @@ import Modal from '@/components/ui/modal';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 import Pagination from '@/components/ui/pagination';
 import DataTable, { type DataTableColumn } from '@/components/ui/data-table';
+import { useLocale } from '@/components/locale-provider';
 
 interface CodeData {
   _id: string;
@@ -78,6 +79,7 @@ function downloadCsv(filename: string, rows: string[][]) {
 
 export default function CodesPage() {
   const { toast } = useToast();
+  const { t } = useLocale();
   const [codes, setCodes] = useState<CodeData[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [plans, setPlans] = useState<PlanOption[]>([]);
@@ -331,7 +333,7 @@ export default function CodesPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             className="w-full h-10 pl-10 pr-4 border border-border bg-card text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-            placeholder="ابحث بآخر 4 أرقام..."
+            placeholder={t('codes.searchPlaceholder')}
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
           />
@@ -341,18 +343,18 @@ export default function CodesPage() {
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
-          <option value="ALL">كل الحالات</option>
-          <option value="UNUSED">UNUSED</option>
-          <option value="ACTIVATED">ACTIVATED</option>
-          <option value="REVOKED">REVOKED</option>
-          <option value="EXPIRED">EXPIRED</option>
+          <option value="ALL">{t('codes.allStatuses')}</option>
+          <option value="UNUSED">{t('codes.unused')}</option>
+          <option value="ACTIVATED">{t('codes.activated')}</option>
+          <option value="REVOKED">{t('codes.revoked')}</option>
+          <option value="EXPIRED">{t('codes.expired')}</option>
         </select>
         <select
           className={`${inputClass} sm:w-52`}
           value={planFilter}
           onChange={(e) => setPlanFilter(e.target.value)}
         >
-          <option value="ALL">كل الباقات</option>
+          <option value="ALL">{t('codes.allPlans')}</option>
           {plans.map((p) => (
             <option key={p._id} value={p._id}>
               {p.name}

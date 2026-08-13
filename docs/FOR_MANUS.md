@@ -125,7 +125,7 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 3. `google-services.json` يبقى **خارج git** (مؤكد gitignored)، ومتغيرات FCM موثقة في `server/.env.production.example`.
 4. Deep link: payload يرسل `deepLink` داخل بيانات FCM؛ ما زال يلزم تحقق فتح الوجهة داخل التطبيق على جهاز فعلي.
 
-**التحقق المنفذ:** `npm run typecheck` و`npm run lint` نجحا، واختبارات backend نجحت بنتيجة 149/149، وSmoke نجح بالكامل. **المتبقي لإغلاق WP4:** توفير إعداد Firebase الحقيقي في بيئة النشر، وضع `google-services.json` في build secret، واختبار وصول إشعار من اللوحة إلى هاتف فعلي خلال ثوانٍ.
+**التحقق المنفذ:** typecheck وlint للواجهة نجحا، وFrontend tests نجحت بنتيجة 2/2، واختبارات Backend نجحت بنتيجة 152/152، وSmoke Activation نجح بالكامل بنتيجة 33/33 من المسار الصحيح `server/backend/scripts/smoke-activation.ts`. **المتبقي لإغلاق WP4:** توفير إعداد Firebase الحقيقي في بيئة النشر، وضع `google-services.json` في build secret، واختبار وصول إشعار من اللوحة إلى هاتف فعلي خلال ثوانٍ.
 
 ---
 ### WP5 — فرض بوابة الاشتراك في التطبيق من طرف لطرف 🟠
@@ -175,8 +175,8 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 ### WP8 — لغات FR/EN كاملة + تحسينات تجربة 🟡
 
 **المهام:**
-1. ملفات i18n كاملة (العربية تمت؛ أضف الفرنسية والإنجليزية) للوحة والتطبيق. **التقدم الحالي:** أضيف LocaleProvider مركزي للوحة يدعم العربية والإنجليزية والفرنسية، مع حفظ الاختيار وتحديث lang/dir، وترجمة كاملة للـsidebar وHeader؛ بقية نصوص الصفحات الداخلية تحتاج الاستبدال التدريجي.
-2. حالات Loading/Empty/Error موحدة في كل الشاشات الجديدة (Skeleton بدل "Loading..."). **التقدم الحالي:** صفحات Movies وSeries تحتوي الآن على loading قابل للوصول، empty state واضح، error panel مع retry، وصور Next Image محسّنة؛ بقية الشاشات تحتاج تطبيق النمط نفسه.
+1. ملفات i18n كاملة (العربية تمت؛ أضف الفرنسية والإنجليزية) للوحة والتطبيق. **التقدم الحالي:** أضيف LocaleProvider مركزي للوحة يدعم العربية والإنجليزية والفرنسية، مع حفظ الاختيار وتحديث lang/dir، وترجمة Sidebar وHeader، وصفحات Users وPlans وCodes وSettings وActivity وVersions، إضافة إلى المكونات المشتركة Modal وRoleGuard وColumnFilter وPagination وChannelRowActions. ما تبقى هو استكمال النصوص الخاصة ببعض تدفقات Quick Pick وImport وSources والتطبيق Android.
+2. حالات Loading/Empty/Error موحدة في كل الشاشات الجديدة (Skeleton بدل "Loading..."). **التقدم الحالي:** صفحات Movies وSeries تحتوي الآن على loading قابل للوصول، empty state واضح، error panel مع retry، وصور Next Image محسّنة؛ RoleGuard وPagination وColumnFilter يستخدمان الآن حالات وتسميات مترجمة، وتبقى بعض صفحات الاستيراد وQuick Pick بحاجة إلى تطبيق النمط نفسه.
 3. توحيد الألوان/الخطوط عبر Design Tokens (يوجد قرار `002-unified-color-palette.md` — طبّقه على الصفحات الجديدة). **ملاحظة:** lint وbuild للواجهة يمران بلا تحذيرات lint بعد تحسين Movies وSeries.
 
 ---
