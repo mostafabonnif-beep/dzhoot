@@ -1,6 +1,8 @@
 # DZ HOOF — تقرير التطوير الاحترافي (للتسليم إلى Manus)
 
-**التاريخ:** 2026-08-13 · **المستودع:** github.com/merci1994dz/dzhoot · **الفرع:** main (`df20384`)
+**التاريخ:** 2026-08-13 · **المستودع:** github.com/merci1994dz/dzhoot · **الفرع المرجعي:** main (`df20384`)
+
+> **حالة التنفيذ الحالية:** ✅ WP1 وWP2 منفذتان على فرع `feature/ci-android-smoke`. أضيف Android CI مع Java 17 وSDK 34 واختبار APK، وأضيف Smoke E2E إلى CI. محليًا نجح typecheck وlint و149 اختبار Backend وSmoke E2E (33/33). تعذر بناء Android محليًا فقط لأن البيئة لا تحتوي Android SDK؛ سيُتحقق منه داخل GitHub Actions.
 **الغرض:** هذا التقرير هو المرجع الكامل للعمل على المشروع. نفّذ حزم العمل (WP) بالترتيب، واتبع `AGENTS.md` في جذر المستودع، ولا تتجاوز البنية المعتمدة.
 
 ---
@@ -53,7 +55,7 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 ---
 ## 4. حزم العمل المقترحة (نفّذ بالترتيب)
 
-### WP1 — بناء Android في CI والتحقق من الترجمة 🔴 (أولوية قصوى)
+### WP1 — بناء Android في CI والتحقق من الترجمة 🔴 (أولوية قصوى) ✅ منفذ على فرع feature/ci-android-smoke
 
 **الهدف:** ضمان أن كل تغيير Android يُترجم فعليًا قبل الدمج.
 
@@ -69,11 +71,11 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 3. أضف `./gradlew test` إذا وُجدت اختبارات JVM (SettingsViewModelTest موجود في `app/src/test`).
 4. (اختياري) job `assembleRelease` بدون توقيع للكشف عن مشاكل R8/obfuscation.
 
-**تعريف الإنجاز:** job أخضر ينتج APK قابلًا للتثبيت، وأي push مستقبلي لملفات Android يفشل البناء إن كُسرت.
+**تعريف الإنجاز:** job أخضر ينتج APK قابلًا للتثبيت، وأي push مستقبلي لملفات Android يفشل البناء إن كُسرت. **التنفيذ:** أضيف job `android` إلى CI باستخدام Java 17 وAndroid SDK 34، مع `testDebugUnitTest` و`assembleDebug` ورفع APK كـartifact. البناء المحلي غير ممكن لغياب SDK، وسيكون تحقق النجاح النهائي عبر GitHub Actions.
 
 ---
 
-### WP2 — إدخال Smoke E2E في CI 🔴
+### WP2 — إدخال Smoke E2E في CI 🔴 ✅ منفذ على فرع feature/ci-android-smoke
 
 **الهدف:** تشغيل الدورة التجارية الكاملة تلقائيًا مع كل push.
 
@@ -89,7 +91,7 @@ DZ HOOF منصة IPTV قانونية (Backend Express+TypeScript+MongoDB+Redis،
 2. تأكد أن `mongodb-memory-server` يحمّل ثنائي mongod في CI (سيُحمَّل تلقائيًا عند أول تشغيل؛ إن فشل، أضف `MONGOMS_SYSTEM_BINARY` أو اترك سكربتات الحزمة تعمل أثناء `npm ci`).
 3. وسّع السكربت تدريجيًا: سيناريو Xtream sync (مع mock HTTP)، إشعارات، أجهزة، حد الأجهزة (موجود جزئيًا — أكمل).
 
-**تعريف الإنجاز:** CI يفشل تلقائيًا إذا انكسرت دورة (أدمن → باقة → أكواد → تفعيل → اشتراك → تشغيل → أجهزة → إلغاء).
+**تعريف الإنجاز:** CI يفشل تلقائيًا إذا انكسرت دورة (أدمن → باقة → أكواد → تفعيل → اشتراك → تشغيل → أجهزة → إلغاء). **التنفيذ:** أضيفت خطوة `npx tsx scripts/smoke-activation.ts` إلى job الخادم، ونجح التشغيل المحلي بنتيجة 33/33.
 
 ---
 
