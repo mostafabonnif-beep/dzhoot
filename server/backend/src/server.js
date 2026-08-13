@@ -591,7 +591,7 @@ mongoose
     // Start server
     httpServer = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📺 FireVision IPTV Server v1.0.0`);
+      console.log(`📺 DZ HOOF Server v${process.env.APP_VERSION || '0.0.0'}`);
       console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`📧 Email provider: ${process.env.MAIL_PROVIDER || 'mailhog'}`);
     });

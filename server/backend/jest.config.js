@@ -14,6 +14,7 @@ module.exports = {
     '^@firevision/shared$': '<rootDir>/../packages/shared/src/index',
   },
   setupFilesAfterEnv: ['<rootDir>/src/test/setup.ts'],
+  maxWorkers: 1,
   coverageDirectory: 'coverage',
   coveragePathIgnorePatterns: ['/node_modules/', '/test/'],
   coverageThreshold: {

@@ -57,12 +57,12 @@ class AppUpdater @Inject constructor(
                 if (!resp.isSuccessful) return null
                 val json = org.json.JSONObject(resp.body?.string() ?: "{}")
                 if (json.optBoolean("success", false) && json.optBoolean("updateAvailable", false)) {
-                    val latest = json.optJSONObject("latestVersion")
+                    val latest = json.optJSONObject("latestVersion") ?: return null
                     UpdateInfo(
-                        versionName = latest?.optString("versionName", "") ?: "",
-                        releaseNotes = latest?.optString("releaseNotes", "")?.takeIf { it != "null" } ?: "",
-                        fileSize = formatFileSize(latest?.optLong("apkFileSize", 0) ?: 0),
-                        downloadUrl = latest?.optString("downloadUrl", "") ?: "",
+                        versionName = latest.optString("versionName", ""),
+                        releaseNotes = latest.optString("releaseNotes", "").takeIf { it != "null" } ?: "",
+                        fileSize = formatFileSize(latest.optLong("apkFileSize", 0)),
+                        downloadUrl = latest.optString("downloadUrl", ""),
                         isMandatory = json.optBoolean("isMandatory", false)
                     )
                 } else null
@@ -129,8 +129,8 @@ class AppUpdater @Inject constructor(
             if (oldFile.exists()) oldFile.delete()
 
             val request = DownloadManager.Request(Uri.parse(updateInfo.downloadUrl)).apply {
-                setTitle("FireVision IPTV Update")
-                setDescription("Downloading update...")
+                setTitle("DZ HOOF Update")
+                setDescription("Downloading DZ HOOF update...")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, APK_FILENAME)
                 setAllowedOverMetered(true)
@@ -275,8 +275,8 @@ class AppUpdater @Inject constructor(
 
     companion object {
         private const val TAG = "AppUpdater"
-        private const val APK_FILENAME = "FireVisionIPTV.apk"
+        private const val APK_FILENAME = "DZHOOF.apk"
         private const val GITHUB_RELEASES_API =
-            "https://api.github.com/repos/akshaynikhare/FireVisionIPTV/releases/latest"
+            "https://api.github.com/repos/merci1994dz/dzhoot/releases/latest"
     }
 }
