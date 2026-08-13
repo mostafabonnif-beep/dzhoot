@@ -4,6 +4,7 @@ import { GoogleAnalytics } from '@next/third-parties/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 import { QueryProvider } from '@/components/query-provider';
+import { LocaleProvider } from '@/components/locale-provider';
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -104,7 +105,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <QueryProvider>{children}</QueryProvider>
+          <LocaleProvider>
+            <QueryProvider>{children}</QueryProvider>
+          </LocaleProvider>
         </ThemeProvider>
       </body>
       {process.env.GA_MEASUREMENT_ID && <GoogleAnalytics gaId={process.env.GA_MEASUREMENT_ID} />}
