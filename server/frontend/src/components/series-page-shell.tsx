@@ -6,6 +6,7 @@ import {
   Tv,
   LayoutGrid,
   List,
+  RefreshCw,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
@@ -27,6 +28,7 @@ const PAGE_SIZE = 24;
 export default function SeriesPageShell() {
   const [seriesList, setSeriesList] = useState<Series[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [category, setCategory] = useState('All');
@@ -36,6 +38,7 @@ export default function SeriesPageShell() {
 
   const fetchSeries = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await api.get('/series', {
         params: {
@@ -51,6 +54,7 @@ export default function SeriesPageShell() {
       }
     } catch (error) {
       console.error('Error fetching series:', error);
+      setError('تعذر تحميل المسلسلات حاليًا. تحقق من الاتصال ثم أعد المحاولة.');
     } finally {
       setLoading(false);
     }
@@ -129,8 +133,22 @@ export default function SeriesPageShell() {
       </div>
 
       {loading ? (
-        <div className="flex h-64 items-center justify-center">
+        <div className="flex h-64 items-center justify-center" role="status" aria-live="polite">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <span className="sr-only">جارٍ تحميل المسلسلات</span>
+        </div>
+      ) : error ? (
+        <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-lg border border-destructive/30 bg-destructive/5 text-center">
+          <Tv className="h-10 w-10 text-destructive" />
+          <p className="text-sm text-destructive">{error}</p>
+          <button
+            type="button"
+            onClick={fetchSeries}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            <RefreshCw className="h-4 w-4" />
+            إعادة المحاولة
+          </button>
         </div>
       ) : seriesList.length === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center border-2 border-dashed rounded-lg">
