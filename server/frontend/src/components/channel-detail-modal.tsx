@@ -81,16 +81,16 @@ export default function ChannelDetailModal({
     const d = new Date(date);
     const diffMs = Date.now() - d.getTime();
     const mins = Math.floor(diffMs / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
+    if (mins < 1) return 'الآن';
+    if (mins < 60) return `منذ ${mins} د`;
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
+    if (hrs < 24) return `منذ ${hrs} س`;
     const days = Math.floor(hrs / 24);
-    return `${days}d ago`;
+    return `منذ ${days} يوم`;
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Channel Details" size="lg">
+    <Modal open={open} onClose={onClose} title="تفاصيل القناة" size="lg">
       <div className="p-5 space-y-4">
         <div className="flex items-start gap-4">
           <ChannelLogo src={channel.tvgLogo} alt={`${channel.channelName} logo`} size="lg" />
@@ -100,7 +100,7 @@ export default function ChannelDetailModal({
               {primaryFlagged && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-signal-red/10 text-signal-red border border-signal-red/30">
                   <AlertTriangle className="h-3 w-3" />
-                  Flagged: {channel.flaggedBad?.reason}
+                  معلّمة: {channel.flaggedBad?.reason}
                 </span>
               )}
             </div>
@@ -126,11 +126,11 @@ export default function ChannelDetailModal({
           </div>
         )}
 
-        {/* Alternate Streams Section */}
+        {/* البثوث البديلة Section */}
         {alternates.length > 0 && (
           <div>
             <h4 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium mb-2">
-              Alternate Streams ({alternates.length})
+              البثوث البديلة ({alternates.length})
             </h4>
             <div className="border border-border divide-y divide-border">
               {alternates.map((alt, idx) => (
@@ -176,8 +176,8 @@ export default function ChannelDetailModal({
                         onClick={() => setConfirmPromote(idx)}
                         disabled={pendingAction === `promote-${idx}`}
                         className="flex items-center justify-center h-6 w-6 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                        title="Promote to primary"
-                        aria-label={`Promote alternate stream ${idx + 1} to primary`}
+                        title="ترقية إلى البث الأساسي"
+                        aria-label={`ترقية البث البديل ${idx + 1} إلى الأساسي`}
                       >
                         {pendingAction === `promote-${idx}` ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -195,8 +195,8 @@ export default function ChannelDetailModal({
                             }
                             disabled={pendingAction === `unflag-${idx}`}
                             className="flex items-center justify-center h-6 w-6 text-signal-red hover:text-foreground transition-colors disabled:opacity-50"
-                            title="Clear flag"
-                            aria-label={`Clear flag on alternate stream ${idx + 1}`}
+                            title="إزالة الإشارة"
+                            aria-label={`إزالة الإشارة عن البث البديل ${idx + 1}`}
                           >
                             {pendingAction === `unflag-${idx}` ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -210,8 +210,8 @@ export default function ChannelDetailModal({
                             onClick={() => withLoading(`flag-${idx}`, () => onFlagAlternate(idx))}
                             disabled={pendingAction === `flag-${idx}`}
                             className="flex items-center justify-center h-6 w-6 text-muted-foreground hover:text-signal-red transition-colors disabled:opacity-50"
-                            title="Flag as bad"
-                            aria-label={`Flag alternate stream ${idx + 1} as bad`}
+                            title="وضع إشارة على البث"
+                            aria-label={`وضع إشارة على البث البديل ${idx + 1} كغير صالح`}
                           >
                             {pendingAction === `flag-${idx}` ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />

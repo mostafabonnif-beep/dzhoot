@@ -239,7 +239,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       if (wasFav) reverted.add(channelId);
       else reverted.delete(channelId);
       updateFavoriteIds(reverted);
-      toast('Failed to update favorites', 'error');
+      toast('تعذر تحديث المفضلة', 'error');
     } finally {
       setFavSyncing((prev) => {
         const s = new Set(prev);
@@ -290,7 +290,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           (err as { code: string }).code === 'ERR_CANCELED'
         )
           return;
-        setError('Failed to load channels');
+        setError('تعذر تحميل القنوات');
       } finally {
         setLoading(false);
       }
@@ -336,7 +336,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       setError('');
     } catch (err: unknown) {
       if (isCanceled(err)) return;
-      setError('Failed to load channels');
+      setError('تعذر تحميل القنوات');
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
@@ -351,7 +351,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       setAllChannels(Array.isArray(body) ? body : body.data || body.channels || []);
     } catch (err: unknown) {
       if (isCanceled(err)) return;
-      setAddChannelsError('Failed to load channels');
+      setAddChannelsError('تعذر تحميل القنوات');
     } finally {
       if (!signal?.aborted) setAllChannelsLoading(false);
     }
@@ -938,7 +938,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'group',
           header: (
             <ColumnFilter
-              label="Group"
+              label="المجموعة"
               options={filterOptions.group}
               selected={selectedGroups}
               onChange={setSelectedGroups}
@@ -953,7 +953,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'country',
           header: (
             <ColumnFilter
-              label="Country"
+              label="الدولة"
               options={filterOptions.country}
               selected={selectedCountries}
               onChange={setSelectedCountries}
@@ -970,7 +970,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'language',
           header: (
             <ColumnFilter
-              label="Language"
+              label="اللغة"
               options={filterOptions.language}
               selected={selectedLanguages}
               onChange={setSelectedLanguages}
@@ -1005,7 +1005,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'status',
           header: (
             <ColumnFilter
-              label="Status"
+              label="الحالة"
               options={filterOptions.status}
               selected={selectedStatuses}
               onChange={setSelectedStatuses}
@@ -1031,7 +1031,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 onClick={() => handleTestOne(c)}
                 disabled={testing === c._id}
                 className="flex items-center justify-center h-6 w-6 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                title="Test stream"
+                title="اختبار البث"
               >
                 <Zap className="h-3 w-3" />
               </button>
@@ -1094,7 +1094,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           mobileHidden: true,
           header: (
             <ColumnFilter
-              label="Status"
+              label="الحالة"
               options={statusOptions}
               selected={selectedStatuses}
               onChange={(v) => setSelectedStatuses(v)}
@@ -1120,7 +1120,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 onClick={() => handleTestOne(c)}
                 disabled={testing === c._id}
                 className="flex items-center justify-center h-6 w-6 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                title="Test stream"
+                title="اختبار البث"
               >
                 <Zap className="h-3 w-3" />
               </button>
@@ -1321,7 +1321,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       {!isAdmin && showAdd && (
         <div className="border-2 border-primary/30 bg-card p-5 space-y-4">
           <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">
-            Add Channels to Your List
+            إضافة قناةs to Your List
           </h2>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1341,7 +1341,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   <span className="text-destructive">{addChannelsError}</span>
                 ) : allChannelsLoading ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Loading channels...
+                    <Loader2 className="h-4 w-4 animate-spin" /> جارٍ تحميل القنوات...
                   </span>
                 ) : (
                   'No channels available to add'
@@ -1386,7 +1386,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               }}
               className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
             >
-              Cancel
+              إلغاء
             </button>
           </div>
         </div>
@@ -1447,8 +1447,8 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           debouncedSearch
             ? 'No channels match your search'
             : isAdmin
-              ? 'No channels yet. Click "Add Channel" to create one or use "Import M3U" to bulk upload.'
-              : 'No channels in your list yet. Click "Add" or use Quick Pick to get started.'
+              ? 'No channels yet. Click "إضافة قناة" to create one or use "Import M3U" to bulk upload.'
+              : 'لم يتم العثور على قنوات your list yet. Click "Add" or use Quick Pick to get started.'
         }
         rowKey={(c) => c._id}
         getName={getName}
@@ -1500,7 +1500,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         onPageChange={setPage}
       />
 
-      {/* Admin: Add Channel Modal */}
+      {/* Admin: إضافة قناة Modal */}
       {isAdmin && (
         <Modal
           open={showAdd}
@@ -1508,7 +1508,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             setShowAdd(false);
             setAddError('');
           }}
-          title="Add New Channel"
+          title="إضافة قناة جديدة"
           size="lg"
         >
           <form onSubmit={handleAddChannel} className="p-5 space-y-4">
@@ -1621,7 +1621,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 }}
                 className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
               >
-                Cancel
+                إلغاء
               </button>
             </div>
           </form>
@@ -1633,7 +1633,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         <Modal
           open={!!editChannel}
           onClose={() => setEditChannel(null)}
-          title="Edit Channel"
+          title="تعديل القناة"
           size="lg"
         >
           <form onSubmit={handleEditSave} className="p-5 space-y-4">
@@ -1737,14 +1737,14 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 aria-busy={editLoading}
                 className="inline-flex items-center px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                {editLoading ? 'Saving...' : 'Save Changes'}
+                {editLoading ? 'Saving...' : 'حفظ التغييرات'}
               </button>
               <button
                 type="button"
                 onClick={() => setEditChannel(null)}
                 className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
               >
-                Cancel
+                إلغاء
               </button>
             </div>
           </form>
@@ -1835,7 +1835,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       {isAdmin && (
         <ConfirmDialog
           open={showBulkDelete}
-          title="Delete All Channels"
+          title="حذف جميع القنوات"
           message={`This will permanently delete all ${totalCount} channels. This action cannot be undone.`}
           confirmLabel="Delete All"
           variant="destructive"
@@ -1915,7 +1915,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               onClick={() => setShowImport(false)}
               className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
             >
-              Cancel
+              إلغاء
             </button>
           </div>
         </form>
@@ -1972,7 +1972,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               }}
               className="px-5 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
             >
-              Cancel
+              إلغاء
             </button>
           </div>
         </div>

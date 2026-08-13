@@ -407,23 +407,23 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
                     ? 'hidden md:flex items-center justify-center h-8 w-8 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors'
                     : 'hidden md:flex items-center gap-1.5 px-2 py-1 rounded border border-border text-xs text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors'
                 }
-                aria-label={mini ? 'Expand' : 'Mini player'}
-                title={mini ? 'Expand' : 'Mini player'}
+                aria-label={mini ? 'توسيع المشغل' : 'المشغل المصغر'}
+                title={mini ? 'توسيع المشغل' : 'المشغل المصغر'}
               >
                 {mini ? (
                   <Maximize2 className="h-3 w-3" />
                 ) : (
                   <>
                     <Minimize2 className="h-3.5 w-3.5" />
-                    <span className="uppercase tracking-[0.1em] text-xs font-medium">Mini</span>
+                    <span className="uppercase tracking-[0.1em] text-xs font-medium">مصغر</span>
                   </>
                 )}
               </button>
               <button
                 onClick={onClose}
                 className={`flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors ${mini ? 'h-8 w-8' : 'h-10 w-10'}`}
-                aria-label="Close"
-                title="Close"
+                aria-label="إغلاق"
+                title="إغلاق"
               >
                 <X className={mini ? 'h-3 w-3' : 'h-4 w-4'} />
               </button>

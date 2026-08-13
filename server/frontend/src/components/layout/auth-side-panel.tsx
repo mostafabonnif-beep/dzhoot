@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { BrandMark } from './brand-mark';
 
 const features = [
   {
@@ -24,12 +24,7 @@ export function AuthSidePanel({ footer }: { footer: string }) {
       <div className="relative z-10">
         <div className="absolute -right-24 -top-24 h-72 w-72 rounded-full bg-primary/20 blur-3xl" />
         <div className="absolute -left-24 top-52 h-56 w-56 rounded-full bg-cyan-400/10 blur-3xl" />
-        <Link href="/" className="relative inline-flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-lg font-black text-primary-foreground shadow-lg shadow-primary/30">DZ</span>
-          <span className="text-xl font-display font-bold tracking-tight">
-            DZ HOOF<span className="text-primary"> IPTV</span>
-          </span>
-        </Link>
+        <BrandMark href="/" dark className="relative" />
         <div className="mt-10 max-w-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-primary">منصة بث ذكية</p>
           <h2 className="mt-4 text-4xl font-display font-bold leading-tight">كل قنواتك، في تجربة واحدة.</h2>
