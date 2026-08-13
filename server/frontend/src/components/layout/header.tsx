@@ -2,17 +2,19 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { LogOut, Menu, Moon, Sun, UserCircle } from 'lucide-react';
+import { Languages, LogOut, Menu, Moon, Sun, UserCircle } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
 import api from '@/lib/api';
+import { useLocale } from '@/components/locale-provider';
 
 export function Header() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const { user, logout } = useAuthStore();
   const { toggleMobileSidebar } = useUIStore();
+  const { locale, setLocale, t } = useLocale();
 
   const [picError, setPicError] = useState(false);
 
@@ -41,15 +43,32 @@ export function Header() {
       <button
         onClick={toggleMobileSidebar}
         className="flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary md:hidden"
-        aria-label="فتح قائمة التنقل"
+                  aria-label={t('header.openNavigation')}
+
       >
         <Menu className="h-5 w-5" />
       </button>
       <div className="relative inline-flex items-center gap-1.5 ml-auto">
-        <button
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                  <label className="inline-flex h-10 items-center gap-1.5 border-l border-border px-2 text-xs text-muted-foreground">
+            <Languages className="h-4 w-4" aria-hidden="true" />
+            <span className="sr-only">{t('language.label')}</span>
+            <select
+              value={locale}
+              onChange={(event) => setLocale(event.target.value as 'ar' | 'en' | 'fr')}
+              className="bg-transparent text-xs text-foreground outline-none"
+              aria-label={t('language.label')}
+            >
+              <option value="ar">{t('language.ar')}</option>
+              <option value="en">{t('language.en')}</option>
+              <option value="fr">{t('language.fr')}</option>
+            </select>
+          </label>
+
+          <button
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+
           className="relative flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
-          aria-label={`التبديل إلى الوضع ${theme === 'dark' ? 'الفاتح' : 'الداكن'}`}
+          aria-label={theme === 'dark' ? t('header.lightMode') : t('header.darkMode')}
           aria-pressed={theme === 'dark'}
         >
           <Sun className="h-4 w-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
@@ -79,7 +98,7 @@ export function Header() {
         <button
           onClick={handleLogout}
           className="flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
-          aria-label="تسجيل الخروج"
+          aria-label={t('header.logout')}
         >
           <LogOut className="h-4 w-4" />
         </button>
