@@ -408,6 +408,7 @@ router.get('/me', requireAuth, async (req, res) => {
         profilePicture: user.profilePicture,
         isActive: user.isActive,
         emailVerified: user.emailVerified,
+        totpEnabled: user.role === 'Admin' && user.totpEnabled === true,
         lastLogin: user.lastLogin,
         channels: user.channels,
         metadata: user.metadata,
