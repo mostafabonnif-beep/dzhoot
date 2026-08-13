@@ -10,9 +10,9 @@ router.get('/defaults', async (req, res) => {
 
     const defaults = {
       defaultTvCode,
-      defaultServerUrl: process.env.DEFAULT_SERVER_URL || 'https://tv.cadnative.com',
+      defaultServerUrl: process.env.DEFAULT_SERVER_URL || '',
       pairingPinExpiryMinutes: parseInt(process.env.PAIRING_PIN_EXPIRY_MINUTES || '10', 10),
-      appName: 'FireVision IPTV',
+      appName: 'DZ HOOF',
       version: '1.0.0',
       recaptchaSiteKey: process.env.GOOGLE_RECAPTCHA_SITE_KEY || null,
     };
@@ -34,7 +34,7 @@ router.get('/defaults', async (req, res) => {
 router.get('/info', async (req, res) => {
   try {
     const info = {
-      name: 'FireVision IPTV Server',
+      name: 'DZ HOOF Server',
       version: '1.0.0',
       status: 'online',
       features: {
