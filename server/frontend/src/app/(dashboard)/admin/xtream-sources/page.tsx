@@ -18,6 +18,13 @@ interface XtreamSource {
 
 const emptyForm = { name: '', serverUrl: '', username: '', password: '' };
 
+type ApiError = { response?: { data?: { error?: string } } };
+
+function errorMessage(error: unknown, fallback: string) {
+  const apiError = error as ApiError;
+  return apiError.response?.data?.error || fallback;
+}
+
 function formatDate(value?: string | null) {
   if (!value) return 'لم تتم المزامنة بعد';
   return new Date(value).toLocaleString('ar-DZ');
@@ -59,8 +66,8 @@ export default function AdminXtreamSourcesPage() {
       setForm(emptyForm);
       setNotice('تمت إضافة المصدر وتشفير بياناته بنجاح.');
       await loadSources();
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'تعذر إضافة المصدر.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'تعذر إضافة المصدر.'));
     } finally {
       setSaving(false);
     }
@@ -73,8 +80,8 @@ export default function AdminXtreamSourcesPage() {
     try {
       const response = await api.post(`/admin/xtream-sources/${source._id}/test`);
       setNotice(response.data?.data?.userInfo ? 'نجح اختبار الاتصال وبيانات الحساب صالحة.' : 'نجح اختبار الاتصال.');
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'فشل اختبار الاتصال بالمصدر.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'فشل اختبار الاتصال بالمصدر.'));
     } finally {
       setTestingId(null);
     }
@@ -88,8 +95,8 @@ export default function AdminXtreamSourcesPage() {
       await api.post(`/admin/xtream-sources/${source._id}/sync`);
       setNotice('بدأت المزامنة في الخلفية. ستتحدث الحالة تلقائيًا عند إعادة تحميل الصفحة.');
       await loadSources();
-    } catch (err: any) {
-      setError(err?.response?.data?.error || 'تعذر بدء المزامنة.');
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'تعذر بدء المزامنة.'));
     } finally {
       setSyncingId(null);
     }
