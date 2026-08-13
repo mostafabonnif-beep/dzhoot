@@ -69,6 +69,7 @@ services:
       BACKEND_SENTRY_DSN: ${BACKEND_SENTRY_DSN}
       ALLOWED_ORIGINS: https://dzhoof.example
       DISABLE_SCHEDULER: 'true'
+      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED:-true}
     networks:
       - dzhoof-network
       - gkz-network
