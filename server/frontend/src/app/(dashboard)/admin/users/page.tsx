@@ -276,7 +276,7 @@ export default function UsersPage() {
               key: 'username',
               header: (
                 <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                  Username
+                  اسم المستخدم
                 </span>
               ),
               cell: (u) => (
@@ -300,7 +300,7 @@ export default function UsersPage() {
               key: 'email',
               header: (
                 <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                  Email
+                  البريد الإلكتروني
                 </span>
               ),
               cell: (u) => (
@@ -379,7 +379,7 @@ export default function UsersPage() {
                     <button
                       onClick={(e) => handleCopyCode(e, u.channelListCode!)}
                       className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                      aria-label="Copy to clipboard"
+                      aria-label="نسخ إلى الحافظة"
                     >
                       {copiedCode === u.channelListCode ? (
                         <Check className="h-3 w-3 text-signal-green" />
@@ -395,7 +395,7 @@ export default function UsersPage() {
               key: 'role',
               header: (
                 <ColumnFilter
-                  label="Role"
+                  label="الدور"
                   options={filterOptions.role}
                   selected={selectedRoles}
                   onChange={setSelectedRoles}
@@ -411,7 +411,7 @@ export default function UsersPage() {
               key: 'status',
               header: (
                 <ColumnFilter
-                  label="Status"
+                  label="الحالة"
                   options={filterOptions.status}
                   selected={selectedStatuses}
                   onChange={setSelectedStatuses}
@@ -424,7 +424,7 @@ export default function UsersPage() {
                     aria-hidden="true"
                   />
                   <span className="text-xs text-muted-foreground">
-                    {u.isActive ? 'Active' : 'Inactive'}
+                    {u.isActive ? 'نشط' : 'غير نشط'}
                   </span>
                 </div>
               ),
@@ -434,7 +434,7 @@ export default function UsersPage() {
               headerClassName: 'text-right',
               header: (
                 <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                  Actions
+                  الإجراءات
                 </span>
               ),
               cell: (u) => (
@@ -445,7 +445,7 @@ export default function UsersPage() {
                       handleToggleActive(e, u);
                     }}
                     className="flex items-center justify-center h-8 w-8 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={u.isActive ? 'Deactivate user' : 'Activate user'}
+                    aria-label={u.isActive ? 'تعطيل المستخدم' : 'تفعيل المستخدم'}
                   >
                     {u.isActive ? (
                       <ToggleRight className="h-4 w-4 text-signal-green" />
@@ -479,7 +479,7 @@ export default function UsersPage() {
           setShowAddForm(false);
           setAddError('');
         }}
-        title="Create New User"
+        title="إنشاء مستخدم جديد"
       >
         <form onSubmit={handleAddUser} className="p-5 space-y-4">
           {addError && (
@@ -496,7 +496,7 @@ export default function UsersPage() {
                 htmlFor="new-username"
                 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
               >
-                Username
+                اسم المستخدم
               </label>
               <input
                 id="new-username"
@@ -514,7 +514,7 @@ export default function UsersPage() {
                 htmlFor="new-email"
                 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
               >
-                Email
+                البريد الإلكتروني
               </label>
               <input
                 id="new-email"
@@ -531,7 +531,7 @@ export default function UsersPage() {
                 htmlFor="new-password"
                 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
               >
-                Password
+                كلمة المرور
               </label>
               <input
                 id="new-password"
@@ -549,7 +549,7 @@ export default function UsersPage() {
                 htmlFor="new-role"
                 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
               >
-                Role
+                الدور
               </label>
               <select
                 id="new-role"
@@ -557,8 +557,8 @@ export default function UsersPage() {
                 onChange={(e) => setNewRole(e.target.value)}
                 className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
               >
-                <option value="User">User</option>
-                <option value="Admin">Admin</option>
+                <option value="User">مستخدم</option>
+                <option value="Admin">مسؤول</option>
               </select>
             </div>
           </div>
@@ -569,7 +569,7 @@ export default function UsersPage() {
               aria-busy={addLoading}
               className="inline-flex items-center px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
             >
-              {addLoading ? 'Creating...' : 'Create User'}
+              {addLoading ? 'جارٍ الإنشاء...' : 'إنشاء المستخدم'}
             </button>
             <button
               type="button"
@@ -579,7 +579,7 @@ export default function UsersPage() {
               }}
               className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
             >
-              Cancel
+              إلغاء
             </button>
           </div>
         </form>
@@ -589,9 +589,9 @@ export default function UsersPage() {
         open={deleteConfirm !== null}
         onCancel={() => setDeleteConfirm(null)}
         onConfirm={confirmDelete}
-        title="Delete User"
-        message={`Delete user "${deleteConfirm?.username}"? This cannot be undone.`}
-        confirmLabel="Delete"
+        title="حذف المستخدم"
+        message={`هل تريد حذف المستخدم "${deleteConfirm?.username}"؟ لا يمكن التراجع عن هذا الإجراء.`}
+        confirmLabel="حذف"
         variant="destructive"
       />
     </div>

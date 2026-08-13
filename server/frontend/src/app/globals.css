@@ -106,6 +106,33 @@
 }
 
 @layer utilities {
+  .brand-gradient {
+    background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.82) 52%, hsl(var(--signal-amber)) 100%);
+  }
+
+  .brand-glow {
+    box-shadow: 0 24px 70px hsl(var(--primary) / 0.18), inset 0 1px 0 hsl(var(--foreground) / 0.08);
+  }
+
+  .brand-surface {
+    background: linear-gradient(145deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.62));
+    box-shadow: 0 18px 45px hsl(var(--foreground) / 0.06), inset 0 1px 0 hsl(var(--foreground) / 0.05);
+    backdrop-filter: blur(18px);
+  }
+
+  .dashboard-shell {
+    background-image: radial-gradient(circle at 15% 0%, hsl(var(--primary) / 0.08), transparent 28rem), radial-gradient(circle at 90% 100%, hsl(var(--signal-blue) / 0.05), transparent 24rem);
+  }
+
+  .interactive-lift {
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  }
+
+  .interactive-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 32px hsl(var(--foreground) / 0.08);
+  }
+
   .grid-bg {
     background-image:
       linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),

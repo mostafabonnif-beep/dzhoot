@@ -408,8 +408,8 @@ export function RecommendationsStep({
         <SearchInput
           value={search}
           onChange={handleSearchChange}
-          placeholder="Search channels..."
-          ariaLabel="Search channels"
+          placeholder="ابحث في القنوات..."
+          ariaLabel="البحث في القنوات"
           className="flex-1 max-w-sm"
         />
         <div className="flex items-center gap-2">
@@ -417,29 +417,29 @@ export function RecommendationsStep({
             onClick={checkPageLiveness}
             disabled={bulkChecking || pageChannels.length === 0}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs uppercase tracking-[0.1em] font-medium border border-border bg-card hover:border-primary/40 transition-colors disabled:opacity-40 disabled:pointer-events-none"
-            title="Check liveness of channels on this page"
-            aria-label="Check liveness of channels on this page"
+            title="فحص حالة القنوات في هذه الصفحة"
+            aria-label="فحص حالة القنوات في هذه الصفحة"
           >
             {bulkChecking ? (
               <Loader2 className="h-3 w-3 animate-spin" />
             ) : (
               <Zap className="h-3 w-3" />
             )}
-            {bulkChecking ? 'Checking...' : 'Check Page'}
+            {bulkChecking ? 'جارٍ الفحص...' : 'فحص الصفحة'}
           </button>
           <span className="text-muted-foreground/40">|</span>
           <button
             onClick={onSelectAll}
             className="text-xs uppercase tracking-[0.1em] text-primary hover:text-primary/80 font-medium"
           >
-            Select All
+            تحديد الكل
           </button>
           <span className="text-muted-foreground">|</span>
           <button
             onClick={onDeselectAll}
             className="text-xs uppercase tracking-[0.1em] text-primary hover:text-primary/80 font-medium"
           >
-            Deselect All
+            إلغاء تحديد الكل
           </button>
         </div>
       </div>
@@ -469,13 +469,13 @@ export function RecommendationsStep({
       {/* Liveness filter */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="text-xs uppercase tracking-[0.1em] text-muted-foreground mr-1">
-          Status:
+          الحالة:
         </span>
         {(['all', 'alive', 'dead', 'unknown'] as const).map((status) => (
           <button
             key={status}
             onClick={() => setLivenessFilter(status)}
-            aria-label={`Filter by ${status} status`}
+            aria-label={`تصفية حسب حالة ${status}`}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border transition-colors ${
               livenessFilter === status
                 ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -502,16 +502,16 @@ export function RecommendationsStep({
             }}
             onChange={togglePageSelection}
             className="accent-primary shrink-0 focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Select all channels on page"
-            title={allPageSelected ? 'Deselect all on page' : 'Select all on page'}
+            aria-label="تحديد جميع قنوات الصفحة"
+            title={allPageSelected ? 'إلغاء تحديد الصفحة' : 'تحديد الصفحة'}
           />
           <div className="h-7 w-7 shrink-0" /> {/* spacer for logo column */}
           <span className="flex-1 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Channel
+            القناة
           </span>
           <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium shrink-0 w-2 text-center"></span>
           <span className="hidden sm:inline text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium shrink-0">
-            Source
+            المصدر
           </span>
           <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium shrink-0 w-[30px] text-center"></span>
           <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium shrink-0 w-[30px] text-center"></span>
@@ -519,7 +519,7 @@ export function RecommendationsStep({
         <div className="max-h-[50vh] sm:max-h-[400px] overflow-y-auto divide-y divide-border">
           {pageChannels.length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-8">
-              No channels match your filters.
+              لا توجد قنوات مطابقة لمرشحاتك.
             </p>
           )}
           {pageChannels.map((ch) => {
@@ -557,8 +557,8 @@ export function RecommendationsStep({
                   onClick={() => checkSingleLiveness(ch)}
                   disabled={isChecking}
                   className="p-1.5 text-muted-foreground hover:text-primary transition-colors shrink-0 disabled:pointer-events-none"
-                  aria-label={`Check liveness for ${ch.channelName}`}
-                  title="Check liveness"
+                  aria-label={`فحص حالة ${ch.channelName}`}
+                  title="فحص الحالة"
                 >
                   {isChecking ? (
                     <Loader2 className="h-3 w-3 animate-spin" />
@@ -575,8 +575,8 @@ export function RecommendationsStep({
                       )
                     }
                     className="p-1.5 text-muted-foreground hover:text-primary transition-colors shrink-0"
-                    aria-label={`Preview ${ch.channelName}`}
-                    title="Preview stream"
+                    aria-label={`معاينة ${ch.channelName}`}
+                    title="معاينة البث"
                   >
                     <Play className="h-3.5 w-3.5" />
                   </button>

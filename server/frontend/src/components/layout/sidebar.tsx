@@ -24,6 +24,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
+import { BrandMark } from './brand-mark';
 
 const adminLinks = [
   { href: '/admin', label: 'لوحة التحكم', icon: LayoutDashboard },
@@ -81,19 +82,10 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
         }`}
       >
         {/* Sidebar Header */}
-        <div className="flex h-20 items-center justify-between border-b border-border/70 px-4">
-          {!sidebarCollapsed && (
-            <Link href={role === 'admin' ? '/admin' : '/user'} className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-lg shadow-lg shadow-primary/25">
-                DZ
-              </div>
-              <span className="font-display font-bold tracking-tight">DZ HOOF<span className="text-primary"> IPTV</span></span>
-            </Link>
-          )}
+        <div className="flex h-20 items-center justify-between border-b border-border/70 bg-gradient-to-l from-primary/[0.08] to-transparent px-4">
+          {!sidebarCollapsed && <BrandMark href={role === 'admin' ? '/admin' : '/user'} />}
           {sidebarCollapsed && (
-            <Link href={role === 'admin' ? '/admin' : '/user'} className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground font-bold text-lg shadow-lg shadow-primary/25">
-              DZ
-            </Link>
+            <BrandMark href={role === 'admin' ? '/admin' : '/user'} compact />
           )}
           <button
             onClick={() => setMobileSidebarOpen(false)}

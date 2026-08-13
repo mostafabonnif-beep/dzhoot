@@ -1018,7 +1018,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                       }
                     }}
                     className="text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label="Toggle page selection"
+                    aria-label="تحديد الصفحة أو إلغاء تحديدها"
                   >
                     {groupedChannels.every((ch) => isSelected(ch._uid)) ? (
                       <CheckSquare className="h-4 w-4 text-primary" />
@@ -1028,11 +1028,11 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                   </button>
                 </div>
                 <span />
-                <span>Name</span>
-                <span>Category</span>
-                <span>Country</span>
-                <span>Streams</span>
-                <span>Best Status</span>
+                <span>الاسم</span>
+                <span>التصنيف</span>
+                <span>الدولة</span>
+                <span>البثوث</span>
+                <span>أفضل حالة</span>
               </div>
 
               {/* Rows */}
@@ -1202,7 +1202,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                             : selectMany(paginated.map((ch) => ch._uid))
                         }
                         className="text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label="Toggle page selection"
+                        aria-label="تحديد الصفحة أو إلغاء تحديدها"
                       >
                         {pageAllSelected ? (
                           <CheckSquare className="h-4 w-4 text-primary" />
@@ -1300,7 +1300,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                   key: 'country',
                   header: (
                     <ColumnFilter
-                      label="Country"
+                      label="الدولة"
                       options={countryOptions}
                       selected={selectedCountries}
                       onChange={(v) => {
@@ -1359,7 +1359,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                   key: 'status',
                   header: (
                     <ColumnFilter
-                      label="Status"
+                      label="الحالة"
                       options={['alive', 'dead', 'unknown']}
                       selected={selectedStatuses}
                       onChange={(v: string[]) => {
@@ -1379,7 +1379,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                         onClick={() => handleTestChannel(ch)}
                         disabled={testingChannelId === ch._uid}
                         className="flex items-center justify-center h-6 w-6 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                        title="Test stream"
+                        title="اختبار البث"
                       >
                         <Zap className="h-3 w-3" />
                       </button>

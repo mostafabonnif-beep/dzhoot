@@ -196,14 +196,14 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="dashboard-shell space-y-8 rounded-[2rem] p-1">
       <div className="">
         <div className="mb-3 inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">مركز العمليات</div>
         <h1 className="text-3xl font-display font-bold tracking-tight">نظرة عامة</h1>
         <p className="mt-2 text-sm text-muted-foreground">تابع حالة المنصة والنشاط الأخير من مكان واحد.</p>
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-border/70 bg-card/60 shadow-sm">
+      <div className="brand-surface interactive-lift overflow-hidden rounded-3xl border border-border/70">
         <div className="grid grid-cols-2 md:grid-cols-4">
           {metrics.map((metric, i) => (
             <Link
@@ -229,13 +229,13 @@ export default function AdminDashboard() {
       {streamHealth && (
         <Link
           href="/admin/stats"
-          className="block overflow-hidden rounded-3xl border border-border/70 bg-card/60 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/30"
+          className="brand-surface interactive-lift block overflow-hidden rounded-3xl border border-border/70 hover:border-primary/30"
         >
           <div className="px-4 py-2 bg-muted/50 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Radio className="h-4 w-4 text-muted-foreground" />
               <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                Stream Health
+                سلامة البث
               </h2>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -243,20 +243,20 @@ export default function AdminDashboard() {
           <div className="p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Alive</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">تعمل</p>
                 <p className="text-xl font-display font-bold tabular-nums text-signal-green">
                   {streamHealth.channels.totalAliveCount ?? 0}
                 </p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Dead</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">متوقفة</p>
                 <p className="text-xl font-display font-bold tabular-nums text-signal-red">
                   {streamHealth.channels.totalDeadCount ?? 0}
                 </p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
-                  Unresponsive
+                  غير مستجيبة
                 </p>
                 <p className="text-xl font-display font-bold tabular-nums text-muted-foreground">
                   {streamHealth.channels.totalUnresponsiveCount ?? 0}
@@ -264,7 +264,7 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
-                  Total Plays
+                  إجمالي مرات التشغيل
                 </p>
                 <p className="text-xl font-display font-bold tabular-nums text-primary">
                   {streamHealth.channels.totalPlayCount ?? 0}
@@ -272,7 +272,7 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
-                  Proxy Plays
+                  تشغيل عبر Proxy
                 </p>
                 <p className="text-xl font-display font-bold tabular-nums text-muted-foreground">
                   {streamHealth.channels.totalProxyPlayCount ?? 0}
@@ -309,14 +309,14 @@ export default function AdminDashboard() {
         <div className="border border-primary/30 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
           <div className="min-w-0">
             <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
-              Default Channel List Code
+              رمز قائمة القنوات الافتراضي
             </p>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-1.5">
               <span className="text-xl font-display font-bold tracking-[0.15em] font-mono">
                 {config.defaultTvCode}
               </span>
               <span className="text-xs text-muted-foreground">
-                New TVs use this code before user pairing
+                تستخدم أجهزة التلفاز الجديدة هذا الرمز قبل ربط المستخدم
               </span>
             </div>
           </div>
@@ -328,7 +328,7 @@ export default function AdminDashboard() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-border bg-card hover:bg-muted transition-colors"
             >
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              Open M3U
+              فتح قائمة M3U
             </a>
             <button
               onClick={() => copyCode(config.defaultTvCode)}
@@ -337,12 +337,12 @@ export default function AdminDashboard() {
               {codeCopied ? (
                 <>
                   <Check className="h-3.5 w-3.5 text-signal-green" aria-hidden="true" />
-                  Copied
+                  تم النسخ
                 </>
               ) : (
                 <>
                   <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                  Copy
+                  نسخ
                 </>
               )}
             </button>
@@ -353,7 +353,7 @@ export default function AdminDashboard() {
       <div className="grid lg:grid-cols-[1fr,300px] gap-6">
         <div className="">
           <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-            Recent Activity
+            آخر النشاطات
           </h2>
           <div className="border border-border divide-y divide-border">
             {stats?.activityFeed && stats.activityFeed.length > 0 ? (
@@ -383,8 +383,7 @@ export default function AdminDashboard() {
               </ul>
             ) : (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No recent activity. Activity appears here when users log in, add channels, or pair
-                devices.
+                لا توجد نشاطات حديثة. ستظهر هنا عند تسجيل الدخول أو إضافة القنوات أو ربط الأجهزة.
               </div>
             )}
           </div>
@@ -392,7 +391,7 @@ export default function AdminDashboard() {
 
         <div className="">
           <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-            Quick Actions
+            إجراءات سريعة
           </h2>
           <div className="space-y-2">
             {quickActions.map((action) => {
@@ -401,7 +400,7 @@ export default function AdminDashboard() {
                 <Link
                   key={action.label}
                   href={action.href}
-                  className="flex items-center gap-3 w-full text-left px-4 py-3 text-sm font-medium border border-border bg-card transition-colors hover:border-primary/40 active:bg-muted"
+                  className="interactive-lift flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-right text-sm font-medium transition-colors hover:border-primary/40 active:bg-muted"
                 >
                   <Icon className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
                   <span className="flex-1">{action.label}</span>
