@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Copy, Check, Trash2 } from 'lucide-react';
+import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -27,6 +27,12 @@ export default function SettingsPage() {
   const [copied, setCopied] = useState(false);
   const [cacheStatus, setCacheStatus] = useState<CacheEntry[]>([]);
   const [cacheLoading, setCacheLoading] = useState(false);
+  const [totpEnabled, setTotpEnabled] = useState(false);
+  const [totpSetup, setTotpSetup] = useState<{ secret: string; uri: string } | null>(null);
+  const [totpCode, setTotpCode] = useState('');
+  const [disablePassword, setDisablePassword] = useState('');
+  const [disableCode, setDisableCode] = useState('');
+  const [totpLoading, setTotpLoading] = useState(false);
   const copyTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
@@ -37,10 +43,12 @@ export default function SettingsPage() {
     const controller = new AbortController();
     async function fetchData() {
       try {
-        const [infoRes, configRes] = await Promise.all([
+        const [infoRes, configRes, meRes] = await Promise.all([
           api.get('/config/info', { signal: controller.signal }).catch(() => null),
           api.get('/config/defaults', { signal: controller.signal }).catch(() => null),
+          api.get('/auth/me', { signal: controller.signal }).catch(() => null),
         ]);
+        if (meRes?.data?.user) setTotpEnabled(meRes.data.user.totpEnabled === true);
         if (infoRes) setInfo(infoRes.data.data || infoRes.data);
         const config = configRes?.data?.data || configRes?.data;
         if (config?.defaultTvCode) {
@@ -78,6 +86,51 @@ export default function SettingsPage() {
       }
     } catch (err) {
       console.error('Failed to fetch cache status:', err);
+    }
+  }
+
+  async function startTotpSetup() {
+    setTotpLoading(true);
+    try {
+      const res = await api.post('/auth/2fa/setup');
+      const data = res.data?.data || res.data;
+      setTotpSetup({ secret: data.secret, uri: data.uri });
+      setTotpCode('');
+      toast('تم إنشاء إعداد 2FA. أكمل التأكيد من تطبيق المصادقة.', 'success');
+    } catch {
+      toast('تعذر بدء إعداد 2FA', 'error');
+    } finally {
+      setTotpLoading(false);
+    }
+  }
+
+  async function confirmTotp() {
+    setTotpLoading(true);
+    try {
+      await api.post('/auth/2fa/confirm', { token: totpCode });
+      setTotpEnabled(true);
+      setTotpSetup(null);
+      setTotpCode('');
+      toast('تم تفعيل المصادقة الثنائية بنجاح', 'success');
+    } catch {
+      toast('رمز 2FA غير صحيح أو منتهي', 'error');
+    } finally {
+      setTotpLoading(false);
+    }
+  }
+
+  async function disableTotp() {
+    setTotpLoading(true);
+    try {
+      await api.post('/auth/2fa/disable', { password: disablePassword, token: disableCode });
+      setTotpEnabled(false);
+      setDisablePassword('');
+      setDisableCode('');
+      toast('تم تعطيل المصادقة الثنائية', 'success');
+    } catch {
+      toast('تعذر تعطيل 2FA. تحقق من كلمة المرور والرمز.', 'error');
+    } finally {
+      setTotpLoading(false);
     }
   }
 
@@ -197,6 +250,60 @@ export default function SettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Two-factor authentication */}
+      <div className="border border-border">
+        <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2">
+          <div>
+            <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">Two-factor authentication</h2>
+            <p className="mt-1 text-xs text-muted-foreground">حماية إضافية لحسابات المشرفين عبر تطبيق Authenticator.</p>
+          </div>
+          {totpEnabled ? <ShieldCheck className="h-5 w-5 text-signal-green" /> : <ShieldOff className="h-5 w-5 text-muted-foreground" />}
+        </div>
+        <div className="space-y-4 px-4 py-4">
+          {totpEnabled ? (
+            <>
+              <div className="rounded-xl border border-signal-green/30 bg-signal-green/10 px-3 py-3 text-sm text-signal-green">
+                2FA مفعّل على حساب المشرف الحالي.
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <input type="password" value={disablePassword} onChange={(event) => setDisablePassword(event.target.value)} placeholder="كلمة المرور الحالية" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="current-password" />
+                <input inputMode="numeric" maxLength={8} value={disableCode} onChange={(event) => setDisableCode(event.target.value.replace(/\\D/g, ''))} placeholder="رمز 2FA الحالي" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
+              </div>
+              <button type="button" onClick={disableTotp} disabled={totpLoading || !disablePassword || disableCode.length < 6} className="inline-flex items-center gap-2 rounded-lg border border-destructive/40 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50">
+                {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />} تعطيل 2FA
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">فعّل 2FA قبل إطلاق النسخة النهائية. استخدم تطبيقًا موثوقًا مثل Google Authenticator أو Aegis.</p>
+              {!totpSetup ? (
+                <button type="button" onClick={startTotpSetup} disabled={totpLoading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                  {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} بدء إعداد 2FA
+                </button>
+              ) : (
+                <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-4">
+                  <p className="text-sm font-medium">أضف الحساب إلى تطبيق المصادقة، ثم أدخل الرمز الظاهر حاليًا.</p>
+                  <label className="block space-y-1.5 text-xs text-muted-foreground">
+                    <span>URI الخاص بالتطبيق</span>
+                    <textarea readOnly value={totpSetup.uri} className="min-h-20 w-full rounded-lg border border-border bg-background p-2 font-mono text-[11px]" />
+                  </label>
+                  <label className="block space-y-1.5 text-xs text-muted-foreground">
+                    <span>المفتاح اليدوي الاحتياطي — احفظه في مدير أسرار</span>
+                    <code className="block rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-foreground">{totpSetup.secret}</code>
+                  </label>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input inputMode="numeric" maxLength={8} value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\\D/g, ''))} placeholder="رمز 2FA من 6 أرقام" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
+                    <button type="button" onClick={confirmTotp} disabled={totpLoading || totpCode.length < 6} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+                      {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} تأكيد وتفعيل
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
       {/* Session Management */}
       <div className="border border-border">
