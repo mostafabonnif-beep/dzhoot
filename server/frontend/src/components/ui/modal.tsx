@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useLocale } from '@/components/locale-provider';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -33,6 +34,9 @@ export default function Modal({
   ariaLabelledBy,
   ariaDescribedBy,
 }: ModalProps) {
+  const { locale } = useLocale();
+  const closeLabel = locale === 'ar' ? 'إغلاق النافذة' : locale === 'fr' ? 'Fermer la boîte de dialogue' : 'Close dialog';
+  const closeTitle = locale === 'ar' ? 'إغلاق (Esc)' : locale === 'fr' ? 'Fermer (Esc)' : 'Close (Esc)';
   const overlayRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -110,8 +114,8 @@ export default function Modal({
             <button
               onClick={onClose}
               className="flex items-center justify-center h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-primary transition-colors"
-              aria-label="Close dialog"
-              title="Close (Esc)"
+              aria-label={closeLabel}
+              title={closeTitle}
             >
               <X className="h-4 w-4" />
             </button>

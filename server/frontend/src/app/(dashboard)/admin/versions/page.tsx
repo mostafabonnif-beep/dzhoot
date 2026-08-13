@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Download, Package, Calendar, FileText, Tag, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
+import { useLocale } from '@/components/locale-provider';
 
 interface AppVersion {
   _id: string;
@@ -19,6 +20,7 @@ interface AppVersion {
 }
 
 export default function VersionsPage() {
+  const { t, locale } = useLocale();
   const [latest, setLatest] = useState<AppVersion | null>(null);
   const [versions, setVersions] = useState<AppVersion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,8 +83,8 @@ export default function VersionsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">App Versions</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage Fire TV application releases</p>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">{locale === 'ar' ? 'إصدارات التطبيق' : locale === 'fr' ? 'Versions de l’application' : 'App versions'}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{locale === 'ar' ? 'إدارة إصدارات تطبيق Fire TV' : locale === 'fr' ? 'Gérer les versions de l’application Fire TV' : 'Manage Fire TV application releases'}</p>
       </div>
 
       {error && (
@@ -96,11 +98,11 @@ export default function VersionsPage() {
         <div className="border-2 border-primary/30 bg-card">
           <div className="px-5 py-3 border-b border-border bg-muted/50 flex items-center justify-between">
             <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">
-              Latest Release
+              {locale === 'ar' ? 'أحدث إصدار' : locale === 'fr' ? 'Dernière version' : 'Latest release'}
             </p>
             {latest.isMandatory && (
               <span className="text-xs uppercase tracking-[0.1em] bg-signal-red/10 text-signal-red px-2 py-0.5 font-medium border border-signal-red/20">
-                Mandatory Update
+                {locale === 'ar' ? 'تحديث إلزامي' : locale === 'fr' ? 'Mise à jour obligatoire' : 'Mandatory update'}
               </span>
             )}
           </div>
@@ -125,7 +127,7 @@ export default function VersionsPage() {
                 {latest.isActive !== false && (
                   <span className="flex items-center gap-1.5 text-xs text-signal-green">
                     <span className="w-1.5 h-1.5 rounded-full bg-signal-green" aria-hidden="true" />
-                    Active
+                    {t('common.active')}
                   </span>
                 )}
               </div>
@@ -134,7 +136,7 @@ export default function VersionsPage() {
             {latest.releaseNotes && (
               <div className="space-y-1.5">
                 <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                  Release Notes
+                  {locale === 'ar' ? 'ملاحظات الإصدار' : locale === 'fr' ? 'Notes de version' : 'Release notes'}
                 </p>
                 <div className="bg-muted/50 border border-border px-4 py-3 text-sm whitespace-pre-wrap">
                   {latest.releaseNotes}
@@ -144,23 +146,23 @@ export default function VersionsPage() {
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">File</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{locale === 'ar' ? 'الملف' : locale === 'fr' ? 'Fichier' : 'File'}</p>
                 <p className="text-sm font-medium mt-0.5 truncate">{latest.apkFileName || '—'}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Size</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{locale === 'ar' ? 'الحجم' : locale === 'fr' ? 'Taille' : 'Size'}</p>
                 <p className="text-sm font-medium mt-0.5">{formatBytes(latest.apkFileSize)}</p>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
-                  Min Compatible
+                  {locale === 'ar' ? 'أدنى إصدار متوافق' : locale === 'fr' ? 'Compatibilité minimale' : 'Min compatible'}
                 </p>
                 <p className="text-sm font-medium mt-0.5">{latest.minCompatibleVersion || '—'}</p>
               </div>
               <div>
-                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">Status</p>
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('common.status')}</p>
                 <p className="text-sm font-medium mt-0.5">
-                  {latest.isActive !== false ? 'Active' : 'Inactive'}
+                  {latest.isActive !== false ? t('common.active') : t('common.inactive')}
                 </p>
               </div>
             </div>
@@ -174,7 +176,7 @@ export default function VersionsPage() {
                 className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"
               >
                 <Download className="h-4 w-4" />
-                Download APK
+                {locale === 'ar' ? 'تنزيل APK' : locale === 'fr' ? 'Télécharger l’APK' : 'Download APK'}
               </a>
             )}
           </div>
@@ -184,7 +186,7 @@ export default function VersionsPage() {
       {!latest && !error && (
         <div className="border border-border bg-card px-6 py-10 text-center">
           <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-3" aria-hidden="true" />
-          <p className="text-sm text-muted-foreground">No app versions found</p>
+          <p className="text-sm text-muted-foreground">{t('common.noData')}</p>
           <p className="text-xs text-muted-foreground mt-1">
             Upload an APK or configure GitHub releases to manage versions
           </p>
@@ -196,7 +198,7 @@ export default function VersionsPage() {
         <div className="border border-border">
           <div className="px-4 py-2 bg-muted/50 border-b border-border">
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Version History ({versions.length})
+              {locale === 'ar' ? `سجل الإصدارات (${versions.length})` : locale === 'fr' ? `Historique des versions (${versions.length})` : `Version history (${versions.length})`}
             </h2>
           </div>
           <div className="divide-y divide-border">
@@ -211,12 +213,12 @@ export default function VersionsPage() {
                     </span>
                     {v.isMandatory && (
                       <span className="text-xs uppercase tracking-[0.1em] bg-signal-red/10 text-signal-red px-1.5 py-0.5 font-medium">
-                        Mandatory
+                        {locale === 'ar' ? 'إلزامي' : locale === 'fr' ? 'Obligatoire' : 'Mandatory'}
                       </span>
                     )}
                     {v.isActive === false && (
                       <span className="text-xs uppercase tracking-[0.1em] bg-muted text-muted-foreground px-1.5 py-0.5">
-                        Inactive
+                        {t('common.inactive')}
                       </span>
                     )}
                   </div>
@@ -225,7 +227,7 @@ export default function VersionsPage() {
                     {v.apkFileSize && <span>{formatBytes(v.apkFileSize)}</span>}
                     {v.releaseNotes && (
                       <span className="relative inline-flex items-center gap-1.5">
-                        <FileText className="h-3 w-3" /> Has notes
+                        <FileText className="h-3 w-3" /> {locale === 'ar' ? 'توجد ملاحظات' : locale === 'fr' ? 'Notes disponibles' : 'Has notes'}
                       </span>
                     )}
                   </div>
