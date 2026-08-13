@@ -20,11 +20,12 @@ const effectiveRefreshSecret = REFRESH_SECRET || 'dev-refresh-secret-change-me';
 
 // Use shared middleware instead of duplicating
 const { requireJwtAuth } = require('../middleware/requireJwtAuth');
+const { verifyTotpToken } = require('../services/totp-service');
 
 // Login (password) -> JWT tokens
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, totpToken } = req.body;
     // Reject non-strings to prevent NoSQL operator injection in the $or query below.
     if (typeof username !== 'string' || typeof password !== 'string' || !username || !password) {
       return res.status(400).json({ success: false, error: 'Username and password required' });
@@ -36,6 +37,15 @@ router.post('/login', async (req, res) => {
     const ok = await user.comparePassword(password);
     if (!ok) {
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+    if (user.role === 'Admin' && user.totpEnabled) {
+      if (typeof totpToken !== 'string' || !totpToken) {
+        return res.status(401).json({ success: false, error: 'Two-factor authentication required', code: 'TWO_FACTOR_REQUIRED' });
+      }
+      const totpUser = await User.findById(user._id).select('+totpSecretEncrypted');
+      if (!totpUser?.totpSecretEncrypted || !(await verifyTotpToken(totpUser.totpSecretEncrypted, totpToken))) {
+        return res.status(401).json({ success: false, error: 'Invalid two-factor authentication code', code: 'TWO_FACTOR_INVALID' });
+      }
     }
     user.lastLogin = new Date();
     await user.save();
