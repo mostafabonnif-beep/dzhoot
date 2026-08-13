@@ -5,6 +5,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx } = require('../services/audit-log');
+const { sendNotificationToDevices } = require('../services/fcm-service');
 
 // Admin-only notifications: /api/v1/admin/notifications
 router.use(requireAuth);
@@ -58,7 +59,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /:id/send — mark as sent (FCM push integration can hook in here later)
+// POST /:id/send — deliver through FCM when configured and mark as sent for in-app clients
 router.post('/:id/send', async (req, res) => {
   try {
     const id = parseId(req.params.id);
@@ -66,12 +67,20 @@ router.post('/:id/send', async (req, res) => {
     const notification = await Notification.findById(id).exec();
     if (!notification) return res.status(404).json({ success: false, error: 'Notification not found' });
 
+    const fcm = await sendNotificationToDevices({
+      title: notification.title,
+      body: notification.body,
+      imageUrl: notification.imageUrl,
+      deepLink: notification.deepLink,
+      audience: notification.audience,
+    });
+
     notification.status = 'SENT';
     notification.sentAt = new Date();
     await notification.save();
 
-    audit({ ...reqCtx(req), action: 'NOTIFICATION_SEND', resource: 'Notification', resourceId: String(id) });
-    return res.json({ success: true, data: notification });
+    audit({ ...reqCtx(req), action: 'NOTIFICATION_SEND', resource: 'Notification', resourceId: String(id), metadata: fcm });
+    return res.json({ success: true, data: notification, fcm });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }

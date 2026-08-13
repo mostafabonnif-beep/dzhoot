@@ -6,6 +6,7 @@ export interface IDeviceDocument extends Document {
   name?: string;
   platform?: string;
   appVersion?: string;
+  pushToken?: string;
   lastSeenAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -40,6 +41,12 @@ const deviceSchema = new Schema<IDeviceDocument>(
       type: String,
       default: '',
       maxlength: 50,
+    },
+    pushToken: {
+      type: String,
+      default: '',
+      maxlength: 4096,
+      select: false,
     },
     lastSeenAt: {
       type: Date,

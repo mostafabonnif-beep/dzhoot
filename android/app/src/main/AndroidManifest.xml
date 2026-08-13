@@ -108,6 +108,15 @@
                 tools:node="remove" />
         </provider>
 
+        <!-- Firebase Cloud Messaging token rotation -->
+        <service
+            android:name=".DzHoofFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
         <!-- Fire TV TIF Integration Service -->
         <service
             android:name=".FireVisionTvInputService"

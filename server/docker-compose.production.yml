@@ -1,4 +1,29 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: dzhoof-caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - dzhoof-network
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
   api:
     image: ${DOCKER_IMAGE}
     container_name: dzhoof-api
@@ -147,6 +172,10 @@ networks:
     name: dzhoof-shared-network
 
 volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
   mongodb_data:
     driver: local
   redis_data:
