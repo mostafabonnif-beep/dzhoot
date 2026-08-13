@@ -260,7 +260,7 @@ export default function CodesPage() {
               setRevokeTarget(c);
             }}
             className="inline-flex items-center gap-1 p-1.5 text-muted-foreground hover:text-destructive"
-            title="Revoke code"
+            title="إلغاء الكود"
           >
             <Ban className="h-4 w-4" />
           </button>
@@ -270,15 +270,15 @@ export default function CodesPage() {
 
   const statChips = stats
     ? [
-        { label: 'Total', value: stats.total, cls: '' },
-        { label: 'Unused', value: stats.byStatus.UNUSED, cls: 'text-sky-600 dark:text-sky-400' },
+        { label: 'الإجمالي', value: stats.total, cls: '' },
+        { label: 'غير مستخدمة', value: stats.byStatus.UNUSED, cls: 'text-sky-600 dark:text-sky-400' },
         {
-          label: 'Activated',
+          label: 'مفعلة',
           value: stats.byStatus.ACTIVATED,
           cls: 'text-emerald-600 dark:text-emerald-400',
         },
-        { label: 'Revoked', value: stats.byStatus.REVOKED, cls: 'text-destructive' },
-        { label: 'Expired', value: stats.byStatus.EXPIRED, cls: 'text-muted-foreground' },
+        { label: 'ملغاة', value: stats.byStatus.REVOKED, cls: 'text-destructive' },
+        { label: 'منتهية', value: stats.byStatus.EXPIRED, cls: 'text-muted-foreground' },
       ]
     : [];
 
@@ -295,9 +295,9 @@ export default function CodesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">
-            Activation Codes
+            أكواد التفعيل
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">{totalCount} codes</p>
+          <p className="text-sm text-muted-foreground mt-1">{totalCount} كود</p>
         </div>
         <button
           onClick={() => {
@@ -308,7 +308,7 @@ export default function CodesPage() {
           className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Generate Codes
+          إنشاء أكواد
         </button>
       </div>
 
@@ -331,7 +331,7 @@ export default function CodesPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             className="w-full h-10 pl-10 pr-4 border border-border bg-card text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-            placeholder="Search by last 4 digits..."
+            placeholder="ابحث بآخر 4 أرقام..."
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
           />
@@ -341,7 +341,7 @@ export default function CodesPage() {
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
-          <option value="ALL">All statuses</option>
+          <option value="ALL">كل الحالات</option>
           <option value="UNUSED">UNUSED</option>
           <option value="ACTIVATED">ACTIVATED</option>
           <option value="REVOKED">REVOKED</option>
@@ -352,7 +352,7 @@ export default function CodesPage() {
           value={planFilter}
           onChange={(e) => setPlanFilter(e.target.value)}
         >
-          <option value="ALL">All plans</option>
+          <option value="ALL">كل الباقات</option>
           {plans.map((p) => (
             <option key={p._id} value={p._id}>
               {p.name}
@@ -365,8 +365,8 @@ export default function CodesPage() {
         columns={columns}
         data={codes}
         gridTemplate="minmax(200px,1.6fr) minmax(120px,0.8fr) 110px 130px 150px 60px"
-        ariaLabel="Activation codes"
-        emptyMessage="No codes found."
+        ariaLabel="أكواد التفعيل"
+        emptyMessage="لم يتم العثور على أكواد."
         rowKey={(c) => c._id}
       />
 
@@ -378,7 +378,7 @@ export default function CodesPage() {
       />
 
       {/* Generate modal */}
-      <Modal open={genOpen} onClose={() => setGenOpen(false)} title="Generate Codes">
+      <Modal open={genOpen} onClose={() => setGenOpen(false)} title="إنشاء أكواد">
         <div className="p-5 space-y-4">
           {genError && (
             <div className="border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -387,14 +387,14 @@ export default function CodesPage() {
           )}
           <div className="space-y-1.5">
             <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Plan *
+              الباقة *
             </label>
             <select
               className={inputClass}
               value={genPlanId}
               onChange={(e) => setGenPlanId(e.target.value)}
             >
-              {plans.length === 0 && <option value="">No plans available</option>}
+              {plans.length === 0 && <option value="">لا توجد باقات متاحة</option>}
               {plans.map((p) => (
                 <option key={p._id} value={p._id}>
                   {p.name} ({p.durationDays} days)
@@ -405,7 +405,7 @@ export default function CodesPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Quantity *
+                الكمية *
               </label>
               <input
                 className={inputClass}
@@ -418,7 +418,7 @@ export default function CodesPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Prefix
+                البادئة
               </label>
               <input
                 className={inputClass}
@@ -430,7 +430,7 @@ export default function CodesPage() {
           </div>
           <div className="space-y-1.5">
             <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Code expires after (days) — optional
+              انتهاء الكود بعدد الأيام — اختياري
             </label>
             <input
               className={inputClass}
@@ -447,14 +447,14 @@ export default function CodesPage() {
               disabled={genLoading || !genPlanId || !Number(genQuantity)}
               className="inline-flex items-center px-6 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
-              {genLoading ? 'Generating...' : 'Generate'}
+              {genLoading ? 'جارٍ الإنشاء...' : 'إنشاء'}
             </button>
             <button
               onClick={() => setGenOpen(false)}
               disabled={genLoading}
               className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
             >
-              Cancel
+              إلغاء
             </button>
           </div>
         </div>
@@ -474,7 +474,7 @@ export default function CodesPage() {
               className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
             >
               <Download className="h-4 w-4" />
-              Download CSV
+              تنزيل CSV
             </button>
             <p className="text-xs text-muted-foreground">
               Codes are shown only once — save them now. The database stores hashes only.
@@ -490,7 +490,7 @@ export default function CodesPage() {
                 <button
                   onClick={() => handleCopyCode(code)}
                   className="p-1.5 text-muted-foreground hover:text-foreground"
-                  title="Copy code"
+                  title="نسخ الكود"
                 >
                   {copiedCode === code ? (
                     <Check className="h-4 w-4 text-emerald-500" />
@@ -513,9 +513,9 @@ export default function CodesPage() {
 
       <ConfirmDialog
         open={!!revokeTarget}
-        title="Revoke Code"
+        title="إلغاء الكود"
         message={`Revoke ${revokeTarget ? displayCode(revokeTarget.prefix, revokeTarget.codeLast4) : ''}? It can no longer be redeemed.`}
-        confirmLabel="Revoke"
+        confirmLabel="إلغاء"
         variant="destructive"
         loading={revoking}
         onConfirm={handleRevoke}

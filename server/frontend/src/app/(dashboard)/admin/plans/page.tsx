@@ -215,7 +215,7 @@ export default function PlansPage() {
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             <span className="h-1.5 w-1.5 rounded-full bg-muted" />
-            Inactive
+            غير نشطة
           </span>
         ),
     },
@@ -227,7 +227,7 @@ export default function PlansPage() {
           <button
             onClick={(e) => handleCopyId(e, p._id)}
             className="p-1.5 text-muted-foreground hover:text-foreground"
-            title="Copy plan id"
+            title="نسخ معرّف الباقة"
           >
             {copiedId === p._id ? (
               <Check className="h-4 w-4 text-emerald-500" />
@@ -241,7 +241,7 @@ export default function PlansPage() {
               openEdit(p);
             }}
             className="p-1.5 text-muted-foreground hover:text-foreground"
-            title="Edit plan"
+            title="تعديل الباقة"
           >
             <Pencil className="h-4 w-4" />
           </button>
@@ -251,7 +251,7 @@ export default function PlansPage() {
               setDeleteTarget(p);
             }}
             className="p-1.5 text-muted-foreground hover:text-destructive"
-            title="Delete / deactivate"
+            title="حذف أو تعطيل"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -272,9 +272,9 @@ export default function PlansPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">Plans</h1>
+          <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">الباقات</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {totalCount} subscription plans
+            {totalCount} باقة اشتراك
           </p>
         </div>
         <button
@@ -282,7 +282,7 @@ export default function PlansPage() {
           className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         >
           <Plus className="h-4 w-4" />
-          New Plan
+          باقة جديدة
         </button>
       </div>
 
@@ -296,8 +296,8 @@ export default function PlansPage() {
         columns={columns}
         data={plans}
         gridTemplate="minmax(180px,1.6fr) 100px 80px 110px 110px 100px 120px"
-        ariaLabel="Plans"
-        emptyMessage="No plans yet. Create your first subscription plan."
+        ariaLabel="الباقات"
+        emptyMessage="لا توجد باقات بعد. أنشئ أول باقة اشتراك."
         rowKey={(p) => p._id}
       />
 
@@ -305,7 +305,7 @@ export default function PlansPage() {
       <Modal
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        title={editingId ? 'Edit Plan' : 'New Plan'}
+        title={editingId ? 'تعديل الباقة' : 'باقة جديدة'}
       >
         <div className="p-5 space-y-4">
           {formError && (
@@ -315,7 +315,7 @@ export default function PlansPage() {
           )}
           <div className="space-y-1.5">
             <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Name *
+              الاسم *
             </label>
             <input
               className={inputClass}
@@ -326,7 +326,7 @@ export default function PlansPage() {
           </div>
           <div className="space-y-1.5">
             <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Description
+              الوصف
             </label>
             <textarea
               className={`${inputClass} h-auto py-2`}
@@ -339,7 +339,7 @@ export default function PlansPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Duration (days) *
+                المدة (بالأيام) *
               </label>
               <input
                 className={inputClass}
@@ -351,7 +351,7 @@ export default function PlansPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Max devices *
+                الحد الأقصى للأجهزة *
               </label>
               <input
                 className={inputClass}
@@ -365,7 +365,7 @@ export default function PlansPage() {
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Price
+                السعر
               </label>
               <input
                 className={inputClass}
@@ -377,7 +377,7 @@ export default function PlansPage() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                Currency
+                العملة
               </label>
               <input
                 className={inputClass}
@@ -389,7 +389,7 @@ export default function PlansPage() {
           </div>
           <div className="space-y-1.5">
             <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Status
+              الحالة
             </label>
             <select
               className={inputClass}
@@ -398,8 +398,8 @@ export default function PlansPage() {
                 setForm({ ...form, status: e.target.value as 'Active' | 'Inactive' })
               }
             >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
+              <option value="Active">نشطة</option>
+              <option value="Inactive">غير نشطة</option>
             </select>
           </div>
           <div className="flex items-center gap-3 pt-2">
@@ -408,14 +408,14 @@ export default function PlansPage() {
               disabled={saving || !form.name.trim()}
               className="inline-flex items-center px-6 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? 'جارٍ الحفظ...' : 'حفظ'}
             </button>
             <button
               onClick={() => setFormOpen(false)}
               disabled={saving}
               className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
             >
-              Cancel
+              إلغاء
             </button>
           </div>
         </div>
@@ -423,9 +423,9 @@ export default function PlansPage() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title="Delete Plan"
-        message={`Delete "${deleteTarget?.name}"? Plans that already have activation codes are deactivated instead of deleted.`}
-        confirmLabel="Delete"
+        title="حذف الباقة"
+        message={`هل تريد حذف "${deleteTarget?.name}"؟ سيتم تعطيل الباقات المرتبطة بأكواد تفعيل بدلًا من حذفها.`}
+        confirmLabel="حذف"
         variant="destructive"
         loading={deleting}
         onConfirm={handleDelete}
