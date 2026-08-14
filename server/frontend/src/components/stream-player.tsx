@@ -26,7 +26,6 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
   const overlayRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState('Loading...');
   const [playerError, setPlayerError] = useState('');
-  const [activeSource, setActiveSource] = useState<'direct' | 'proxy'>('direct');
   const [mini, setMini] = useState(false);
   const wasActiveRef = useRef(false); // tracks if player was already open (for swap vs fresh open)
   const playReportedRef = useRef<{ channelId: string; at: number } | null>(null);
@@ -67,12 +66,18 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       wasActiveRef.current = false;
       return;
     }
-    const url = channel.url;
-    const directUrl = url;
-    const proxyUrl = `/api/v1/stream-proxy?url=${encodeURIComponent(url)}`;
     const alternateUrls = channel.alternateUrls || [];
     let alternateIndex = 0;
     const sessionId = typeof window !== 'undefined' ? useAuthStore.getState().sessionId : null;
+    const resolvePlaybackUrl = async (slot: number) => {
+      if (!channel.channelId) throw new Error('Channel playback identity is missing');
+      const response = await api.post(
+        '/tv/playback-token',
+        { channelId: channel.channelId, slot },
+        { headers: { 'X-Skip-Auth-Redirect': '1' }, timeout: 15_000 },
+      );
+      return response.data?.data?.playbackUrl as string;
+    };
     let destroyed = false;
     let activeHls: { destroy: () => void } | null = null;
     let currentSource: 'direct' | 'proxy' = mode === 'proxy' ? 'proxy' : 'direct';
@@ -94,7 +99,6 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
 
     setStatus('Loading...');
     setPlayerError('');
-    setActiveSource(currentSource);
 
     // If player was already active (swapping streams), keep mini mode & position.
     // Only reset to full modal on fresh open.
@@ -120,8 +124,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             safeDestroyHls(activeHls);
             currentSource = isProxy ? 'proxy' : 'direct';
             currentSourceRef.current = currentSource;
-            setActiveSource(currentSource);
-            if (isProxy && mode === 'direct-fallback') setStatus('Trying proxy...');
+                    if (isProxy && mode === 'direct-fallback') setStatus('Trying proxy...');
             setPlayerError('');
 
             const hls = new Hls({
@@ -160,18 +163,16 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
                   if (data.type === 'mediaError') {
                     setStatus('Media error — recovering...');
                     hls.recoverMediaError();
-                  } else if (!isProxy && mode === 'direct-fallback') {
-                    safeDestroyHls(hls);
-                    tryHlsSource(proxyUrl, true);
-                  } else if (data.type === 'networkError' && mode === 'proxy') {
+                  } else if (data.type === 'networkError') {
                     setStatus('Network error — retrying...');
                     hls.startLoad();
                   } else if (alternateIndex < alternateUrls.length) {
-                    const altUrl = alternateUrls[alternateIndex++];
-                    const altProxy = `/api/v1/stream-proxy?url=${encodeURIComponent(altUrl)}`;
-                    setStatus(`Trying alternate ${alternateIndex}/${alternateUrls.length}...`);
+                    const nextSlot = ++alternateIndex;
+                    setStatus(`Trying alternate ${nextSlot}/${alternateUrls.length}...`);
                     safeDestroyHls(hls);
-                    tryHlsSource(altProxy, true);
+                    resolvePlaybackUrl(nextSlot)
+                      .then((playbackUrl) => tryHlsSource(playbackUrl, true))
+                      .catch(() => setPlayerError('Playback authorization failed'));
                   } else {
                     setPlayerError(`Fatal error: ${data.details}`);
                     safeDestroyHls(hls);
@@ -181,14 +182,13 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             );
           };
 
-          tryHlsSource(mode === 'proxy' ? proxyUrl : directUrl, mode === 'proxy');
+          resolvePlaybackUrl(0)
+            .then((playbackUrl) => tryHlsSource(playbackUrl, true))
+            .catch(() => setPlayerError('Playback authorization failed'));
         } else if (video!.canPlayType('application/vnd.apple.mpegurl')) {
-          const startUrl = mode === 'proxy' ? proxyUrl : directUrl;
-          currentSource = mode === 'proxy' ? 'proxy' : 'direct';
+          currentSource = 'proxy';
           currentSourceRef.current = currentSource;
-          setActiveSource(currentSource);
-          video!.src = startUrl;
-          let nativeFallback = false;
+                let nativeFallback = false;
           nativeLoadedMeta = () => {
             if (!destroyed) {
               setStatus('Playing');
@@ -197,26 +197,39 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
           };
           nativeError = () => {
             if (destroyed) return;
-            if (!nativeFallback && mode === 'direct-fallback') {
+            if (!nativeFallback) {
               nativeFallback = true;
-              currentSource = 'proxy';
-              currentSourceRef.current = currentSource;
-              setActiveSource(currentSource);
-              setStatus('Trying proxy...');
-              video!.src = proxyUrl;
-              video!.load();
+              setStatus('إعادة طلب تصريح التشغيل...');
+              resolvePlaybackUrl(0)
+                .then((playbackUrl) => {
+                  if (destroyed) return;
+                  video!.src = playbackUrl;
+                  video!.load();
+                })
+                .catch(() => setPlayerError('Playback authorization failed'));
             } else if (alternateIndex < alternateUrls.length) {
-              const altUrl = alternateUrls[alternateIndex++];
+              const nextSlot = ++alternateIndex;
               currentSource = 'proxy';
               currentSourceRef.current = currentSource;
-              setActiveSource(currentSource);
-              setStatus(`Trying alternate ${alternateIndex}/${alternateUrls.length}...`);
-              video!.src = `/api/v1/stream-proxy?url=${encodeURIComponent(altUrl)}`;
-              video!.load();
+                        setStatus(`Trying alternate ${nextSlot}/${alternateUrls.length}...`);
+              resolvePlaybackUrl(nextSlot)
+                .then((playbackUrl) => {
+                  if (destroyed) return;
+                  video!.src = playbackUrl;
+                  video!.load();
+                })
+                .catch(() => setPlayerError('Playback authorization failed'));
             } else {
               setPlayerError('Playback error');
             }
           };
+          resolvePlaybackUrl(0)
+            .then((playbackUrl) => {
+              if (destroyed) return;
+              video!.src = playbackUrl;
+              video!.load();
+            })
+            .catch(() => setPlayerError('Playback authorization failed'));
           video!.addEventListener('loadedmetadata', nativeLoadedMeta);
           video!.addEventListener('error', nativeError);
         } else {
@@ -335,8 +348,6 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       ? 'text-signal-green'
       : 'text-muted-foreground';
 
-  const sourceBadge = activeSource === 'proxy' ? 'proxy' : 'direct';
-
   /*
    * Single return — the video/audio element is always at the same position
    * in the React tree so it is never unmounted when toggling mini mode.
@@ -452,16 +463,8 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
               className={`flex items-center gap-2 truncate ${mini ? 'max-w-[55%]' : 'max-w-[60%]'}`}
             >
               {!mini && (
-                <span
-                  className={`truncate ${mini ? 'text-xs' : 'text-xs'} text-muted-foreground`}
-                  title={channel.url}
-                >
-                  {channel.url}
-                </span>
-              )}
-              {!mini && (
-                <span className="text-xs uppercase tracking-wider px-1.5 py-0.5 border border-border text-muted-foreground shrink-0">
-                  {sourceBadge}
+                <span className="text-xs text-muted-foreground">
+                  تشغيل آمن ومصرّح به
                 </span>
               )}
             </div>
