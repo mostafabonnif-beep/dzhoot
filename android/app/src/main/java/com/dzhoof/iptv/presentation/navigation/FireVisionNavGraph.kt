@@ -35,7 +35,9 @@ import com.dzhoof.iptv.presentation.ui.screens.VodPlayerScreen
 import com.dzhoof.iptv.presentation.ui.screens.SearchScreen
 import com.dzhoof.iptv.presentation.ui.screens.AddSourceScreen
 import com.dzhoof.iptv.presentation.ui.screens.SettingsScreen
+import com.dzhoof.iptv.presentation.ui.screens.SubscriptionGateScreen
 import com.dzhoof.iptv.presentation.viewmodel.PairingViewModel
+import com.dzhoof.iptv.presentation.viewmodel.SubscriptionViewModel
 import kotlinx.coroutines.delay
 
 /**
@@ -78,7 +80,7 @@ fun FireVisionNavGraph(
             LaunchedEffect(uiState.isPaired) {
                 if (uiState.isPaired) {
                     delay(1500) // Show success message briefly
-                    navController.navigate(Screen.Home.route) {
+                    navController.navigate(Screen.SubscriptionGate.route) {
                         popUpTo(Screen.Pairing.route) { inclusive = true }
                         launchSingleTop = true
                     }
@@ -100,6 +102,27 @@ fun FireVisionNavGraph(
                 onRetryClick = { viewModel.requestNewPairing() },
                 onUseDefaultClick = { viewModel.useDefaultChannelList() },
                 onUseAdvancedClick = { navController.navigate(Screen.AddSource.route) }
+            )
+        }
+
+        // ── Mandatory subscription gate ─────────────────────────────────
+        composable(route = Screen.SubscriptionGate.route) {
+            val viewModel: SubscriptionViewModel = hiltViewModel()
+            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+            val isActive = uiState.subscription?.subscription?.status == "ACTIVE"
+
+            LaunchedEffect(isActive) {
+                if (isActive) {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.SubscriptionGate.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            }
+
+            SubscriptionGateScreen(
+                uiState = uiState,
+                onRedeem = viewModel::redeem,
             )
         }
 
