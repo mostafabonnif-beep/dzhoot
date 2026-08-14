@@ -40,7 +40,16 @@ object AppPreferences {
 
     fun getServerUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(SERVER_URL_KEY, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
+        val stored = prefs.getString(SERVER_URL_KEY, null)?.trim().orEmpty()
+        // Migrate installations that persisted the old placeholder endpoint.
+        // A stale value must never override the current compiled API endpoint.
+        if (stored.isBlank() || stored.contains("example.invalid", ignoreCase = true)) {
+            if (stored.isNotBlank()) {
+                prefs.edit().putString(SERVER_URL_KEY, DEFAULT_SERVER_URL).apply()
+            }
+            return DEFAULT_SERVER_URL
+        }
+        return stored.trimEnd('/')
     }
 
     fun getTvCode(context: Context): String {
