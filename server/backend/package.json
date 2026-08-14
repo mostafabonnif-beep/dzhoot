@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.js",
-    "build": "tsc",
+    "build": "tsc && rm -rf dist/templates && cp -R src/templates dist/templates",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
