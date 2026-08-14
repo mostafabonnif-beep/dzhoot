@@ -48,6 +48,7 @@ data class DeviceDto(
 /** Success payload of POST /api/v1/activation/redeem */
 data class RedeemResponseDto(
     @SerializedName("success") val success: Boolean = false,
+    @SerializedName("sessionId") val sessionId: String? = null,
     @SerializedName("data") val data: RedeemDataDto? = null,
     @SerializedName("error") val error: String? = null,
     @SerializedName("code") val code: String? = null,

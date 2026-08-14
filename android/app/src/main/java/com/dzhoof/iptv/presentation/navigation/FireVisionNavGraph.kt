@@ -122,7 +122,7 @@ fun FireVisionNavGraph(
 
             SubscriptionGateScreen(
                 uiState = uiState,
-                onRedeem = viewModel::redeem,
+                onClaim = viewModel::claim,
             )
         }
 

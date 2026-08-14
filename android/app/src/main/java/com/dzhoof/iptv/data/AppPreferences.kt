@@ -12,6 +12,7 @@ object AppPreferences {
     const val PREFS_NAME = "DzhoofSettings"
     private const val SERVER_URL_KEY = "server_url"
     private const val TV_CODE_KEY = "tv_code"
+    private const val CUSTOMER_SESSION_ID_KEY = "customer_session_id"
     private const val DEMO_MODE_KEY = "is_demo_mode"
     private const val EPG_XMLTV_URL_KEY = "epg_xmltv_url"
     private const val PLAYLIST_EPG_URL_KEY = "playlist_epg_url"
@@ -45,6 +46,21 @@ object AppPreferences {
     fun getTvCode(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(TV_CODE_KEY, "") ?: ""
+    }
+
+    fun getCustomerSessionId(context: Context): String {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(CUSTOMER_SESSION_ID_KEY, "") ?: ""
+    }
+
+    fun setCustomerSessionId(context: Context, sessionId: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(CUSTOMER_SESSION_ID_KEY, sessionId.trim()).apply()
+    }
+
+    fun clearCustomerSessionId(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(CUSTOMER_SESSION_ID_KEY).apply()
     }
 
     fun hasChannelSelection(context: Context): Boolean {
@@ -195,6 +211,7 @@ object AppPreferences {
         prefs.edit()
             .remove(TV_CODE_KEY)
             .remove(DEMO_MODE_KEY)
+            .remove(CUSTOMER_SESSION_ID_KEY)
             .apply()
     }
 
