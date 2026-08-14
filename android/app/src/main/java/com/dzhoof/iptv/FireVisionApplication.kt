@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.dzhoof.iptv.worker.WorkManagerInitializer
+import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dagger.hilt.android.HiltAndroidApp
 import io.sentry.SentryEvent
@@ -27,8 +28,14 @@ class FireVisionApplication : Application(), Configuration.Provider {
         super.onCreate()
         instance = this
 
-        FirebaseCrashlytics.getInstance().apply {
-            setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+        // google-services.json is intentionally kept outside git. Firebase must
+        // therefore be optional in debug builds; calling Crashlytics.getInstance()
+        // before a configured FirebaseApp exists crashes the app during startup.
+        val firebaseApp = FirebaseApp.initializeApp(this)
+        if (firebaseApp != null) {
+            FirebaseCrashlytics.getInstance().apply {
+                setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+            }
         }
 
         // Filter out noisy Sentry HTTP client errors from health scan / thumbnail extraction.
