@@ -7,13 +7,17 @@ const {
   isValidObjectId,
   parsePagination,
 } = require('./catalog-helpers');
+const { getContentScope, idsFor, canAccess } = require('../services/content-access');
 
 router.get('/', requireTvOrSessionAuth, async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const requestedStatus = String(req.query.status || 'active');
     const isAdmin = req.user?.role === 'Admin';
+    const scope = await getContentScope(req.user);
+    const allowedMovieIds = idsFor(scope, 'movie');
     const query = { isActive: requestedStatus === 'all' && isAdmin ? { $in: [true, false] } : requestedStatus === 'inactive' && isAdmin ? false : true };
+    if (!isAdmin && allowedMovieIds !== null) query._id = { $in: allowedMovieIds };
 
     if (req.query.sourceId && isValidObjectId(String(req.query.sourceId))) {
       query.sourceId = String(req.query.sourceId);
@@ -58,6 +62,10 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
   }
 
   try {
+    const scope = await getContentScope(req.user);
+    if (!canAccess(scope, 'movie', req.params.id)) {
+      return res.status(404).json({ success: false, error: 'Movie not found' });
+    }
     const movie = await Movie.findOne({ _id: req.params.id, isActive: true }).select('-streamUrl').lean();
     if (!movie) {
       return res.status(404).json({ success: false, error: 'Movie not found' });

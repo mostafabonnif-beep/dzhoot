@@ -9,6 +9,7 @@ const { escapeRegex } = require('../utils/escapeRegex');
 const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
 const { audit } = require('../services/audit-log');
 const { channelCache } = require('../services/cache');
+const { getContentScope } = require('../services/content-access');
 
 // The shared admin/demo catalog is identical for every admin hit and is the heaviest
 // read. Cache it (10 min TTL via channelCache) and bust it on any catalog mutation.
@@ -101,8 +102,8 @@ const CHANNEL_LIST_FIELDS = [
 // Get channels (for Android app sync) — accepts TV code or session auth, excludes DRM keys
 router.get('/', requireTvOrSessionAuth, async (req, res) => {
   try {
-    // allCatalog users are served the shared catalog like admins — avoids a giant $in.
-    const catalogView = req.user.role === 'Admin' || req.user.allCatalog === true;
+    const scope = await getContentScope(req.user);
+    const catalogView = req.user.role === 'Admin' || (req.user.allCatalog === true && scope.mode === 'all');
 
     // The catalog payload is identical across requests — serve from cache when present.
     if (catalogView) {
@@ -113,7 +114,11 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     // Catalog view sees the shared catalog only (ownerId:null); a user sees their own selection.
     const query = catalogView
       ? { ownerId: null }
-      : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
+      : scope.mode === 'selected'
+        ? { ownerId: null, _id: { $in: scope.channelIds }, isActive: { $ne: false } }
+        : scope.mode === 'none'
+          ? { _id: { $in: [] } }
+          : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
 
     const channels = await Channel.find(query)
       .sort({ channelGroup: 1, order: 1 })
@@ -143,7 +148,8 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
 // Get channels grouped by category
 router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
   try {
-    const catalogView = req.user.role === 'Admin' || req.user.allCatalog === true;
+    const scope = await getContentScope(req.user);
+    const catalogView = req.user.role === 'Admin' || (req.user.allCatalog === true && scope.mode === 'all');
 
     if (catalogView) {
       const cached = await channelCache.get('catalog:grouped');
@@ -153,7 +159,11 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
     // Catalog view sees the shared catalog only (ownerId:null); a user sees their own selection.
     const query = catalogView
       ? { ownerId: null }
-      : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
+      : scope.mode === 'selected'
+        ? { ownerId: null, _id: { $in: scope.channelIds }, isActive: { $ne: false } }
+        : scope.mode === 'none'
+          ? { _id: { $in: [] } }
+          : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
 
     const channels = await Channel.find(query)
       .sort({ channelGroup: 1, order: 1 })
