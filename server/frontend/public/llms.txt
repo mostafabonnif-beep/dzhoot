@@ -1,41 +1,36 @@
-# FireVision IPTV
+# DZ HOOF IPTV
 
-> Self-hosted IPTV management console for Android TV and Fire TV
+> منصة احترافية لإدارة محتوى IPTV وتفعيل اشتراكات العملاء على Android وAndroid TV
 
-FireVision IPTV is a free, open-source platform for managing IPTV channels on Android TV and Amazon Fire TV devices. It includes a Next.js web dashboard and a Kotlin Android TV player app.
+DZ HOOF IPTV منصة لإدارة القنوات والمحتوى والاشتراكات من لوحة تحكم مركزية، مع تطبيق عميل لا يعرض مصادر البث أو بيانات الخوادم. يدخل العميل كود التفعيل الذي يحصل عليه من المشرف، ثم يرى المحتوى المسموح به حسب الباقة.
 
-## Core Features
+## المزايا الأساسية
 
-- M3U playlist import with DRM support
-- Multi-source import: IPTV-org, Pluto TV, Samsung TV Plus
-- Fire TV / Android TV device pairing via codes
-- Role-based user access control
-- Real-time analytics dashboard
-- Self-hosted with Docker Compose
+- تفعيل العميل بكود اشتراك دون حساب تقني مسبق
+- تحديد القنوات والأفلام والمسلسلات حسب الباقة
+- استيراد M3U ومصادر Xtream مع تخزين بيانات الاعتماد على الخادم
+- تشغيل آمن عبر Playback Tokens قصيرة العمر
+- إدارة الخطط والأكواد والأجهزة والاشتراكات
+- لوحة تحكم Next.js وواجهة عربية RTL
+- دعم النسخ الاحتياطي والاستعادة والنشر عبر Docker Compose
 
-## Links
+## الروابط
 
-- Website: https://tv.cadnative.com
-- Android TV App: https://github.com/akshaynikhare/FireVisionIPTV/releases/latest
-- Server Source: https://github.com/akshaynikhare/FireVisionIPTVServer
-- App Source: https://github.com/akshaynikhare/FireVisionIPTV
-- API Documentation: https://tv.cadnative.com/api/v1/
+- المستودع: https://github.com/merci1994dz/dzhoot
+- طلبات السحب: https://github.com/merci1994dz/dzhoot/pulls
+- توثيق التشغيل: https://github.com/merci1994dz/dzhoot/tree/main/docs
 
-## Tech Stack
+## التقنية
 
-- **Server**: Node.js, Express, TypeScript, MongoDB
-- **Frontend**: Next.js 14, React, Tailwind CSS, shadcn/ui
-- **Android App**: Kotlin, Jetpack Compose, ExoPlayer
-- **Deployment**: Docker, Docker Compose
+- **الخادم**: Node.js، Express، TypeScript، MongoDB، Redis
+- **الواجهة**: Next.js، React، Tailwind CSS
+- **تطبيق Android**: Kotlin، Jetpack Compose، ExoPlayer
+- **النشر**: Docker، Docker Compose، Caddy، HTTPS
 
-## Who Is This For?
+## الاستخدام
 
-- Users who want to self-host their own IPTV server
-- Android TV / Fire TV owners looking for a free IPTV player
-- Developers building custom IPTV solutions
-- Cord-cutters managing free-to-air and legal IPTV streams
+هذه المنصة مخصصة للمشغلين الذين يديرون مصادر بث مرخصة أو قانونية ويريدون تقديم محتوى مضبوط حسب الاشتراك. يجب على مشغل الخدمة التأكد من امتلاك حقوق توزيع كل مصدر ومحتوى تتم إضافته إلى النظام.
 
-## Author
+## الناشر
 
-Built by Akshay Nikhare (https://github.com/akshaynikhare)
-Published by CADNative
+DZ HOOF IPTV — merci1994dz

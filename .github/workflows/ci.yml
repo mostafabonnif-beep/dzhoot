@@ -32,6 +32,30 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run test:backend
+      - name: Validate production compose
+        working-directory: server
+        env:
+          DOMAIN: example.com
+          ACME_EMAIL: ops@example.com
+          DOCKER_IMAGE: example/backend:ci
+          DOCKER_FRONTEND_IMAGE: example/frontend:ci
+          MONGO_INITDB_ROOT_USERNAME: ci-admin
+          MONGO_INITDB_ROOT_PASSWORD: ci-mongodb-password
+          REDIS_PASSWORD: ci-redis-password
+          JWT_ACCESS_SECRET: ci-jwt-access-secret-32-characters-long
+          JWT_REFRESH_SECRET: ci-jwt-refresh-secret-32-characters-long
+          XTREAM_SECRET_KEY: ci-xtream-secret-32-characters-long
+          PLAYBACK_TOKEN_SECRET: ci-playback-secret-32-characters-long
+          TOTP_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          SUPER_ADMIN_USERNAME: ci-admin
+          SUPER_ADMIN_PASSWORD: ci-admin-password
+          SUPER_ADMIN_EMAIL: ci@example.com
+          SUPER_ADMIN_CHANNEL_LIST_CODE: ci-channel-code
+          PUBLIC_BASE_URL: https://example.com
+          ALLOWED_ORIGINS: https://example.com
+          APP_URL: https://example.com
+        run: |
+          docker compose config --quiet
       - name: E2E smoke (subscription loop)
         run: npx tsx scripts/smoke-activation.ts
         working-directory: server/backend
