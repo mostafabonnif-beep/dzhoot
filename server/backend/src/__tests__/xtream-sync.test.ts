@@ -9,6 +9,9 @@ import Episode from '../models/Episode';
 import { syncXtreamSource, buildXtreamApiUrl } from '../services/xtream-service';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 
+process.env.XTREAM_SECRET_KEY =
+  process.env.XTREAM_SECRET_KEY || 'test-only-xtream-secret-32-bytes';
+
 jest.mock('axios');
 jest.mock('../utils/ssrf-guard', () => ({
   validateUrlForSSRF: jest.fn(async () => ({ safe: true, resolvedAddresses: ['198.51.100.10'] })),

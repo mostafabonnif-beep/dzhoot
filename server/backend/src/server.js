@@ -25,6 +25,9 @@ Sentry.init({
     'MONGODB_URI',
     'JWT_ACCESS_SECRET',
     'JWT_REFRESH_SECRET',
+    'PLAYBACK_TOKEN_SECRET',
+    'XTREAM_SECRET_KEY',
+    'TOTP_ENCRYPTION_KEY',
     'SUPER_ADMIN_PASSWORD',
   ];
   const missing = required.filter((key) => !process.env[key]);
@@ -50,6 +53,7 @@ if (process.env.NODE_ENV === 'production') {
     'CHANGE-ME',
     'CHANGE_ME',
     'change-me',
+    'CHANGE-ME-openssl-rand-hex-32',
   ]);
   const isWeakSecret = (val) =>
     !val || PLACEHOLDER_SECRETS.has(val) || /^change[-_]?me/i.test(val) || val.length < 32;
@@ -59,6 +63,13 @@ if (process.env.NODE_ENV === 'production') {
     problems.push('JWT_ACCESS_SECRET is a default/placeholder or shorter than 32 characters');
   if (isWeakSecret(process.env.JWT_REFRESH_SECRET))
     problems.push('JWT_REFRESH_SECRET is a default/placeholder or shorter than 32 characters');
+  if (isWeakSecret(process.env.PLAYBACK_TOKEN_SECRET))
+    problems.push('PLAYBACK_TOKEN_SECRET is a default/placeholder or shorter than 32 characters');
+  if (isWeakSecret(process.env.XTREAM_SECRET_KEY))
+    problems.push('XTREAM_SECRET_KEY is a default/placeholder or shorter than 32 characters');
+  const totpKey = process.env.TOTP_ENCRYPTION_KEY || '';
+  if (!/^[a-f0-9]{64}$/i.test(totpKey))
+    problems.push('TOTP_ENCRYPTION_KEY must be a 64-character hexadecimal secret');
   if (process.env.SUPER_ADMIN_PASSWORD === 'admin123')
     problems.push('SUPER_ADMIN_PASSWORD is set to the default "admin123"');
 

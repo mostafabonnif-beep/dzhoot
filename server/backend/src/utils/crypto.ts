@@ -7,7 +7,10 @@ import crypto from 'crypto';
  */
 
 function getKey(): Buffer {
-  const secret = process.env.XTREAM_SECRET_KEY || process.env.JWT_ACCESS_SECRET || 'dzhoof-dev-secret';
+  const secret = process.env.XTREAM_SECRET_KEY || process.env.JWT_ACCESS_SECRET;
+  if (!secret) {
+    throw new Error('XTREAM_SECRET_KEY (or an explicitly configured JWT secret) is required');
+  }
   return crypto.createHash('sha256').update(secret).digest();
 }
 

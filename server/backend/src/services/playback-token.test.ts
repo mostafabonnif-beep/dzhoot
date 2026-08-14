@@ -1,5 +1,8 @@
 import { issuePlaybackToken, verifyPlaybackToken } from './playback-token';
 
+process.env.PLAYBACK_TOKEN_SECRET =
+  process.env.PLAYBACK_TOKEN_SECRET || 'test-only-playback-token-secret-32-bytes';
+
 describe('playback tokens', () => {
   const input = {
     userId: 'user-123',

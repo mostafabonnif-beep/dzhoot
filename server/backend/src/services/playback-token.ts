@@ -18,8 +18,10 @@ function getKey(): Buffer {
   const secret =
     process.env.PLAYBACK_TOKEN_SECRET ||
     process.env.JWT_ACCESS_SECRET ||
-    process.env.XTREAM_SECRET_KEY ||
-    'dzhoof-development-playback-secret';
+    process.env.XTREAM_SECRET_KEY;
+  if (!secret) {
+    throw new Error('PLAYBACK_TOKEN_SECRET (or an explicitly configured signing secret) is required');
+  }
   return crypto.createHash('sha256').update(secret).digest();
 }
 
