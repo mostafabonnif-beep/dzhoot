@@ -5,6 +5,12 @@ on:
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'HTTPS API base URL for a manual Android debug build'
+        required: false
+        type: string
+        default: 'https://example.invalid/'
 jobs:
   backend:
     runs-on: ubuntu-latest
@@ -41,6 +47,8 @@ jobs:
         run: ./gradlew testDebugUnitTest --stacktrace
       - name: Assemble Android debug APK
         working-directory: android
+        env:
+          DZHOOF_API_URL: ${{ inputs.api_url || 'https://example.invalid/' }}
         run: ./gradlew assembleDebug --stacktrace
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v4
