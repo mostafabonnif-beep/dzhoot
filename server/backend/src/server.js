@@ -23,6 +23,7 @@ Sentry.init({
 {
   const required = [
     'MONGODB_URI',
+    'REDIS_URL',
     'JWT_ACCESS_SECRET',
     'JWT_REFRESH_SECRET',
     'PLAYBACK_TOKEN_SECRET',
@@ -72,6 +73,22 @@ if (process.env.NODE_ENV === 'production') {
     problems.push('TOTP_ENCRYPTION_KEY must be a 64-character hexadecimal secret');
   if (process.env.SUPER_ADMIN_PASSWORD === 'admin123')
     problems.push('SUPER_ADMIN_PASSWORD is set to the default "admin123"');
+
+  const mongoUri = String(process.env.MONGODB_URI || '');
+  if (/localhost|127\\.0\\.0\\.1|example\\.invalid/i.test(mongoUri))
+    problems.push('MONGODB_URI must not point to localhost or a placeholder host');
+  const redisUrl = String(process.env.REDIS_URL || '');
+  if (/localhost|127\\.0\\.0\\.1|example\\.invalid/i.test(redisUrl))
+    problems.push('REDIS_URL must not point to localhost or a placeholder host');
+  const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || '').trim();
+  if (!/^https:\/\//i.test(publicBaseUrl) || /localhost|example\.invalid/i.test(publicBaseUrl))
+    problems.push('PUBLIC_BASE_URL must be a real HTTPS URL in production');
+  const allowedOrigins = String(process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (allowedOrigins.length === 0 || allowedOrigins.includes('*') || allowedOrigins.some((origin) => !/^https:\/\//i.test(origin)))
+    problems.push('ALLOWED_ORIGINS must contain only explicit HTTPS origins; wildcard CORS is forbidden');
 
   if (problems.length > 0) {
     console.error(`[SECURITY] Refusing to start in production:\n  - ${problems.join('\n  - ')}`);
