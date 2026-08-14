@@ -9,6 +9,13 @@ import ConfirmDialog from '@/components/ui/confirm-dialog';
 import DataTable, { type DataTableColumn } from '@/components/ui/data-table';
 import { useLocale } from '@/components/locale-provider';
 
+interface ContentScope {
+  mode?: 'all' | 'selected';
+  channelIds?: string[];
+  movieIds?: string[];
+  seriesIds?: string[];
+}
+
 interface PlanData {
   _id: string;
   name: string;
@@ -18,6 +25,7 @@ interface PlanData {
   price?: number;
   currency?: string;
   status: 'Active' | 'Inactive';
+  features?: { contentScope?: ContentScope };
   codeCount?: number;
   usedCodeCount?: number;
   activeSubs?: number;
@@ -32,6 +40,10 @@ interface PlanForm {
   price: string;
   currency: string;
   status: 'Active' | 'Inactive';
+  contentMode: 'all' | 'selected';
+  channelIds: string[];
+  movieIds: string[];
+  seriesIds: string[];
 }
 
 const emptyForm: PlanForm = {
@@ -42,6 +54,10 @@ const emptyForm: PlanForm = {
   price: '0',
   currency: 'DZD',
   status: 'Active',
+  contentMode: 'all',
+  channelIds: [],
+  movieIds: [],
+  seriesIds: [],
 };
 
 const inputClass =
@@ -51,6 +67,7 @@ export default function PlansPage() {
   const { toast } = useToast();
   const { t } = useLocale();
   const [plans, setPlans] = useState<PlanData[]>([]);
+  const [contentOptions, setContentOptions] = useState<{ channels: { _id: string; channelName?: string }[]; movies: { _id: string; title?: string }[]; series: { _id: string; title?: string }[] }>({ channels: [], movies: [], series: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [totalCount, setTotalCount] = useState(0);
@@ -81,6 +98,19 @@ export default function PlansPage() {
 
   useEffect(() => {
     fetchPlans();
+    Promise.all([
+      api.get('/channels'),
+      api.get('/catalog/movies?limit=100'),
+      api.get('/catalog/series?limit=100'),
+    ]).then(([channelsRes, moviesRes, seriesRes]) => {
+      setContentOptions({
+        channels: channelsRes.data?.data || [],
+        movies: moviesRes.data?.data || [],
+        series: seriesRes.data?.data || [],
+      });
+    }).catch(() => {
+      // Content selection remains optional; the plan can still use the full catalog.
+    });
   }, [fetchPlans]);
 
   function openCreate() {
@@ -100,6 +130,10 @@ export default function PlansPage() {
       price: String(plan.price ?? 0),
       currency: plan.currency || 'DZD',
       status: plan.status,
+      contentMode: plan.features?.contentScope?.mode === 'selected' ? 'selected' : 'all',
+      channelIds: plan.features?.contentScope?.channelIds || [],
+      movieIds: plan.features?.contentScope?.movieIds || [],
+      seriesIds: plan.features?.contentScope?.seriesIds || [],
     });
     setFormError('');
     setFormOpen(true);
@@ -117,6 +151,14 @@ export default function PlansPage() {
         price: Number(form.price) || 0,
         currency: form.currency.toUpperCase(),
         status: form.status,
+        features: {
+          contentScope: {
+            mode: form.contentMode,
+            channelIds: form.contentMode === 'selected' ? form.channelIds : [],
+            movieIds: form.contentMode === 'selected' ? form.movieIds : [],
+            seriesIds: form.contentMode === 'selected' ? form.seriesIds : [],
+          },
+        },
       };
       if (editingId) {
         await api.patch(`/admin/plans/${editingId}`, payload);
@@ -403,6 +445,50 @@ export default function PlansPage() {
               <option value="Active">نشطة</option>
               <option value="Inactive">غير نشطة</option>
             </select>
+          </div>
+          <div className="space-y-3 border border-border p-3">
+            <div>
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                محتوى الزبون
+              </label>
+              <select
+                className={inputClass}
+                value={form.contentMode}
+                onChange={(e) => setForm({ ...form, contentMode: e.target.value as 'all' | 'selected' })}
+              >
+                <option value="all">كل الكتالوج المتاح</option>
+                <option value="selected">محتوى محدد لهذه الباقة</option>
+              </select>
+            </div>
+            {form.contentMode === 'selected' && (
+              <div className="grid gap-3 md:grid-cols-3">
+                {([
+                  ['القنوات', 'channels', 'channelName'],
+                  ['الأفلام', 'movies', 'title'],
+                  ['المسلسلات', 'series', 'title'],
+                ] as const).map(([label, key, textKey]) => (
+                  <label key={key} className="space-y-1.5 text-xs text-muted-foreground">
+                    <span>{label}</span>
+                    <select
+                      multiple
+                      className={`${inputClass} h-32`}
+                      value={form[`${key.slice(0, -1)}Ids` as 'channelIds' | 'movieIds' | 'seriesIds']}
+                      onChange={(e) => {
+                        const values = Array.from(e.target.selectedOptions).map((option) => option.value);
+                        const field = `${key.slice(0, -1)}Ids` as 'channelIds' | 'movieIds' | 'seriesIds';
+                        setForm({ ...form, [field]: values });
+                      }}
+                    >
+                      {contentOptions[key].map((item) => (
+                        <option key={item._id} value={item._id}>
+                          {(item as { channelName?: string; title?: string })[textKey] || item._id}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-3 pt-2">
             <button

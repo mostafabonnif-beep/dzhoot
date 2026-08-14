@@ -9,13 +9,17 @@ const {
   isValidObjectId,
   parsePagination,
 } = require('./catalog-helpers');
+const { getContentScope, idsFor, canAccess } = require('../services/content-access');
 
 router.get('/', requireTvOrSessionAuth, async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const requestedStatus = String(req.query.status || 'active');
     const isAdmin = req.user?.role === 'Admin';
+    const scope = await getContentScope(req.user);
+    const allowedSeriesIds = idsFor(scope, 'series');
     const query = { isActive: requestedStatus === 'all' && isAdmin ? { $in: [true, false] } : requestedStatus === 'inactive' && isAdmin ? false : true };
+    if (!isAdmin && allowedSeriesIds !== null) query._id = { $in: allowedSeriesIds };
 
     if (req.query.sourceId && isValidObjectId(String(req.query.sourceId))) {
       query.sourceId = String(req.query.sourceId);
@@ -60,6 +64,10 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
   }
 
   try {
+    const scope = await getContentScope(req.user);
+    if (!canAccess(scope, 'series', req.params.id)) {
+      return res.status(404).json({ success: false, error: 'Series not found' });
+    }
     const series = await Series.findOne({ _id: req.params.id, isActive: true }).select('-streamUrl').lean();
     if (!series) {
       return res.status(404).json({ success: false, error: 'Series not found' });
@@ -81,6 +89,10 @@ router.get('/seasons/:seasonId/episodes', requireTvOrSessionAuth, async (req, re
   try {
     const season = await Season.findById(req.params.seasonId).select('_id seriesId').lean();
     if (!season) {
+      return res.status(404).json({ success: false, error: 'Season not found' });
+    }
+    const scope = await getContentScope(req.user);
+    if (!canAccess(scope, 'series', season.seriesId)) {
       return res.status(404).json({ success: false, error: 'Season not found' });
     }
     const episodes = await Episode.find({ seasonId: season._id, seriesId: season.seriesId })

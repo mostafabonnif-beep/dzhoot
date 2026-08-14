@@ -14,6 +14,7 @@ const {
 const { issuePlaybackToken } = require('../services/playback-token');
 const { registerStreamSession } = require('../services/stream-session-service');
 const { getPublicBaseUrl } = require('../utils/public-url');
+const { getContentScope, canAccess } = require('../services/content-access');
 
 // Stream authorization: /api/v1/streams
 // The client requests a playable URL here instead of using raw catalog URLs,
@@ -42,6 +43,7 @@ router.post('/authorize', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid contentId' });
 
     const isAdmin = req.user?.role === 'Admin';
+    const scope = await getContentScope(req.user);
     const subscriptionRequired = await isSubscriptionRequired();
 
     // Subscription gate (skipped for admins, and while the flag is off).
@@ -64,6 +66,9 @@ router.post('/authorize', async (req, res) => {
     let url = null;
 
     if (contentType === 'LIVE') {
+      if (!isAdmin && !canAccess(scope, 'channel', id)) {
+        return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
+      }
       content = await Channel.findOne({ _id: id, isActive: { $ne: false } }).lean();
       if (content) {
         const canAccessCatalog = isAdmin || req.user?.allCatalog === true;
@@ -74,10 +79,16 @@ router.post('/authorize', async (req, res) => {
         url = content.channelUrl;
       }
     } else if (contentType === 'MOVIE') {
+      if (!isAdmin && !canAccess(scope, 'movie', id)) {
+        return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
+      }
       content = await Movie.findOne({ _id: id, isActive: true }).lean();
       if (content) url = content.streamUrl;
     } else if (contentType === 'EPISODE') {
       content = await Episode.findById(id).lean();
+      if (content && !isAdmin && !canAccess(scope, 'series', content.seriesId)) {
+        return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
+      }
       if (content) url = content.streamUrl;
     } else {
       return res.status(400).json({ success: false, error: 'Unsupported contentType' });
