@@ -15,7 +15,14 @@ jest.mock('../utils/ssrf-guard', () => ({
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 describe('EpgService XMLTV ingestion', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-08-12T06:00:00.000Z'));
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
 
   it('parses XMLTV, respects channel scope, and preserves timezone/title metadata', async () => {
     const startTime = new Date(Date.now() + 60 * 60 * 1000);
