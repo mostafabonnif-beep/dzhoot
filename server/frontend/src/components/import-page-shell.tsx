@@ -32,6 +32,7 @@ import ChannelDetailModal, { type ChannelField } from '@/components/channel-deta
 import ChannelRowActions from '@/components/ui/channel-row-actions';
 import DataTable, { type DataTableColumn } from '@/components/ui/data-table';
 import GroupedStreamRow, { type GroupedStream } from '@/components/grouped-stream-row';
+import { useLocale } from '@/components/locale-provider';
 
 interface PlaylistFilter {
   country?: string;
@@ -106,6 +107,7 @@ interface ImportPageShellProps {
 export default function ImportPageShell({ mode }: ImportPageShellProps) {
   const isAdmin = mode === 'admin';
   const { toast } = useToast();
+  const { t } = useLocale();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null);
@@ -801,12 +803,12 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">
-            Import from IPTV-org
+            {t('import.title')}
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isAdmin
-              ? 'Import channels from iptv-org to the system database'
-              : 'Auto-fetch channels from iptv-org.github.io'}
+              ? t('import.adminDescription')
+              : t('import.userDescription')}
           </p>
         </div>
         {isAdmin && (
@@ -826,13 +828,13 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
               }`}
             >
               {groupedMode ? <Layers className="h-4 w-4" /> : <List className="h-4 w-4" />}
-              {groupedMode ? 'Grouped' : 'Flat'}
+              {groupedMode ? t('import.grouped') : t('import.flat')}
             </button>
             <button
               onClick={handleClearCache}
               className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 uppercase tracking-[0.1em]"
             >
-              <RefreshCw className="h-4 w-4" /> Clear Cache
+              <RefreshCw className="h-4 w-4" /> {t('import.clearCache')}
             </button>
           </div>
         )}
@@ -843,7 +845,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
       {regions.length > 0 && (
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-            Select Region
+            {t('import.selectRegion')}
           </p>
           <div className="flex flex-wrap gap-2">
             {(showAllRegions ? regions : regions.slice(0, 5)).map((r) => (
@@ -866,7 +868,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
               onClick={() => setShowAllRegions(true)}
               className="mt-3 text-xs text-primary hover:text-primary/80 uppercase tracking-[0.1em] font-medium"
             >
-              Show all regions ({regions.length - 5} more)
+              {t('import.showAllRegions')} ({regions.length - 5})
             </button>
           )}
           {showAllRegions && (
@@ -874,7 +876,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
               onClick={() => setShowAllRegions(false)}
               className="mt-3 text-xs text-primary hover:text-primary/80 uppercase tracking-[0.1em] font-medium"
             >
-              Show fewer regions
+              {t('import.showFewerRegions')}
             </button>
           )}
         </div>
@@ -882,7 +884,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
 
       <div>
         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-3">
-          Select a Playlist
+            {t('import.selectPlaylist')}
         </p>
         <div className="flex flex-wrap gap-2">
           {playlists.map((pl) => (
@@ -906,7 +908,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
       {fetchingChannels && (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          <span className="ml-2 text-sm text-muted-foreground">Fetching channels...</span>
+          <span className="ml-2 text-sm text-muted-foreground">{t('import.fetching')}</span>
         </div>
       )}
 
@@ -921,7 +923,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                 <SearchInput
                   value={groupedSearch}
                   onChange={handleGroupedSearchChange}
-                  placeholder="Search by name or ID..."
+                  placeholder={t('import.searchPlaceholder')}
                   ariaLabel="Search grouped channels"
                   className="flex-1 max-w-full sm:max-w-md w-full"
                 />
@@ -934,7 +936,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                         onChange={(e) => setReplaceExisting(e.target.checked)}
                         className="accent-primary"
                       />
-                      Replace existing
+                      {t('import.replaceExisting')}
                     </label>
                   )}
                   <button
@@ -944,16 +946,16 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                   >
                     <Download className="h-4 w-4 shrink-0" />
                     {importing
-                      ? 'Importing...'
-                      : `Import ${selectedCount} to ${isAdmin ? 'System' : 'My List'}`}
+                      ? t('import.importing')
+                      : `${t('import.importing').replace('…', '')} ${selectedCount} ${isAdmin ? t('import.toSystem') : t('import.toMyList')}`}
                   </button>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">
-                <span className="text-muted-foreground">{groupedTotal} channels</span>
+                <span className="text-muted-foreground">{groupedTotal} {t('import.channels')}</span>
                 <span className="text-muted-foreground">·</span>
                 <span className="text-xs uppercase tracking-[0.1em] text-muted-foreground">
-                  Status:
+                  {t('import.status')}
                 </span>
                 {['', 'alive', 'dead', 'unknown'].map((s) => (
                   <button
@@ -966,12 +968,12 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                     }`}
                   >
                     {s === ''
-                      ? `All`
+                      ? t('import.all')
                       : s === 'alive'
-                        ? '● Alive'
+                        ? t('import.alive')
                         : s === 'dead'
-                          ? '● Dead'
-                          : '● Unknown'}
+                          ? t('import.dead')
+                          : t('import.unknown')}
                   </button>
                 ))}
               </div>
