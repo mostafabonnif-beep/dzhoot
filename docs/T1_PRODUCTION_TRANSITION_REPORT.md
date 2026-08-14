@@ -2,7 +2,7 @@
 
 **التاريخ:** 2026-08-14  
 **المستودع:** `merci1994dz/dzhoot`  
-**فرع التنفيذ:** `feature/t1-production-transition`  
+**فرع التنفيذ:** `feature/t1-final-production`  
 **القرار الحالي:** **T1 NOT COMPLETE**
 
 ## 1. Executive Summary
@@ -22,6 +22,9 @@
 | مشغل الإدارة يستخدم `POST /tv/playback-token` | منفذ | `server/frontend/src/components/stream-player.tsx` |
 | إخفاء رابط المصدر وشارة direct/proxy | منفذ | `stream-player.tsx` |
 | CI على feature/chore branches | منفذ | `.github/workflows/ci.yml` |
+| production compose مع MongoDB/Redis authentication وhealthchecks | منفذ | `server/docker-compose.production.yml` |
+| production compose validation داخل CI | منفذ | `.github/workflows/ci.yml` |
+| تحديث الهوية العامة والروابط القديمة | منفذ جزئيًا | `server/frontend/public/llms.txt` |
 | تفعيل العميل بالكود وتحديد المحتوى | منفذ سابقًا | مسارات activation وcontent-access |
 | إخفاء مصادر IPTV من تطبيق العميل | منفذ سابقًا | شاشات Android |
 
@@ -63,7 +66,7 @@
 
 ## 9. CI/CD Verification
 
-آخر تشغيل ناجح على فرع T1 هو CI run `31845770082`، ونجحت وظائف Backend وFrontend وAndroid. تشمل Backend typecheck وlint و152 اختبارًا وSmoke activation، وتشمل Frontend build و5 اختبارات Jest، وتشمل Android unit tests وassembleDebug.
+آخر تشغيل ناجح على فرع T1 النهائي هو CI run `31849133575`، ونجحت وظائف Backend وFrontend وAndroid. تشمل Backend typecheck وlint و152 اختبارًا وSmoke activation، وتشمل Frontend build و5 اختبارات Jest، وتشمل Android unit tests وassembleDebug.
 
 ## 10. Production Configuration
 
@@ -109,13 +112,14 @@ Sentry وطبقات التنبيه موجودة جزئيًا في المشروع
 
 | العنصر | القيمة |
 |---|---|
-| Branch | `feature/t1-production-transition` |
-| Base used | HEAD الحالي `d3d8a6c`؛ baseline المطوّر `d3a3e10` غير موجود في clone الحالي |
-| Commits added | `b26dd61`, `1cdfb2f`, `57cec50` |
-| Remote | `origin/feature/t1-production-transition` |
-| Latest commit | `57cec50 ci: validate feature branches automatically` |
+| Branch | `feature/t1-final-production` |
+| Base used | `d3d8a6c` هو ancestor؛ baseline المطوّر `d3a3e10` غير موجود في clone الحالي |
+| Commits added | `b26dd61`, `1cdfb2f`, `57cec50`, `632e4d0` |
+| Remote | `origin/feature/t1-final-production` |
+| Latest commit | `632e4d0 chore: harden production configuration and CI validation` |
 | Working tree | تغييرات المصدر committed/pushed؛ توجد artifacts محلية غير متعقبة |
 | Main | لم يُعدّل مباشرة |
+| Final PR | [PR #30](https://github.com/merci1994dz/dzhoot/pull/30) |
 
 ## 16. Final Decision
 
