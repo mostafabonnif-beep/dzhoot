@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -53,13 +53,13 @@ fun SubscriptionGateScreen(
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(modifier = Modifier.width(1.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Text(
                     text = "أدخل كود التفعيل للوصول إلى القنوات والمحتوى.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                 )
-                Spacer(modifier = Modifier.width(1.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 OutlinedTextField(
                     value = code,
                     onValueChange = { code = it.uppercase() },
@@ -69,7 +69,7 @@ fun SubscriptionGateScreen(
                     enabled = !uiState.isRedeeming,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                Spacer(modifier = Modifier.width(1.dp))
+                Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = { onClaim(code.trim()) },
                     enabled = code.isNotBlank() && !uiState.isRedeeming,
@@ -85,7 +85,7 @@ fun SubscriptionGateScreen(
                     }
                 }
                 uiState.error?.takeIf { it.isNotBlank() }?.let { error ->
-                    Spacer(modifier = Modifier.width(1.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = error,
                         color = MaterialTheme.colorScheme.error,
@@ -94,7 +94,7 @@ fun SubscriptionGateScreen(
                     )
                 }
                 Text(
-                    text = "يمكنك إدخال كود جديد من الإعدادات بعد انتهاء الاشتراك.",
+                    text = "يمكنك إدخال كود جديد بعد انتهاء الاشتراك أو التواصل مع الدعم.",
                     style = MaterialTheme.typography.bodySmall,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = 12.dp),
