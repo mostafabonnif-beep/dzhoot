@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Filter, Search, X } from 'lucide-react';
+import { useLocale } from '@/components/locale-provider';
 
 export interface ColumnFilterProps {
   /** Label shown as column header text */
@@ -23,6 +24,8 @@ export default function ColumnFilter({
   onChange,
   searchable = false,
 }: ColumnFilterProps) {
+  const { locale } = useLocale();
+  const labelFor = (ar: string, en: string, fr: string) => locale === 'ar' ? ar : locale === 'fr' ? fr : en;
   const [open, setOpen] = useState(false);
   const [filterSearch, setFilterSearch] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -123,11 +126,11 @@ export default function ColumnFilter({
             ? 'text-primary bg-primary/10'
             : 'text-muted-foreground/50 hover:text-muted-foreground'
         }`}
-        aria-label={`Filter by ${label}`}
+        aria-label={`${labelFor('فلترة حسب', 'Filter by', 'Filtrer par')} ${label}`}
         aria-expanded={open}
         aria-controls={dropdownId}
         title={
-          isActive ? `Filtered: ${selected.length} of ${options.length}` : `Filter by ${label}`
+          isActive ? `${labelFor('مفلتر:', 'Filtered:', 'Filtré :')} ${selected.length} ${labelFor('من', 'of', 'sur')} ${options.length}` : `${labelFor('فلترة حسب', 'Filter by', 'Filtrer par')} ${label}`
         }
       >
         <Filter className="h-3 w-3" />
@@ -138,14 +141,14 @@ export default function ColumnFilter({
           ref={dropdownRef}
           id={dropdownId}
           role="dialog"
-          aria-label={`${label} filter options`}
+          aria-label={`${labelFor('خيارات فلترة', 'Filter options for', 'Options de filtre pour')} ${label}`}
           className="absolute top-full left-0 mt-1 z-50 min-w-[min(200px,calc(100vw-2rem))] max-w-[280px] bg-card border-2 border-border shadow-lg animate-fade-up"
           style={{ animationDuration: '100ms' }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-border">
             <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Filter: {label}
+              {labelFor('فلترة:', 'Filter:', 'Filtre :')} {label}
             </span>
             <button
               onClick={() => {
@@ -153,7 +156,7 @@ export default function ColumnFilter({
                 setFilterSearch('');
               }}
               className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Close filter"
+              aria-label={labelFor('إغلاق الفلتر', 'Close filter', 'Fermer le filtre')}
             >
               <X className="h-3 w-3" />
             </button>
@@ -168,8 +171,8 @@ export default function ColumnFilter({
                   type="text"
                   value={filterSearch}
                   onChange={(e) => setFilterSearch(e.target.value)}
-                  placeholder="Search..."
-                  aria-label={`Search ${label} options`}
+                  placeholder={labelFor('بحث…', 'Search…', 'Rechercher…')}
+                  aria-label={`${labelFor('بحث في خيارات', 'Search', 'Rechercher dans')} ${label}`}
                   aria-controls={`${dropdownId}-options`}
                   className="w-full h-7 pl-7 pr-2 text-xs border border-border bg-background placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary"
                 />
@@ -183,14 +186,14 @@ export default function ColumnFilter({
               onClick={selectAll}
               className="text-xs uppercase tracking-[0.1em] text-primary hover:text-primary/80 font-medium transition-colors"
             >
-              Select All
+              {labelFor('تحديد الكل', 'Select all', 'Tout sélectionner')}
             </button>
             <span className="text-muted-foreground/30">|</span>
             <button
               onClick={clearAll}
               className="text-xs uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground font-medium transition-colors"
             >
-              Clear
+              {labelFor('مسح', 'Clear', 'Effacer')}
             </button>
             {isActive && (
               <span className="ml-auto text-xs text-muted-foreground">
@@ -207,7 +210,7 @@ export default function ColumnFilter({
             aria-label={`${label} options`}
           >
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">No matches</div>
+              <div className="px-3 py-2 text-xs text-muted-foreground">{labelFor('لا توجد نتائج', 'No matches', 'Aucun résultat')}</div>
             ) : (
               filteredOptions.map((opt) => {
                 const isChecked = selected.includes(opt);

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useLocale } from '@/components/locale-provider';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import Pagination from '@/components/ui/pagination';
 import Modal from '@/components/ui/modal';
@@ -41,6 +42,7 @@ interface UserData {
 
 export default function UsersPage() {
   const { toast } = useToast();
+  const { t } = useLocale();
   const router = useRouter();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -221,8 +223,8 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">Users</h1>
-          <p className="text-sm text-muted-foreground mt-1">{totalCount} registered users</p>
+          <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">{t('admin.users')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{totalCount} {t('admin.registeredUsers')}</p>
         </div>
         <button
           onClick={() => {
@@ -249,8 +251,8 @@ export default function UsersPage() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Search by username, email, or channel code..."
-          aria-label="Search users"
+          placeholder={t('admin.searchPlaceholder')}
+          aria-label={t('admin.searchUsers')}
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
           className="w-full h-10 pl-10 pr-4 border border-border bg-card text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
@@ -506,7 +508,7 @@ export default function UsersPage() {
                 value={newUsername}
                 onChange={(e) => setNewUsername(e.target.value)}
                 className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-                placeholder="username"
+                placeholder={t('common.username')}
               />
             </div>
             <div className="space-y-1.5">
@@ -523,7 +525,7 @@ export default function UsersPage() {
                 value={newEmail}
                 onChange={(e) => setNewEmail(e.target.value)}
                 className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-                placeholder="user@example.com"
+                placeholder={t('common.email')}
               />
             </div>
             <div className="space-y-1.5">
@@ -541,7 +543,7 @@ export default function UsersPage() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-                placeholder="Min. 8 characters"
+                placeholder={t('common.password')}
               />
             </div>
             <div className="space-y-1.5">

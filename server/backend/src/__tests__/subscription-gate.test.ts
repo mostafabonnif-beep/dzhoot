@@ -36,6 +36,15 @@ describe('subscription gate', () => {
     expect(await isSubscriptionRequired()).toBe(false);
   });
 
+  it('uses SUBSCRIPTION_REQUIRED when explicitly configured', async () => {
+    const previous = process.env.SUBSCRIPTION_REQUIRED;
+    process.env.SUBSCRIPTION_REQUIRED = 'true';
+    await AppSetting.create({ key: 'subscription_required', value: false });
+    expect(await isSubscriptionRequired()).toBe(true);
+    if (previous === undefined) delete process.env.SUBSCRIPTION_REQUIRED;
+    else process.env.SUBSCRIPTION_REQUIRED = previous;
+  });
+
   it('getActiveSubscription returns only unexpired ACTIVE subscriptions', async () => {
     const user = await makeUser();
     const plan = await makePlan();

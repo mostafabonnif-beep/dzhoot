@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useLocale } from '@/components/locale-provider';
 
 interface PaginationProps {
   page: number;
@@ -11,6 +12,8 @@ interface PaginationProps {
 }
 
 export default function Pagination({ page, pageSize, totalCount, onPageChange }: PaginationProps) {
+  const { locale } = useLocale();
+  const label = (ar: string, en: string, fr: string) => locale === 'ar' ? ar : locale === 'fr' ? fr : en;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
   const start = (page - 1) * pageSize + 1;
@@ -31,9 +34,9 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange }:
   if (totalCount <= pageSize) return null;
 
   return (
-    <nav aria-label="Pagination" className="flex items-center justify-between py-3 px-1">
+    <nav aria-label={label('التنقل بين الصفحات', 'Pagination', 'Pagination')} className="flex items-center justify-between py-3 px-1">
       <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
-        {start}–{end} of {totalCount}
+        {start}–{end} {label('من', 'of', 'sur')} {totalCount}
       </span>
       <div className="flex items-center gap-1.5 sm:gap-1">
         <button
@@ -41,7 +44,7 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange }:
           disabled={page <= 1}
           aria-disabled={page <= 1}
           className="flex items-center justify-center h-11 w-11 border border-border text-muted-foreground hover:text-foreground hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-primary transition-colors disabled:opacity-30 disabled:pointer-events-none"
-          aria-label="Previous page"
+          aria-label={label('الصفحة السابقة', 'Previous page', 'Page précédente')}
         >
           <ChevronLeft className="h-4 w-4" />
         </button>
@@ -58,7 +61,7 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange }:
             <button
               key={item}
               onClick={() => onPageChange(item as number)}
-              aria-label={`Go to page ${item}`}
+              aria-label={`${label('الانتقال إلى الصفحة', 'Go to page', 'Aller à la page')} ${item}`}
               aria-current={item === page ? 'page' : undefined}
               className={`flex items-center justify-center h-11 min-w-[2.75rem] px-1 text-xs font-medium border focus-visible:ring-2 focus-visible:ring-primary transition-colors ${
                 item === page
@@ -75,7 +78,7 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange }:
           disabled={page >= totalPages}
           aria-disabled={page >= totalPages}
           className="flex items-center justify-center h-11 w-11 border border-border text-muted-foreground hover:text-foreground hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-primary transition-colors disabled:opacity-30 disabled:pointer-events-none"
-          aria-label="Next page"
+          aria-label={label('الصفحة التالية', 'Next page', 'Page suivante')}
         >
           <ChevronRight className="h-4 w-4" />
         </button>

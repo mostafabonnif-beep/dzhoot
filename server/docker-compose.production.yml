@@ -1,4 +1,29 @@
 services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: dzhoof-caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - dzhoof-network
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
   api:
     image: ${DOCKER_IMAGE}
     container_name: dzhoof-api
@@ -14,6 +39,9 @@ services:
       REDIS_URL: redis://dzhoof-redis:6379
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      XTREAM_SECRET_KEY: ${XTREAM_SECRET_KEY}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
@@ -41,9 +69,15 @@ services:
       DEMO_CHANNEL_LIST_CODE: ${DEMO_CHANNEL_LIST_CODE}
       GOOGLE_RECAPTCHA_SITE_KEY: ${GOOGLE_RECAPTCHA_SITE_KEY}
       GOOGLE_RECAPTCHA_SECRET_KEY: ${GOOGLE_RECAPTCHA_SECRET_KEY}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID}
+      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL}
+      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY}
       BACKEND_SENTRY_DSN: ${BACKEND_SENTRY_DSN}
-      ALLOWED_ORIGINS: https://dzhoof.example
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       DISABLE_SCHEDULER: 'true'
+      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED:-true}
     networks:
       - dzhoof-network
       - gkz-network
@@ -147,6 +181,10 @@ networks:
     name: dzhoof-shared-network
 
 volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
   mongodb_data:
     driver: local
   redis_data:

@@ -91,6 +91,7 @@ export interface DeviceInfo {
   name?: string;
   platform?: string;
   appVersion?: string;
+  pushToken?: string;
 }
 
 /**
@@ -222,7 +223,7 @@ export async function getUserSubscription(userId: string) {
  * user's ACTIVE subscription — the subscription is what grants device slots.
  */
 export async function registerDevice(userId: string, info: DeviceInfo, maxDevices?: number) {
-  const { deviceId, name, platform, appVersion } = info;
+  const { deviceId, name, platform, appVersion, pushToken } = info;
   const normalizedDeviceId = typeof deviceId === 'string' ? deviceId.trim() : '';
   if (!normalizedDeviceId || normalizedDeviceId.length > 200) {
     return { ok: false as const, error: 'DEVICE_ID_REQUIRED', message: 'deviceId must be a non-empty string up to 200 characters' };
@@ -234,6 +235,7 @@ export async function registerDevice(userId: string, info: DeviceInfo, maxDevice
       existing.name = name || existing.name;
       existing.platform = platform || existing.platform;
       existing.appVersion = appVersion || existing.appVersion;
+      if (pushToken) existing.pushToken = pushToken.trim().slice(0, 4096);
       existing.lastSeenAt = new Date();
       await existing.save();
       return { ok: true as const, device: existing };
@@ -264,6 +266,7 @@ export async function registerDevice(userId: string, info: DeviceInfo, maxDevice
         name: name || '',
         platform: platform || '',
         appVersion: appVersion || '',
+        pushToken: pushToken ? pushToken.trim().slice(0, 4096) : '',
         lastSeenAt: new Date(),
       });
       return { ok: true as const, device };
@@ -354,6 +357,11 @@ export async function expireStaleCodes(): Promise<number> {
 
 /** Whether the platform currently gates playback behind an active subscription. */
 export async function isSubscriptionRequired(): Promise<boolean> {
+  const envValue = process.env.SUBSCRIPTION_REQUIRED?.trim().toLowerCase();
+  if (envValue === 'true' || envValue === 'false') {
+    return envValue === 'true';
+  }
+
   const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
   const doc = await AppSetting.findOne({ key: 'subscription_required' }).lean().exec();
   return doc ? !!doc.value : false;

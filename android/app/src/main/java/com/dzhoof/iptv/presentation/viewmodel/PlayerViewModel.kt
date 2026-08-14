@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
-import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
+import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationRequest
 import com.dzhoof.iptv.data.source.remote.FireVisionApiService
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
@@ -100,12 +100,20 @@ class PlayerViewModel @Inject constructor(
         catchupDurationMin: Int = 0,
     ): String? {
         return try {
-            val response = apiService.issuePlaybackToken(
-                PlaybackTokenRequest(channelId, slot, catchupStartMs, catchupDurationMin),
+            val response = apiService.authorizePlayback(
+                PlaybackAuthorizationRequest(contentType = "LIVE", contentId = channelId),
             )
             if (response.isSuccessful && response.body()?.success == true) {
-                response.body()?.data?.playbackUrl
+                response.body()?.data?.url
             } else {
+                val body = response.body()
+                _uiState.update {
+                    it.copy(error = when (body?.code) {
+                        "SUBSCRIPTION_EXPIRED" -> "Your subscription has expired. Activate a new code to continue watching."
+                        "PLAYBACK_DEVICE_REQUIRED" -> "Register this device before starting playback."
+                        else -> body?.error ?: "Unable to authorize playback (HTTP ${response.code()})"
+                    })
+                }
                 null
             }
         } catch (_: Exception) {
