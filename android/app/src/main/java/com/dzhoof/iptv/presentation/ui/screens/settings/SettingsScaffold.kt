@@ -271,13 +271,7 @@ private fun SectionContent(
     modifier: Modifier = Modifier
 ) {
     when (section) {
-        SettingsSection.Connection -> ConnectionSection(
-            uiState = uiState,
-            onResetPairing = actions.onResetPairing,
-            onPairDevice = actions.onPairDevice,
-            onNavigateToSelfHost = actions.onNavigateToSelfHost,
-            modifier = modifier
-        )
+        SettingsSection.Connection -> CustomerAccessSection(modifier = modifier)
         SettingsSection.Channels -> ChannelsSection(
             scanProgress = scanProgress,
             onCheckLiveliness = actions.onCheckLiveliness,
@@ -326,6 +320,34 @@ private fun SectionContent(
             onCheckForUpdate = actions.onCheckForUpdate,
             onUpdateNow = actions.onUpdateNow,
             modifier = modifier
+        )
+    }
+}
+
+
+@Composable
+private fun CustomerAccessSection(modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "DZ HOOF IPTV",
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = "تتم إدارة القنوات والمحتوى من طرف الإدارة. لا تظهر بيانات الخادم أو مصدر القنوات على جهازك.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = "لتغيير الاشتراك، استخدم كود تفعيل جديدًا من الإدارة.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
