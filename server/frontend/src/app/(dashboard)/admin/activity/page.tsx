@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import api from '@/lib/api';
+import { useLocale } from '@/components/locale-provider';
 import Pagination from '@/components/ui/pagination';
 import ColumnFilter from '@/components/ui/column-filter';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
@@ -75,6 +76,7 @@ function ResourceCell({ log }: { log: AuditEntry }) {
 }
 
 export default function ActivityPage() {
+  const { t, locale } = useLocale();
   const [logs, setLogs] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -151,9 +153,9 @@ export default function ActivityPage() {
   return (
     <div className="space-y-6">
       <div className="">
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">Activity Log</h1>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">{t('admin.activity')}</h1>
         <h2 className="text-sm text-muted-foreground mt-1">
-          System-wide audit trail of all actions
+          {t('admin.activity')}
         </h2>
       </div>
 
@@ -170,11 +172,11 @@ export default function ActivityPage() {
         <Search className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
         <input
           type="text"
-          placeholder="Search activity..."
+          placeholder={t('admin.searchActivity')}
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-          aria-label="Search activity logs"
+          aria-label={t('admin.searchActivityLabel')}
         />
       </div>
 
@@ -188,7 +190,7 @@ export default function ActivityPage() {
           gridTemplate="minmax(100px,1fr) minmax(110px,1.2fr) minmax(130px,1.4fr) minmax(160px,2.6fr) minmax(90px,1fr) minmax(110px,1.1fr)"
           resizable
           ariaLabel="Activity log table"
-          emptyMessage="No activity logs found"
+          emptyMessage={t('common.noResults')}
           rowKey={(log) => log._id}
           rowAriaLabel={(log) =>
             `${formatLabel(log.action)} by ${log.userId?.username || 'unknown'}`
@@ -198,7 +200,7 @@ export default function ActivityPage() {
               {
                 key: 'time',
                 headerClassName: 'text-xs uppercase tracking-[0.15em] text-muted-foreground',
-                header: 'Time',
+                header: locale === 'ar' ? 'الوقت' : locale === 'fr' ? 'Heure' : 'Time',
                 cell: (log) => (
                   <div className="text-xs tabular-nums text-muted-foreground">
                     <time dateTime={log.timestamp}>
@@ -213,7 +215,7 @@ export default function ActivityPage() {
               {
                 key: 'user',
                 headerClassName: 'text-xs uppercase tracking-[0.15em] text-muted-foreground',
-                header: 'User',
+                header: locale === 'ar' ? 'المستخدم' : locale === 'fr' ? 'Utilisateur' : 'User',
                 cell: (log) => (
                   <span className="text-sm truncate">{log.userId?.username || '—'}</span>
                 ),
@@ -224,7 +226,7 @@ export default function ActivityPage() {
                   'text-xs uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1',
                 header: (
                   <ColumnFilter
-                    label="Action"
+                    label={locale === 'ar' ? 'الإجراء' : locale === 'fr' ? 'Action' : 'Action'}
                     options={filterOptions.action.map((a) => formatLabel(a))}
                     selected={selectedActions.map((a) => formatLabel(a))}
                     onChange={(labels) => {
@@ -247,7 +249,7 @@ export default function ActivityPage() {
                   'text-xs uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1',
                 header: (
                   <ColumnFilter
-                    label="Resource"
+                    label={locale === 'ar' ? 'المورد' : locale === 'fr' ? 'Ressource' : 'Resource'}
                     options={filterOptions.resource}
                     selected={selectedResources}
                     onChange={setSelectedResources}
@@ -261,7 +263,7 @@ export default function ActivityPage() {
                   'text-xs uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1',
                 header: (
                   <ColumnFilter
-                    label="Status"
+                    label={t('common.status')}
                     options={filterOptions.status}
                     selected={selectedStatuses}
                     onChange={setSelectedStatuses}

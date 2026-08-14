@@ -2,6 +2,9 @@ package com.dzhoof.iptv.data.repository
 
 import android.content.Context
 import android.provider.Settings
+import com.dzhoof.iptv.BuildConfig
+import com.google.firebase.messaging.FirebaseMessaging
+import com.dzhoof.iptv.DzHoofFirebaseMessagingService
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.model.dto.RedeemCodeRequest
 import com.dzhoof.iptv.data.model.dto.RedeemDataDto
@@ -13,7 +16,9 @@ import com.dzhoof.iptv.data.source.remote.FireVisionApiService
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.repository.SubscriptionRepository
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -40,6 +45,34 @@ class SubscriptionRepositoryImpl @Inject constructor(
         "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()
 
     private fun platform(): String = "android"
+
+    /**
+     * Returns the current Firebase token when Firebase is configured for this build.
+     * Debug builds without google-services.json intentionally continue without a token.
+     */
+    private suspend fun getPushToken(): String? {
+        val preferences = appContext.getSharedPreferences(
+            DzHoofFirebaseMessagingService.PREFERENCES,
+            Context.MODE_PRIVATE,
+        )
+        preferences.getString(DzHoofFirebaseMessagingService.PUSH_TOKEN, null)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { return it }
+
+        return try {
+            suspendCancellableCoroutine { continuation ->
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                    val token = if (task.isSuccessful) task.result?.takeIf { it.isNotBlank() } else null
+                    if (token != null) {
+                        preferences.edit().putString(DzHoofFirebaseMessagingService.PUSH_TOKEN, token).apply()
+                    }
+                    continuation.resume(token)
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     override suspend fun redeemCode(code: String): Result<RedeemDataDto> =
         withContext(dispatcher) {
@@ -96,7 +129,8 @@ class SubscriptionRepositoryImpl @Inject constructor(
                         deviceId = getDeviceId(),
                         name = deviceName(),
                         platform = platform(),
-                        appVersion = null,
+                        appVersion = BuildConfig.VERSION_NAME,
+                        pushToken = getPushToken(),
                     ),
                 )
                 if (response.isSuccessful) {

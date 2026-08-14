@@ -14,6 +14,7 @@ import {
   UserCircle,
   Package,
   MonitorPlay,
+  Server,
   Link2,
   Zap,
   Calendar,
@@ -25,41 +26,44 @@ import {
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
 import { BrandMark } from './brand-mark';
+import { useLocale } from '@/components/locale-provider';
 
 const adminLinks = [
-  { href: '/admin', label: 'لوحة التحكم', icon: LayoutDashboard },
-  { href: '/admin/quick-pick', label: 'اختيار سريع', icon: Zap },
-  { href: '/admin/channels', label: 'القنوات المباشرة', icon: Tv },
-  { href: '/admin/movies', label: 'الأفلام (VOD)', icon: Film },
-  { href: '/admin/series', label: 'المسلسلات', icon: MonitorPlay },
-  { href: '/admin/users', label: 'المستخدمون', icon: Users },
-  { href: '/admin/devices', label: 'الأجهزة', icon: Smartphone },
-  { href: '/admin/plans', label: 'الباقات', icon: CreditCard },
-  { href: '/admin/codes', label: 'أكواد التفعيل', icon: KeyRound },
-  { href: '/admin/import', label: 'استيراد IPTV', icon: Globe },
-  { href: '/admin/m3u-sources', label: 'مصادر M3U التلقائية', icon: Link2 },
-  { href: '/admin/sources', label: 'مصادر أخرى', icon: MonitorPlay },
-  { href: '/admin/epg', label: 'دليل البرامج (EPG)', icon: Calendar },
-  { href: '/admin/versions', label: 'إصدارات التطبيق', icon: Package },
-  { href: '/admin/stats', label: 'الإحصائيات', icon: BarChart3 },
-  { href: '/admin/activity', label: 'سجل النشاط', icon: Activity },
-  { href: '/admin/scheduler', label: 'جدول المهام', icon: Clock },
-  { href: '/admin/settings', label: 'الإعدادات', icon: Settings },
+  { href: '/admin', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { href: '/admin/quick-pick', labelKey: 'nav.quickPick', icon: Zap },
+  { href: '/admin/channels', labelKey: 'nav.channels', icon: Tv },
+  { href: '/admin/movies', labelKey: 'nav.movies', icon: Film },
+  { href: '/admin/series', labelKey: 'nav.series', icon: MonitorPlay },
+  { href: '/admin/users', labelKey: 'nav.users', icon: Users },
+  { href: '/admin/devices', labelKey: 'nav.devices', icon: Smartphone },
+  { href: '/admin/plans', labelKey: 'nav.plans', icon: CreditCard },
+  { href: '/admin/codes', labelKey: 'nav.codes', icon: KeyRound },
+  { href: '/admin/import', labelKey: 'nav.import', icon: Globe },
+  { href: '/admin/m3u-sources', labelKey: 'nav.m3uSources', icon: Link2 },
+  { href: '/admin/xtream-sources', labelKey: 'nav.xtreamSources', icon: Server },
+  { href: '/admin/sources', labelKey: 'nav.sources', icon: MonitorPlay },
+  { href: '/admin/epg', labelKey: 'nav.epg', icon: Calendar },
+  { href: '/admin/versions', labelKey: 'nav.versions', icon: Package },
+  { href: '/admin/stats', labelKey: 'nav.stats', icon: BarChart3 },
+  { href: '/admin/activity', labelKey: 'nav.activity', icon: Activity },
+  { href: '/admin/scheduler', labelKey: 'nav.scheduler', icon: Clock },
+  { href: '/admin/settings', labelKey: 'nav.settings', icon: Settings },
 ];
 
 const userLinks = [
-  { href: '/user', label: 'لوحة التحكم', icon: LayoutDashboard },
-  { href: '/user/quick-pick', label: 'اختيار سريع', icon: Zap },
-  { href: '/user/channels', label: 'قنواتـي', icon: Tv },
-  { href: '/user/import', label: 'استيراد IPTV', icon: Globe },
-  { href: '/user/sources', label: 'مصادر أخرى', icon: MonitorPlay },
-  { href: '/user/devices', label: 'ربط الجهاز', icon: Smartphone },
-  { href: '/user/subscription', label: 'الاشتراك', icon: CreditCard },
-  { href: '/user/profile', label: 'الملف الشخصي', icon: UserCircle },
+  { href: '/user', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { href: '/user/quick-pick', labelKey: 'nav.quickPick', icon: Zap },
+  { href: '/user/channels', labelKey: 'nav.myChannels', icon: Tv },
+  { href: '/user/import', labelKey: 'nav.import', icon: Globe },
+  { href: '/user/sources', labelKey: 'nav.sources', icon: MonitorPlay },
+  { href: '/user/devices', labelKey: 'nav.pairDevice', icon: Smartphone },
+  { href: '/user/subscription', labelKey: 'nav.subscription', icon: CreditCard },
+  { href: '/user/profile', labelKey: 'nav.profile', icon: UserCircle },
 ];
 
 export function Sidebar({ role }: { role: 'admin' | 'user' }) {
   const pathname = usePathname();
+  const { t } = useLocale();
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
 
   const links = role === 'admin' ? adminLinks : userLinks;
@@ -105,7 +109,7 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
               <Link
                 key={link.href}
                 href={link.href}
-                title={sidebarCollapsed ? link.label : undefined}
+                title={sidebarCollapsed ? t(link.labelKey) : undefined}
                 className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
                   isActive
                     ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
@@ -113,7 +117,7 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
                 }`}
               >
                 <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                {!sidebarCollapsed && <span className="truncate">{link.label}</span>}
+                {!sidebarCollapsed && <span className="truncate">{t(link.labelKey)}</span>}
               </Link>
             );
           })}
@@ -122,7 +126,7 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
         {/* Sidebar Footer / Collapse Toggle */}
         <div className="border-t border-border/70 p-3 hidden lg:flex items-center justify-between">
           {!sidebarCollapsed && (
-            <span className="text-xs text-muted-foreground px-2">نسخة التطوير 1.0.0</span>
+            <span className="text-xs text-muted-foreground px-2">DZ HOOF IPTV · 1.0.0</span>
           )}
           <button
             onClick={toggleSidebar}

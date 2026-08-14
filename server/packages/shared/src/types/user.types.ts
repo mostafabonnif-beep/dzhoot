@@ -31,6 +31,9 @@ export interface IUser {
   passwordResetToken?: string;
   passwordResetExpires?: Date;
   codeRevokedAt?: Date | null;
+  totpEnabled?: boolean;
+  totpSecretEncrypted?: string;
+  totpEnabledAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

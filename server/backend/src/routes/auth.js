@@ -9,6 +9,7 @@ const Session = require('../models/Session');
 const RefreshToken = require('../models/RefreshToken');
 const { audit } = require('../services/audit-log');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/email');
+const { createTotpSetup, verifyTotpToken } = require('../services/totp-service');
 
 function buildOwnedOtherSessionsFilter(userId, currentSessionId) {
   return {
@@ -167,7 +168,7 @@ const requireAdmin = (req, res, next) => {
  */
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, totpToken } = req.body;
 
     // Validate input — reject non-strings to prevent NoSQL operator injection
     // (e.g. username: { $ne: null }) in the $or query below.
@@ -216,6 +217,24 @@ router.post('/login', async (req, res) => {
         success: false,
         error: 'Invalid credentials',
       });
+    }
+
+    if (user.role === 'Admin' && user.totpEnabled) {
+      if (typeof totpToken !== 'string' || !totpToken) {
+        return res.status(401).json({
+          success: false,
+          error: 'Two-factor authentication required',
+          code: 'TWO_FACTOR_REQUIRED',
+        });
+      }
+      const totpUser = await User.findById(user._id).select('+totpSecretEncrypted');
+      if (!totpUser?.totpSecretEncrypted || !(await verifyTotpToken(totpUser.totpSecretEncrypted, totpToken))) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid two-factor authentication code',
+          code: 'TWO_FACTOR_INVALID',
+        });
+      }
     }
 
     // Generate session ID
@@ -272,6 +291,63 @@ router.post('/login', async (req, res) => {
       success: false,
       error: 'Login failed',
     });
+  }
+});
+
+router.post('/2fa/setup', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('+totpSecretEncrypted');
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const setup = await createTotpSetup(user.email || user.username);
+    user.totpSecretEncrypted = setup.encryptedSecret;
+    user.totpEnabled = false;
+    user.totpEnabledAt = undefined;
+    await user.save();
+    return res.json({ success: true, secret: setup.secret, uri: setup.uri, requiresConfirmation: true });
+  } catch (error) {
+    console.error('2FA setup error:', error);
+    return res.status(500).json({ success: false, error: 'Unable to setup two-factor authentication' });
+  }
+});
+
+router.post('/2fa/confirm', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (typeof token !== 'string' || !/^[0-9]{6,8}$/.test(token)) {
+      return res.status(400).json({ success: false, error: 'A valid two-factor code is required' });
+    }
+    const user = await User.findById(req.user.id).select('+totpSecretEncrypted');
+    if (!user?.totpSecretEncrypted || !(await verifyTotpToken(user.totpSecretEncrypted, token))) {
+      return res.status(401).json({ success: false, error: 'Invalid two-factor authentication code' });
+    }
+    user.totpEnabled = true;
+    user.totpEnabledAt = new Date();
+    await user.save();
+    return res.json({ success: true, enabled: true });
+  } catch (error) {
+    console.error('2FA confirmation error:', error);
+    return res.status(500).json({ success: false, error: 'Unable to confirm two-factor authentication' });
+  }
+});
+
+router.post('/2fa/disable', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { password, token } = req.body;
+    const user = await User.findById(req.user.id).select('+totpSecretEncrypted');
+    if (!user || typeof password !== 'string' || !(await user.comparePassword(password))) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
+    if (!user.totpSecretEncrypted || !(await verifyTotpToken(user.totpSecretEncrypted, String(token || '')))) {
+      return res.status(401).json({ success: false, error: 'A valid two-factor code is required' });
+    }
+    user.totpEnabled = false;
+    user.totpSecretEncrypted = undefined;
+    user.totpEnabledAt = undefined;
+    await user.save();
+    return res.json({ success: true, enabled: false });
+  } catch (error) {
+    console.error('2FA disable error:', error);
+    return res.status(500).json({ success: false, error: 'Unable to disable two-factor authentication' });
   }
 });
 
@@ -332,6 +408,7 @@ router.get('/me', requireAuth, async (req, res) => {
         profilePicture: user.profilePicture,
         isActive: user.isActive,
         emailVerified: user.emailVerified,
+        totpEnabled: user.role === 'Admin' && user.totpEnabled === true,
         lastLogin: user.lastLogin,
         channels: user.channels,
         metadata: user.metadata,
