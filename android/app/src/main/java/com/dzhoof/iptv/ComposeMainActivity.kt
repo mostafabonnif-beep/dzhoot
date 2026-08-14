@@ -173,13 +173,9 @@ class ComposeMainActivity : ComponentActivity() {
                 FireVisionTheme(darkTheme = darkTheme) {
                     var showSplash by rememberSaveable { mutableStateOf(showSplashOnStart) }
                     val navController = rememberNavController()
-                    // Pairing is onboarding; subscription activation is mandatory
-                    // before any client can enter the catalog.
-                    val startDestination = if (needsPairing) {
-                        Screen.Pairing.route
-                    } else {
-                        Screen.SubscriptionGate.route
-                    }
+                    // Customer builds start with activation code entry. Pairing
+                    // remains available only as an internal/settings flow.
+                    val startDestination = Screen.SubscriptionGate.route
 
                     // Confirm-exit guard at the app root (TiviMate-style): with the
                     // setting on, the first BACK on Home arms a toast; a second press

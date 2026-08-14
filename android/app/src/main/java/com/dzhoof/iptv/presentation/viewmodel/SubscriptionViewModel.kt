@@ -48,6 +48,33 @@ class SubscriptionViewModel @Inject constructor(
         }
     }
 
+    fun claim(code: String) {
+        if (code.isBlank()) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isRedeeming = true, error = null, redeemSuccess = null)
+            when (val result = repository.claimCode(code)) {
+                is Result.Success -> {
+                    val plan = result.data.plan
+                    val expires = result.data.subscription?.expiresAt
+                    _uiState.value = _uiState.value.copy(
+                        isRedeeming = false,
+                        redeemSuccess = "Subscription activated${if (!plan?.name.isNullOrBlank()) " — ${plan?.name}" else ""}${if (!expires.isNullOrBlank()) " · expires ${formatExpiry(expires!!)}" else ""}",
+                        subscription = SubscriptionViewDataDto(
+                            subscription = result.data.subscription,
+                            plan = result.data.plan,
+                            devicesUsed = result.data.devicesUsed,
+                            maxDevices = result.data.maxDevices,
+                        ),
+                    )
+                }
+                is Result.Error -> _uiState.value = _uiState.value.copy(
+                    isRedeeming = false,
+                    error = result.exception.message ?: "Activation failed",
+                )
+            }
+        }
+    }
+
     fun redeem(code: String) {
         if (code.isBlank()) return
         viewModelScope.launch {

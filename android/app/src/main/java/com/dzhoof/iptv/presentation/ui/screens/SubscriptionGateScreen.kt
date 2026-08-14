@@ -33,7 +33,7 @@ import com.dzhoof.iptv.presentation.viewmodel.SubscriptionUiState
 @Composable
 fun SubscriptionGateScreen(
     uiState: SubscriptionUiState,
-    onRedeem: (String) -> Unit,
+    onClaim: (String) -> Unit,
 ) {
     var code by rememberSaveable { mutableStateOf("") }
 
@@ -71,7 +71,7 @@ fun SubscriptionGateScreen(
                 )
                 Spacer(modifier = Modifier.width(1.dp))
                 Button(
-                    onClick = { onRedeem(code.trim()) },
+                    onClick = { onClaim(code.trim()) },
                     enabled = code.isNotBlank() && !uiState.isRedeeming,
                     modifier = Modifier.fillMaxWidth(),
                 ) {

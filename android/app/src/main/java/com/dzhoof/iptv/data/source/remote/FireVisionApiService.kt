@@ -117,6 +117,10 @@ interface FireVisionApiService {
      */
     @POST("api/v1/activation/redeem")
     suspend fun redeemCode(@Body request: RedeemCodeRequest): Response<RedeemResponseDto>
+
+    /** Claims a sold activation code and returns the customer session. */
+    @POST("api/v1/activation/claim")
+    suspend fun claimCode(@Body request: RedeemCodeRequest): Response<RedeemResponseDto>
     
     /**
      * Fetches the current subscription, plan and registered devices.

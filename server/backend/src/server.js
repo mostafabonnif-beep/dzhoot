@@ -358,6 +358,7 @@ const activationRedeemLimiter = rateLimit({
   message: { success: false, error: 'Too many activation attempts, please try again later', code: 'RATE_LIMITED' },
 });
 app.use('/api/v1/activation/redeem', activationRedeemLimiter);
+app.use('/api/v1/activation/claim', activationRedeemLimiter);
 
 // Static files for uploads
 app.use('/uploads', express.static(path.join(PROJECT_ROOT, 'uploads')));

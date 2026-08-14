@@ -21,6 +21,9 @@ interface SubscriptionRepository {
      */
     suspend fun redeemCode(code: String): Result<RedeemDataDto>
 
+    /** Claims a sold activation code and creates the anonymous customer session. */
+    suspend fun claimCode(code: String): Result<RedeemDataDto>
+
     /**
      * Fetches the current subscription, plan and device usage.
      */

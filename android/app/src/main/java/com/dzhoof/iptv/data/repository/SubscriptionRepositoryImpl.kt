@@ -3,6 +3,7 @@ package com.dzhoof.iptv.data.repository
 import android.content.Context
 import android.provider.Settings
 import com.dzhoof.iptv.BuildConfig
+import com.dzhoof.iptv.data.AppPreferences
 import com.google.firebase.messaging.FirebaseMessaging
 import com.dzhoof.iptv.DzHoofFirebaseMessagingService
 import com.dzhoof.iptv.data.model.Result
@@ -89,6 +90,36 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     val body: RedeemResponseDto? = response.body()
                     val data = body?.data
                     if (body?.success == true && data != null) {
+                        Result.success(data)
+                    } else {
+                        Result.error(IOException(body?.error ?: "Activation failed"))
+                    }
+                } else {
+                    Result.error(IOException("Activation failed (HTTP ${response.code()})"))
+                }
+            } catch (e: Exception) {
+                Result.error(e)
+            }
+        }
+
+    override suspend fun claimCode(code: String): Result<RedeemDataDto> =
+        withContext(dispatcher) {
+            try {
+                val response = apiService.claimCode(
+                    RedeemCodeRequest(
+                        code = code.trim(),
+                        deviceId = getDeviceId(),
+                        deviceName = deviceName(),
+                        platform = platform(),
+                        appVersion = BuildConfig.VERSION_NAME,
+                    ),
+                )
+                if (response.isSuccessful) {
+                    val body = response.body()
+                    val data = body?.data
+                    val sessionId = body?.sessionId
+                    if (body?.success == true && data != null && !sessionId.isNullOrBlank()) {
+                        AppPreferences.setCustomerSessionId(appContext, sessionId)
                         Result.success(data)
                     } else {
                         Result.error(IOException(body?.error ?: "Activation failed"))
