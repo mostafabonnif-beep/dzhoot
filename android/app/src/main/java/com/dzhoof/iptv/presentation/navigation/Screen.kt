@@ -8,6 +8,7 @@ import java.net.URLEncoder
  */
 sealed class Screen(val route: String) {
     object Pairing : Screen("pairing")
+    object SubscriptionGate : Screen("subscription_gate")
     object Home : Screen("home")
     object Channels : Screen("channels")
     object Categories : Screen("categories")
