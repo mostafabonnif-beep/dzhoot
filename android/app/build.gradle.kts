@@ -43,7 +43,7 @@ android {
         // APKs can point at a real server without editing source. HTTPS required.
         val configuredApiUrl = providers.gradleProperty("dzhoofApiUrl")
             .orElse(providers.environmentVariable("DZHOOF_API_URL"))
-            .orElse("https://example.invalid/")
+            .orElse("https://8009-i11yovu3v9kwp3b77gc99-9aaf8799.us4.manus.computer/")
             .get()
             .trim()
             .let { if (it.endsWith("/")) it else "$it/" }
