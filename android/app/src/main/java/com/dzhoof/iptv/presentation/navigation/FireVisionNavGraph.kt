@@ -163,6 +163,22 @@ fun FireVisionNavGraph(
             )
         }
 
+        // ── Series details (opened directly from unified search) ────────
+        composable(
+            route = Screen.SeriesDetails.route,
+            arguments = listOf(navArgument("seriesId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            CatalogScreen(
+                initialSeriesId = backStackEntry.arguments?.getString("seriesId"),
+                onPlayMovie = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("MOVIE", id, title))
+                },
+                onPlayEpisode = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("EPISODE", id, title))
+                },
+            )
+        }
+
         // ── Channels ────────────────────────────────────────────────────
         composable(route = Screen.Channels.route) {
             ChannelsScreen(
@@ -251,8 +267,8 @@ fun FireVisionNavGraph(
                 onMovieClick = { movieId ->
                     navController.navigate(Screen.VodPlayer.createRoute("MOVIE", movieId, "Movie"))
                 },
-                onSeriesClick = {
-                    navController.navigate(Screen.Catalog.route)
+                onSeriesClick = { seriesId ->
+                    navController.navigate(Screen.SeriesDetails.createRoute(seriesId))
                 },
                 onProgramClick = {
                     navController.navigate(Screen.Guide.route)

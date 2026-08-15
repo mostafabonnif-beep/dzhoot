@@ -23,6 +23,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -39,6 +41,7 @@ import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
 import com.dzhoof.iptv.presentation.ui.components.ChannelCard
 import com.dzhoof.iptv.presentation.ui.components.ErrorState
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
+import coil.compose.AsyncImage
 
 @Composable
 internal fun SearchResultsArea(
@@ -254,7 +257,15 @@ private fun SearchResultSection(
                 .clickable { onClick(item.id) },
         ) {
             Row(modifier = Modifier.padding(12.dp)) {
-                Spacer(modifier = Modifier.size(4.dp))
+                AsyncImage(
+                    model = item.poster,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(MaterialTheme.shapes.small),
+                )
+                Spacer(modifier = Modifier.size(12.dp))
                 Column {
                     Text(item.name, style = MaterialTheme.typography.titleSmall)
                     item.category?.takeIf { it.isNotBlank() }?.let {

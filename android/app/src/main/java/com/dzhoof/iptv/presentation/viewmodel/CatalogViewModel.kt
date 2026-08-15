@@ -73,6 +73,19 @@ class CatalogViewModel @Inject constructor(
         else loadSeries(page = current.page + 1, append = true)
     }
 
+    fun selectSeriesById(seriesId: String, fallbackTitle: String = "Series") {
+        viewModelScope.launch {
+            when (val result = repository.getSeriesById(seriesId)) {
+                is Result.Success -> selectSeries(result.data)
+                is Result.Error -> _uiState.value = _uiState.value.copy(
+                    selectedSeries = Series(id = seriesId, title = fallbackTitle),
+                    isLoadingDetails = false,
+                    detailsError = result.exception.message ?: "Unable to load series details",
+                )
+            }
+        }
+    }
+
     fun selectSeries(series: Series) {
         _uiState.value = _uiState.value.copy(
             selectedSeries = series,
