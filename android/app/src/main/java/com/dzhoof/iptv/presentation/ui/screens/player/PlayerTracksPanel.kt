@@ -107,15 +107,15 @@ internal fun PlayerTracksPanel(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(Dimens.Space2)
         ) {
-            SectionHeader("Audio")
+            SectionHeader("الصوت")
             if (!hasAudio) {
-                EmptyRow("No alternate audio tracks")
+                EmptyRow("لا تتوفر مسارات صوتية بديلة")
             } else {
                 var firstAudio = true
                 audioGroups.forEach { group ->
                     (0 until group.length).forEach { i ->
                         TrackRow(
-                            label = trackLabel(group, i, "Audio"),
+                            label = trackLabel(group, i, "صوت"),
                             selected = group.isTrackSelected(i),
                             focusRequester = if (firstAudio) firstRowFocus else null,
                             onClick = { selectTrack(group, i) }
@@ -125,9 +125,9 @@ internal fun PlayerTracksPanel(
                 }
             }
 
-            SectionHeader("Subtitles")
+            SectionHeader("الترجمة")
             TrackRow(
-                label = "Off",
+                label = "إيقاف",
                 selected = subtitlesOff,
                 focusRequester = if (!hasAudio) firstRowFocus else null,
                 onClick = { disableSubtitles() }
@@ -135,7 +135,7 @@ internal fun PlayerTracksPanel(
             textGroups.forEach { group ->
                 (0 until group.length).forEach { i ->
                     TrackRow(
-                        label = trackLabel(group, i, "Subtitle"),
+                        label = trackLabel(group, i, "ترجمة"),
                         selected = group.isTrackSelected(i),
                         onClick = { selectTrack(group, i) }
                     )

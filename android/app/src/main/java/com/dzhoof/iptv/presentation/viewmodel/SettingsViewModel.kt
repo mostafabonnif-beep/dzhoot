@@ -274,48 +274,48 @@ class SettingsViewModel @Inject constructor(
             }
             "$versionName (Build $versionCode)"
         } catch (e: PackageManager.NameNotFoundException) {
-            "Unknown"
+            "غير معروف"
         }
     }
 
     fun setTheme(theme: String) {
         viewModelScope.launch {
             val result = userPreferencesRepository.setTheme(theme)
-            handleResult(result, "Failed to update theme")
+            handleResult(result, "تعذر تحديث المظهر")
         }
     }
 
     fun setGridSize(size: Int) {
         viewModelScope.launch {
             val result = userPreferencesRepository.setGridSize(size)
-            handleResult(result, "Failed to update grid size")
+            handleResult(result, "تعذر تحديث حجم الشبكة")
         }
     }
 
     fun setFontSize(scale: Float) {
         viewModelScope.launch {
             val result = userPreferencesRepository.setFontSize(scale)
-            handleResult(result, "Failed to update font size")
+            handleResult(result, "تعذر تحديث حجم الخط")
         }
     }
 
     fun setAnimationSpeed(speed: Float) {
         viewModelScope.launch {
             val result = userPreferencesRepository.setAnimationSpeed(speed)
-            handleResult(result, "Failed to update animation speed")
+            handleResult(result, "تعذر تحديث سرعة الحركة")
         }
     }
 
     fun setLayoutDensity(density: String) {
         viewModelScope.launch {
             val result = userPreferencesRepository.setLayoutDensity(density)
-            handleResult(result, "Failed to update layout density")
+            handleResult(result, "تعذر تحديث كثافة التخطيط")
         }
     }
 
     fun setBackExitProtection(enabled: Boolean) {
         viewModelScope.launch {
-            handleResult(userPreferencesRepository.setBackExitProtection(enabled), "Failed to update back protection")
+            handleResult(userPreferencesRepository.setBackExitProtection(enabled), "تعذر تحديث حماية زر الرجوع")
         }
     }
 
@@ -336,7 +336,7 @@ class SettingsViewModel @Inject constructor(
     /** Switch back to the managed (paired) source. */
     fun useManagedSource() {
         AppPreferences.useManagedSource(application)
-        _uiState.update { it.copy(playlistResult = "Using managed source") }
+        _uiState.update { it.copy(playlistResult = "جارٍ استخدام المصدر المُدار") }
     }
 
     private fun loadPlaylist() {
@@ -357,37 +357,37 @@ class SettingsViewModel @Inject constructor(
 
     fun setAlwaysShowProgramBar(enabled: Boolean) {
         viewModelScope.launch {
-            handleResult(userPreferencesRepository.setAlwaysShowProgramBar(enabled), "Failed to update program bar")
+            handleResult(userPreferencesRepository.setAlwaysShowProgramBar(enabled), "تعذر تحديث شريط البرنامج")
         }
     }
 
     fun setInfoBarTimeoutSeconds(seconds: Int) {
         viewModelScope.launch {
-            handleResult(userPreferencesRepository.setInfoBarTimeoutSeconds(seconds), "Failed to update banner timeout")
+            handleResult(userPreferencesRepository.setInfoBarTimeoutSeconds(seconds), "تعذر تحديث مهلة شريط المعلومات")
         }
     }
 
     fun setKeyUpDownAction(action: String) {
         viewModelScope.launch {
-            handleResult(userPreferencesRepository.setPlayerKeyUpDownAction(action), "Failed to update key action")
+            handleResult(userPreferencesRepository.setPlayerKeyUpDownAction(action), "تعذر تحديث إجراء الزر")
         }
     }
 
     fun setKeyLeftRightAction(action: String) {
         viewModelScope.launch {
-            handleResult(userPreferencesRepository.setPlayerKeyLeftRightAction(action), "Failed to update key action")
+            handleResult(userPreferencesRepository.setPlayerKeyLeftRightAction(action), "تعذر تحديث إجراء الزر")
         }
     }
 
     fun setLongOkAction(action: String) {
         viewModelScope.launch {
-            handleResult(userPreferencesRepository.setPlayerLongOkAction(action), "Failed to update key action")
+            handleResult(userPreferencesRepository.setPlayerLongOkAction(action), "تعذر تحديث إجراء الزر")
         }
     }
 
     fun setSleepTimerDefaultMinutes(minutes: Int) {
         viewModelScope.launch {
-            handleResult(userPreferencesRepository.setSleepTimerDefaultMinutes(minutes), "Failed to update sleep timer")
+            handleResult(userPreferencesRepository.setSleepTimerDefaultMinutes(minutes), "تعذر تحديث مؤقت النوم")
         }
     }
 
@@ -410,7 +410,7 @@ class SettingsViewModel @Inject constructor(
                     _uiState.update {
                         it.copy(
                             isClearingCache = false,
-                            error = result.exception.message ?: "Failed to clear cache"
+                            error = result.exception.message ?: "تعذر مسح الذاكرة المؤقتة"
                         )
                     }
                 }
@@ -441,7 +441,7 @@ class SettingsViewModel @Inject constructor(
         val requested = activityManager.clearApplicationUserData()
         if (!requested) {
             // On success the process dies before this line; only failure lands here.
-            _uiState.update { it.copy(error = "Failed to reset app data") }
+            _uiState.update { it.copy(error = "تعذر إعادة ضبط بيانات التطبيق") }
         }
     }
 
@@ -492,7 +492,7 @@ class SettingsViewModel @Inject constructor(
                     it.copy(
                         isCheckingForUpdate = false,
                         updateChecked = true,
-                        error = "Failed to check for updates"
+                        error = "تعذر البحث عن تحديثات"
                     )
                 }
             }
@@ -530,16 +530,16 @@ class SettingsViewModel @Inject constructor(
                     val serverUrl = _uiState.value.serverUrl.trim().trimEnd('/')
                     val response = PinnedHttpClient.get("$serverUrl/health")
                     response.use { resp ->
-                        if (resp.code in 200..299) "Connected" else "Server returned ${resp.code}"
+                        if (resp.code in 200..299) "تم الاتصال" else "أعاد الخادم ${resp.code}"
                     }
                 } catch (e: java.net.ConnectException) {
-                    "Connection refused — check server URL"
+                    "تعذر الاتصال — تحقق من عنوان الخادم"
                 } catch (e: java.net.UnknownHostException) {
-                    "Server not found — check URL"
+                    "لم يتم العثور على الخادم — تحقق من العنوان"
                 } catch (e: java.net.SocketTimeoutException) {
-                    "Connection timed out"
+                    "انتهت مهلة الاتصال"
                 } catch (e: Exception) {
-                    "Failed: ${e.message}"
+                    "فشل: ${e.message}"
                 }
             }
             _uiState.update { it.copy(isTestingConnection = false, connectionTestResult = result) }

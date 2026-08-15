@@ -34,12 +34,14 @@ class SubscriptionViewModel @Inject constructor(
         refresh()
     }
 
-    fun refresh() {
+    fun refresh(preserveRedeemSuccess: Boolean = false) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            val redeemSuccess = if (preserveRedeemSuccess) _uiState.value.redeemSuccess else null
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, redeemSuccess = redeemSuccess)
             when (val result = repository.getSubscription()) {
                 is Result.Success -> _uiState.value = SubscriptionUiState(
                     subscription = result.data,
+                    redeemSuccess = redeemSuccess,
                 )
                 is Result.Error -> _uiState.value = SubscriptionUiState(
                     error = friendlyError(result.exception.message, "تعذر تحميل حالة الاشتراك"),
@@ -75,11 +77,22 @@ class SubscriptionViewModel @Inject constructor(
                         ),
                     )
                     // Re-fetch the full view (devices list) after a successful redeem.
-                    refresh()
+                    refresh(preserveRedeemSuccess = true)
                 }
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     isRedeeming = false,
                     error = friendlyError(result.exception.message, "فشل تفعيل الكود"),
+                )
+            }
+        }
+    }
+
+    fun registerDevice() {
+        viewModelScope.launch {
+            when (val result = repository.registerDevice()) {
+                is Result.Success -> refresh()
+                is Result.Error -> _uiState.value = _uiState.value.copy(
+                    error = friendlyError(result.exception.message, "تعذر تسجيل الجهاز"),
                 )
             }
         }

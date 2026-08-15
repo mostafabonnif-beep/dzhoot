@@ -30,19 +30,23 @@ object StreamErrorMessageResolver {
         }
 
         val (title, explanation) = when {
-            context.errorMessage.contains("Network connection", ignoreCase = true) ->
+            (context.errorMessage.contains("انقطع اتصال الشبكة") ||
+                    context.errorMessage.contains("Network connection", ignoreCase = true)) ->
                 "انقطع الاتصال" to
                         "فقد الجهاز اتصال الشبكة. تحقق من Wi-Fi أو كابل الشبكة ثم حاول مجددًا."
 
-            context.errorMessage.contains("Server error", ignoreCase = true) ->
+            (context.errorMessage.contains("خطأ في الخادم") ||
+                    context.errorMessage.contains("Server error", ignoreCase = true)) ->
                 "خادم البث لا يستجيب" to
                         "خادم بث القناة لا يستجيب حاليًا. قد تكون المشكلة مؤقتة لدى مزود المصدر."
 
-            context.errorMessage.contains("Invalid stream format", ignoreCase = true) ->
+            (context.errorMessage.contains("تنسيق البث غير صالح") ||
+                    context.errorMessage.contains("Invalid stream format", ignoreCase = true)) ->
                 "تنسيق البث غير متوافق" to
                         "تغير تنسيق البث أو لم يعد متوافقًا مع المشغل. قد يكون مزود المصدر حدّث قائمته."
 
-            context.errorMessage.contains("All streams exhausted", ignoreCase = true) ->
+            (context.errorMessage.contains("استُنفدت جميع مصادر البث") ||
+                    context.errorMessage.contains("All streams exhausted", ignoreCase = true)) ->
                 "القناة غير متاحة" to
                         "تمت تجربة جميع المصادر المتاحة لهذه القناة، ولا يستجيب أي منها حاليًا."
 

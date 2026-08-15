@@ -110,7 +110,7 @@ internal fun OverlayDetailStrip(
             }
         } else {
             Text(
-                text = "No program info",
+                text = "لا تتوفر معلومات البرنامج",
                 style = LabelToast,
                 color = TextSecondary,
                 maxLines = 1

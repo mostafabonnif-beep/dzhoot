@@ -434,7 +434,6 @@ app.use('/api/v1/scheduler', require('./routes/scheduler'));
 
 // Initialize Redis (optional - app works without it)
 const { getRedisClient, isRedisReady, closeRedis } = require('./services/redis');
-getRedisClient();
 
 function summarizeSourceHealth(sources) {
   const active = sources.filter((source) => source.status === 'Active').length;
@@ -585,63 +584,72 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof
 const PORT = process.env.PORT || 3000;
 let httpServer = null;
 
-mongoose
-  .connect(MONGODB_URI, {
-    maxPoolSize: 10,
-    minPoolSize: 2,
-    serverSelectionTimeoutMS: 5000,
-    socketTimeoutMS: 45000,
-  })
-  .then(async () => {
-    console.log('✅ Connected to MongoDB');
+/**
+ * Connect to MongoDB, initialize background services, and start the HTTP server.
+ * Kept behind the main-module guard so route-level tests can import `app` without
+ * opening a database connection or listening on a real port.
+ */
+function startServer() {
+  return mongoose
+    .connect(MONGODB_URI, {
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+    })
+    .then(async () => {
+      console.log('✅ Connected to MongoDB');
+      getRedisClient();
 
-    // Initialize Super Admin user
-    const { initializeSuperAdmin } = require('./utils/initSuperAdmin');
-    await initializeSuperAdmin();
+      // Initialize Super Admin user
+      const { initializeSuperAdmin } = require('./utils/initSuperAdmin');
+      await initializeSuperAdmin();
 
-    // Initialize optional test user (only if TEST_USER_USERNAME is set)
-    const { initializeTestUser } = require('./utils/initTestUser');
-    await initializeTestUser();
+      // Initialize optional test user (only if TEST_USER_USERNAME is set)
+      const { initializeTestUser } = require('./utils/initTestUser');
+      await initializeTestUser();
 
-    // Load seed channels from JSON (YouTube Live + Prasar Bharati)
-    const { initializeSeedChannels } = require('./utils/initSeedChannels');
-    await initializeSeedChannels();
+      // Load seed channels from JSON (YouTube Live + Prasar Bharati)
+      const { initializeSeedChannels } = require('./utils/initSeedChannels');
+      await initializeSeedChannels();
 
-    // Initialize IPTV-org cache (populate from DB or fetch if empty)
-    const { iptvOrgCacheService } = require('./services/iptv-org-cache');
-    iptvOrgCacheService.initializeOnStartup().catch((err) => {
-      console.error('iptv-org cache initialization failed:', err.message);
-    });
-
-    // Initialize EPG service (auto-fetch program guides)
-    const { epgService } = require('./services/epg-service');
-    epgService.initializeOnStartup().catch((err) => {
-      console.error('EPG service initialization failed:', err.message);
-    });
-
-    // Initialize scheduler service (liveness checks, EPG refresh, cache refresh)
-    // Only start interval timers if the external scheduler container is not running
-    if (process.env.DISABLE_SCHEDULER !== 'true') {
-      const { schedulerService } = require('./services/scheduler-service');
-      schedulerService.start().catch((err) => {
-        console.error('Scheduler service start failed:', err.message);
+      // Initialize IPTV-org cache (populate from DB or fetch if empty)
+      const { iptvOrgCacheService } = require('./services/iptv-org-cache');
+      iptvOrgCacheService.initializeOnStartup().catch((err) => {
+        console.error('iptv-org cache initialization failed:', err.message);
       });
-    } else {
-      console.log('[scheduler] Disabled — running in separate container');
-    }
 
-    // Start server
-    httpServer = app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📺 DZ HOOF Server v${process.env.APP_VERSION || '0.0.0'}`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`📧 Email provider: ${process.env.MAIL_PROVIDER || 'mailhog'}`);
+      // Initialize EPG service (auto-fetch program guides)
+      const { epgService } = require('./services/epg-service');
+      epgService.initializeOnStartup().catch((err) => {
+        console.error('EPG service initialization failed:', err.message);
+      });
+
+      // Initialize scheduler service (liveness checks, EPG refresh, cache refresh)
+      // Only start interval timers if the external scheduler container is not running
+      if (process.env.DISABLE_SCHEDULER !== 'true') {
+        const { schedulerService } = require('./services/scheduler-service');
+        schedulerService.start().catch((err) => {
+          console.error('Scheduler service start failed:', err.message);
+        });
+      } else {
+        console.log('[scheduler] Disabled — running in separate container');
+      }
+
+      // Start server
+      httpServer = app.listen(PORT, '0.0.0.0', () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`📺 DZ HOOF Server v${process.env.APP_VERSION || '0.0.0'}`);
+        console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+        console.log(`📧 Email provider: ${process.env.MAIL_PROVIDER || 'mailhog'}`);
+      });
+      return httpServer;
+    })
+    .catch((err) => {
+      console.error('❌ MongoDB connection error:', err);
+      process.exit(1);
     });
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err);
-    process.exit(1);
-  });
+}
 
 // Graceful shutdown
 async function gracefulShutdown(signal) {
@@ -676,3 +684,9 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled rejection:', reason);
 });
+
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = { app, startServer };

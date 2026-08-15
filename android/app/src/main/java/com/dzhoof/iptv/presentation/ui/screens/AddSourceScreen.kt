@@ -537,7 +537,7 @@ private fun ServerConfigCard(
             connectionTestResult?.let { result ->
                 StatusText(
                     text = result,
-                    status = if (result == "Connected") Status.SUCCESS else Status.WARNING,
+                    status = if (result == "تم الاتصال") Status.SUCCESS else Status.WARNING,
                     fontWeight = FontWeight.SemiBold
                 )
             }
