@@ -46,6 +46,9 @@ internal fun TvSearchContent(
     onRetry: () -> Unit,
     onRecentSearchClick: (String) -> Unit,
     onClearHistory: () -> Unit,
+    onMovieClick: (String) -> Unit = {},
+    onSeriesClick: (String) -> Unit = {},
+    onProgramClick: (String) -> Unit = {},
     firstKeyFocus: FocusRequester,
     modifier: Modifier = Modifier
 ) {
@@ -115,6 +118,9 @@ internal fun TvSearchContent(
                 onRetry = onRetry,
                 onRecentSearchClick = onRecentSearchClick,
                 onClearHistory = onClearHistory,
+                onMovieClick = onMovieClick,
+                onSeriesClick = onSeriesClick,
+                onProgramClick = onProgramClick,
                 keyboardController = null,
                 modifier = Modifier
                     .fillMaxWidth()

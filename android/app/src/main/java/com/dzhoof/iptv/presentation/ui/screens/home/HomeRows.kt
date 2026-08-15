@@ -21,6 +21,8 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
@@ -83,7 +85,7 @@ internal fun FeaturedRow(
 
     Column(modifier = modifier.padding(horizontal = horizontalPadding)) {
         SectionHeader(
-            title = "Featured",
+            title = stringResource(R.string.home_featured),
             accentColor = MaterialTheme.colorScheme.primary
         )
         Spacer(modifier = Modifier.height(titleGap))
@@ -129,7 +131,7 @@ internal fun PopularCategoriesSlider(
 
     Column(modifier = modifier.padding(horizontal = horizontalPadding)) {
         SectionHeader(
-            title = "Popular Categories",
+            title = stringResource(R.string.home_popular_categories),
             accentColor = MaterialTheme.colorScheme.primary
         )
         Spacer(modifier = Modifier.height(titleGap))
@@ -146,7 +148,7 @@ internal fun PopularCategoriesSlider(
                     imageUrl = category.imageUrl,
                     isFavorite = category.isFavorite,
                     onClick = { onCategoryClick(category.name) },
-                    subtitle = "${category.channelCount} live",
+                    subtitle = stringResource(R.string.home_live_count, category.channelCount),
                     modifier = Modifier
                         .width(cardWidth)
                         .height(cardHeight)

@@ -247,7 +247,16 @@ fun FireVisionNavGraph(
                 },
                 onMultiviewClick = { channelId ->
                     navController.navigate(Screen.Multiview.createRoute(channelId))
-                }
+                },
+                onMovieClick = { movieId ->
+                    navController.navigate(Screen.VodPlayer.createRoute("MOVIE", movieId, "Movie"))
+                },
+                onSeriesClick = {
+                    navController.navigate(Screen.Catalog.route)
+                },
+                onProgramClick = {
+                    navController.navigate(Screen.Guide.route)
+                },
             )
         }
 

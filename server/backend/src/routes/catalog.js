@@ -5,6 +5,7 @@ const Movie = require('../models/Movie');
 const Series = require('../models/Series');
 const Season = require('../models/Season');
 const Episode = require('../models/Episode');
+const EpgProgram = require('../models/EpgProgram');
 const { optionalAuth } = require('../middleware/resolveUser');
 const { escapeRegex } = require('../utils/escapeRegex');
 
@@ -163,7 +164,7 @@ router.get('/search', async (req, res) => {
   try {
     const q = String(req.query.q || '').trim();
     if (!q) {
-      return res.json({ success: true, data: { channels: [], movies: [], series: [] } });
+      return res.json({ success: true, data: { channels: [], movies: [], series: [], programs: [] } });
     }
     if (q.length > 500) {
       return res.status(400).json({ success: false, error: 'Search query too long' });
@@ -172,13 +173,34 @@ router.get('/search', async (req, res) => {
     const Channel = require('../models/Channel');
     const regex = { $regex: escapeRegex(q), $options: 'i' };
 
-    const [channels, movies, series] = await Promise.all([
-      Channel.find({ isActive: { $ne: false }, ownerId: null, channelName: regex })
+    // Keep current and recently finished programmes discoverable. The two-hour
+    // grace window makes a just-finished programme searchable for catch-up users.
+    const programmeSince = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const [channels, movies, series, programs] = await Promise.all([
+      Channel.find({
+        isActive: { $ne: false },
+        ownerId: null,
+        $or: [{ channelName: regex }, { channelGroup: regex }],
+      })
         .sort({ order: 1 })
         .limit(20)
         .lean(),
-      Movie.find({ isActive: true, title: regex }).sort({ createdAt: -1 }).limit(20).lean(),
-      Series.find({ isActive: true, title: regex }).sort({ createdAt: -1 }).limit(20).lean(),
+      Movie.find({
+        isActive: true,
+        $or: [{ title: regex }, { category: regex }],
+      }).sort({ createdAt: -1 }).limit(20).lean(),
+      Series.find({
+        isActive: true,
+        $or: [{ title: regex }, { category: regex }, { genre: regex }],
+      }).sort({ createdAt: -1 }).limit(20).lean(),
+      EpgProgram.find({
+        endTime: { $gte: programmeSince },
+        $or: [{ title: regex }, { category: regex }, { description: regex }],
+      })
+        .select('channelEpgId title description category startTime endTime icon language')
+        .sort({ startTime: 1 })
+        .limit(20)
+        .lean(),
     ]);
 
     return res.json({
@@ -204,6 +226,19 @@ router.get('/search', async (req, res) => {
           name: s.title,
           poster: s.poster,
           category: s.category,
+        })),
+        programs: programs.map((program) => ({
+          _id: program._id,
+          type: 'PROGRAM',
+          name: program.title,
+          description: program.description,
+          category: program.category,
+          channelEpgId: program.channelEpgId,
+          startTime: program.startTime,
+          endTime: program.endTime,
+          icon: program.icon,
+          language: program.language,
+          catchupAvailable: program.endTime < new Date(),
         })),
       },
     });

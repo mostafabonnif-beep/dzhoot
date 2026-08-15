@@ -16,6 +16,17 @@
     <string name="dismiss_error">إغلاق</string>
     <string name="home">الرئيسية</string>
     <string name="search">بحث</string>
+    <string name="home_featured">مميز</string>
+    <string name="home_popular_categories">التصنيفات الشائعة</string>
+    <string name="home_recently_watched">شاهدتها مؤخرًا</string>
+    <string name="home_for_you">مقترح لك</string>
+    <string name="home_live_count">%d مباشر</string>
+    <string name="search_channels_content">ابحث في القنوات والبرامج والمحتوى…</string>
+    <string name="search_live_channels">القنوات المباشرة</string>
+    <string name="search_movies">الأفلام</string>
+    <string name="search_series">المسلسلات</string>
+    <string name="search_programmes">برامج الدليل</string>
+    <string name="search_catchup_available">متاح للمشاهدة اللاحقة</string>
     <string name="categories">التصنيفات</string>
     <string name="languages">اللغات</string>
     <string name="favorites">المفضلة</string>
