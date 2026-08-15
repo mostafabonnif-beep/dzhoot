@@ -126,14 +126,14 @@ internal fun SearchPrompt(modifier: Modifier = Modifier) {
         )
         Spacer(modifier = Modifier.height(20.dp))
         Text(
-            text = "Find your channels",
+            text = "ابحث عن قنواتك",
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f),
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Search by name or category",
+            text = "ابحث بالاسم أو التصنيف",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -154,7 +154,7 @@ internal fun RecentSearches(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Recent",
+                text = "عمليات البحث الأخيرة",
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onBackground
@@ -174,7 +174,7 @@ internal fun RecentSearches(
                     .onFocusChanged { clearFocused = it.isFocused }
             ) {
                 Text(
-                    text = "Clear",
+                    text = "مسح",
                     color = if (clearFocused) MaterialTheme.colorScheme.secondary
                             else MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.labelMedium
@@ -239,14 +239,14 @@ internal fun NoResultsState(
         )
         Spacer(modifier = Modifier.height(20.dp))
         Text(
-            text = "No results for \"$query\"",
+            text = "لا توجد نتائج لـ\"$query\"",
             style = MaterialTheme.typography.titleLarge,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.Medium
         )
         Spacer(modifier = Modifier.height(6.dp))
         Text(
-            text = "Try a different search term",
+            text = "جرّب كلمة بحث مختلفة",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
@@ -278,7 +278,7 @@ internal fun TvSearchQueryDisplay(
         ) {
             Icon(
                 imageVector = Icons.Default.Search,
-                contentDescription = "Search",
+                contentDescription = "بحث",
                 tint = if (query.isNotEmpty()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(Dimens.IconMedium)
             )

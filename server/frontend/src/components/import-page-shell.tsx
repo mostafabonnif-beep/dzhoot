@@ -1092,7 +1092,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
 
               {groupedChannels.length === 0 && (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                  No channels found
+                  {t('common.noResults')}
                 </div>
               )}
             </div>
@@ -1117,8 +1117,8 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                 setSearch(v);
                 setPage(1);
               }}
-              placeholder="Search by name, category, language, or ID..."
-              ariaLabel="Search channels"
+              placeholder={t('import.flatSearchPlaceholder')}
+              ariaLabel={t('common.search')}
               className="flex-1 max-w-md w-full"
             />
             <div className="flex items-center gap-2 flex-wrap">
@@ -1131,7 +1131,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                       onChange={(e) => setReplaceExisting(e.target.checked)}
                       className="accent-primary"
                     />
-                    Replace existing
+                    {t('import.replaceExisting')}
                   </label>
                   <button
                     onClick={handleBatchLivenessCheck}
@@ -1143,7 +1143,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                     ) : (
                       <Zap className="h-4 w-4" />
                     )}
-                    {batchTesting ? 'Checking...' : 'Check Liveness'}
+                    {batchTesting ? t('import.checking') : t('import.checkLiveness')}
                   </button>
                 </>
               )}
@@ -1154,8 +1154,10 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
               >
                 <Download className="h-4 w-4" />
                 {importing
-                  ? 'Importing...'
-                  : `Import ${selectedCount} to ${isAdmin ? 'System' : 'My List'}`}
+                  ? t('import.importing')
+                  : t('import.importCount')
+                      .replace('{count}', String(selectedCount))
+                      .replace('{target}', isAdmin ? t('import.system') : t('import.myList'))}
               </button>
             </div>
           </div>

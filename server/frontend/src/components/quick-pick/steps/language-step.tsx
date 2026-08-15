@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
+import { useLocale } from '@/components/locale-provider';
 
 // Common languages with 3-letter codes (matching IPTV-org format)
 const ALL_LANGUAGES = [
@@ -58,6 +59,7 @@ interface LanguageStepProps {
 }
 
 export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageStepProps) {
+  const { t } = useLocale();
   const [search, setSearch] = useState('');
   const [showAll, setShowAll] = useState(false);
 
@@ -74,12 +76,12 @@ export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageSt
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">Step 3</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">{t('quickPick.step3')}</p>
         <h2 className="text-base font-display font-bold uppercase tracking-[0.08em]">
-          Preferred Languages
+          {t('quickPick.preferredLanguages')}
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Select the languages you want channels in, or skip for all.
+          {t('quickPick.languageDescription')}
         </p>
       </div>
 
@@ -87,8 +89,8 @@ export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageSt
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Search languages..."
-          aria-label="Search languages"
+          placeholder={t('quickPick.searchLanguages')}
+          aria-label={t('quickPick.searchLanguages')}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -98,7 +100,7 @@ export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageSt
         />
       </div>
 
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Language selection">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label={t('quickPick.selectLanguage')}>
         {filtered.map((lang) => {
           const isSelected = selectedLanguages.includes(lang.code);
           return (
@@ -123,13 +125,13 @@ export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageSt
           onClick={() => setShowAll(true)}
           className="text-xs text-primary hover:text-primary/80 uppercase tracking-[0.1em] font-medium"
         >
-          Show all languages ({ALL_LANGUAGES.length - PROMINENT_COUNT} more)
+          {t('quickPick.showAllLanguages')} ({ALL_LANGUAGES.length - PROMINENT_COUNT} {t('quickPick.more')})
         </button>
       )}
 
       {selectedLanguages.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {selectedLanguages.length} language{selectedLanguages.length !== 1 ? 's' : ''} selected
+          {selectedLanguages.length} {t('quickPick.selectedLanguages')}
         </p>
       )}
     </div>

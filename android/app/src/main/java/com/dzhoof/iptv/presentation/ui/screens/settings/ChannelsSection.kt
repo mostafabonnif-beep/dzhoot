@@ -359,15 +359,15 @@ private fun ResetAppDataConfirmDialog(
             ) {
                 Column(modifier = Modifier.padding(Dimens.Space5)) {
                     Text(
-                        text = "Reset app data?",
+                        text = "إعادة ضبط بيانات التطبيق؟",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(Dimens.Space3))
                     Text(
-                        text = "This erases pairing, favorites, playback history, and all " +
-                            "settings. The app will close and start fresh, like a new install.",
+                        text = "سيؤدي هذا إلى حذف الربط والمفضلة وسجل المشاهدة وجميع " +
+                            "الإعدادات. سيُغلق التطبيق ويبدأ من جديد مثل التثبيت الأول.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -380,7 +380,7 @@ private fun ResetAppDataConfirmDialog(
                             onClick = onDismiss,
                             modifier = Modifier.focusRequester(cancelFocus)
                         ) {
-                            Text(text = "Cancel", fontWeight = FontWeight.SemiBold)
+                            Text(text = "إلغاء", fontWeight = FontWeight.SemiBold)
                         }
                         FocusAwareButton(
                             onClick = onConfirm,
@@ -389,7 +389,7 @@ private fun ResetAppDataConfirmDialog(
                                 contentColor = MaterialTheme.colorScheme.onError
                             )
                         ) {
-                            Text(text = "Erase Everything", fontWeight = FontWeight.SemiBold)
+                            Text(text = "حذف كل شيء", fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
