@@ -23,6 +23,25 @@ if (googleServicesAvailable) {
     apply(plugin = "com.google.firebase.firebase-perf")
 }
 
+val configuredVersionCode = providers.gradleProperty("versionCode").orElse("5").get().toInt()
+val configuredVersionName = providers.gradleProperty("versionName").orElse("1.5").get()
+val configuredApiUrl = providers.gradleProperty("dzhoofApiUrl")
+    .orElse(providers.environmentVariable("DZHOOF_API_URL"))
+    .orElse("https://8009-i11yovu3v9kwp3b77gc99-9aaf8799.us4.manus.computer/")
+    .get()
+    .trim()
+    .let { if (it.endsWith("/")) it else "$it/" }
+val signingKeyStore = System.getenv("SIGNING_KEY_STORE")
+val signingStorePassword = System.getenv("SIGNING_STORE_PASSWORD")
+val signingKeyAlias = System.getenv("SIGNING_KEY_ALIAS")
+val signingKeyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    signingKeyStore,
+    signingStorePassword,
+    signingKeyAlias,
+    signingKeyPassword,
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "com.dzhoof.iptv"
     compileSdk = 34
@@ -31,22 +50,12 @@ android {
         applicationId = "com.dzhoof.iptv"
         minSdk = 28
         targetSdk = 34
-        versionCode = 5
-        versionName = if (project.hasProperty("versionName")) {
-            project.property("versionName") as String
-        } else {
-            "1.5"
-        }
+        versionCode = configuredVersionCode
+        versionName = configuredVersionName
         
         // API Base URL configuration — overridable at build time via the
         // `dzhoofApiUrl` Gradle property or the DZHOOF_API_URL env var so real
         // APKs can point at a real server without editing source. HTTPS required.
-        val configuredApiUrl = providers.gradleProperty("dzhoofApiUrl")
-            .orElse(providers.environmentVariable("DZHOOF_API_URL"))
-            .orElse("https://8009-i11yovu3v9kwp3b77gc99-9aaf8799.us4.manus.computer/")
-            .get()
-            .trim()
-            .let { if (it.endsWith("/")) it else "$it/" }
         require(configuredApiUrl.startsWith("https://")) {
             "DZHOOF_API_URL / dzhoofApiUrl must use HTTPS (got: $configuredApiUrl)"
         }
@@ -57,12 +66,11 @@ android {
 
     signingConfigs {
         create("release") {
-            val signingKeyStore = System.getenv("SIGNING_KEY_STORE")
-            if (signingKeyStore != null) {
-                storeFile = file(signingKeyStore)
-                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
-                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
-                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+            if (hasReleaseSigning) {
+                storeFile = file(signingKeyStore!!)
+                storePassword = signingStorePassword
+                keyAlias = signingKeyAlias
+                keyPassword = signingKeyPassword
             }
         }
     }
@@ -224,6 +232,26 @@ sentry {
     org = "dzhoof"
     projectName = "firevisioniptv"
     authToken = System.getenv("SENTRY_AUTH_TOKEN")
+}
+
+tasks.register("verifyReleaseSigning") {
+    doLast {
+        check(hasReleaseSigning) {
+            "Release signing requires SIGNING_KEY_STORE, SIGNING_STORE_PASSWORD, SIGNING_KEY_ALIAS, and SIGNING_KEY_PASSWORD"
+        }
+        check(googleServicesAvailable) {
+            "Release builds require google-services.json from the Firebase project"
+        }
+        check(!configuredApiUrl.contains("manus.computer") && !configuredApiUrl.contains("example.invalid")) {
+            "Release builds require a permanent HTTPS API URL, not a temporary or placeholder URL"
+        }
+    }
+}
+
+tasks.configureEach {
+    if (name == "assembleRelease" || name == "bundleRelease") {
+        dependsOn("verifyReleaseSigning")
+    }
 }
 
 tasks.withType<Test> {
