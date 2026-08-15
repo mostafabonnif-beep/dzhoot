@@ -39,7 +39,7 @@ jobs:
           if [ -n "${GOOGLE_SERVICES_JSON_BASE64:-}" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > android/app/google-services.json
             chmod 600 android/app/google-services.json
-            grep -q 'com.dzhoof.iptv' android/app/google-services.json
+            grep -q '"package_name"[[:space:]]*:[[:space:]]*"com.dzhoof.iptv"' android/app/google-services.json
           else
             echo 'Firebase config not supplied; building with Firebase integrations disabled.'
           fi
