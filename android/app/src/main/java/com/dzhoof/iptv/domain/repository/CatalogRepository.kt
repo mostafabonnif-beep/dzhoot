@@ -7,8 +7,10 @@ import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.PlaybackAuthorization
 import com.dzhoof.iptv.domain.model.Season
 import com.dzhoof.iptv.domain.model.Series
+import com.dzhoof.iptv.domain.model.UnifiedSearchResults
 
 interface CatalogRepository {
+    suspend fun searchCatalog(query: String): Result<UnifiedSearchResults>
     suspend fun getMovies(page: Int = 1, limit: Int = 30, search: String? = null): Result<CatalogPage<Movie>>
     suspend fun getSeries(page: Int = 1, limit: Int = 30, search: String? = null): Result<CatalogPage<Series>>
     suspend fun getSeasons(seriesId: String): Result<List<Season>>

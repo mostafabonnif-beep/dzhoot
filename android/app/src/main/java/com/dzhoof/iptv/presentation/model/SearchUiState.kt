@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.presentation.model
 
 import com.dzhoof.iptv.domain.model.SearchFilter
+import com.dzhoof.iptv.domain.model.UnifiedSearchResults
 
 /**
  * UI state for the search screen.
@@ -11,6 +12,7 @@ import com.dzhoof.iptv.domain.model.SearchFilter
 data class SearchUiState(
     val query: String = "",
     val results: List<ChannelUiModel> = emptyList(),
+    val unifiedResults: UnifiedSearchResults = UnifiedSearchResults(),
     val recentSearches: List<String> = emptyList(),
     val activeFilters: List<SearchFilter> = emptyList(),
     val isLoading: Boolean = false,

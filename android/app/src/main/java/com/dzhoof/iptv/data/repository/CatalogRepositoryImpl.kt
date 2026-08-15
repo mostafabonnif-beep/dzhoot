@@ -9,6 +9,10 @@ import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.PlaybackAuthorization
 import com.dzhoof.iptv.domain.model.Season
 import com.dzhoof.iptv.domain.model.Series
+import com.dzhoof.iptv.domain.model.UnifiedChannelResult
+import com.dzhoof.iptv.domain.model.UnifiedContentResult
+import com.dzhoof.iptv.domain.model.UnifiedProgramResult
+import com.dzhoof.iptv.domain.model.UnifiedSearchResults
 import com.dzhoof.iptv.domain.repository.CatalogRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
@@ -20,6 +24,46 @@ class CatalogRepositoryImpl @Inject constructor(
     private val apiService: FireVisionApiService,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
+
+    override suspend fun searchCatalog(query: String): Result<UnifiedSearchResults> = withContext(dispatcher) {
+        try {
+            val response = apiService.unifiedSearch(query.trim())
+            val body = response.body()
+            if (response.isSuccessful && body?.success == true) {
+                Result.Success(
+                    UnifiedSearchResults(
+                        channels = body.data.channels.map { channel ->
+                            UnifiedChannelResult(channel.id, channel.name, channel.logo, channel.group)
+                        },
+                        movies = body.data.movies.map { content ->
+                            UnifiedContentResult(content.id, content.type, content.name, content.poster, content.category)
+                        },
+                        series = body.data.series.map { content ->
+                            UnifiedContentResult(content.id, content.type, content.name, content.poster, content.category)
+                        },
+                        programs = body.data.programs.map { program ->
+                            UnifiedProgramResult(
+                                id = program.id,
+                                name = program.name,
+                                description = program.description,
+                                category = program.category,
+                                channelEpgId = program.channelEpgId,
+                                startTime = program.startTime,
+                                endTime = program.endTime,
+                                icon = program.icon,
+                                language = program.language,
+                                catchupAvailable = program.catchupAvailable,
+                            )
+                        },
+                    ),
+                )
+            } else {
+                Result.Error(Exception(body?.error ?: response.message().ifBlank { "Unable to search catalog" }))
+            }
+        } catch (error: Exception) {
+            Result.Error(error)
+        }
+    }
 
     override suspend fun getMovies(page: Int, limit: Int, search: String?): Result<CatalogPage<Movie>> =
         withContext(dispatcher) {

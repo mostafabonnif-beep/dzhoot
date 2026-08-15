@@ -20,6 +20,17 @@
     <!-- Sidebar Navigation -->
     <string name="home">Home</string>
     <string name="search">Search</string>
+    <string name="home_featured">Featured</string>
+    <string name="home_popular_categories">Popular Categories</string>
+    <string name="home_recently_watched">Recently Watched</string>
+    <string name="home_for_you">For You</string>
+    <string name="home_live_count">%d live</string>
+    <string name="search_channels_content">Search channels, programmes and content…</string>
+    <string name="search_live_channels">Live channels</string>
+    <string name="search_movies">Movies</string>
+    <string name="search_series">Series</string>
+    <string name="search_programmes">EPG programmes</string>
+    <string name="search_catchup_available">Catch-up available</string>
     <string name="categories">Categories</string>
     <string name="languages">Languages</string>
     <string name="favorites">Favorites</string>
