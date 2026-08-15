@@ -7,6 +7,7 @@ import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.model.dto.HealthSyncItem
 import com.dzhoof.iptv.data.model.dto.HealthSyncRequest
 import com.dzhoof.iptv.data.model.dto.StreamPlayReport
+import com.dzhoof.iptv.data.model.dto.PlaybackQoeReport
 import com.dzhoof.iptv.data.model.dto.StreamStatusReport
 import com.dzhoof.iptv.data.source.local.dao.StreamMetricsDao
 import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
@@ -137,6 +138,37 @@ class StreamMetricsRepositoryImpl @Inject constructor(
                 Result.Error(e)
             }
         }
+
+    override suspend fun reportPlaybackQoe(
+        channelId: String,
+        eventType: String,
+        startupMs: Long?,
+        rebufferCount: Int,
+        fallbackUsed: Boolean,
+        fallbackSucceeded: Boolean?,
+        errorCode: String?
+    ): Result<Unit> = withContext(dispatcher) {
+        try {
+            try {
+                apiService.reportPlaybackQoe(
+                    channelId,
+                    PlaybackQoeReport(
+                        eventType = eventType,
+                        startupMs = startupMs,
+                        rebufferCount = rebufferCount,
+                        fallbackUsed = fallbackUsed,
+                        fallbackSucceeded = fallbackSucceeded,
+                        errorCode = errorCode?.take(100)
+                    )
+                )
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to report playback QoE: ${e.message}")
+            }
+            Result.Success(Unit)
+        } catch (e: Exception) {
+            Result.Error(e)
+        }
+    }
 
     override suspend fun syncHealthResults(results: List<HealthSyncEntry>): Result<Unit> =
         withContext(dispatcher) {

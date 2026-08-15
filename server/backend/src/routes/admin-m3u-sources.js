@@ -6,9 +6,14 @@ const { audit, reqCtx, redactSensitiveText } = require('../services/audit-log');
 const {
   testM3UConnection,
   syncM3USource,
+  previewM3USource,
   createM3USourceSecrets,
   decryptSecret,
 } = require('../services/m3u-service');
+const {
+  rollbackSyncSnapshot,
+  listSyncSnapshots,
+} = require('../services/sync-snapshot-service');
 const { encryptSecret } = require('../utils/crypto');
 
 const router = express.Router();
@@ -108,6 +113,64 @@ router.post('/:id/test', async (req, res) => {
   } catch (err) {
     console.error('[m3u] test error:', redactSensitiveText(err));
     return res.status(500).json({ success: false, error: 'M3U test failed' });
+  }
+});
+
+router.post('/:id/preview', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const source = await M3USource.findById(id).lean();
+    if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+
+    const result = await previewM3USource(String(id), String(req.user?.id || ''));
+    audit({
+      ...reqCtx(req),
+      action: 'M3U_SOURCE_PREVIEW',
+      resource: 'M3USource',
+      resourceId: String(id),
+      changes: { after: result.diff },
+    });
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[m3u] preview error:', redactSensitiveText(err));
+    return res.status(500).json({ success: false, error: 'M3U preview failed' });
+  }
+});
+
+router.get('/:id/snapshots', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const snapshots = await listSyncSnapshots('m3u', String(id), Number(req.query.limit) || 10);
+    return res.json({ success: true, data: snapshots });
+  } catch (err) {
+    console.error('[m3u] snapshots error:', redactSensitiveText(err));
+    return res.status(500).json({ success: false, error: 'Failed to fetch sync snapshots' });
+  }
+});
+
+router.post('/:id/rollback/:snapshotId', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id || !mongoose.Types.ObjectId.isValid(req.params.snapshotId)) {
+      return res.status(400).json({ success: false, error: 'Invalid source or snapshot id' });
+    }
+    const result = await rollbackSyncSnapshot(req.params.snapshotId);
+    if (result.sourceType !== 'm3u' || result.sourceId !== String(id)) {
+      return res.status(409).json({ success: false, error: 'Snapshot does not belong to this source' });
+    }
+    audit({
+      ...reqCtx(req),
+      action: 'M3U_SOURCE_ROLLBACK',
+      resource: 'M3USource',
+      resourceId: String(id),
+      changes: { after: { snapshotId: req.params.snapshotId, restoredChannels: result.restoredChannels } },
+    });
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[m3u] rollback error:', redactSensitiveText(err));
+    return res.status(500).json({ success: false, error: 'M3U rollback failed' });
   }
 });
 

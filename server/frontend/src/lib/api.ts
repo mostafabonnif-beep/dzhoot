@@ -115,6 +115,63 @@ export interface ChannelOperationsData {
   generatedAt: string;
 }
 
+export interface EpgCoverageData {
+  totalSystemChannels: number;
+  matchedSystemChannels: number;
+  overallCoveragePercent: number;
+  unmatchedChannelCount: number;
+  sources: Array<{
+    source: string;
+    coveredChannelCount: number;
+    matchedChannelCount: number;
+    coveragePercent: number;
+    unmatchedChannels: Array<{ channelId: string; name: string; tvgId: string | null }>;
+  }>;
+}
+
+export interface PlaybackQualityData {
+  windowDays: number;
+  summary: {
+    totalEvents: number;
+    startupSuccesses: number;
+    startupFailures: number;
+    startupSuccessRate: number | null;
+    avgStartupMs: number | null;
+    avgRebufferCount: number;
+    fallbackAttempts: number;
+    fallbackSuccesses: number;
+    fallbackSuccessRate: number | null;
+  };
+  daily: Array<{
+    date: string;
+    totalEvents: number;
+    startupSuccesses: number;
+    startupFailures: number;
+    startupSuccessRate: number | null;
+    avgStartupMs: number | null;
+    avgRebufferCount: number;
+    fallbackAttempts: number;
+    fallbackSuccesses: number;
+  }>;
+  topErrors: Array<{ errorCode: string; count: number }>;
+}
+
+export async function getPlaybackQuality(signal?: AbortSignal): Promise<PlaybackQualityData> {
+  const response = await api.get<{ success: boolean; data: PlaybackQualityData }>(
+    '/admin/stats/playback-quality?days=7',
+    { signal },
+  );
+  return response.data.data;
+}
+
+export async function getEpgCoverage(signal?: AbortSignal): Promise<EpgCoverageData> {
+  const response = await api.get<{ success: boolean; data: EpgCoverageData }>(
+    '/admin/stats/epg-coverage',
+    { signal },
+  );
+  return response.data.data;
+}
+
 export async function getChannelOperations(signal?: AbortSignal): Promise<ChannelOperationsData> {
   const response = await api.get<{ success: boolean; data: ChannelOperationsData }>(
     '/admin/stats/channel-operations',

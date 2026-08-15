@@ -1,5 +1,7 @@
 import { Readable } from 'stream';
 import axios from 'axios';
+import Channel from '../models/Channel';
+import EpgProgram from '../models/EpgProgram';
 import { EpgService } from './epg-service';
 
 jest.mock('axios');
@@ -58,6 +60,38 @@ describe('EpgService XMLTV ingestion', () => {
       language: 'ar',
     });
     expect(programs[0].startTime.getTime()).toBe(Math.floor(startTime.getTime() / 1000) * 1000);
+  });
+
+  it('reports EPG coverage and unmatched channels per source', async () => {
+    const channelQuery = {
+      select: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockResolvedValue([
+        { channelId: 'news.dz', channelName: 'News DZ', tvgId: 'news.dz', metadata: {} },
+        { channelId: 'sports.dz', channelName: 'Sports DZ', tvgId: 'sports.dz', metadata: {} },
+      ]),
+    };
+    jest.spyOn(Channel, 'find').mockReturnValue(channelQuery as any);
+    jest.spyOn(EpgProgram, 'distinct').mockResolvedValue(['news.dz'] as any);
+    const service = new EpgService();
+    jest.spyOn(service, 'discoverEpgSources').mockResolvedValue([
+      { url: 'https://epg.example/dz.xml', coveredChannelIds: ['news.dz', 'sports.dz'], source: 'custom' },
+    ]);
+
+    const coverage = await service.getCoverage();
+
+    expect(coverage).toMatchObject({
+      totalSystemChannels: 2,
+      matchedSystemChannels: 1,
+      overallCoveragePercent: 50,
+      unmatchedChannelCount: 1,
+    });
+    expect(coverage.sources[0]).toMatchObject({
+      source: 'custom',
+      coveredChannelCount: 2,
+      matchedChannelCount: 1,
+      coveragePercent: 50,
+    });
+    expect(coverage.sources[0].unmatchedChannels[0]).toMatchObject({ channelId: 'sports.dz', name: 'Sports DZ' });
   });
 
   it('rejects unsafe XMLTV URLs before making a network request', async () => {
