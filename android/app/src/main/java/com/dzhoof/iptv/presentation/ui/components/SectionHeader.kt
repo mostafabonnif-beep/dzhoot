@@ -55,7 +55,7 @@ fun SectionHeader(
         if (onSeeAllClick != null) {
             TextButton(onClick = onSeeAllClick) {
                 Text(
-                    text = "See All",
+                    text = "عرض الكل",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

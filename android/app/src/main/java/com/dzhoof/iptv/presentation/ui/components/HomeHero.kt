@@ -206,7 +206,7 @@ private fun HeroNowBlock(hero: ChannelUiModel) {
     Column {
         hero.nowProgramTitle?.let { nowTitle ->
             Text(
-                text = "Now: $nowTitle",
+                text = "الآن: $nowTitle",
                 style = MaterialTheme.typography.titleMedium,
                 color = OnVideo,
                 maxLines = 1,
@@ -223,7 +223,7 @@ private fun HeroNowBlock(hero: ChannelUiModel) {
         hero.nextProgramTitle?.let { nextTitle ->
             Spacer(modifier = Modifier.height(Dimens.Space2))
             Text(
-                text = "Next: $nextTitle",
+                text = "التالي: $nextTitle",
                 style = MaterialTheme.typography.bodyMedium,
                 color = OnVideo.copy(alpha = 0.6f),
                 maxLines = 1,
@@ -428,7 +428,7 @@ private fun WatchNowButton(
         )
         Spacer(modifier = Modifier.width(Dimens.Space2))
         Text(
-            text = "Watch now",
+            text = "شاهد الآن",
             // Use the Manrope label style (not the tall display face, whose caps
             // get clipped inside a button's constrained content row).
             style = MaterialTheme.typography.labelLarge,
