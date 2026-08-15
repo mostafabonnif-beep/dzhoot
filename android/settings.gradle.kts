@@ -21,5 +21,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "FireVisionIPTV"
+rootProject.name = "DZHOOF"
 include(":app")

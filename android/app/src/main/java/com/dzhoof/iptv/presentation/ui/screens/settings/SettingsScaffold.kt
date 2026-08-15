@@ -69,13 +69,13 @@ internal class SettingsActions(
 )
 
 internal enum class SettingsSection(val label: String) {
-    Connection("Connection"),
-    Channels("Channels"),
-    Controls("Controls"),
-    Parental("Parental"),
-    Appearance("Appearance"),
-    Subscription("Subscription"),
-    About("About")
+    Connection("الاتصال"),
+    Channels("القنوات"),
+    Controls("التحكم"),
+    Parental("الرقابة الأبوية"),
+    Appearance("المظهر"),
+    Subscription("الاشتراك"),
+    About("حول التطبيق")
 }
 
 private val SectionListWidth = 280.dp
@@ -89,7 +89,7 @@ internal fun SettingsScaffold(
 ) {
     val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
 
-    ScreenScaffold(title = "Settings", modifier = modifier) {
+    ScreenScaffold(title = "الإعدادات", modifier = modifier) {
         if (isPortrait) {
             StackedSettings(
                 uiState = uiState,

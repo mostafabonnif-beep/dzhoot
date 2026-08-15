@@ -56,7 +56,7 @@ fun ChannelsScreen(
     }
 
     ScreenScaffold(
-        title = uiState.selectedCategory ?: "All Channels",
+        title = uiState.selectedCategory ?: "كل القنوات",
         modifier = modifier,
         onBack = if (uiState.selectedCategory != null || initialCategory != null) {
             {
@@ -101,7 +101,7 @@ fun ChannelsScreen(
             when (state) {
                 "loading" -> ChannelsGridLoadingSkeleton()
                 "error" -> ErrorState(
-                    message = uiState.error ?: "Unknown error",
+                    message = uiState.error ?: "حدث خطأ غير متوقع",
                     onRetry = { viewModel.refresh() },
                     errorType = uiState.errorType,
                     onPairDevice = onPairDevice
@@ -109,7 +109,7 @@ fun ChannelsScreen(
                 "empty" -> {
                     if (uiState.selectedCategory != null) {
                         EmptyState(
-                            message = "No channels in this category",
+                            message = "لا توجد قنوات في هذه الفئة",
                             onRetry = { viewModel.refresh() }
                         )
                     } else {
@@ -184,7 +184,7 @@ private fun CategoryChips(
         if (showAllChip) {
             item {
                 CategoryChip(
-                    label = "All",
+                    label = "الكل",
                     isSelected = selectedCategory == null,
                     selectedContainerColor = Amber,
                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary,

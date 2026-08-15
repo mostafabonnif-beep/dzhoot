@@ -57,9 +57,9 @@ internal fun VideoPlayer(
 /** Aspect/zoom modes cycled by the player's Aspect quick-action, with labels. */
 @OptIn(UnstableApi::class)
 internal val ASPECT_MODES: List<Pair<Int, String>> = listOf(
-    AspectRatioFrameLayout.RESIZE_MODE_FIT to "Fit",
-    AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Zoom",
-    AspectRatioFrameLayout.RESIZE_MODE_FILL to "Fill"
+    AspectRatioFrameLayout.RESIZE_MODE_FIT to "ملاءمة",
+    AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "تكبير",
+    AspectRatioFrameLayout.RESIZE_MODE_FILL to "ملء الشاشة"
 )
 
 /** Loading/error crossfade plus stream recovery and dead-stream overlays. */

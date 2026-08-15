@@ -18,11 +18,11 @@ internal fun AppearanceSection(
     onThemeChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SettingsCard(title = "Appearance", modifier = modifier) {
+    SettingsCard(title = "المظهر", modifier = modifier) {
         SettingRowLayout(
             text = {
                 Text(
-                    text = "Theme",
+                    text = "السمة",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.SemiBold
@@ -30,9 +30,9 @@ internal fun AppearanceSection(
             },
             action = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SettingOption(label = "Dark",   value = "dark",   current = currentTheme, onSelect = onThemeChange)
-                    SettingOption(label = "Light",  value = "light",  current = currentTheme, onSelect = onThemeChange)
-                    SettingOption(label = "System", value = "system", current = currentTheme, onSelect = onThemeChange)
+                    SettingOption(label = "داكن",   value = "dark",   current = currentTheme, onSelect = onThemeChange)
+                    SettingOption(label = "فاتح",  value = "light",  current = currentTheme, onSelect = onThemeChange)
+                    SettingOption(label = "النظام", value = "system", current = currentTheme, onSelect = onThemeChange)
                 }
             }
         )
