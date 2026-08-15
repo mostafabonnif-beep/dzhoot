@@ -1,7 +1,6 @@
 services:
   caddy:
     image: caddy:2-alpine
-    container_name: dzhoof-caddy
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN}
@@ -26,17 +25,13 @@ services:
 
   api:
     image: ${DOCKER_IMAGE}
-    container_name: dzhoof-api
     restart: unless-stopped
     environment:
       NODE_ENV: production
       PORT: 3000
       APP_VERSION: ${APP_VERSION}
       MONGODB_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/dzhoof-iptv?authSource=admin
-      # container_name, not the service name: the api/frontend also sit on the shared
-      # gkz-network where another stack's redis carries the alias "redis" (and requires
-      # auth) — the bare name resolves there and fails with NOAUTH.
-      REDIS_URL: redis://:${REDIS_PASSWORD}@dzhoof-redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       XTREAM_SECRET_KEY: ${XTREAM_SECRET_KEY}
@@ -86,10 +81,11 @@ services:
       start_period: 20s
     networks:
       - dzhoof-network
-      - gkz-network
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     logging:
       driver: 'json-file'
       options:
@@ -98,14 +94,12 @@ services:
 
   frontend:
     image: ${DOCKER_FRONTEND_IMAGE}
-    container_name: dzhoof-frontend
     restart: unless-stopped
     environment:
       GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID}
       FRONTEND_SENTRY_DSN: ${FRONTEND_SENTRY_DSN}
     networks:
       - dzhoof-network
-      - gkz-network
     depends_on:
       - api
     logging:
@@ -116,7 +110,6 @@ services:
 
   mongodb:
     image: mongo:7
-    container_name: dzhoof-mongodb
     restart: unless-stopped
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:?MONGO_INITDB_ROOT_USERNAME is required}
@@ -139,7 +132,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: dzhoof-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD is required}"]
     healthcheck:
@@ -159,15 +151,11 @@ services:
 
   scheduler:
     image: ${DOCKER_IMAGE}
-    container_name: dzhoof-scheduler
     restart: unless-stopped
     environment:
       NODE_ENV: production
       MONGODB_URI: mongodb://${MONGO_INITDB_ROOT_USERNAME}:${MONGO_INITDB_ROOT_PASSWORD}@mongodb:27017/dzhoof-iptv?authSource=admin
-      # container_name, not the service name: the api/frontend also sit on the shared
-      # gkz-network where another stack's redis carries the alias "redis" (and requires
-      # auth) — the bare name resolves there and fails with NOAUTH.
-      REDIS_URL: redis://:${REDIS_PASSWORD}@dzhoof-redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       LIVENESS_CHECK_INTERVAL_MS: ${LIVENESS_CHECK_INTERVAL_MS}
       EPG_REFRESH_INTERVAL_MS: ${EPG_REFRESH_INTERVAL_MS}
       CACHE_REFRESH_INTERVAL_MS: ${CACHE_REFRESH_INTERVAL_MS}
@@ -183,8 +171,10 @@ services:
     healthcheck:
       disable: true
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - dzhoof-network
     logging:
@@ -196,10 +186,6 @@ services:
 networks:
   dzhoof-network:
     driver: bridge
-  gkz-network:
-    external: true
-    name: dzhoof-shared-network
-
 volumes:
   caddy_data:
     driver: local

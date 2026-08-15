@@ -126,3 +126,10 @@ Sentry وطبقات التنبيه موجودة جزئيًا في المشروع
 > **T1 NOT COMPLETE**
 
 تم تنفيذ والتحقق من كل ما يمكن إنجازه داخل المستودع وCI دون أسرار أو VPS أو مصدر محتوى حقيقي. الخطوات التالية التي تتطلب تدخلًا خارجيًا هي إعداد VPS/domain، إدخال أسرار الإنتاج، إضافة مصدر محتوى مرخّص، تفعيل Firebase، وتوقيع Release APK.
+
+
+## 17. Cloud portability update — 2026-08-15
+
+تمت إزالة اعتماد production Compose على شبكة `gkz-network` الخارجية وعلى أسماء الحاويات الثابتة. أصبح Redis يُخاطب باسم خدمة Compose المحمول `redis`، وأضيفت شروط انتظار جاهزية MongoDB وRedis قبل تشغيل API وscheduler. تمت إضافة دليل `docs/CLOUD_MIGRATION_ORACLE_AWS.md` الذي يوضح أن الانتقال بين Oracle وAWS لا يتطلب إعادة إنتاج Android ما دام نطاق API ثابتًا، مع خطوات نقل الصور والبيانات والأسرار وDNS والنسخ الاحتياطي.
+
+نتيجة التحقق بعد التغيير: production Compose config صالح، `npm run typecheck` ناجح، `npm run lint` ناجح، واختبارات Backend ناجحة بنتيجة 152/152.
