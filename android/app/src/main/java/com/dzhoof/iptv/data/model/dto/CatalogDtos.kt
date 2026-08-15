@@ -97,3 +97,46 @@ data class PlaybackAuthorizationData(
     val authorized: Boolean = false,
     val subscriptionRequired: Boolean = false,
 )
+
+data class UnifiedSearchResponse(
+    val success: Boolean = false,
+    val data: UnifiedSearchData = UnifiedSearchData(),
+    val error: String? = null,
+)
+
+data class UnifiedSearchData(
+    val channels: List<ChannelSearchResult> = emptyList(),
+    val movies: List<ContentSearchResult> = emptyList(),
+    val series: List<ContentSearchResult> = emptyList(),
+    val programs: List<ProgramSearchResult> = emptyList(),
+)
+
+data class ChannelSearchResult(
+    @SerializedName("_id") val id: String,
+    val type: String = "LIVE",
+    val name: String,
+    val logo: String? = null,
+    val group: String? = null,
+)
+
+data class ContentSearchResult(
+    @SerializedName("_id") val id: String,
+    val type: String,
+    val name: String,
+    val poster: String? = null,
+    val category: String? = null,
+)
+
+data class ProgramSearchResult(
+    @SerializedName("_id") val id: String,
+    val type: String = "PROGRAM",
+    val name: String,
+    val description: String? = null,
+    val category: String? = null,
+    val channelEpgId: String? = null,
+    val startTime: String? = null,
+    val endTime: String? = null,
+    val icon: String? = null,
+    val language: String? = null,
+    val catchupAvailable: Boolean = false,
+)

@@ -56,3 +56,41 @@ data class PlaybackAuthorization(
     val url: String,
     val expiresAt: Long,
 )
+
+data class UnifiedSearchResults(
+    val channels: List<UnifiedChannelResult> = emptyList(),
+    val movies: List<UnifiedContentResult> = emptyList(),
+    val series: List<UnifiedContentResult> = emptyList(),
+    val programs: List<UnifiedProgramResult> = emptyList(),
+) {
+    val totalCount: Int
+        get() = channels.size + movies.size + series.size + programs.size
+}
+
+data class UnifiedChannelResult(
+    val id: String,
+    val name: String,
+    val logo: String?,
+    val group: String?,
+)
+
+data class UnifiedContentResult(
+    val id: String,
+    val type: String,
+    val name: String,
+    val poster: String?,
+    val category: String?,
+)
+
+data class UnifiedProgramResult(
+    val id: String,
+    val name: String,
+    val description: String?,
+    val category: String?,
+    val channelEpgId: String?,
+    val startTime: String?,
+    val endTime: String?,
+    val icon: String?,
+    val language: String?,
+    val catchupAvailable: Boolean,
+)

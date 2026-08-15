@@ -22,6 +22,7 @@ import com.dzhoof.iptv.data.model.dto.SeasonsResponse
 import com.dzhoof.iptv.data.model.dto.EpisodesResponse
 import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationRequest
 import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationResponse
+import com.dzhoof.iptv.data.model.dto.UnifiedSearchResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -61,6 +62,9 @@ interface FireVisionApiService {
      */
     @GET("api/v1/channels/{id}")
     suspend fun getChannelById(@Path("id") id: String): Response<ChannelDto>
+
+    @GET("api/v1/catalog/search")
+    suspend fun unifiedSearch(@Query("q") query: String): Response<UnifiedSearchResponse>
 
     @GET("api/v1/catalog/movies")
     suspend fun getMovies(

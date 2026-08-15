@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.SearchFilter
+import com.dzhoof.iptv.domain.model.UnifiedSearchResults
+import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.usecase.ClearSearchHistoryUseCase
 import com.dzhoof.iptv.domain.usecase.GetRecentSearchesUseCase
 import com.dzhoof.iptv.domain.usecase.SaveSearchQueryUseCase
@@ -43,7 +45,8 @@ class SearchViewModel @Inject constructor(
     private val clearSearchHistoryUseCase: ClearSearchHistoryUseCase,
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val channelUiMapper: ChannelUiMapper,
-    private val channelHealthDao: ChannelHealthDao
+    private val channelHealthDao: ChannelHealthDao,
+    private val catalogRepository: CatalogRepository,
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(SearchUiState())
@@ -88,7 +91,14 @@ class SearchViewModel @Inject constructor(
         // Clear results and error if query is empty
         if (query.isBlank()) {
             searchJob?.cancel()
-            _uiState.update { it.copy(results = emptyList(), isLoading = false, error = null) }
+            _uiState.update {
+                it.copy(
+                    results = emptyList(),
+                    unifiedResults = UnifiedSearchResults(),
+                    isLoading = false,
+                    error = null,
+                )
+            }
         }
     }
     
@@ -103,6 +113,13 @@ class SearchViewModel @Inject constructor(
             // Save search query to history
             saveSearchQueryUseCase(query)
             
+            // Search the server catalog in addition to the local channel index.
+            // A catalog failure must not hide locally cached channels.
+            when (val unifiedResult = catalogRepository.searchCatalog(query)) {
+                is Result.Success -> _uiState.update { it.copy(unifiedResults = unifiedResult.data) }
+                is Result.Error -> Unit
+            }
+
             // Perform search with active filters
             val params = SearchChannelsUseCase.Params(
                 query = query,
@@ -124,11 +141,15 @@ class SearchViewModel @Inject constructor(
                             }
                         }
                         is Result.Error -> {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    error = result.exception.message ?: "Search failed"
-                                )
+                            _uiState.update { state ->
+                                if (state.unifiedResults.totalCount > 0) {
+                                    state.copy(isLoading = false)
+                                } else {
+                                    state.copy(
+                                        isLoading = false,
+                                        error = result.exception.message ?: "Search failed",
+                                    )
+                                }
                             }
                         }
                     }
