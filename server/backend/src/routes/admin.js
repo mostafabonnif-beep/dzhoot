@@ -15,6 +15,10 @@ const { ScheduledTaskRun } = require('../models/ScheduledTaskRun');
 const M3USource = require('../models/M3USource');
 const XtreamSource = require('../models/XtreamSource');
 const { epgService } = require('../services/epg-service');
+const {
+  getChannelIdentityStats,
+  reconcileChannelIdentities,
+} = require('../services/channel-identity-service');
 const { channelCache, statsCache } = require('../services/cache');
 const {
   resolveChannelGroups,
@@ -870,12 +874,24 @@ router.get('/stats/trends/:type', async (req, res) => {
 
 // ============ CHANNEL OPERATIONS ============
 
+// Reconcile active catalog entries into logical channel identities. This is an
+// admin-only operation and never returns stream URLs or source credentials.
+router.post('/channel-identities/reconcile', async (req, res) => {
+  try {
+    const result = await reconcileChannelIdentities();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    console.error('Error reconciling channel identities:', error);
+    res.status(500).json({ success: false, error: 'Failed to reconcile channel identities' });
+  }
+});
+
 // One compact control-plane payload for the admin dashboard. It combines the
 // channel fleet, source synchronization, and EPG freshness without exposing
 // encrypted credentials or stream URLs.
 router.get('/stats/channel-operations', async (req, res) => {
   try {
-    const [channelSummary, m3uSources, xtreamSources, epg] = await Promise.all([
+    const [channelSummary, m3uSources, xtreamSources, epg, identities] = await Promise.all([
       Channel.aggregate([
         { $match: { ownerId: null } },
         {
@@ -916,6 +932,7 @@ router.get('/stats/channel-operations', async (req, res) => {
         .select('name status syncStatus lastSyncAt lastError stats updatedAt')
         .lean(),
       epgService.getStats(),
+      getChannelIdentityStats(),
     ]);
 
     res.json({
@@ -924,6 +941,7 @@ router.get('/stats/channel-operations', async (req, res) => {
         channels: channelSummary,
         sources: { m3u: m3uSources, xtream: xtreamSources },
         epg,
+        identities,
         generatedAt: new Date().toISOString(),
       },
     });

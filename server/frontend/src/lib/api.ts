@@ -93,6 +93,12 @@ export interface ChannelOperationsData {
     m3u: ChannelOperationsSource[];
     xtream: ChannelOperationsSource[];
   };
+  identities: {
+    total: number;
+    multiSource: number;
+    lowConfidence: number;
+    lastReconciledAt: string | null;
+  };
   epg: {
     totalPrograms: number;
     channelsWithEpg: number;

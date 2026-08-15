@@ -14,7 +14,7 @@ interface HealthCheckResult {
   flaggedSkipped: number;
 }
 
-class StreamHealthService {
+export class StreamHealthService {
   async runHealthCheck(): Promise<HealthCheckResult> {
     const stats: HealthCheckResult = {
       checked: 0,
@@ -194,6 +194,8 @@ class StreamHealthService {
     channel.metadata.lastTested = new Date();
     channel.metadata.responseTime = bestAlternate.responseTimeMs;
     if (promotedAlt.quality) channel.metadata.quality = promotedAlt.quality;
+    channel.activeUserAgent = promotedAlt.userAgent || null;
+    channel.activeReferrer = promotedAlt.referrer || null;
 
     // Clear primary flaggedBad since this is a new URL
     channel.flaggedBad = {

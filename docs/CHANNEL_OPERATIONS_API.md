@@ -30,6 +30,12 @@ Authorization: Bearer <admin-token>
       "m3u": [],
       "xtream": []
     },
+    "identities": {
+      "total": 105,
+      "multiSource": 42,
+      "lowConfidence": 18,
+      "lastReconciledAt": "2026-08-15T12:00:00.000Z"
+    },
     "epg": {
       "totalPrograms": 8500,
       "channelsWithEpg": 112,
@@ -47,6 +53,19 @@ Authorization: Bearer <admin-token>
   }
 }
 ```
+
+## Reconcile هوية القنوات
+
+```http
+POST /api/v1/admin/channel-identities/reconcile
+Authorization: Bearer <admin-token>
+```
+
+يعيد المسار عدد الهويات والقنوات المرتبطة وعدد الهويات متعددة المصادر وعدد المطابقات منخفضة الثقة. تتم المطابقة تلقائيًا عبر `tvg-id` الحقيقي بدرجة ثقة عالية، أو عبر الاسم والبلد بدرجة أقل. القنوات التي لا تملك tvg-id أو بلدًا لا تُدمج تلقائيًا مع قنوات أخرى؛ تُنشأ لها هوية منخفضة الثقة مرتبطة بمعرف المصدر حتى يراجعها المشرف.
+
+## رؤوس المصدر في Failover
+
+عند ترقية بديل إلى المصدر الأساسي، يمكن للخادم حفظ `user-agent` و`referrer` داخليًا. تُمرر هذه القيم داخل playback token المشفر فقط، ثم يستخدمها proxy عند الاتصال بالمصدر. لا تظهر هذه القيم في استجابات القنوات أو قوائم M3U/JSON، وتُرفض قيم headers التي تحتوي على CRLF أو تتجاوز حدود الطول.
 
 ## حقل `health` في استجابات القنوات
 

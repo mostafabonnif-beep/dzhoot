@@ -145,9 +145,12 @@ DZ HOOF لا يوفر قنوات أو أفلامًا أو اشتراكات جا�
 - [x] إضافة `GET /api/v1/admin/stats/channel-operations` لدمج صحة القنوات والمصادر وEPG في Control Plane واحد.
 - [x] إضافة بطاقة عمليات القنوات في لوحة الإدارة مع typed API client.
 - [x] توثيق العقد في `docs/CHANNEL_OPERATIONS_API.md` وإنشاء مقارنة السوق في `CHANNELS_COMPETITIVE_COMPARISON_AR.md`.
-- [ ] إضافة Channel Identity موحدة تربط القناة المنطقية بعدة مصادر بدل الاعتماد على تكرار `channelId` فقط.
+- [x] إضافة Channel Identity آمنة تربط القنوات ذات tvg-id الحقيقي عبر مصادر M3U وXtream، مع confidence ورفض الدمج التلقائي للاسم المجهول.
+- [x] تشغيل reconciliation بعد مزامنة M3U وXtream وإتاحة reconciliation يدوي للمشرف.
+- [x] تحسين Failover بحفظ رؤوس المصدر البديل داخل playback token المشفر وتمريرها إلى proxy بعد promotion، مع حماية CRLF.
 - [ ] إضافة معاينة مزامنة وrollback لمصادر M3U/Xtream قبل تعطيل القنوات المختفية.
-- [ ] ربط health score في Android بترتيب المفضلة وواجهة الحالة دون تخزين روابط أو أسرار.
+- [x] تمرير health score وidentity إلى Android عبر transient cache دون Room migration، وعرض score اختياري على بطاقة القناة.
+- [ ] ربط health score بترتيب المفضلة وقياس QoE الكامل.
 - [ ] إضافة telemetry مجهول لتجربة التشغيل: زمن البدء، إعادة المحاولة، rebuffer، ونجاح التحويل إلى البديل.
 
 ### المرحلة 4 — VOD وSeries
