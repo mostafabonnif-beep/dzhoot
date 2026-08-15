@@ -90,7 +90,7 @@ fun MultiviewScreen(
     if (channels.isEmpty()) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text(
-                text = "No channels available for multiview",
+                text = "لا توجد قنوات متاحة للمشاهدة المتعددة",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

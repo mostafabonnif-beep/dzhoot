@@ -113,7 +113,7 @@ class FavoritesViewModel @Inject constructor(
                             _uiState.update {
                                 it.copy(
                                     isLoading = false,
-                                    error = result.exception.message ?: "Failed to load favorites"
+                                    error = result.exception.message ?: "تعذر تحميل المفضلة"
                                 )
                             }
                         }

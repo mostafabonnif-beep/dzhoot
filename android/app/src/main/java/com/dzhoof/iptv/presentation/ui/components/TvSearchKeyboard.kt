@@ -112,7 +112,7 @@ fun TvSearchKeyboard(
                     .weight(1f)
                     .height(Dimens.KeyboardKeySize)
             ) {
-                Icon(imageVector = Icons.Default.SpaceBar, contentDescription = "Space")
+                Icon(imageVector = Icons.Default.SpaceBar, contentDescription = "مسافة")
             }
             KeyButton(
                 onClick = onBackspace,
@@ -122,7 +122,7 @@ fun TvSearchKeyboard(
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.Backspace,
-                    contentDescription = "Backspace"
+                    contentDescription = "حذف الحرف السابق"
                 )
             }
             KeyButton(
@@ -131,7 +131,7 @@ fun TvSearchKeyboard(
                     .widthIn(min = Dimens.KeyboardActionKeyMinWidth)
                     .height(Dimens.KeyboardKeySize)
             ) {
-                Text(text = "Clear", style = MaterialTheme.typography.labelLarge)
+                Text(text = "مسح", style = MaterialTheme.typography.labelLarge)
             }
         }
     }

@@ -223,7 +223,7 @@ private fun HeroNowBlock(hero: ChannelUiModel) {
         hero.nextProgramTitle?.let { nextTitle ->
             Spacer(modifier = Modifier.height(Dimens.Space2))
             Text(
-                text = "Next: $nextTitle",
+                text = "التالي: $nextTitle",
                 style = MaterialTheme.typography.bodyMedium,
                 color = OnVideo.copy(alpha = 0.6f),
                 maxLines = 1,
