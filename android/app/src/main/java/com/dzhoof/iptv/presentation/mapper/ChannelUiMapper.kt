@@ -25,7 +25,13 @@ class ChannelUiMapper @Inject constructor() {
             isFavorite = channel.isFavorite,
             healthStatus = healthStatus,
             thumbnailPath = thumbnailPath,
-            alternateStreamUrls = channel.alternateStreamUrls
+            alternateStreamUrls = channel.alternateStreamUrls,
+            identityKey = channel.identityKey,
+            identityConfidence = channel.identityConfidence,
+            serverHealthStatus = channel.serverHealthStatus,
+            serverHealthScore = channel.serverHealthScore,
+            serverFallbackCount = channel.serverFallbackCount,
+            serverRecommendation = channel.serverRecommendation
         )
     }
 

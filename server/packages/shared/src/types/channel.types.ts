@@ -39,8 +39,14 @@ export interface IChannel {
   channelDrmType: string;
   tvgId: string;
   tvgName: string;
-  tvgLogo: string;
-  order: number;
+  /** Stable logical identity shared across equivalent source entries. */
+  identityKey?: string | null;
+  identityConfidence?: number | null;
+  identityMatch?: 'tvg-id' | 'name-country' | 'name' | null;
+  /** Internal headers for the currently promoted stream; never expose to clients. */
+  activeUserAgent?: string | null;
+  activeReferrer?: string | null;
+  order?: number;
   /**
    * Catch-up (timeshift) capability, populated from M3U attributes
    * (catchup= / catchup-source= / catchup-days=) or set for Xtream channels.
