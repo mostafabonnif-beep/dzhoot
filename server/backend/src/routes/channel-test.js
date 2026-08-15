@@ -28,7 +28,7 @@ const testLocks = new Map(); // sessionId -> { locked: boolean, timestamp: numbe
 const LOCK_TTL = 300000; // 5 minutes
 
 // Periodic cleanup of stale locks to prevent memory leaks
-setInterval(() => {
+const lockCleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [key, lock] of testLocks.entries()) {
     if (now - lock.timestamp > LOCK_TTL) {
@@ -36,6 +36,7 @@ setInterval(() => {
     }
   }
 }, 60000); // Clean every minute
+lockCleanupTimer.unref?.();
 
 // Helper functions for lock management
 function acquireLock(sessionId) {
