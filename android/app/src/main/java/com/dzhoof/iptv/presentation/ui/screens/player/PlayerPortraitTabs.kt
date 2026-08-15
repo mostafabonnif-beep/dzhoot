@@ -83,14 +83,14 @@ internal fun PortraitTabs(
             Tab(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
-                text = { Text("Schedule", style = MaterialTheme.typography.labelMedium) },
+                text = { Text("الجدول", style = MaterialTheme.typography.labelMedium) },
                 selectedContentColor = Amber,
                 unselectedContentColor = TextSecondary
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
-                text = { Text("Channels", style = MaterialTheme.typography.labelMedium) },
+                text = { Text("القنوات", style = MaterialTheme.typography.labelMedium) },
                 selectedContentColor = Amber,
                 unselectedContentColor = TextSecondary
             )

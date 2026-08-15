@@ -105,12 +105,12 @@ fun ParentalPinDialog(
         },
         confirmButton = {
             TextButton(onClick = ::submit, enabled = pin.isNotBlank()) {
-                Text("OK")
+                Text("تأكيد")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("إلغاء")
             }
         }
     )

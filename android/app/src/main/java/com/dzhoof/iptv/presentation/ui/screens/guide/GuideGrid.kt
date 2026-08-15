@@ -263,7 +263,7 @@ private fun GuideRow(
         ) {
             when {
                 !row.isHydrated ->
-                    GuideGapCell(width = laneWidth, isCompact = isCompact, label = "Loading…")
+                    GuideGapCell(width = laneWidth, isCompact = isCompact, label = "جارٍ التحميل…")
 
                 row.programs.isEmpty() ->
                     GuideGapCell(width = laneWidth, isCompact = isCompact)

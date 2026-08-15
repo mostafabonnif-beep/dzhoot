@@ -39,7 +39,7 @@ fun GuideScreen(
     Box(modifier = modifier.fillMaxSize()) {
         when {
             uiState.isLoading && uiState.isEmpty ->
-                LoadingIndicator(message = "Loading guide…")
+                LoadingIndicator(message = "جارٍ تحميل دليل البرامج…")
 
             uiState.error != null && uiState.isEmpty ->
                 ErrorState(
@@ -51,7 +51,7 @@ fun GuideScreen(
 
             uiState.isEmpty ->
                 EmptyState(
-                    message = "No channels available for the guide",
+                    message = "لا توجد قنوات متاحة في الدليل",
                     onRetry = viewModel::retry
                 )
 

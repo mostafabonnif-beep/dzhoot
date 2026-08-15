@@ -9,6 +9,7 @@ import { LanguageStep } from './steps/language-step';
 import { CategoryStep } from './steps/category-step';
 import { RecommendationsStep } from './steps/recommendations-step';
 import { ConfirmStep } from './steps/confirm-step';
+import { useLocale } from '@/components/locale-provider';
 
 export type SourceType = 'iptv-org' | 'pluto-tv' | 'samsung-tv-plus';
 
@@ -40,6 +41,7 @@ interface WizardShellProps {
 }
 
 export function WizardShell({ mode }: WizardShellProps) {
+  const { t } = useLocale();
   const [currentStep, setCurrentStep] = useState(0);
 
   // Step 1
@@ -174,14 +176,14 @@ export function WizardShell({ mode }: WizardShellProps) {
   }, [currentStep, handleBack]);
 
   return (
-    <main aria-label="Channel Quick Pick Wizard" className="space-y-4 sm:space-y-6 pb-20 sm:pb-0">
+    <main aria-label={t('quickPick.wizardAria')} className="space-y-4 sm:space-y-6 pb-20 sm:pb-0">
       {/* Header */}
       <div>
         <h1 className="text-base sm:text-lg font-display font-bold uppercase tracking-[0.1em]">
-          Quick Channel Pick
+              {t('quickPick.title')}
         </h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
-          Answer a few questions and we&apos;ll find the best channels for you.
+          {t('quickPick.subtitle')}
         </p>
       </div>
 
@@ -252,28 +254,28 @@ export function WizardShell({ mode }: WizardShellProps) {
         <button
           onClick={handleBack}
           disabled={currentStep === 0}
-          aria-label="Go to previous step"
+          aria-label={t('quickPick.previousStep')}
           className="inline-flex items-center gap-1.5 px-3 py-2 sm:gap-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-border bg-card hover:border-primary/40 uppercase tracking-[0.1em] transition-colors disabled:opacity-30 disabled:pointer-events-none"
         >
-          <ChevronLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> Back
+          <ChevronLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> {t('quickPick.back')}
         </button>
 
         <span className="text-[10px] sm:text-xs text-muted-foreground" aria-live="polite">
-          Step {currentStep + 1} of {TOTAL_STEPS}
+          {t('quickPick.stepOf').replace('{current}', String(currentStep + 1)).replace('{total}', String(TOTAL_STEPS))}
         </span>
 
         {currentStep < 5 ? (
           <button
             onClick={handleNext}
             disabled={!canProceed}
-            aria-label={isLastBeforeConfirm ? 'Finish and import channels' : 'Go to next step'}
+            aria-label={isLastBeforeConfirm ? t('quickPick.finishImport') : t('quickPick.nextStep')}
             className="inline-flex items-center gap-1.5 px-3 py-2 sm:gap-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
           >
             {isLastBeforeConfirm
-              ? 'Review'
+              ? t('quickPick.review')
               : currentStep >= 1 && currentStep <= 3
-                ? 'Next / Skip'
-                : 'Next'}{' '}
+                ? t('quickPick.nextSkip')
+                : t('quickPick.next')}{' '}
             <ChevronRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
           </button>
         ) : (

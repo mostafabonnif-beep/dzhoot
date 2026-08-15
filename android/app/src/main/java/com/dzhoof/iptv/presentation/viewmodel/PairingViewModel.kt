@@ -115,7 +115,7 @@ class PairingViewModel @Inject constructor(
                             _uiState.update {
                                 it.copy(
                                     pin = pin,
-                                    statusMessage = "Waiting for confirmation...",
+                                    statusMessage = "في انتظار التأكيد…",
                                     statusColor = Color.White,
                                     isLoading = false,
                                     showCountdown = true,
@@ -130,15 +130,15 @@ class PairingViewModel @Inject constructor(
                             startCountdown(expiry)
                         } else {
                             showError(
-                                "Failed to generate PIN: ${json.optString("error", "Unknown error")}"
+                                "تعذر إنشاء PIN: ${json.optString("error", "حدث خطأ غير متوقع")}"
                             )
                         }
                     } else {
-                        showError("Server error: ${resp.code}")
+                        showError("خطأ في الخادم: ${resp.code}")
                     }
                 }
             } catch (e: Exception) {
-                showError("Connection error: ${e.message}")
+                showError("خطأ في الاتصال: ${e.message}")
             }
         }
     }

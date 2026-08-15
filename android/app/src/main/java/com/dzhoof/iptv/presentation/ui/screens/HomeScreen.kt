@@ -76,7 +76,7 @@ fun HomeScreen(
             when (state) {
                 "loading" -> HomeSkeleton()
                 "error" -> ErrorState(
-                    message = uiState.error ?: "Unknown error",
+                    message = uiState.error ?: "حدث خطأ غير متوقع",
                     onRetry = { viewModel.refresh() },
                     errorType = uiState.errorType,
                     onPairDevice = onPairDevice
