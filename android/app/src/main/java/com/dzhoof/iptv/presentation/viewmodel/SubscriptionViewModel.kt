@@ -42,7 +42,7 @@ class SubscriptionViewModel @Inject constructor(
                     subscription = result.data,
                 )
                 is Result.Error -> _uiState.value = SubscriptionUiState(
-                    error = result.exception.message ?: "Failed to load subscription",
+                    error = friendlyError(result.exception.message, "تعذر تحميل حالة الاشتراك"),
                 )
             }
         }
@@ -57,10 +57,10 @@ class SubscriptionViewModel @Inject constructor(
                     val plan = result.data.plan
                     val expires = result.data.subscription?.expiresAt
                     val message = buildString {
-                        append("Subscription activated")
+                        append("تم تفعيل الاشتراك")
                         if (!plan?.name.isNullOrBlank()) append(" — ${plan?.name}")
                         if (!expires.isNullOrBlank()) {
-                            append(" · expires ")
+                            append(" · ينتهي في ")
                             append(formatExpiry(expires))
                         }
                     }
@@ -79,7 +79,7 @@ class SubscriptionViewModel @Inject constructor(
                 }
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     isRedeeming = false,
-                    error = result.exception.message ?: "Activation failed",
+                    error = friendlyError(result.exception.message, "فشل تفعيل الكود"),
                 )
             }
         }
@@ -91,9 +91,23 @@ class SubscriptionViewModel @Inject constructor(
             when (val result = repository.removeDevice(deviceId)) {
                 is Result.Success -> refresh()
                 is Result.Error -> _uiState.value = _uiState.value.copy(
-                    error = result.exception.message ?: "Failed to remove device",
+                    error = friendlyError(result.exception.message, "تعذر حذف الجهاز"),
                 )
             }
+        }
+    }
+
+    private fun friendlyError(raw: String?, fallback: String): String {
+        val code = raw.orEmpty().substringBefore(':').trim()
+        return when (code) {
+            "SUBSCRIPTION_EXPIRED" -> "انتهى اشتراكك. فعّل كودًا جديدًا للمتابعة."
+            "ACTIVATION_RATE_LIMITED" -> "تم تجاوز محاولات التفعيل. حاول بعد قليل."
+            "DEVICE_LIMIT_REACHED" -> "تم بلوغ الحد الأقصى للأجهزة في خطتك. احذف جهازًا أولًا."
+            "CODE_ALREADY_USED" -> "هذا الكود مستخدم من قبل."
+            "CODE_EXPIRED" -> "انتهت صلاحية هذا الكود."
+            "PLAN_UNAVAILABLE" -> "الخطة المرتبطة بهذا الكود غير متاحة حاليًا."
+            "INVALID_CODE" -> "كود التفعيل غير صالح."
+            else -> raw?.substringAfter(':', raw)?.trim().takeUnless { it.isNullOrBlank() } ?: fallback
         }
     }
 

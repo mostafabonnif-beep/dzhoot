@@ -198,7 +198,13 @@ export async function redeemCode(
 
 /** Current active subscription with its plan, plus device usage. */
 export async function getUserSubscription(userId: string) {
-  const subscription = await Subscription.findOne({ userId, status: 'ACTIVE' }).lean().exec();
+  const subscription = await Subscription.findOne({
+    userId,
+    status: { $in: ['ACTIVE', 'EXPIRED'] },
+  })
+    .sort({ expiresAt: -1 })
+    .lean()
+    .exec();
   if (!subscription) {
     const devicesUsed = await Device.countDocuments({ userId }).exec();
     return { subscription: null, plan: null, devicesUsed, maxDevices: 0, devices: [] };
@@ -208,9 +214,13 @@ export async function getUserSubscription(userId: string) {
     Plan.findById(subscription.planId).lean().exec(),
     Device.find({ userId }).sort({ createdAt: 1 }).lean().exec(),
   ]);
+  const isExpired = subscription.status !== 'ACTIVE' || subscription.expiresAt.getTime() <= Date.now();
+  const visibleSubscription = isExpired
+    ? { ...subscription, status: 'EXPIRED' as const }
+    : subscription;
 
   return {
-    subscription,
+    subscription: visibleSubscription,
     plan,
     devicesUsed: devices.length,
     maxDevices: plan?.maxDevices ?? 0,

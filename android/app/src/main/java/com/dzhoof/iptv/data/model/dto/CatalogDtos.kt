@@ -65,6 +65,12 @@ data class SeriesPageResponse(
     val error: String? = null,
 )
 
+data class MovieDetailResponse(
+    val success: Boolean = false,
+    val data: MovieDto? = null,
+    val error: String? = null,
+)
+
 data class SeriesDetailResponse(
     val success: Boolean = false,
     val data: SeriesDto? = null,

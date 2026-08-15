@@ -83,6 +83,10 @@ router.get('/seasons/:seasonId/episodes', requireTvOrSessionAuth, async (req, re
     if (!season) {
       return res.status(404).json({ success: false, error: 'Season not found' });
     }
+    const series = await Series.findOne({ _id: season.seriesId, isActive: true }).select('_id').lean();
+    if (!series) {
+      return res.status(404).json({ success: false, error: 'Series not found' });
+    }
     const episodes = await Episode.find({ seasonId: season._id, seriesId: season.seriesId })
       .select('-streamUrl')
       .sort({ episodeNumber: 1 })

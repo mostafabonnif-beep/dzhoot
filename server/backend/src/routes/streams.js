@@ -5,6 +5,9 @@ const AppSetting = require('../models/AppSetting');
 const Channel = require('../models/Channel');
 const Movie = require('../models/Movie');
 const Episode = require('../models/Episode');
+const Series = require('../models/Series');
+const Season = require('../models/Season');
+const XtreamSource = require('../models/XtreamSource');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { resolveUser } = require('../middleware/resolveUser');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
@@ -70,10 +73,24 @@ router.post('/authorize', async (req, res) => {
       }
     } else if (contentType === 'MOVIE') {
       content = await Movie.findOne({ _id: id, isActive: true }).lean();
-      if (content) url = content.streamUrl;
+      if (content) {
+        const sourceIsActive = await XtreamSource.exists({ _id: content.sourceId, status: 'Active' });
+        if (!sourceIsActive) content = null;
+        else url = content.streamUrl;
+      }
     } else if (contentType === 'EPISODE') {
       content = await Episode.findById(id).lean();
-      if (content) url = content.streamUrl;
+      if (content) {
+        const [series, season] = await Promise.all([
+          Series.findOne({ _id: content.seriesId, isActive: true }).select('sourceId').lean(),
+          Season.findOne({ _id: content.seasonId, seriesId: content.seriesId }).select('_id').lean(),
+        ]);
+        const sourceIsActive = series
+          ? await XtreamSource.exists({ _id: series.sourceId, status: 'Active' })
+          : null;
+        if (!series || !season || !sourceIsActive) content = null;
+        else url = content.streamUrl;
+      }
     } else {
       return res.status(400).json({ success: false, error: 'Unsupported contentType' });
     }

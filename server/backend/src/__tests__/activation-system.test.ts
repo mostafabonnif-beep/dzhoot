@@ -229,6 +229,22 @@ describe('getUserSubscription', () => {
     expect(data.devicesUsed).toBe(1);
     expect(data.maxDevices).toBe(2);
   });
+
+  it('reports an expired active row as EXPIRED instead of granting access in the UI', async () => {
+    const user = await makeUser('expired-subscription');
+    const plan = await makePlan({ durationDays: 30 });
+    await Subscription.create({
+      userId: user._id,
+      planId: plan._id,
+      status: 'ACTIVE',
+      startsAt: new Date(Date.now() - 3 * 86400000),
+      expiresAt: new Date(Date.now() - 1000),
+    });
+
+    const data = await getUserSubscription(String(user._id));
+    expect(data.subscription!.status).toBe('EXPIRED');
+    expect(data.plan!.name).toBe('3 Months');
+  });
 });
 
 describe('revokeCode', () => {
