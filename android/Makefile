@@ -47,6 +47,7 @@ help:
 	@echo "Quality:"
 	@echo "  make lint                 Run Android lint checks"
 	@echo "  make test                 Run unit tests"
+	@echo "  make firebase-check       Validate optional Firebase config"
 	@echo ""
 	@echo "Setup:"
 	@echo "  make setup                Install git hooks (lint before commit)"
@@ -119,6 +120,15 @@ lint:
 
 test:
 	./gradlew test
+
+firebase-check:
+	@if [ -f app/google-services.json ] || [ -f app/src/debug/google-services.json ] || [ -f app/src/release/google-services.json ]; then \
+		firebase_file=$$(find app -path '*/google-services.json' -print -quit); \
+		grep -Eq '"package_name"[[:space:]]*:[[:space:]]*"$(PACKAGE)"' "$$firebase_file" || { echo "Firebase package_name must be $(PACKAGE)" >&2; exit 1; }; \
+		echo "Firebase config matches $(PACKAGE): $$firebase_file"; \
+	else \
+		echo "Firebase config not present; optional local build mode is active."; \
+	fi
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
