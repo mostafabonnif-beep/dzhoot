@@ -57,10 +57,18 @@ fun CatalogScreen(
     onPlayEpisode: (String, String) -> Unit,
     initialSeriesId: String? = null,
     initialSeriesTitle: String? = null,
+    initialMovieId: String? = null,
+    initialMovieTitle: String? = null,
     modifier: Modifier = Modifier,
     viewModel: CatalogViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(initialMovieId) {
+        initialMovieId?.takeIf { it.isNotBlank() }?.let { id ->
+            viewModel.selectMovieById(id, initialMovieTitle ?: "فيلم")
+        }
+    }
 
     LaunchedEffect(initialSeriesId) {
         initialSeriesId?.takeIf { it.isNotBlank() }?.let { id ->
@@ -74,7 +82,18 @@ fun CatalogScreen(
                 .fillMaxSize()
                 .padding(horizontal = 24.dp, vertical = 16.dp),
         ) {
-            if (state.selectedSeries == null) {
+            if (state.selectedMovie != null) {
+                MovieDetails(
+                    movie = state.selectedMovie,
+                    isLoading = state.isLoadingMovie,
+                    error = state.movieError,
+                    onBack = viewModel::clearDetails,
+                    onRetry = {
+                        state.selectedMovie?.id?.let { viewModel.selectMovieById(it, state.selectedMovie.title) }
+                    },
+                    onPlay = { movie -> onPlayMovie(movie.id, movie.title) },
+                )
+            } else if (state.selectedSeries == null) {
                 CatalogToolbar(
                     tab = state.tab,
                     query = state.query,
@@ -85,7 +104,7 @@ fun CatalogScreen(
                 Spacer(modifier = Modifier.height(16.dp))
                 CatalogContent(
                     state = state,
-                    onMovieClick = { movie -> onPlayMovie(movie.id, movie.title) },
+                    onMovieClick = viewModel::selectMovie,
                     onSeriesClick = viewModel::selectSeries,
                     onLoadMore = viewModel::loadMore,
                     onRetry = viewModel::refresh,
@@ -99,6 +118,7 @@ fun CatalogScreen(
                     isLoading = state.isLoadingDetails,
                     error = state.detailsError,
                     onBack = viewModel::clearDetails,
+                    onRetry = viewModel::retryDetails,
                     onSeasonSelected = viewModel::selectSeason,
                     onEpisodeClick = { episode -> onPlayEpisode(episode.id, episode.title) },
                 )
@@ -183,7 +203,7 @@ private fun CatalogContent(
             if (state.movies.size < state.totalCount) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (state.isLoadingMore) "Loading…" else "Load more")
+                        Text(if (state.isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
                     }
                 }
             }
@@ -206,11 +226,53 @@ private fun CatalogContent(
             if (state.series.size < state.totalCount) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (state.isLoadingMore) "Loading…" else "Load more")
+                        Text(if (state.isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MovieDetails(
+    movie: Movie?,
+    isLoading: Boolean,
+    error: String?,
+    onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onPlay: (Movie) -> Unit,
+) {
+    if (movie == null) return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedButton(onClick = onBack) { Text("رجوع") }
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(movie.title, style = MaterialTheme.typography.headlineSmall)
+    }
+    Spacer(modifier = Modifier.height(16.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        AsyncImage(
+            model = movie.poster,
+            contentDescription = movie.title,
+            modifier = Modifier
+                .width(180.dp)
+                .height(260.dp)
+                .clip(MaterialTheme.shapes.medium),
+            contentScale = ContentScale.Crop,
+        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            movie.description?.takeIf { it.isNotBlank() }?.let { Text(it, maxLines = 6, overflow = TextOverflow.Ellipsis) }
+            Text("التصنيف: ${movie.category}")
+            movie.year?.let { Text("السنة: $it") }
+            movie.rating?.let { Text("التقييم: $it") }
+            movie.durationMinutes?.let { Text("المدة: $it دقيقة") }
+            Button(onClick = { onPlay(movie) }) { Text("تشغيل الفيلم") }
+        }
+    }
+    if (isLoading) CircularProgressIndicator()
+    error?.let {
+        Spacer(modifier = Modifier.height(12.dp))
+        ErrorState(message = it, onRetry = onRetry)
     }
 }
 
@@ -223,6 +285,7 @@ private fun SeriesDetails(
     isLoading: Boolean,
     error: String?,
     onBack: () -> Unit,
+    onRetry: () -> Unit,
     onSeasonSelected: (Season) -> Unit,
     onEpisodeClick: (Episode) -> Unit,
 ) {
@@ -242,7 +305,8 @@ private fun SeriesDetails(
         return
     }
     error?.let {
-        ErrorState(message = it, onRetry = { onBack(); })
+        ErrorState(message = it, onRetry = onRetry)
+
         return
     }
     if (seasons.isEmpty()) {
@@ -254,7 +318,7 @@ private fun SeriesDetails(
             FilterChip(
                 selected = selectedSeason?.id == season.id,
                 onClick = { onSeasonSelected(season) },
-                label = { Text(season.name.ifBlank { "Season ${season.seasonNumber}" }) },
+                label = { Text(season.name.ifBlank { "الموسم ${season.seasonNumber}" }) },
             )
         }
     }

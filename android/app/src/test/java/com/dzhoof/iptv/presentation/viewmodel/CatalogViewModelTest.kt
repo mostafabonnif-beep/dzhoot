@@ -58,6 +58,17 @@ class CatalogViewModelTest {
     }
 
     @Test
+    fun `loads movie details by id for direct search navigation`() = runTest {
+        val repository = FakeCatalogRepository(movies = listOf(movie))
+        val viewModel = CatalogViewModel(repository)
+        viewModel.selectMovieById(movie.id)
+        advanceUntilIdle()
+
+        assertEquals(movie, viewModel.uiState.value.selectedMovie)
+        assertEquals(false, viewModel.uiState.value.isLoadingMovie)
+    }
+
+    @Test
     fun `loads series details by id for direct search navigation`() = runTest {
         val repository = FakeCatalogRepository(series = listOf(series), seasons = listOf(season))
         val viewModel = CatalogViewModel(repository)
@@ -92,6 +103,10 @@ class CatalogViewModelTest {
 
         override suspend fun getMovies(page: Int, limit: Int, search: String?): Result<CatalogPage<Movie>> =
             Result.Success(moviePage.copy(page = page))
+
+        override suspend fun getMovieById(movieId: String): Result<Movie> =
+            movies.firstOrNull { it.id == movieId }?.let { Result.Success(it) }
+                ?: Result.Error(IllegalArgumentException("Movie not found"))
 
         override suspend fun getSeries(page: Int, limit: Int, search: String?): Result<CatalogPage<Series>> =
             Result.Success(CatalogPage(series, series.size, page, limit))
