@@ -129,7 +129,7 @@ private fun ChannelsZapTab(
     }
 
     if (channels.isEmpty()) {
-        TabEmptyState("No channels in this category")
+        TabEmptyState("لا توجد قنوات في هذه الفئة")
         return
     }
 

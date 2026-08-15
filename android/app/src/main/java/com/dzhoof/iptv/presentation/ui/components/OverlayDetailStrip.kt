@@ -101,7 +101,7 @@ internal fun OverlayDetailStrip(
             }
             if (next != null) {
                 Text(
-                    text = "Next: ${next.title}  ${formatEpgTimeRange(next)}",
+                    text = "التالي: ${next.title}  ${formatEpgTimeRange(next)}",
                     style = LabelToast,
                     color = OnVideo.copy(alpha = EmphasisMedium),
                     maxLines = 1,

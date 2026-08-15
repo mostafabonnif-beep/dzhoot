@@ -123,10 +123,10 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     if (body?.success == true && data != null) {
                         Result.success(data)
                     } else {
-                        Result.error(IOException(body?.error ?: "Failed to load subscription"))
+                        Result.error(IOException(body?.error ?: "تعذر تحميل الاشتراك"))
                     }
                 } else {
-                    Result.error(backendError(response.errorBody()?.string(), "Failed to load subscription (HTTP ${response.code()})"))
+                    Result.error(backendError(response.errorBody()?.string(), "تعذر تحميل الاشتراك (HTTP ${response.code()})"))
                 }
             } catch (e: Exception) {
                 Result.error(e)
