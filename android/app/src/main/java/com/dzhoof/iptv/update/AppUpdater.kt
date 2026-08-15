@@ -119,7 +119,7 @@ class AppUpdater @Inject constructor(
      */
     fun downloadAndInstall(updateInfo: UpdateInfo, onState: (DownloadState) -> Unit) {
         if (updateInfo.downloadUrl.isEmpty()) {
-            onState(DownloadState.Failed("No download URL"))
+            onState(DownloadState.Failed("لا يتوفر رابط للتنزيل"))
             return
         }
         try {
@@ -129,8 +129,8 @@ class AppUpdater @Inject constructor(
             if (oldFile.exists()) oldFile.delete()
 
             val request = DownloadManager.Request(Uri.parse(updateInfo.downloadUrl)).apply {
-                setTitle("DZ HOOF Update")
-                setDescription("Downloading DZ HOOF update...")
+                setTitle("تحديث DZ HOOF")
+                setDescription("جارٍ تنزيل تحديث DZ HOOF…")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, APK_FILENAME)
                 setAllowedOverMetered(true)
@@ -152,7 +152,7 @@ class AppUpdater @Inject constructor(
                             if (status == DownloadManager.STATUS_SUCCESSFUL) {
                                 onState(installUpdate())
                             } else {
-                                onState(DownloadState.Failed("Download failed"))
+                                onState(DownloadState.Failed("فشل تنزيل التحديث"))
                             }
                         }
                     } finally {
@@ -174,19 +174,19 @@ class AppUpdater @Inject constructor(
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading update", e)
-            onState(DownloadState.Failed("Failed to start download"))
+            onState(DownloadState.Failed("تعذر بدء التنزيل"))
         }
     }
 
     private fun installUpdate(): DownloadState {
         return try {
             val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), APK_FILENAME)
-            if (!file.exists()) return DownloadState.Failed("Failed to get download file")
+            if (!file.exists()) return DownloadState.Failed("تعذر الوصول إلى ملف التحديث")
 
             if (!verifyApkSignature(file)) {
                 Log.e(TAG, "APK signature verification failed — refusing to install")
                 file.delete()
-                return DownloadState.Failed("Update verification failed — signature mismatch")
+                return DownloadState.Failed("تعذر التحقق من التحديث — لا تتطابق التوقيعات")
             }
 
             val apkUri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
@@ -198,7 +198,7 @@ class AppUpdater @Inject constructor(
             DownloadState.InstallLaunched
         } catch (e: Exception) {
             Log.e(TAG, "Error installing update", e)
-            DownloadState.Failed("Failed to install update")
+            DownloadState.Failed("تعذر تثبيت التحديث")
         }
     }
 

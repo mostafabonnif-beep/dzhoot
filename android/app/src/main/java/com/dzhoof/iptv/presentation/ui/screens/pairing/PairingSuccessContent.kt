@@ -62,7 +62,7 @@ internal fun PairingSuccessContent(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "You're all set!",
+                text = "تم إعداد كل شيء!",
                 style = MaterialTheme.typography.displaySmall,
                 color = Amber,
                 textAlign = TextAlign.Center
@@ -71,7 +71,7 @@ internal fun PairingSuccessContent(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Welcome, $username",
+                text = "أهلًا بك، $username",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
@@ -81,7 +81,7 @@ internal fun PairingSuccessContent(
 
             if (isTvDevice) {
                 Text(
-                    text = "Scan the QR code or visit",
+                    text = "امسح رمز QR أو انتقل إلى",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -94,7 +94,7 @@ internal fun PairingSuccessContent(
                     textAlign = TextAlign.Center
                 )
                 Text(
-                    text = "to add channels to your playlist",
+                    text = "لإضافة القنوات إلى قائمة التشغيل",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -112,7 +112,7 @@ internal fun PairingSuccessContent(
                     ) {
                         Image(
                             bitmap = channelManagerQrBitmap.asImageBitmap(),
-                            contentDescription = "QR Code for Channel Manager",
+                            contentDescription = "رمز QR لمدير القنوات",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Fit
                         )
@@ -126,7 +126,7 @@ internal fun PairingSuccessContent(
                 }
             } else {
                 Text(
-                    text = "Add channels to your playlist to start watching",
+                    text = "أضف القنوات إلى قائمة التشغيل لبدء المشاهدة",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -154,7 +154,7 @@ internal fun PairingSuccessContent(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Open Channel Manager",
+                        text = "فتح مدير القنوات",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -183,7 +183,7 @@ internal fun PairingSuccessContent(
                     .height(48.dp)
             ) {
                 Text(
-                    text = "Continue",
+                    text = "متابعة",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold
                 )

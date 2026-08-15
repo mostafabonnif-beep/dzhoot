@@ -335,7 +335,7 @@ class ChannelsViewModel @Inject constructor(
                                 channel
                             }
                         },
-                        error = result.exception.message ?: "Failed to update favorite"
+                        error = result.exception.message ?: "تعذر تحديث المفضلة"
                     )
                 }
             }
@@ -485,16 +485,16 @@ class ChannelsViewModel @Inject constructor(
     private fun classifyError(exception: Exception): Pair<String, ErrorType> {
         return when (exception) {
             is UnauthorizedException, is ForbiddenException ->
-                "Device not paired — please pair your device" to ErrorType.AUTH_REQUIRED
+                "الجهاز غير مربوط — اربط جهازك" to ErrorType.AUTH_REQUIRED
             is NetworkException, is java.net.ConnectException,
             is java.net.UnknownHostException, is java.net.SocketTimeoutException ->
-                "Cannot connect to server — check server URL in Settings" to ErrorType.NETWORK_ERROR
+                "تعذر الاتصال بالخادم — تحقق من عنوان الخادم في الإعدادات" to ErrorType.NETWORK_ERROR
             is ServerException ->
-                "Server error — please try again later" to ErrorType.SERVER_ERROR
+                "خطأ في الخادم — حاول لاحقًا" to ErrorType.SERVER_ERROR
             is ServiceUnavailableException ->
-                "Server is offline — please try again later" to ErrorType.SERVER_ERROR
+                "الخادم غير متاح — حاول لاحقًا" to ErrorType.SERVER_ERROR
             else ->
-                (exception.message ?: "Something went wrong") to ErrorType.UNKNOWN
+                (exception.message ?: "حدث خطأ غير متوقع") to ErrorType.UNKNOWN
         }
     }
 }

@@ -182,6 +182,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   const [importClear, setImportClear] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importResult, setImportResult] = useState('');
+  const [importSuccess, setImportSuccess] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Stream testing
@@ -659,6 +660,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     if (!importContent.trim()) return;
     setImportLoading(true);
     setImportResult('');
+    setImportSuccess(false);
     try {
       const endpoint = isAdmin ? '/admin/channels/import-m3u' : '/user-playlist/me/import-m3u';
       const payload = isAdmin
@@ -666,10 +668,12 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         : { m3uContent: importContent };
       const res = await api.post(endpoint, payload);
       const data = res.data;
+      const importedCount = data.imported || data.added || data.count || 0;
+      setImportSuccess(true);
       setImportResult(
         isAdmin
-          ? `Imported ${data.imported || data.count || 0} channels`
-          : `Added ${data.added || data.count || 0} channels to your list`,
+          ? t('channels.imported').replace('{count}', String(importedCount))
+          : t('channels.addedToList').replace('{count}', String(importedCount)),
       );
       setImportContent('');
       setImportClear(false);
@@ -681,7 +685,8 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       }
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setImportResult(axiosErr.response?.data?.error || 'Import failed');
+      setImportSuccess(false);
+      setImportResult(axiosErr.response?.data?.error || t('channels.importFailed'));
     } finally {
       setImportLoading(false);
     }
@@ -733,7 +738,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status?: number } };
       if (axiosErr.response?.status === 409)
-        toast('Another test is already in progress. Please wait.', 'error');
+        toast(t('channels.testBusy'), 'error');
     } finally {
       setTestingAll(false);
     }
@@ -799,7 +804,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       setShowAdd(false);
       fetchMyChannels();
     } catch {
-      toast('Failed to add channels', 'error');
+      toast(t('channels.addFailed'), 'error');
     }
   }
 
@@ -822,58 +827,58 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   // Detail modal fields
   const detailFields: ChannelField[] = detailChannel
     ? [
-        { label: 'Stream URL', value: getUrl(detailChannel) },
+        { label: t('sources.streamUrl'), value: getUrl(detailChannel) },
         ...(isAdmin
           ? [
-              { label: 'Channel ID', value: detailChannel.channelId },
-              { label: 'Country', value: detailChannel.metadata?.country },
-              { label: 'Language', value: detailChannel.metadata?.language },
-              { label: 'Quality', value: detailChannel.metadata?.quality },
-              { label: 'Network', value: detailChannel.metadata?.network },
-              { label: 'Website', value: detailChannel.metadata?.website },
-              { label: 'DRM Type', value: detailChannel.channelDrmType },
-              { label: 'Sort Order', value: detailChannel.order?.toString() },
+              { label: t('channels.channelId'), value: detailChannel.channelId },
+              { label: t('sources.country'), value: detailChannel.metadata?.country },
+              { label: t('sources.language'), value: detailChannel.metadata?.language },
+              { label: t('channels.quality'), value: detailChannel.metadata?.quality },
+              { label: t('channels.network'), value: detailChannel.metadata?.network },
+              { label: t('channels.website'), value: detailChannel.metadata?.website },
+              { label: t('channels.drmType'), value: detailChannel.channelDrmType },
+              { label: t('channels.sortOrder'), value: detailChannel.order?.toString() },
             ]
-          : [{ label: 'Group', value: detailChannel.channelGroup }]),
+          : [{ label: t('channels.group'), value: detailChannel.channelGroup }]),
         {
-          label: 'Status',
+          label: t('common.status'),
           value:
             detailChannel.metadata?.isWorking === false
-              ? 'Not Working'
+              ? t('channels.notWorkingStatus')
               : detailChannel.metadata?.isWorking === true
-                ? 'Working'
-                : 'Untested',
+                ? t('channels.workingStatus')
+                : t('channels.untestedStatus'),
         },
         {
-          label: 'Response Time',
+          label: t('channels.responseTime'),
           value: detailChannel.metadata?.responseTime
             ? `${detailChannel.metadata.responseTime}ms`
             : undefined,
         },
         {
-          label: 'Last Tested',
+          label: t('channels.lastTested'),
           value: detailChannel.metadata?.lastTested
             ? new Date(detailChannel.metadata.lastTested).toLocaleString()
             : undefined,
         },
         ...(isAdmin && detailChannel.metrics
           ? [
-              { label: 'Play Count', value: String(detailChannel.metrics.playCount ?? 0) },
-              { label: 'Proxy Plays', value: String(detailChannel.metrics.proxyPlayCount ?? 0) },
-              { label: 'Alive Count', value: String(detailChannel.metrics.aliveCount ?? 0) },
-              { label: 'Dead Count', value: String(detailChannel.metrics.deadCount ?? 0) },
+              { label: t('channels.playCount'), value: String(detailChannel.metrics.playCount ?? 0) },
+              { label: t('channels.proxyPlays'), value: String(detailChannel.metrics.proxyPlayCount ?? 0) },
+              { label: t('channels.aliveCount'), value: String(detailChannel.metrics.aliveCount ?? 0) },
+              { label: t('channels.deadCount'), value: String(detailChannel.metrics.deadCount ?? 0) },
               {
-                label: 'Unresponsive Count',
+                label: t('channels.unresponsiveCount'),
                 value: String(detailChannel.metrics.unresponsiveCount ?? 0),
               },
               {
-                label: 'Last Played',
+                label: t('channels.lastPlayed'),
                 value: detailChannel.metrics.lastPlayedAt
                   ? new Date(detailChannel.metrics.lastPlayedAt).toLocaleString()
                   : undefined,
               },
               {
-                label: 'Last Dead',
+                label: t('channels.lastDead'),
                 value: detailChannel.metrics.lastDeadAt
                   ? new Date(detailChannel.metrics.lastDeadAt).toLocaleString()
                   : undefined,
@@ -882,22 +887,22 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           : []),
         ...(!isAdmin && detailChannel.metrics
           ? [
-              { label: 'Play Count', value: String(detailChannel.metrics.playCount ?? 0) },
-              { label: 'Proxy Plays', value: String(detailChannel.metrics.proxyPlayCount ?? 0) },
-              { label: 'Alive Count', value: String(detailChannel.metrics.aliveCount ?? 0) },
-              { label: 'Dead Count', value: String(detailChannel.metrics.deadCount ?? 0) },
+              { label: t('channels.playCount'), value: String(detailChannel.metrics.playCount ?? 0) },
+              { label: t('channels.proxyPlays'), value: String(detailChannel.metrics.proxyPlayCount ?? 0) },
+              { label: t('channels.aliveCount'), value: String(detailChannel.metrics.aliveCount ?? 0) },
+              { label: t('channels.deadCount'), value: String(detailChannel.metrics.deadCount ?? 0) },
               {
-                label: 'Unresponsive Count',
+                label: t('channels.unresponsiveCount'),
                 value: String(detailChannel.metrics.unresponsiveCount ?? 0),
               },
               {
-                label: 'Last Played',
+                label: t('channels.lastPlayed'),
                 value: detailChannel.metrics.lastPlayedAt
                   ? new Date(detailChannel.metrics.lastPlayedAt).toLocaleString()
                   : undefined,
               },
               {
-                label: 'Last Dead',
+                label: t('channels.lastDead'),
                 value: detailChannel.metrics.lastDeadAt
                   ? new Date(detailChannel.metrics.lastDeadAt).toLocaleString()
                   : undefined,
@@ -922,8 +927,8 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           onClick={() => toggleFavorite(c._id)}
           disabled={favSyncing.has(c._id)}
           className="flex items-center justify-center h-7 w-7 transition-colors disabled:opacity-50"
-          title={isFav ? 'Remove from favorites' : 'Add to favorites'}
-          aria-label={isFav ? 'Remove from favorites' : 'Add to favorites'}
+          title={isFav ? t('channels.removeFavorite') : t('channels.addFavorite')}
+          aria-label={isFav ? t('channels.removeFavorite') : t('channels.addFavorite')}
         >
           <Heart
             className={`h-4 w-4 transition-colors ${isFav ? 'fill-red-500 text-red-500' : 'text-muted-foreground hover:text-red-400'}`}
@@ -1162,32 +1167,32 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           ? `/channels/${flagTarget.channelId}/alternates/${flagTarget.alternateIndex}/flag`
           : `/channels/${flagTarget.channelId}/flag`;
       await api.post(url, { reason: flagReason });
-      toast('Stream flagged', 'success');
+      toast(t('channels.streamFlagged'), 'success');
       setShowFlagModal(false);
       setFlagTarget(null);
       fetchChannels();
     } catch {
-      toast('Failed to flag stream', 'error');
+      toast(t('channels.flagFailed'), 'error');
     }
   }
 
   async function handleUnflagPrimary(channelId: string) {
     try {
       await api.post(`/channels/${channelId}/unflag`);
-      toast('Flag cleared', 'success');
+      toast(t('channels.flagCleared'), 'success');
       fetchChannels();
     } catch {
-      toast('Failed to clear flag', 'error');
+      toast(t('channels.flagFailed'), 'error');
     }
   }
 
   async function handleUnflagAlternate(channelId: string, index: number) {
     try {
       await api.post(`/channels/${channelId}/alternates/${index}/unflag`);
-      toast('Alternate flag cleared', 'success');
+      toast(t('channels.alternateFlagCleared'), 'success');
       fetchChannels();
     } catch {
-      toast('Failed to clear flag', 'error');
+      toast(t('channels.flagFailed'), 'error');
     }
   }
 
@@ -1207,10 +1212,10 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         channelUrl: alt.streamUrl,
         alternateStreams: newAlternates,
       });
-      toast('Stream promoted to primary', 'success');
+      toast(t('channels.promoteSuccess'), 'success');
       fetchChannels();
     } catch {
-      toast('Failed to promote stream', 'error');
+      toast(t('channels.promoteFailed'), 'error');
     }
   }
 
@@ -1229,10 +1234,12 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">
-              My Channels
+              {t('channels.myChannels')}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {isAdmin ? `${totalCount} total channels` : `${channels.length} channels`}
+              {isAdmin
+                ? t('channels.totalCount').replace('{count}', String(totalCount))
+                : t('channels.channelCount').replace('{count}', String(channels.length))}
             </p>
           </div>
           {/* Primary actions */}
@@ -1241,7 +1248,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               href={isAdmin ? '/admin/quick-pick' : '/user/quick-pick'}
               className="inline-flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-primary bg-primary/10 text-primary uppercase tracking-[0.1em] transition-colors hover:bg-primary/20"
             >
-              <Zap className="h-4 w-4" /> Quick Pick
+              <Zap className="h-4 w-4" /> {t('nav.quickPick')}
             </Link>
             <button
               onClick={() => {
@@ -1254,7 +1261,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               }}
               className="inline-flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"
             >
-              <Plus className="h-4 w-4" /> Add Stream
+              <Plus className="h-4 w-4" /> {t('channels.addStream')}
             </button>
           </div>
         </div>
@@ -1264,7 +1271,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             onClick={() => setShowImport(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 uppercase tracking-[0.1em]"
           >
-            <Upload className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Import M3U
+            <Upload className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('channels.importM3u')}
           </button>
           {channels.length > 0 && (
             <button
@@ -1276,7 +1283,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               ) : (
                 <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               )}
-              Export M3U
+              {t('channels.exportM3u')}
             </button>
           )}
           <button
@@ -1289,14 +1296,14 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             ) : (
               <Zap className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             )}
-            Test All
+            {t('channels.testAll')}
           </button>
           {channels.length > 0 && (
             <button
               onClick={() => (isAdmin ? setShowBulkDelete(true) : handleBulkDelete())}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-destructive/30 bg-card shadow-sm transition-colors hover:border-destructive/60 text-destructive uppercase tracking-[0.1em]"
             >
-              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Delete All
+              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('channels.deleteAll')}
             </button>
           )}
         </div>
@@ -1306,9 +1313,9 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       {testResults && (
         <div className="border border-border bg-muted/50 px-4 py-3 text-sm flex items-center justify-between">
           <span>
-            Test complete:{' '}
-            <strong className="text-signal-green">{testResults.working} working</strong>,{' '}
-            <strong className="text-signal-red">{testResults.failed} failed</strong>
+            {t('channels.testComplete')
+              .replace('{working}', String(testResults.working))
+              .replace('{failed}', String(testResults.failed))}
           </span>
           <button
             onClick={() => setTestResults(null)}
@@ -1323,17 +1330,17 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       {!isAdmin && showAdd && (
         <div className="border-2 border-primary/30 bg-card p-5 space-y-4">
           <h2 className="text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">
-            إضافة قناةs to Your List
+            {t('channels.addToMyList')}
           </h2>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
-              placeholder="Search available channels..."
+              placeholder={t('channels.searchAvailable')}
               value={addSearch}
               onChange={(e) => setAddSearch(e.target.value)}
               className="w-full h-10 pl-10 pr-4 border border-border bg-background text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-              aria-label="Search available channels"
+              aria-label={t('channels.searchAvailable')}
             />
           </div>
           <div className="max-h-64 overflow-y-auto border border-border divide-y divide-border">
@@ -1346,7 +1353,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                     <Loader2 className="h-4 w-4 animate-spin" /> جارٍ تحميل القنوات...
                   </span>
                 ) : (
-                  'No channels available to add'
+                  t('channels.noAvailable')
                 )}
               </div>
             ) : (
@@ -1379,7 +1386,9 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               disabled={selectedIds.size === 0}
               className="px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
             >
-              Add {selectedIds.size} Channel{selectedIds.size !== 1 ? 's' : ''}
+              {t('channels.addSelected')
+                .replace('{count}', String(selectedIds.size))
+                .replace('{plural}', selectedIds.size !== 1 ? 's' : '')}
             </button>
             <button
               onClick={() => {
@@ -1406,8 +1415,8 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       <SearchInput
         value={search}
         onChange={handleSearchChange}
-        placeholder={isAdmin ? 'Search channels...' : 'Search my channels...'}
-        ariaLabel="Search channels"
+        placeholder={isAdmin ? t('channels.search') : t('channels.searchMine')}
+        ariaLabel={t('channels.search')}
       />
 
       {/* Stream health stats */}
@@ -1426,12 +1435,14 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         return (
           <div className="flex items-center gap-4 px-4 py-2.5 bg-muted/50 border border-border text-xs">
             <Zap className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-signal-green font-medium">{working} working</span>
-            <span className="text-signal-red font-medium">{notWorking} not working</span>
-            <span className="text-muted-foreground font-medium">{untested} untested</span>
+            <span className="text-signal-green font-medium">{t('channels.working').replace('{count}', String(working))}</span>
+            <span className="text-signal-red font-medium">{t('channels.notWorking').replace('{count}', String(notWorking))}</span>
+            <span className="text-muted-foreground font-medium">{t('channels.untested').replace('{count}', String(untested))}</span>
             {!isAdmin && filtered.length !== channels.length && (
               <span className="text-muted-foreground">
-                (showing {filtered.length} of {channels.length})
+                {t('channels.showing')
+                  .replace('{shown}', String(filtered.length))
+                  .replace('{total}', String(channels.length))}
               </span>
             )}
           </div>
@@ -1444,13 +1455,13 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         gridTemplate={
           isAdmin ? '1fr 40px 1fr 100px 100px 120px 70px 110px' : '1fr 40px 180px 130px 60px 110px'
         }
-        ariaLabel={isAdmin ? 'Channels table' : 'My channels table'}
+        ariaLabel={isAdmin ? t('channels.tableAria') : t('channels.myTableAria')}
         emptyMessage={
           debouncedSearch
-            ? 'No channels match your search'
+            ? t('channels.noSearchMatch')
             : isAdmin
-              ? 'No channels yet. Click "إضافة قناة" to create one or use "Import M3U" to bulk upload.'
-              : 'لم يتم العثور على قنوات your list yet. Click "Add" or use Quick Pick to get started.'
+              ? t('channels.noChannelsYet')
+              : t('channels.noMineYet')
         }
         rowKey={(c) => c._id}
         getName={getName}
@@ -1462,7 +1473,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               onClick={() => handleSort('name')}
               className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors text-left"
             >
-              Name <SortIcon field="name" />
+              {t('common.name')} <SortIcon field="name" />
             </button>
           ) : undefined
         }
@@ -1527,14 +1538,14 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 [
                   {
                     id: 'add-name',
-                    label: 'Channel Name',
+                    label: t('channels.channelName'),
                     key: 'channelName' as const,
                     required: true,
-                    placeholder: 'e.g. BBC World News',
+                    placeholder: t('channels.namePlaceholder'),
                   },
                   {
                     id: 'add-url',
-                    label: 'Stream URL',
+                    label: t('sources.streamUrl'),
                     key: 'channelUrl' as const,
                     required: true,
                     placeholder: 'https://...',
@@ -1542,27 +1553,27 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   },
                   {
                     id: 'add-group',
-                    label: 'Group',
+                    label: t('channels.group'),
                     key: 'channelGroup' as const,
-                    placeholder: 'e.g. News',
+                    placeholder: t('channels.groupPlaceholder'),
                   },
                   {
                     id: 'add-logo',
-                    label: 'Logo URL',
+                    label: t('sources.logoUrl'),
                     key: 'tvgLogo' as const,
-                    placeholder: 'https://... (optional)',
+                    placeholder: t('channels.logoPlaceholder'),
                   },
                   {
                     id: 'add-drm-key',
-                    label: 'DRM Key',
+                    label: t('channels.drmKey'),
                     key: 'channelDrmKey' as const,
-                    placeholder: 'Optional — for protected streams',
+                    placeholder: t('channels.drmKeyPlaceholder'),
                   },
                   {
                     id: 'add-drm-type',
-                    label: 'DRM Type',
+                    label: t('channels.drmType'),
                     key: 'channelDrmType' as const,
-                    placeholder: 'e.g. Widevine, PlayReady, FairPlay',
+                    placeholder: t('channels.drmTypePlaceholder'),
                   },
                 ] as const
               ).map((f) => (
@@ -1589,7 +1600,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   htmlFor="add-order"
                   className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
                 >
-                  Sort Order
+                  {t('channels.sortOrder')}
                 </label>
                 <input
                   id="add-order"
@@ -1602,7 +1613,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   placeholder="0"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Lower numbers appear first. Leave as 0 for automatic ordering.
+                  {t('channels.sortHint')}
                 </p>
               </div>
             </div>
@@ -1613,7 +1624,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 aria-busy={addLoading}
                 className="inline-flex items-center px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:pointer-events-none"
               >
-                {addLoading ? 'Creating...' : 'Create Channel'}
+                {addLoading ? t('channels.creating') : t('channels.create')}
               </button>
               <button
                 type="button"
@@ -1652,26 +1663,26 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 [
                   {
                     id: 'edit-name',
-                    label: 'Channel Name',
+                    label: t('channels.channelName'),
                     key: 'channelName' as const,
                     required: true,
                   },
                   {
                     id: 'edit-url',
-                    label: 'Stream URL',
+                    label: t('sources.streamUrl'),
                     key: 'channelUrl' as const,
                     required: true,
                     type: 'url',
                   },
-                  { id: 'edit-group', label: 'Group', key: 'channelGroup' as const },
-                  { id: 'edit-logo', label: 'Logo URL', key: 'tvgLogo' as const },
-                  { id: 'edit-drm-key', label: 'DRM Key', key: 'channelDrmKey' as const },
-                  { id: 'edit-drm-type', label: 'DRM Type', key: 'channelDrmType' as const },
-                  { id: 'edit-country', label: 'Country', key: 'country' as const },
-                  { id: 'edit-language', label: 'Language', key: 'language' as const },
-                  { id: 'edit-quality', label: 'Quality', key: 'quality' as const },
-                  { id: 'edit-network', label: 'Network', key: 'network' as const },
-                  { id: 'edit-website', label: 'Website', key: 'website' as const },
+                  { id: 'edit-group', label: t('channels.group'), key: 'channelGroup' as const },
+                  { id: 'edit-logo', label: t('sources.logoUrl'), key: 'tvgLogo' as const },
+                  { id: 'edit-drm-key', label: t('channels.drmKey'), key: 'channelDrmKey' as const },
+                  { id: 'edit-drm-type', label: t('channels.drmType'), key: 'channelDrmType' as const },
+                  { id: 'edit-country', label: t('sources.country'), key: 'country' as const },
+                  { id: 'edit-language', label: t('sources.language'), key: 'language' as const },
+                  { id: 'edit-quality', label: t('channels.quality'), key: 'quality' as const },
+                  { id: 'edit-network', label: t('channels.network'), key: 'network' as const },
+                  { id: 'edit-website', label: t('channels.website'), key: 'website' as const },
                 ] as const
               ).map((f) => (
                 <div key={f.id} className="space-y-1.5">
@@ -1696,7 +1707,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   htmlFor="edit-order"
                   className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
                 >
-                  Sort Order
+                  {t('channels.sortOrder')}
                 </label>
                 <input
                   id="edit-order"
@@ -1708,7 +1719,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Lower numbers appear first. Leave as 0 for automatic ordering.
+                  {t('channels.sortHint')}
                 </p>
               </div>
               <div className="space-y-1.5">
@@ -1716,19 +1727,18 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   htmlFor="edit-alternates"
                   className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
                 >
-                  Alternate Stream URLs
+                  {t('channels.alternateUrls')}
                 </label>
                 <textarea
                   id="edit-alternates"
                   rows={4}
                   value={editForm.alternateUrls}
                   onChange={(e) => setEditForm((p) => ({ ...p, alternateUrls: e.target.value }))}
-                  placeholder="One URL per line"
+                  placeholder={t('channels.oneUrlPerLine')}
                   className="flex w-full border border-border bg-background px-3 py-2 text-sm font-mono focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary resize-y min-h-[80px]"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  One URL per line. Existing alternate data (liveness, flags) is preserved for
-                  matching URLs.
+                  {t('channels.alternateHint')}
                 </p>
               </div>
             </div>
@@ -1739,7 +1749,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 aria-busy={editLoading}
                 className="inline-flex items-center px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                {editLoading ? 'Saving...' : 'حفظ التغييرات'}
+                {editLoading ? t('channels.saving') : 'حفظ التغييرات'}
               </button>
               <button
                 type="button"
@@ -1838,8 +1848,8 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         <ConfirmDialog
           open={showBulkDelete}
           title="حذف جميع القنوات"
-          message={`This will permanently delete all ${totalCount} channels. This action cannot be undone.`}
-          confirmLabel="Delete All"
+          message={t('channels.deleteAllConfirm').replace('{count}', String(totalCount))}
+          confirmLabel={t('channels.deleteAll')}
           variant="destructive"
           loading={bulkDeleteLoading}
           onConfirm={handleBulkDelete}
@@ -1851,20 +1861,20 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       <Modal
         open={showImport}
         onClose={() => setShowImport(false)}
-        title="Import M3U Playlist"
+        title={t('channels.importTitle')}
         size="lg"
       >
         <form onSubmit={handleImport} className="p-5 space-y-4">
           {importResult && (
             <div
-              className={`border px-3 py-2 text-sm ${importResult.startsWith('Imported') || importResult.startsWith('Added') ? 'border-signal-green/40 bg-signal-green/10 text-signal-green' : 'border-destructive/40 bg-destructive/10 text-destructive'}`}
+              className={`border px-3 py-2 text-sm ${importSuccess ? 'border-signal-green/40 bg-signal-green/10 text-signal-green' : 'border-destructive/40 bg-destructive/10 text-destructive'}`}
             >
               {importResult}
             </div>
           )}
           <div className="space-y-1.5">
             <label className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">
-              M3U Content
+              {t('channels.m3uContent')}
             </label>
             <textarea
               value={importContent}
@@ -1883,7 +1893,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               onClick={() => fileRef.current?.click()}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border border-border text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
             >
-              <Upload className="h-4 w-4" /> Upload File
+              <Upload className="h-4 w-4" /> {t('channels.uploadFile')}
             </button>
             <input
               ref={fileRef}
@@ -1900,7 +1910,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   onChange={(e) => setImportClear(e.target.checked)}
                   className="accent-primary"
                 />
-                Clear existing channels before import
+                {t('channels.clearBeforeImport')}
               </label>
             )}
           </div>
@@ -1910,7 +1920,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               disabled={importLoading || !importContent.trim()}
               className="inline-flex items-center px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
-              {importLoading ? 'Importing...' : 'Import'}
+              {importLoading ? t('channels.importing') : t('channels.importAction')}
             </button>
             <button
               type="button"
@@ -1930,21 +1940,19 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           setShowFlagModal(false);
           setFlagTarget(null);
         }}
-        title={mode === 'admin' ? 'Flag Bad Stream' : 'Report Bad Stream'}
+        title={mode === 'admin' ? t('channels.flagBadTitle') : t('channels.reportBadTitle')}
         size="default"
       >
         <div className="p-5 space-y-4">
           <p className="text-sm text-muted-foreground">
-            {mode === 'admin'
-              ? 'Report this stream as bad. Select the reason:'
-              : "What's wrong with this stream?"}
+            {mode === 'admin' ? t('channels.reportBadDescription') : t('channels.reportDescription')}
           </p>
           <div className="space-y-2">
             {[
-              { value: 'looping', label: 'Looping Content' },
-              { value: 'frozen', label: 'Frozen / Stuck' },
-              { value: 'wrong-content', label: 'Wrong Content' },
-              { value: 'other', label: 'Other' },
+              { value: 'looping', label: t('channels.looping') },
+              { value: 'frozen', label: t('channels.frozen') },
+              { value: 'wrong-content', label: t('channels.wrongContent') },
+              { value: 'other', label: t('channels.other') },
             ].map((opt) => (
               <label key={opt.value} className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
@@ -1965,7 +1973,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-signal-red text-white uppercase tracking-[0.1em] transition-colors hover:bg-signal-red/90"
             >
               <Flag className="h-4 w-4" />
-              {mode === 'admin' ? 'Flag Stream' : 'Report'}
+              {mode === 'admin' ? t('channels.flagStream') : t('channels.report')}
             </button>
             <button
               onClick={() => {

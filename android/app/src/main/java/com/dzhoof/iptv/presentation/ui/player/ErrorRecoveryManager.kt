@@ -112,7 +112,7 @@ class ErrorRecoveryManager(
                 if (totalAttempts < maxTotalAttempts) {
                     attemptReconnect()
                 } else {
-                    onStreamDead("Stream unresponsive (buffering timeout)")
+                    onStreamDead("البث لا يستجيب (انتهت مهلة التخزين المؤقت)")
                 }
             }
         }
@@ -133,17 +133,17 @@ class ErrorRecoveryManager(
         val errorMessage = when (error.errorCode) {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> {
-                "Network connection failed"
+                "انقطع اتصال الشبكة"
             }
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> {
-                "Server error"
+                "خطأ في الخادم"
             }
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
             PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED -> {
-                "Invalid stream format"
+                "تنسيق البث غير صالح"
             }
             else -> {
-                "Playback error: ${error.message}"
+                "خطأ في التشغيل: ${error.message}"
             }
         }
 
@@ -176,7 +176,7 @@ class ErrorRecoveryManager(
                 attemptInSlot = 1
 
                 if (currentSlotIndex >= streamSlots.size) {
-                    onStreamDead("All streams exhausted")
+                    onStreamDead("استُنفدت جميع مصادر البث")
                     return@launch
                 }
 
