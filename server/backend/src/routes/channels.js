@@ -9,6 +9,7 @@ const { escapeRegex } = require('../utils/escapeRegex');
 const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
 const { audit } = require('../services/audit-log');
 const { channelCache } = require('../services/cache');
+const { buildChannelHealth } = require('../utils/channel-health');
 
 // The shared admin/demo catalog is identical for every admin hit and is the heaviest
 // read. Cache it (10 min TTL via channelCache) and bust it on any catalog mutation.
@@ -77,6 +78,8 @@ function slimAlternates(channel) {
     : legacyXtream
       ? { type: 'timeshift', days: null }
       : null;
+  // Add an explainable, URL-free availability summary for TV clients and admin UI.
+  safeChannel.health = buildChannelHealth(channel);
   return safeChannel;
 }
 

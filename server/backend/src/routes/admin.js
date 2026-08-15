@@ -12,6 +12,9 @@ const { validateUrlForSSRF } = require('../utils/ssrf-guard');
 const AuditLog = require('../models/AuditLog');
 const { ExternalSourceChannel } = require('../models/ExternalSourceCache');
 const { ScheduledTaskRun } = require('../models/ScheduledTaskRun');
+const M3USource = require('../models/M3USource');
+const XtreamSource = require('../models/XtreamSource');
+const { epgService } = require('../services/epg-service');
 const { channelCache, statsCache } = require('../services/cache');
 const {
   resolveChannelGroups,
@@ -862,6 +865,71 @@ router.get('/stats/trends/:type', async (req, res) => {
   } catch (error) {
     console.error('Error fetching trend stats:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch trend statistics' });
+  }
+});
+
+// ============ CHANNEL OPERATIONS ============
+
+// One compact control-plane payload for the admin dashboard. It combines the
+// channel fleet, source synchronization, and EPG freshness without exposing
+// encrypted credentials or stream URLs.
+router.get('/stats/channel-operations', async (req, res) => {
+  try {
+    const [channelSummary, m3uSources, xtreamSources, epg] = await Promise.all([
+      Channel.aggregate([
+        { $match: { ownerId: null } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            active: { $sum: { $cond: [{ $ne: ['$isActive', false] }, 1, 0] } },
+            healthy: { $sum: { $cond: [{ $eq: ['$metadata.isWorking', true] }, 1, 0] } },
+            failing: { $sum: { $cond: [{ $eq: ['$metadata.isWorking', false] }, 1, 0] } },
+            unknown: { $sum: { $cond: [{ $eq: ['$metadata.isWorking', null] }, 1, 0] } },
+            withFallback: {
+              $sum: {
+                $cond: [
+                  { $gt: [{ $size: { $ifNull: ['$alternateStreams', []] } }, 0] },
+                  1,
+                  0,
+                ],
+              },
+            },
+            avgResponseTime: { $avg: '$metadata.responseTime' },
+          },
+        },
+      ]).then((rows) => rows[0] || {
+        total: 0,
+        active: 0,
+        healthy: 0,
+        failing: 0,
+        unknown: 0,
+        withFallback: 0,
+        avgResponseTime: null,
+      }),
+      M3USource.find({})
+        .sort({ updatedAt: -1 })
+        .select('name status syncStatus lastSyncAt lastError stats updatedAt')
+        .lean(),
+      XtreamSource.find({})
+        .sort({ updatedAt: -1 })
+        .select('name status syncStatus lastSyncAt lastError stats updatedAt')
+        .lean(),
+      epgService.getStats(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        channels: channelSummary,
+        sources: { m3u: m3uSources, xtream: xtreamSources },
+        epg,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching channel operations:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch channel operations' });
   }
 });
 

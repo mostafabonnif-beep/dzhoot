@@ -9,6 +9,7 @@ export const channelMetadataSchema = z
     lastTested: z.coerce.date().optional(),
     isWorking: z.boolean().optional(),
     responseTime: z.number().optional(),
+    m3uSourceId: z.string().optional(),
   })
   .optional();
 

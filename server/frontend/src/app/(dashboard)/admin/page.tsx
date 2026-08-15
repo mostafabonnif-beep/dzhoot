@@ -14,7 +14,7 @@ import {
   ExternalLink,
   Radio,
 } from 'lucide-react';
-import api from '@/lib/api';
+import api, { getChannelOperations, type ChannelOperationsData } from '@/lib/api';
 
 interface DashboardStats {
   channels: { total: number; active: number; inactive: number };
@@ -69,6 +69,7 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [config, setConfig] = useState<ConfigDefaults | null>(null);
   const [streamHealth, setStreamHealth] = useState<StreamHealthData | null>(null);
+  const [channelOperations, setChannelOperations] = useState<ChannelOperationsData | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -84,10 +85,11 @@ export default function AdminDashboard() {
 
     async function fetchStats() {
       try {
-        const [statsRes, configRes, healthRes] = await Promise.all([
+        const [statsRes, configRes, healthRes, operationsRes] = await Promise.all([
           api.get('/admin/stats/detailed', { signal: controller.signal }),
           api.get('/config/defaults', { signal: controller.signal }),
           api.get('/admin/stats/stream-health', { signal: controller.signal }).catch(() => null),
+          getChannelOperations(controller.signal).catch(() => null),
         ]);
         if (controller.signal.aborted) return;
         const res = statsRes;
@@ -96,6 +98,9 @@ export default function AdminDashboard() {
         }
         if (healthRes?.data?.data) {
           setStreamHealth(healthRes.data.data);
+        }
+        if (operationsRes) {
+          setChannelOperations(operationsRes);
         }
         const data = res.data?.data || res.data;
 
@@ -301,6 +306,47 @@ export default function AdminDashboard() {
                 />
               </div>
             )}
+          </div>
+        </Link>
+      )}
+
+      {channelOperations && (
+        <Link
+          href="/admin/stats"
+          className="brand-surface interactive-lift block overflow-hidden rounded-3xl border border-border/70 hover:border-primary/30"
+        >
+          <div className="px-4 py-2 bg-muted/50 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Tv className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                عمليات القنوات
+              </h2>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-5">
+            <div>
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">قنوات الكتالوج</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums">{channelOperations.channels.total}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">لها بديل</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums text-primary">{channelOperations.channels.withFallback}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">برامج EPG</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums">{channelOperations.epg.totalPrograms}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">مصادر EPG</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums">{channelOperations.epg.sourcesDiscovered}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">أخطاء آخر تحديث</p>
+              <p className={`mt-1 text-xl font-display font-bold tabular-nums ${channelOperations.epg.lastRefreshErrorCount > 0 ? 'text-signal-red' : 'text-signal-green'}`}>
+                {channelOperations.epg.lastRefreshErrorCount}
+              </p>
+            </div>
           </div>
         </Link>
       )}

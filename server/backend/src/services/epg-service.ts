@@ -41,6 +41,10 @@ interface EpgStats {
   nextRefreshAt: Date | null;
   sourcesDiscovered: number;
   refreshInProgress: boolean;
+  lastRefreshDurationMs: number;
+  lastRefreshProgramCount: number;
+  lastRefreshErrorCount: number;
+  lastRefreshErrorSources: string[];
 }
 
 export class EpgService {
@@ -48,6 +52,10 @@ export class EpgService {
   private refreshPromise: Promise<void> | null = null;
   private lastRefreshedAt: Date | null = null;
   private lastSourceCount = 0;
+  private lastRefreshDurationMs = 0;
+  private lastRefreshProgramCount = 0;
+  private lastRefreshErrorCount = 0;
+  private lastRefreshErrorSources: string[] = [];
 
   // ─── Lifecycle ──────────────────────────────────────────
 
@@ -103,6 +111,9 @@ export class EpgService {
 
   private async doRefreshEpg(): Promise<void> {
     const startTime = Date.now();
+    this.lastRefreshErrorCount = 0;
+    this.lastRefreshErrorSources = [];
+    this.lastRefreshProgramCount = 0;
 
     try {
       console.log('[epg-service] Starting EPG refresh...');
@@ -114,6 +125,7 @@ export class EpgService {
       if (sources.length === 0) {
         console.log('[epg-service] No EPG sources discovered for current channels');
         this.lastRefreshedAt = new Date();
+        this.lastRefreshDurationMs = Date.now() - startTime;
         return;
       }
 
@@ -133,6 +145,10 @@ export class EpgService {
               }
               return 0;
             } catch (err: any) {
+              this.lastRefreshErrorCount += 1;
+              if (this.lastRefreshErrorSources.length < 10) {
+                this.lastRefreshErrorSources.push(source.source);
+              }
               console.warn(`[epg-service] Failed to fetch ${source.source}: ${err.message}`);
               return 0;
             }
@@ -147,6 +163,8 @@ export class EpgService {
       }
 
       const durationMs = Date.now() - startTime;
+      this.lastRefreshDurationMs = durationMs;
+      this.lastRefreshProgramCount = totalPrograms;
       this.lastRefreshedAt = new Date();
 
       // Bust cached EPG responses AND the known-ids set — a refresh can introduce
@@ -509,6 +527,10 @@ export class EpgService {
         : null,
       sourcesDiscovered: this.lastSourceCount,
       refreshInProgress: this.refreshPromise !== null,
+      lastRefreshDurationMs: this.lastRefreshDurationMs,
+      lastRefreshProgramCount: this.lastRefreshProgramCount,
+      lastRefreshErrorCount: this.lastRefreshErrorCount,
+      lastRefreshErrorSources: this.lastRefreshErrorSources,
     };
   }
 

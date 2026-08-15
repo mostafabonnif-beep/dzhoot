@@ -15,6 +15,19 @@ describe('Channel model', () => {
     expect(saved.channelGroup).toBe('Uncategorized');
   });
 
+  it('should preserve M3U source provenance for EPG mapping', async () => {
+    const channel: any = new Channel({
+      channelId: `m3u-channel-${Date.now()}`,
+      channelName: 'M3U News',
+      channelUrl: 'http://example.com/m3u-news.m3u8',
+      metadata: { source: 'm3u', m3uSourceId: 'source-123' },
+    });
+
+    const saved: any = await channel.save();
+    expect(saved.metadata.source).toBe('m3u');
+    expect(saved.metadata.m3uSourceId).toBe('source-123');
+  });
+
   it('should fail without required fields', async () => {
     const channel = new Channel({});
     await expect(channel.save()).rejects.toThrow();
