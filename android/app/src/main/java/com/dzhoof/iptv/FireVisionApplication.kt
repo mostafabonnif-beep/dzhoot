@@ -27,8 +27,10 @@ class FireVisionApplication : Application(), Configuration.Provider {
         super.onCreate()
         instance = this
 
-        FirebaseCrashlytics.getInstance().apply {
-            setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+        if (BuildConfig.FIREBASE_ENABLED) {
+            runCatching {
+                FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
+            }
         }
 
         // Filter out noisy Sentry HTTP client errors from health scan / thumbnail extraction.

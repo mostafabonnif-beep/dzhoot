@@ -51,6 +51,7 @@ class SubscriptionRepositoryImpl @Inject constructor(
      * Debug builds without google-services.json intentionally continue without a token.
      */
     private suspend fun getPushToken(): String? {
+        if (!BuildConfig.FIREBASE_ENABLED) return null
         val preferences = appContext.getSharedPreferences(
             DzHoofFirebaseMessagingService.PREFERENCES,
             Context.MODE_PRIVATE,

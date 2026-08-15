@@ -13,6 +13,7 @@ interface CatalogRepository {
     suspend fun searchCatalog(query: String): Result<UnifiedSearchResults>
     suspend fun getMovies(page: Int = 1, limit: Int = 30, search: String? = null): Result<CatalogPage<Movie>>
     suspend fun getSeries(page: Int = 1, limit: Int = 30, search: String? = null): Result<CatalogPage<Series>>
+    suspend fun getSeriesById(seriesId: String): Result<Series>
     suspend fun getSeasons(seriesId: String): Result<List<Season>>
     suspend fun getEpisodes(seasonId: String): Result<List<Episode>>
     suspend fun authorizePlayback(contentType: String, contentId: String): Result<PlaybackAuthorization>
