@@ -44,8 +44,8 @@
 -dontwarn com.google.firebase.**
 
 # ---- Data model classes (API DTOs) ----
--keep class com.cadnative.firevisioniptv.data.model.dto.** { *; }
--keep class com.cadnative.firevisioniptv.data.source.remote.** { *; }
+-keep class com.dzhoof.iptv.data.model.dto.** { *; }
+-keep class com.dzhoof.iptv.data.source.remote.** { *; }
 
 # ---- Compose ----
 -dontwarn androidx.compose.**

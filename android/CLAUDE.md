@@ -1,4 +1,4 @@
-# CLAUDE.md — FireVision IPTV Android TV App
+# CLAUDE.md — DZ HOOF Android TV App
 
 > IPTV streaming app for Amazon Fire TV and Android TV. Kotlin, Jetpack Compose for TV, Clean Architecture.
 
@@ -40,12 +40,12 @@ make install                             # Build debug + install on device
 make run                                 # Build, install, and launch
 make lint                                # Run Android lint checks
 make test                                # Run unit tests
-make logcat                              # Show app logs (filtered to FireVision)
+make logcat                              # Show app logs (filtered to DZ HOOF)
 ```
 
-API base URL is hardcoded in `app/build.gradle.kts`:
-```kotlin
-buildConfigField("String", "API_BASE_URL", "\"https://tv.cadnative.com/\"")
+API base URL is configured through the `dzhoofApiUrl` Gradle property or `DZHOOF_API_URL` environment variable; release builds reject non-HTTPS URLs.
+```bash
+DZHOOF_API_URL=https://api.example.com/ ./gradlew assembleDebug
 ```
 
 Firebase requires `app/google-services.json`.
@@ -53,7 +53,7 @@ Firebase requires `app/google-services.json`.
 ## Key File Locations
 
 ```
-app/src/main/java/com/cadnative/firevisioniptv/
+app/src/main/java/com/dzhoof/iptv/
 ├── ComposeMainActivity.kt              ← Entry point
 ├── FireVisionApplication.kt            ← Hilt application class
 ├── PairingActivity.kt                  ← Device pairing (PIN + QR)
@@ -116,7 +116,7 @@ D-pad optimized navigation. Focus management via Compose for TV focus APIs.
 
 ## API Integration
 
-Consumes the FireVision IPTV Server backend:
+Consumes the DZ HOOF backend:
 - `GET /api/v1/channels` — Channel list with categories
 - `GET /api/v1/categories` — Category list
 - `POST /api/v1/favorites` — Sync favorites
@@ -201,7 +201,7 @@ When a significant decision is made (new tech choice, pattern change, data model
 
 1. Always read this file before making changes
 2. Build with `./gradlew assembleDebug` after changes to catch compile errors
-3. Test on Fire TV device or Android TV emulator — not a phone emulator
+3. Test on a Fire TV device or Android TV emulator — not a phone emulator
 4. All API calls go through `FireVisionApiService` (Retrofit) — never use raw HTTP
 5. Use `EncryptedSharedPreferences` for any sensitive data (pairing code, tokens)
 6. Never hardcode colors — use theme from `presentation/ui/theme/`

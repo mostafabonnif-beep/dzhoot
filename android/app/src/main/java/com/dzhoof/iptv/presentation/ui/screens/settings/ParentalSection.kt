@@ -29,15 +29,15 @@ internal fun ParentalSection(modifier: Modifier = Modifier) {
     var showPinSetup by remember { mutableStateOf(false) }
     var showDisableConfirm by remember { mutableStateOf(false) }
 
-    SettingsCard(title = "Parental Controls", modifier = modifier) {
+    SettingsCard(title = "الرقابة الأبوية", modifier = modifier) {
         SettingRowLayout(
             text = {
-                Text("Parental lock", style = MaterialTheme.typography.bodyLarge)
+                Text("قفل المحتوى", style = MaterialTheme.typography.bodyLarge)
                 Text(
                     text = if (lockEnabled) {
-                        "Channels require the PIN once per app session"
+                        "تتطلب القنوات PIN مرة واحدة في كل جلسة للتطبيق"
                     } else {
-                        "Channels play without a PIN"
+                        "تعمل القنوات دون PIN"
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -66,16 +66,16 @@ internal fun ParentalSection(modifier: Modifier = Modifier) {
 
         SettingRowLayout(
             text = {
-                Text(if (hasPin) "Change PIN" else "Set PIN", style = MaterialTheme.typography.bodyLarge)
+                Text(if (hasPin) "تغيير PIN" else "ضبط PIN", style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    text = "4-6 digits. Stored as a hash, never in plain text.",
+                    text = "من 4 إلى 6 أرقام. يُخزّن كـhash وليس كنص صريح.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             },
             action = {
                 TextButton(onClick = { showPinSetup = true }) {
-                    Text(if (hasPin) "Change" else "Set")
+                    Text(if (hasPin) "تغيير" else "ضبط")
                 }
             }
         )
@@ -102,7 +102,7 @@ internal fun ParentalSection(modifier: Modifier = Modifier) {
 
     if (showDisableConfirm) {
         ParentalPinDialog(
-            title = "Enter current PIN to disable",
+            title = "أدخل PIN الحالي للتعطيل",
             verify = { AppPreferences.verifyParentalPin(context, it) },
             onSuccess = {
                 AppPreferences.setParentalLockEnabled(context, false)
@@ -126,9 +126,9 @@ private fun PinSetupDialog(
     var newPin by remember { mutableStateOf<String?>(null) }
 
     val title = when {
-        needCurrent -> "Enter current PIN"
-        newPin == null -> "Enter new PIN (4-6 digits)"
-        else -> "Confirm new PIN"
+        needCurrent -> "أدخل PIN الحالي"
+        newPin == null -> "أدخل PIN جديدًا (4–6 أرقام)"
+        else -> "أكد PIN الجديد"
     }
 
     ParentalPinDialog(
@@ -141,9 +141,9 @@ private fun PinSetupDialog(
             }
         },
         errorMessage = when {
-            needCurrent -> "Incorrect PIN"
-            newPin == null -> "PIN must be 4-6 digits"
-            else -> "PINs do not match"
+            needCurrent -> "PIN غير صحيح"
+            newPin == null -> "يجب أن يتكون PIN من 4 إلى 6 أرقام"
+            else -> "PINs غير متطابقة"
         },
         onSuccess = { pin ->
             when {

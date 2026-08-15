@@ -111,9 +111,10 @@ class PlayerViewModel @Inject constructor(
                 val body = response.body()
                 _uiState.update {
                     it.copy(error = when (body?.code) {
-                        "SUBSCRIPTION_EXPIRED" -> "Your subscription has expired. Activate a new code to continue watching."
-                        "PLAYBACK_DEVICE_REQUIRED" -> "Register this device before starting playback."
-                        else -> body?.error ?: "Unable to authorize playback (HTTP ${response.code()})"
+                        "SUBSCRIPTION_EXPIRED" -> "انتهى اشتراكك. فعّل كودًا جديدًا لمتابعة المشاهدة."
+                        "PLAYBACK_DEVICE_REQUIRED" -> "سجّل هذا الجهاز قبل بدء التشغيل."
+                        "DEVICE_LIMIT_REACHED" -> "تم بلوغ الحد الأقصى للأجهزة في خطتك."
+                        else -> body?.error ?: "تعذر تفويض تشغيل القناة (HTTP ${response.code()})"
                     })
                 }
                 null
@@ -872,7 +873,7 @@ class PlayerViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isSwitchingChannel = false,
-                                error = result.exception.message ?: "Failed to switch channel"
+                                error = result.exception.message ?: "تعذر تبديل القناة"
                             )
                         }
                     }
@@ -1047,7 +1048,7 @@ class PlayerViewModel @Inject constructor(
                 status = ChannelHealthStatus.UNRESPONSIVE.name,
                 lastCheckedAt = System.currentTimeMillis(),
                 responseTimeMs = null,
-                errorMessage = "Stream unresponsive (buffering timeout)"
+                errorMessage = "المصدر لا يستجيب (تجاوز مهلة التخزين المؤقت)"
             )
             reportStreamStatusUseCase(
                 ReportStreamStatusUseCase.Params(

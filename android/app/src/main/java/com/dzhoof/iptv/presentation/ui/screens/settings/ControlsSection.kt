@@ -17,19 +17,19 @@ import com.dzhoof.iptv.presentation.ui.screens.SettingRowLayout
 import com.dzhoof.iptv.presentation.ui.screens.SettingsCard
 
 private val keyActionOptions = listOf(
-    "Zap" to PlayerKeyAction.ZAP,
-    "Last Ch" to PlayerKeyAction.LAST_CHANNEL,
-    "Favorite" to PlayerKeyAction.FAVORITE,
-    "Play/Pause" to PlayerKeyAction.PLAY_PAUSE,
-    "Menu" to PlayerKeyAction.MENU
+    "تبديل" to PlayerKeyAction.ZAP,
+    "القناة السابقة" to PlayerKeyAction.LAST_CHANNEL,
+    "المفضلة" to PlayerKeyAction.FAVORITE,
+    "تشغيل/إيقاف" to PlayerKeyAction.PLAY_PAUSE,
+    "القائمة" to PlayerKeyAction.MENU
 )
 
 private val sleepTimerOptions = listOf(
-    "Off" to "0",
-    "30 min" to "30",
-    "1 h" to "60",
-    "2 h" to "120",
-    "3 h" to "180"
+    "إيقاف" to "0",
+    "30 دقيقة" to "30",
+    "ساعة" to "60",
+    "ساعتان" to "120",
+    "3 ساعات" to "180"
 )
 
 private val infoBarTimeoutOptions = listOf(
@@ -58,22 +58,22 @@ internal fun ControlsSection(
     modifier: Modifier = Modifier
 ) {
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
-    SettingsCard(title = "Player Controls", modifier = modifier) {
+        SettingsCard(title = "تحكم المشغل", modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(if (isCompact) 14.dp else 10.dp)) {
             PlayerKeyRow(
-                label = "Confirm app exit (press back twice on Home)",
-                options = listOf("On" to "on", "Off" to "off"),
+                label = "تأكيد الخروج من التطبيق (اضغط رجوع مرتين في الرئيسية)",
+                options = listOf("تشغيل" to "on", "إيقاف" to "off"),
                 current = if (backExitProtection) "on" else "off",
                 onSelect = { onBackExitProtectionChange(it == "on") }
             )
             PlayerKeyRow(
-                label = "Always show program bar",
-                options = listOf("On" to "on", "Off" to "off"),
+                label = "إظهار شريط البرنامج دائمًا",
+                options = listOf("تشغيل" to "on", "إيقاف" to "off"),
                 current = if (alwaysShowProgramBar) "on" else "off",
                 onSelect = { onAlwaysShowProgramBarChange(it == "on") }
             )
             PlayerKeyRow(
-                label = "Info banner timeout",
+                label = "مدة ظهور شريط المعلومات",
                 options = infoBarTimeoutOptions,
                 current = infoBarTimeoutSeconds.toString(),
                 onSelect = { onInfoBarTimeoutChange(it.toIntOrNull() ?: 4) }
@@ -83,21 +83,21 @@ internal fun ControlsSection(
                 // Five key-action pills fill the row, so keep the label on its own
                 // line above them — side-by-side starves the label to a 1-char column.
                 PlayerKeyRow(
-                    label = "D-pad up/down",
+                    label = "أعلى/أسفل في الريموت",
                     options = keyActionOptions,
                     current = keyUpDownAction,
                     onSelect = onKeyUpDownChange,
                     stacked = true
                 )
                 PlayerKeyRow(
-                    label = "D-pad left/right",
+                    label = "يمين/يسار في الريموت",
                     options = keyActionOptions,
                     current = keyLeftRightAction,
                     onSelect = onKeyLeftRightChange,
                     stacked = true
                 )
                 PlayerKeyRow(
-                    label = "Hold OK",
+                    label = "الضغط المطوّل على موافق",
                     options = keyActionOptions,
                     current = longOkAction,
                     onSelect = onLongOkChange,
@@ -105,7 +105,7 @@ internal fun ControlsSection(
                 )
             }
             PlayerKeyRow(
-                label = "Sleep timer",
+                label = "مؤقت النوم",
                 options = sleepTimerOptions,
                 current = sleepTimerDefaultMinutes.toString(),
                 onSelect = { onSleepTimerDefaultChange(it.toIntOrNull() ?: 0) }
