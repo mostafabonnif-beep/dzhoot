@@ -32,7 +32,7 @@ fun CategoriesScreen(
         viewModel.loadChannels()
     }
 
-    ScreenScaffold(title = "Categories", modifier = modifier) {
+    ScreenScaffold(title = "التصنيفات", modifier = modifier) {
         val contentState = when {
             uiState.isLoading && uiState.categories.isEmpty() -> "loading"
             uiState.error != null && uiState.categories.isEmpty() -> "error"
@@ -46,13 +46,13 @@ fun CategoriesScreen(
             label = "categoriesState"
         ) { state ->
             when (state) {
-                "loading" -> LoadingIndicator(message = "Loading categories...")
+                "loading" -> LoadingIndicator(message = "جارٍ تحميل التصنيفات…")
                 "error" -> ErrorState(
-                    message = uiState.error ?: "Failed to load categories",
+                    message = uiState.error ?: "تعذر تحميل التصنيفات",
                     onRetry = { viewModel.loadChannels() }
                 )
                 "empty" -> EmptyState(
-                    message = "No categories available",
+                    message = "لا توجد تصنيفات متاحة",
                     onRetry = { viewModel.loadChannels() }
                 )
                 else -> {

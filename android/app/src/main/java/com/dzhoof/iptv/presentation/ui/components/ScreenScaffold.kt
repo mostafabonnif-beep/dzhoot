@@ -111,7 +111,7 @@ fun ScreenHeader(
             IconButton(onClick = onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = "رجوع",
                     tint = MaterialTheme.colorScheme.onBackground
                 )
             }

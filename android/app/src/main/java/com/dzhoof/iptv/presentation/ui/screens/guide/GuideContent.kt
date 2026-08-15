@@ -61,7 +61,7 @@ internal fun GuideContent(
     }
 
     ScreenScaffold(
-        title = "Guide",
+        title = "دليل البرامج",
         modifier = modifier,
         trailing = {
             GuideHeaderDetail(

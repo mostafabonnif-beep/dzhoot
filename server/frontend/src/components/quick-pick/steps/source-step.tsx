@@ -2,6 +2,7 @@
 
 import { Globe, Tv, Monitor } from 'lucide-react';
 import type { SourceType } from '../wizard-shell';
+import { useLocale } from '@/components/locale-provider';
 
 const SOURCES: { id: SourceType; label: string; icon: typeof Globe; description: string }[] = [
   {
@@ -25,22 +26,29 @@ interface SourceStepProps {
 }
 
 export function SourceStep({ selectedSources, onToggleSource }: SourceStepProps) {
+  const { t } = useLocale();
+  const descriptions: Record<SourceType, string> = {
+    'iptv-org': t('quickPick.iptvOrgDescription'),
+    'pluto-tv': t('quickPick.plutoDescription'),
+    'samsung-tv-plus': t('quickPick.samsungDescription'),
+  };
+
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">Step 1</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">{t('quickPick.step1')}</p>
         <h2 className="text-base font-display font-bold uppercase tracking-[0.08em]">
-          Choose Your Sources
+          {t('quickPick.chooseSources')}
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Select where you want to browse channels from. Pick one or more.
+          {t('quickPick.sourceDescription')}
         </p>
       </div>
 
       <div
         className="grid grid-cols-1 sm:grid-cols-2 gap-3"
         role="group"
-        aria-label="Source selection"
+        aria-label={t('quickPick.sourceSelection')}
       >
         {SOURCES.map((source) => {
           const Icon = source.icon;
@@ -67,7 +75,7 @@ export function SourceStep({ selectedSources, onToggleSource }: SourceStepProps)
                 >
                   {source.label}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">{source.description}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{descriptions[source.id]}</p>
               </div>
             </button>
           );
@@ -75,7 +83,7 @@ export function SourceStep({ selectedSources, onToggleSource }: SourceStepProps)
       </div>
 
       {selectedSources.length === 0 && (
-        <p className="text-xs text-destructive">Select at least one source to continue.</p>
+        <p className="text-xs text-destructive">{t('quickPick.selectSourceRequired')}</p>
       )}
     </div>
   );

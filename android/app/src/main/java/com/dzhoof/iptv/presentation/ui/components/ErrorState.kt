@@ -39,9 +39,9 @@ fun ErrorState(
     // Contextual headline so the state reads as a clear problem, not just a raw
     // message dump. The message itself carries the detail below it.
     val title = when (errorType) {
-        ErrorType.AUTH_REQUIRED -> "Device not paired"
-        ErrorType.NETWORK_ERROR -> "Can't reach the server"
-        else -> "Something went wrong"
+        ErrorType.AUTH_REQUIRED -> "الجهاز غير مربوط"
+        ErrorType.NETWORK_ERROR -> "تعذر الوصول إلى الخادم"
+        else -> "حدث خطأ غير متوقع"
     }
 
     Box(
@@ -100,7 +100,7 @@ fun ErrorState(
                         .onFocusChanged { pairFocused = it.isFocused }
                 ) {
                     Text(
-                        text = "Pair Now",
+                        text = "الربط الآن",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -131,7 +131,7 @@ fun ErrorState(
                     .onFocusChanged { retryFocused = it.isFocused }
             ) {
                 Text(
-                    text = "Retry",
+                    text = "إعادة المحاولة",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary

@@ -115,14 +115,14 @@ internal fun PlayerQuickActions(
 
         QuickActionButton(
             icon = Icons.Filled.ClosedCaption,
-            label = "Audio/Subs",
+            label = "الصوت/الترجمة",
             tint = OnVideo,
             onClick = onShowTracks
         )
 
         QuickActionButton(
             icon = Icons.AutoMirrored.Filled.List,
-            label = "Channels",
+            label = "القنوات",
             tint = OnVideo,
             onClick = onShowChannelList
         )
@@ -130,7 +130,7 @@ internal fun PlayerQuickActions(
         if (onShowGuide != null) {
             QuickActionButton(
                 icon = Icons.Filled.GridView,
-                label = "Guide",
+                label = "الدليل",
                 tint = OnVideo,
                 onClick = onShowGuide
             )

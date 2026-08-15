@@ -77,7 +77,7 @@ internal fun SearchResultsArea(
     ) { state ->
         when (state) {
             "loading" -> SearchResultsSkeleton(showShimmer = !LocalPerfProfile.current.reduceMotion)
-            "error" -> ErrorState(message = uiState.error ?: "Search failed", onRetry = onRetry)
+            "error" -> ErrorState(message = uiState.error ?: "تعذر تنفيذ البحث", onRetry = onRetry)
             "recent" -> RecentSearches(
                 searches = uiState.recentSearches,
                 onSearchClick = onRecentSearchClick,
@@ -92,7 +92,7 @@ internal fun SearchResultsArea(
                 Column(modifier = Modifier.fillMaxSize()) {
                     val totalCount = uiState.results.size + uiState.unifiedResults.totalCount
                     Text(
-                        text = "$totalCount result${if (totalCount != 1) "s" else ""} for \"$searchQuery\"",
+                        text = "$totalCount نتيجة للبحث عن \"$searchQuery\"",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.padding(bottom = Dimens.RowTitleGap),

@@ -66,7 +66,7 @@ internal fun TvSearchContent(
                 modifier = Modifier.height(Dimens.HeaderBandHeightTv),
                 contentAlignment = Alignment.CenterStart
             ) {
-                ScreenHeaderTitle(text = "Search")
+                ScreenHeaderTitle(text = "بحث")
             }
             Spacer(modifier = Modifier.height(Dimens.Space5))
             TvSearchKeyboard(
