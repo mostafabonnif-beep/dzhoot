@@ -80,7 +80,7 @@ fun PlayerInfoBar(
 
         if (nowPlaying != null) {
             Text(
-                text = "Now: ${nowPlaying.title}  ${formatEpgTimeRange(nowPlaying)}",
+                text = "الآن: ${nowPlaying.title}  ${formatEpgTimeRange(nowPlaying)}",
                 style = BodyOverlay,
                 color = OnVideo,
                 maxLines = 1,
@@ -90,7 +90,7 @@ fun PlayerInfoBar(
         }
         if (nextProgram != null) {
             Text(
-                text = "Next: ${nextProgram.title}  ${formatEpgTimeRange(nextProgram)}",
+                text = "التالي: ${nextProgram.title}  ${formatEpgTimeRange(nextProgram)}",
                 style = LabelToast,
                 color = OnVideo.copy(alpha = EmphasisMedium),
                 maxLines = 1,
@@ -154,7 +154,7 @@ private fun CompactInfoBar(
         }
         if (nextProgram != null) {
             Text(
-                text = "Next: ${nextProgram.title}",
+                text = "التالي: ${nextProgram.title}",
                 style = LabelToast,
                 color = OnVideo.copy(alpha = EmphasisMedium),
                 maxLines = 1,

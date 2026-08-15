@@ -347,8 +347,8 @@ class SettingsViewModel @Inject constructor(
                 it.copy(
                     isLoadingPlaylist = false,
                     playlistResult = when (result) {
-                        is Result.Success -> "Playlist loaded"
-                        is Result.Error -> "Failed to load playlist"
+                        is Result.Success -> "تم تحميل قائمة التشغيل"
+                        is Result.Error -> "تعذر تحميل قائمة التشغيل"
                     }
                 )
             }

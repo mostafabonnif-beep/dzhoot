@@ -175,7 +175,7 @@ private fun PortraitDetailSection(
         }
         uiState.nextProgram?.let { next ->
             Text(
-                text = "Next: ${next.title}  ${formatEpgTimeRange(next)}",
+                text = "التالي: ${next.title}  ${formatEpgTimeRange(next)}",
                 style = LabelToast,
                 color = OnVideo.copy(alpha = EmphasisMedium),
                 maxLines = 1,
@@ -186,10 +186,10 @@ private fun PortraitDetailSection(
         Row(horizontalArrangement = Arrangement.spacedBy(Dimens.Space4)) {
             PortraitActionButton(
                 icon = Icons.Filled.ClosedCaption,
-                label = "Audio/Subs",
+                label = "الصوت/الترجمة",
                 onClick = actions.onShowTracks
             )
-            val sleepLabel = uiState.sleepTimerMinutes?.let { "Sleep ${it}m" } ?: "Sleep off"
+            val sleepLabel = uiState.sleepTimerMinutes?.let { "مؤقت النوم ${it} د" } ?: "مؤقت النوم متوقف"
             PortraitActionButton(
                 icon = Icons.Filled.Bedtime,
                 label = sleepLabel,

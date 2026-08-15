@@ -213,7 +213,7 @@ class ChannelRepositoryImpl @Inject constructor(
     private suspend fun refreshFromPlaylist(load: () -> PlaylistFetch): Result<Unit> {
         val fetched: PlaylistFetch = load()
         if (fetched.channels.isEmpty()) {
-            return Result.Error(Exception("No channels found in playlist"))
+            return Result.Error(Exception("لم يتم العثور على قنوات في قائمة التشغيل"))
         }
         alternatesCache = emptyMap()
         serverMetadataCache = emptyMap()

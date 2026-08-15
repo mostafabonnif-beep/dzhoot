@@ -125,7 +125,7 @@ internal fun BoxScope.PlayerMobileChrome(
             IconButton(onClick = actions.onBack) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = "رجوع",
                     tint = OnVideo
                 )
             }
@@ -150,14 +150,14 @@ internal fun BoxScope.PlayerMobileChrome(
             IconButton(onClick = actions.onShowTracks) {
                 Icon(
                     imageVector = Icons.Filled.ClosedCaption,
-                    contentDescription = "Audio and subtitles",
+                    contentDescription = "الصوت والترجمة",
                     tint = OnVideo
                 )
             }
             IconButton(onClick = actions.onEnterPip) {
                 Icon(
                     imageVector = Icons.Filled.PictureInPictureAlt,
-                    contentDescription = "Picture in picture",
+                    contentDescription = "صورة داخل صورة",
                     tint = OnVideo
                 )
             }
@@ -179,44 +179,44 @@ internal fun BoxScope.PlayerMobileChrome(
         ) {
             ChromeIconButton(
                 icon = Icons.Filled.SkipPrevious,
-                contentDescription = "Previous channel",
+                contentDescription = "القناة السابقة",
                 onClick = actions.onPrevChannel
             )
             ChromeIconButton(
                 icon = if (uiState.channel?.isFavorite == true) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                contentDescription = "Favorite",
+                contentDescription = "مفضلة",
                 tint = if (uiState.channel?.isFavorite == true) MaterialTheme.colorScheme.error else OnVideo,
                 onClick = actions.onToggleFavorite
             )
             ChromeIconButton(
                 icon = Icons.AutoMirrored.Filled.List,
-                contentDescription = "Channel list",
+                contentDescription = "قائمة القنوات",
                 onClick = actions.onShowChannelList
             )
             ChromeIconButton(
                 icon = Icons.Filled.AspectRatio,
-                contentDescription = "Aspect ratio",
+                contentDescription = "نسبة العرض",
                 onClick = actions.onCycleAspect
             )
             ChromeIconButton(
                 icon = Icons.Filled.Bedtime,
-                contentDescription = "Sleep timer",
+                contentDescription = "مؤقت النوم",
                 tint = if (uiState.sleepTimerMinutes != null) Amber else OnVideo,
                 onClick = { actions.onCycleSleepTimer(nextSleepTimerStep(uiState.sleepTimerMinutes)) }
             )
             ChromeIconButton(
                 icon = Icons.Filled.Lock,
-                contentDescription = "Lock screen",
+                contentDescription = "قفل الشاشة",
                 onClick = { state.lockScreen() }
             )
             ChromeIconButton(
                 icon = Icons.Filled.SkipNext,
-                contentDescription = "Next channel",
+                contentDescription = "القناة التالية",
                 onClick = actions.onNextChannel
             )
             ChromeIconButton(
                 icon = Icons.Filled.FullscreenExit,
-                contentDescription = "Exit fullscreen",
+                contentDescription = "الخروج من ملء الشاشة",
                 onClick = actions.onExitFullscreen
             )
         }

@@ -60,8 +60,8 @@ class PipController(private val activity: Activity) {
         if (canZap) {
             builder.setActions(
                 listOf(
-                    remoteAction(ACTION_PREV, "Previous channel", android.R.drawable.ic_media_previous),
-                    remoteAction(ACTION_NEXT, "Next channel", android.R.drawable.ic_media_next)
+                    remoteAction(ACTION_PREV, "القناة السابقة", android.R.drawable.ic_media_previous),
+                    remoteAction(ACTION_NEXT, "القناة التالية", android.R.drawable.ic_media_next)
                 )
             )
         }
