@@ -90,7 +90,17 @@ class CatalogViewModel @Inject constructor(
 
     fun selectMovieById(movieId: String, fallbackTitle: String = "فيلم") {
         _uiState.value = _uiState.value.copy(
-            selectedMovie = Movie(id = movieId, title = fallbackTitle),
+            selectedMovie = Movie(
+                id = movieId,
+                title = fallbackTitle,
+                category = "",
+                poster = null,
+                backdrop = null,
+                description = null,
+                year = null,
+                durationMinutes = null,
+                rating = null,
+            ),
             movieError = null,
             isLoadingMovie = true,
             selectedSeries = null,
@@ -117,7 +127,19 @@ class CatalogViewModel @Inject constructor(
             when (val result = repository.getSeriesById(seriesId)) {
                 is Result.Success -> selectSeries(result.data)
                 is Result.Error -> _uiState.value = _uiState.value.copy(
-                    selectedSeries = Series(id = seriesId, title = fallbackTitle),
+                    selectedSeries = Series(
+                        id = seriesId,
+                        title = fallbackTitle,
+                        category = "",
+                        poster = null,
+                        backdrop = null,
+                        plot = null,
+                        cast = null,
+                        director = null,
+                        genre = null,
+                        releaseDate = null,
+                        rating = null,
+                    ),
                     isLoadingDetails = false,
                     detailsError = result.exception.message ?: "تعذر تحميل تفاصيل المسلسل",
                 )
