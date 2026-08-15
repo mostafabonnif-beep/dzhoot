@@ -20,6 +20,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 import java.io.IOException
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,6 +51,13 @@ class SubscriptionRepositoryImpl @Inject constructor(
      * Returns the current Firebase token when Firebase is configured for this build.
      * Debug builds without google-services.json intentionally continue without a token.
      */
+    private fun backendError(raw: String?, fallback: String): IOException {
+        val json = runCatching { JSONObject(raw.orEmpty()) }.getOrNull()
+        val code = json?.optString("code")?.takeIf { it.isNotBlank() }
+        val message = json?.optString("error")?.takeIf { it.isNotBlank() } ?: fallback
+        return IOException(if (code != null) "$code: $message" else message)
+    }
+
     private suspend fun getPushToken(): String? {
         if (!BuildConfig.FIREBASE_ENABLED) return null
         val preferences = appContext.getSharedPreferences(
@@ -92,10 +100,13 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     if (body?.success == true && data != null) {
                         Result.success(data)
                     } else {
-                        Result.error(IOException(body?.error ?: "Activation failed"))
+                        Result.error(IOException(
+                            if (!body?.code.isNullOrBlank()) "${body?.code}: ${body?.error ?: "Activation failed"}"
+                            else body?.error ?: "Activation failed",
+                        ))
                     }
                 } else {
-                    Result.error(IOException("Activation failed (HTTP ${response.code()})"))
+                    Result.error(backendError(response.errorBody()?.string(), "Activation failed (HTTP ${response.code()})"))
                 }
             } catch (e: Exception) {
                 Result.error(e)
@@ -115,7 +126,7 @@ class SubscriptionRepositoryImpl @Inject constructor(
                         Result.error(IOException(body?.error ?: "Failed to load subscription"))
                     }
                 } else {
-                    Result.error(IOException("Failed to load subscription (HTTP ${response.code()})"))
+                    Result.error(backendError(response.errorBody()?.string(), "Failed to load subscription (HTTP ${response.code()})"))
                 }
             } catch (e: Exception) {
                 Result.error(e)
@@ -137,7 +148,7 @@ class SubscriptionRepositoryImpl @Inject constructor(
                 if (response.isSuccessful) {
                     Result.success(Unit)
                 } else {
-                    Result.error(IOException("Device registration failed (HTTP ${response.code()})"))
+                    Result.error(backendError(response.errorBody()?.string(), "Device registration failed (HTTP ${response.code()})"))
                 }
             } catch (e: Exception) {
                 Result.error(e)
@@ -151,7 +162,7 @@ class SubscriptionRepositoryImpl @Inject constructor(
                 if (response.isSuccessful) {
                     Result.success(Unit)
                 } else {
-                    Result.error(IOException("Failed to remove device (HTTP ${response.code()})"))
+                    Result.error(backendError(response.errorBody()?.string(), "Failed to remove device (HTTP ${response.code()})"))
                 }
             } catch (e: Exception) {
                 Result.error(e)

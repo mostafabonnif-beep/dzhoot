@@ -17,6 +17,7 @@ import com.dzhoof.iptv.data.model.dto.RegisterDeviceRequest
 import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
 import com.dzhoof.iptv.data.model.dto.PlaybackTokenResponse
 import com.dzhoof.iptv.data.model.dto.MoviePageResponse
+import com.dzhoof.iptv.data.model.dto.MovieDetailResponse
 import com.dzhoof.iptv.data.model.dto.SeriesPageResponse
 import com.dzhoof.iptv.data.model.dto.SeriesDetailResponse
 import com.dzhoof.iptv.data.model.dto.SeasonsResponse
@@ -75,6 +76,9 @@ interface FireVisionApiService {
         @Query("category") category: String? = null,
         @Query("search") search: String? = null,
     ): Response<MoviePageResponse>
+
+    @GET("api/v1/catalog/movies/{movieId}")
+    suspend fun getMovieById(@Path("movieId") movieId: String): Response<MovieDetailResponse>
 
     @GET("api/v1/catalog/series")
     suspend fun getSeries(

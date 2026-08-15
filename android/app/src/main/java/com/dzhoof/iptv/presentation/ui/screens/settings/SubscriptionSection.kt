@@ -38,21 +38,23 @@ internal fun SubscriptionSection(
     val uiState by viewModel.uiState.collectAsState()
     var code by remember { mutableStateOf("") }
 
-    SettingsCard(title = "Subscription", modifier = modifier) {
+    SettingsCard(title = "الاشتراك", modifier = modifier) {
         val sub = uiState.subscription
-        val active = sub?.subscription?.status == "ACTIVE"
+        val status = sub?.subscription?.status
+        val active = status == "ACTIVE"
+        val expired = status == "EXPIRED"
 
         // Redeem input
         SettingRowLayout(
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "Activate Code",
+                        text = "تفعيل كود",
                         fontWeight = FontWeight.Medium,
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "Enter a DZHF-XXXX-XXXX-XXXX code. The duration starts when the code is activated.",
+                        text = "أدخل كودًا بصيغة DZHF-XXXX-XXXX-XXXX. تبدأ المدة عند التفعيل.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
@@ -74,7 +76,7 @@ internal fun SubscriptionSection(
                     },
                 ) {
                     Text(
-                        text = if (uiState.isRedeeming) "Activating..." else "Activate",
+                        text = if (uiState.isRedeeming) "جارٍ التفعيل…" else "تفعيل",
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -91,32 +93,32 @@ internal fun SubscriptionSection(
         }
 
         // Subscription status
-        if (active && sub != null) {
+        if ((active || expired) && sub != null) {
             Spacer(modifier = Modifier.height(12.dp))
             SettingRowLayout(
                 text = {
                     Column {
-                        Text("Plan: ${sub.plan?.name ?: "—"}", fontWeight = FontWeight.Medium)
+                        Text("الخطة: ${sub.plan?.name ?: "—"}", fontWeight = FontWeight.Medium)
                         Text(
-                            "Expires: ${sub.subscription?.expiresAt?.take(10) ?: "—"}",
+                            "${if (expired) "انتهى في" else "ينتهي في"}: ${sub.subscription?.expiresAt?.take(10) ?: "—"}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            "Devices: ${sub.devicesUsed} / ${sub.maxDevices}",
+                            "الأجهزة: ${sub.devicesUsed} / ${sub.maxDevices}",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 },
                 action = {
                     FocusAwareOutlinedButton(onClick = { viewModel.refresh() }) {
-                        Text("Refresh", fontWeight = FontWeight.Medium)
+                        Text("تحديث", fontWeight = FontWeight.Medium)
                     }
                 },
             )
         } else if (!uiState.isLoading && sub == null) {
             Spacer(modifier = Modifier.height(12.dp))
             StatusText(
-                text = "No active subscription. Enter a code above to get started.",
+                text = "لا يوجد اشتراك فعال. أدخل كودًا للبدء.",
                 status = Status.WARNING,
                 fontWeight = FontWeight.Medium,
             )
@@ -126,7 +128,7 @@ internal fun SubscriptionSection(
         if (!sub?.devices.isNullOrEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "Registered Devices",
+                text = "الأجهزة المسجلة",
                 fontWeight = FontWeight.Medium,
             )
             sub?.devices?.forEach { device ->
@@ -135,7 +137,7 @@ internal fun SubscriptionSection(
                     text = {
                         Column {
                             Text(
-                                text = device.name?.takeIf { it.isNotBlank() } ?: (device.deviceId ?: "Device"),
+                                text = device.name?.takeIf { it.isNotBlank() } ?: (device.deviceId ?: "جهاز"),
                                 fontWeight = FontWeight.Medium,
                             )
                             Text(
@@ -148,7 +150,7 @@ internal fun SubscriptionSection(
                         FocusAwareOutlinedButton(
                             onClick = { viewModel.removeDevice(device) },
                         ) {
-                            Text("Remove", fontWeight = FontWeight.Medium)
+                            Text("حذف", fontWeight = FontWeight.Medium)
                         }
                     },
                 )

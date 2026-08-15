@@ -152,7 +152,14 @@ router.get('/seasons/:id/episodes', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid season id' });
-    const episodes = await Episode.find({ seasonId: id }).select('-streamUrl').sort({ episodeNumber: 1 }).lean();
+    const season = await Season.findById(id).select('seriesId').lean();
+    if (!season) return res.status(404).json({ success: false, error: 'Season not found' });
+    const series = await Series.findOne({ _id: season.seriesId, isActive: true }).select('_id').lean();
+    if (!series) return res.status(404).json({ success: false, error: 'Series not found' });
+    const episodes = await Episode.find({ seasonId: id, seriesId: season.seriesId })
+      .select('-streamUrl')
+      .sort({ episodeNumber: 1 })
+      .lean();
     return res.json({ success: true, data: episodes });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
