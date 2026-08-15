@@ -29,14 +29,12 @@ import com.dzhoof.iptv.presentation.ui.screens.FavoritesScreen
 import com.dzhoof.iptv.presentation.ui.screens.HomeScreen
 import com.dzhoof.iptv.presentation.ui.screens.MultiviewScreen
 import com.dzhoof.iptv.presentation.ui.screens.guide.GuideScreen
-import com.dzhoof.iptv.presentation.ui.screens.PairingScreen
+import com.dzhoof.iptv.presentation.ui.screens.ActivationScreen
 import com.dzhoof.iptv.presentation.ui.screens.PlayerScreen
 import com.dzhoof.iptv.presentation.ui.screens.VodPlayerScreen
 import com.dzhoof.iptv.presentation.ui.screens.SearchScreen
 import com.dzhoof.iptv.presentation.ui.screens.AddSourceScreen
 import com.dzhoof.iptv.presentation.ui.screens.SettingsScreen
-import com.dzhoof.iptv.presentation.viewmodel.PairingViewModel
-import kotlinx.coroutines.delay
 
 /**
  * Navigation graph for FireVision IPTV app.
@@ -71,35 +69,13 @@ fun FireVisionNavGraph(
     ) {
         // ── Pairing (onboarding) ────────────────────────────────────────
         composable(route = Screen.Pairing.route) {
-            val viewModel: PairingViewModel = hiltViewModel()
-            val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-
-            // Auto-navigate to Home after successful pairing
-            LaunchedEffect(uiState.isPaired) {
-                if (uiState.isPaired) {
-                    delay(1500) // Show success message briefly
+            ActivationScreen(
+                onActivated = {
                     navController.navigate(Screen.Home.route) {
                         popUpTo(Screen.Pairing.route) { inclusive = true }
                         launchSingleTop = true
                     }
-                }
-            }
-
-            PairingScreen(
-                pin = uiState.pin,
-                statusMessage = uiState.statusMessage,
-                statusColor = uiState.statusColor,
-                countdownText = uiState.countdownText,
-                isLoading = uiState.isLoading,
-                showRetryButton = uiState.showRetryButton,
-                showCountdown = uiState.showCountdown,
-                qrCodeBitmap = uiState.qrCodeBitmap,
-                serverUrl = uiState.serverUrl,
-                isTvDevice = uiState.isTvDevice,
-                pairingUrl = uiState.pairingUrl,
-                onRetryClick = { viewModel.requestNewPairing() },
-                onUseDefaultClick = { viewModel.useDefaultChannelList() },
-                onUseAdvancedClick = { navController.navigate(Screen.AddSource.route) }
+                },
             )
         }
 

@@ -11,6 +11,8 @@ import com.dzhoof.iptv.data.model.dto.StreamPlayReport
 import com.dzhoof.iptv.data.model.dto.StreamStatusReport
 import com.dzhoof.iptv.data.model.dto.SubscriptionViewResponse
 import com.dzhoof.iptv.data.model.dto.RedeemCodeRequest
+import com.dzhoof.iptv.data.model.dto.ClientRedeemRequest
+import com.dzhoof.iptv.data.model.dto.ClientRedeemResponse
 import com.dzhoof.iptv.data.model.dto.RedeemResponseDto
 import com.dzhoof.iptv.data.model.dto.DevicesResponse
 import com.dzhoof.iptv.data.model.dto.RegisterDeviceRequest
@@ -130,6 +132,9 @@ interface FireVisionApiService {
      */
     @POST("api/v1/activation/redeem")
     suspend fun redeemCode(@Body request: RedeemCodeRequest): Response<RedeemResponseDto>
+
+    @POST("api/v1/activation/client-redeem")
+    suspend fun clientRedeem(@Body request: ClientRedeemRequest): Response<ClientRedeemResponse>
     
     /**
      * Fetches the current subscription, plan and registered devices.

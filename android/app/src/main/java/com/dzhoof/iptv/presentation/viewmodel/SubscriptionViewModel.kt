@@ -50,6 +50,24 @@ class SubscriptionViewModel @Inject constructor(
         }
     }
 
+    fun clientRedeem(code: String) {
+        if (code.isBlank()) return
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isRedeeming = true, error = null, redeemSuccess = null)
+            when (val result = repository.clientRedeem(code.trim())) {
+                is Result.Success -> _uiState.value = _uiState.value.copy(
+                    isRedeeming = false,
+                    subscription = result.data,
+                    redeemSuccess = "تم تفعيل جهازك بنجاح. مرحبًا بك في DZ HOOF",
+                )
+                is Result.Error -> _uiState.value = _uiState.value.copy(
+                    isRedeeming = false,
+                    error = friendlyError(result.exception.message, "كود التفعيل غير صالح أو منتهي"),
+                )
+            }
+        }
+    }
+
     fun redeem(code: String) {
         if (code.isBlank()) return
         viewModelScope.launch {
@@ -120,6 +138,8 @@ class SubscriptionViewModel @Inject constructor(
             "CODE_EXPIRED" -> "انتهت صلاحية هذا الكود."
             "PLAN_UNAVAILABLE" -> "الخطة المرتبطة بهذا الكود غير متاحة حاليًا."
             "INVALID_CODE" -> "كود التفعيل غير صالح."
+            "CODE_REVOKED" -> "تم إلغاء هذا الكود من الإدارة."
+            "ACCOUNT_INACTIVE" -> "تم إيقاف حساب العميل. تواصل مع الدعم."
             else -> raw?.substringAfter(':')?.trim().takeUnless { it.isNullOrBlank() } ?: fallback
         }
     }
