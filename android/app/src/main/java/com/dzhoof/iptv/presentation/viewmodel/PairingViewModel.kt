@@ -31,7 +31,7 @@ import javax.inject.Inject
 
 data class PairingUiState(
     val pin: String = "------",
-    val statusMessage: String = "Generating PIN...",
+    val statusMessage: String = "جارٍ إنشاء PIN…",
     val statusColor: Color = Color.White,
     val countdownText: String = "",
     val isLoading: Boolean = true,
@@ -80,7 +80,7 @@ class PairingViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 pin = "------",
-                statusMessage = "Connecting to server...",
+                statusMessage = "جارٍ الاتصال بالخادم…",
                 statusColor = Color.White,
                 isLoading = true,
                 showRetryButton = false,
@@ -147,7 +147,7 @@ class PairingViewModel @Inject constructor(
         pollingJob?.cancel()
         countdownJob?.cancel()
 
-        _uiState.update { it.copy(isLoading = true, statusMessage = "Fetching demo channels...") }
+        _uiState.update { it.copy(isLoading = true, statusMessage = "جارٍ جلب القنوات التجريبية…") }
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
@@ -163,22 +163,22 @@ class PairingViewModel @Inject constructor(
                         if (demoCode.isNotEmpty()) {
                             AppPreferences.setDemoMode(context, demoCode)
                             _uiState.update {
-                                it.copy(isPaired = true, isLoading = false, statusMessage = "Using demo channel list")
+                                it.copy(isPaired = true, isLoading = false, statusMessage = "جارٍ استخدام قائمة القنوات التجريبية")
                             }
                         } else {
                             _uiState.update {
-                                it.copy(isLoading = false, statusMessage = "Demo channels unavailable", showRetryButton = true)
+                                it.copy(isLoading = false, statusMessage = "القنوات التجريبية غير متاحة", showRetryButton = true)
                             }
                         }
                     } else {
                         _uiState.update {
-                            it.copy(isLoading = false, statusMessage = "Demo channels unavailable", showRetryButton = true)
+                            it.copy(isLoading = false, statusMessage = "القنوات التجريبية غير متاحة", showRetryButton = true)
                         }
                     }
                 }
             } catch (_: Exception) {
                 _uiState.update {
-                    it.copy(isLoading = false, statusMessage = "Network error — try again", showRetryButton = true)
+                    it.copy(isLoading = false, statusMessage = "خطأ في الشبكة — حاول مرة أخرى", showRetryButton = true)
                 }
             }
         }
@@ -208,7 +208,7 @@ class PairingViewModel @Inject constructor(
                                 onPairingSuccess(channelListCode, username)
                                 return@launch
                             } else if (status == "expired") {
-                                showError("PIN expired. Please generate a new one.")
+                                showError("انتهت صلاحية PIN. أنشئ رمزًا جديدًا.")
                                 return@launch
                             }
                         }
@@ -219,7 +219,7 @@ class PairingViewModel @Inject constructor(
             }
 
             if (System.currentTimeMillis() >= expiresAt) {
-                showError("Pairing timeout. Please try again.")
+                showError("انتهت مهلة الاقتران. حاول مرة أخرى.")
             }
         }
     }
@@ -229,15 +229,15 @@ class PairingViewModel @Inject constructor(
             while (isActive) {
                 val remaining = expiryTimeMs - System.currentTimeMillis()
                 if (remaining <= 0) {
-                    _uiState.update { it.copy(countdownText = "PIN Expired") }
-                    showError("PIN expired. Please generate a new one.")
+                    _uiState.update { it.copy(countdownText = "انتهت صلاحية PIN") }
+                    showError("انتهت صلاحية PIN. أنشئ رمزًا جديدًا.")
                     break
                 }
 
                 val minutes = TimeUnit.MILLISECONDS.toMinutes(remaining)
                 val seconds = TimeUnit.MILLISECONDS.toSeconds(remaining) % 60
                 _uiState.update {
-                    it.copy(countdownText = String.format("Expires in: %d:%02d", minutes, seconds))
+                    it.copy(countdownText = String.format("تنتهي الصلاحية خلال: %d:%02d", minutes, seconds))
                 }
 
                 delay(1000)
@@ -253,7 +253,7 @@ class PairingViewModel @Inject constructor(
 
         _uiState.update {
             it.copy(
-                statusMessage = "Paired successfully! Welcome, $username!",
+                statusMessage = "تم الاقتران بنجاح! أهلًا بك، $username!",
                 statusColor = Color(0xFF4CAF50),
                 showCountdown = false,
                 isPaired = true

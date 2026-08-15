@@ -227,7 +227,7 @@ class ChannelManager private constructor(
     }
 
     private fun truncateName(name: String?): String {
-        if (name == null) return "Unknown"
+        if (name == null) return "قناة غير معروفة"
         if (name.length <= 25) return name
         return "${name.substring(0, 22)}..."
     }

@@ -77,7 +77,7 @@ class M3uDataSource @Inject constructor(
     private fun parseExtInf(line: String): ExtInf {
         // #EXTINF:-1 tvg-id="..." tvg-logo="..." group-title="...",Display Name
         val name = line.substringAfter(',', "").trim().ifEmpty {
-            attr(line, "tvg-name") ?: "Unknown"
+            attr(line, "tvg-name") ?: "قناة غير معروفة"
         }
         return ExtInf(
             name = name,

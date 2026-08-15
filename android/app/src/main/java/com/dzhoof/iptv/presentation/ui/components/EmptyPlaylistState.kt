@@ -99,7 +99,7 @@ fun EmptyPlaylistState(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Open Channel Manager",
+                        text = "فتح مدير القنوات",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold
                     )

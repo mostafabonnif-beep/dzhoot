@@ -135,7 +135,7 @@ class FavoritesViewModel @Inject constructor(
             if (result is Result.Error) {
                 _uiState.update {
                     it.copy(
-                        error = result.exception.message ?: "Failed to remove favorite"
+                        error = result.exception.message ?: "تعذر حذف القناة من المفضلة"
                     )
                 }
                 loadFavorites()
@@ -172,7 +172,7 @@ class FavoritesViewModel @Inject constructor(
             if (result is Result.Error) {
                 _uiState.update {
                     it.copy(
-                        error = result.exception.message ?: "Failed to reorder favorites"
+                        error = result.exception.message ?: "تعذر إعادة ترتيب المفضلة"
                     )
                 }
                 loadFavorites()
