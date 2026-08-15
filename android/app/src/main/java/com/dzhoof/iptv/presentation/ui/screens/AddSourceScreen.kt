@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.ui.components.AppSpinner
 import com.dzhoof.iptv.presentation.ui.components.AppTextField
 import com.dzhoof.iptv.presentation.ui.components.Status
@@ -469,6 +470,10 @@ private fun ServerConfigCard(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        val serverAndCodeRequiredMessage = stringResource(R.string.source_server_and_code_required)
+        val urlProtocolErrorMessage = stringResource(R.string.source_url_protocol_error)
+        val invalidSettingsMessage = stringResource(R.string.source_invalid_settings)
+
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically
@@ -476,10 +481,10 @@ private fun ServerConfigCard(
             FocusAwareButton(
                 onClick = {
                     validationError = if (onSave()) null else when {
-                        serverUrl.isBlank() || tvCode.isBlank() -> stringResource(R.string.source_server_and_code_required)
+                        serverUrl.isBlank() || tvCode.isBlank() -> serverAndCodeRequiredMessage
                         !serverUrl.startsWith("http://") && !serverUrl.startsWith("https://") ->
-                            stringResource(R.string.source_url_protocol_error)
-                        else -> stringResource(R.string.source_invalid_settings)
+                            urlProtocolErrorMessage
+                        else -> invalidSettingsMessage
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
