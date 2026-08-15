@@ -53,14 +53,25 @@ if (process.env.NODE_ENV === 'production') {
   ]);
   const isWeakSecret = (val) =>
     !val || PLACEHOLDER_SECRETS.has(val) || /^change[-_]?me/i.test(val) || val.length < 32;
+  const isPlaceholder = (val) => {
+    const normalized = String(val || '').trim().toLowerCase();
+    return !normalized ||
+      normalized.includes('change-me') ||
+      normalized.includes('change_me') ||
+      normalized.includes('your-') ||
+      normalized.includes('example.com') ||
+      normalized === 'changemenow123!';
+  };
 
   const problems = [];
   if (isWeakSecret(process.env.JWT_ACCESS_SECRET))
     problems.push('JWT_ACCESS_SECRET is a default/placeholder or shorter than 32 characters');
   if (isWeakSecret(process.env.JWT_REFRESH_SECRET))
     problems.push('JWT_REFRESH_SECRET is a default/placeholder or shorter than 32 characters');
-  if (process.env.SUPER_ADMIN_PASSWORD === 'admin123')
-    problems.push('SUPER_ADMIN_PASSWORD is set to the default "admin123"');
+  if (isPlaceholder(process.env.SUPER_ADMIN_PASSWORD) || String(process.env.SUPER_ADMIN_PASSWORD || '').length < 16)
+    problems.push('SUPER_ADMIN_PASSWORD is a placeholder or shorter than 16 characters');
+  if (isPlaceholder(process.env.SUPER_ADMIN_EMAIL))
+    problems.push('SUPER_ADMIN_EMAIL is a placeholder address');
 
   if (problems.length > 0) {
     console.error(`[SECURITY] Refusing to start in production:\n  - ${problems.join('\n  - ')}`);
@@ -318,6 +329,20 @@ const oauthLimiter = rateLimit({
 });
 app.use('/api/v1/oauth/google/start', oauthLimiter);
 app.use('/api/v1/oauth/github/start', oauthLimiter);
+
+// Read-only TV-code endpoints still expose bearer-like credentials. Keep a
+// separate, less aggressive limiter so normal playlist/EPG refreshes work while
+// distributed guessing from one client is throttled.
+const tvCodeReadLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: clientIp,
+  message: { success: false, error: 'Too many TV code requests, please slow down' },
+});
+app.use('/api/v1/tv/playlist', tvCodeReadLimiter);
+app.use('/api/v1/tv/epg', tvCodeReadLimiter);
 
 // Strict rate limiting for TV pairing mutation endpoints (prevent PIN brute-force)
 const pairingLimiter = rateLimit({

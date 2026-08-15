@@ -36,15 +36,19 @@ flowchart TD
 
 | Endpoint                                        | Auth    | Description           |
 | ----------------------------------------------- | ------- | --------------------- |
-| `GET /tv/playlist/:code`                        | None    | M3U playlist by code  |
-| `GET /tv/playlist/:code/json`                   | None    | JSON playlist by code |
+| `GET /tv/playlist/:code`                        | TV code + rate limit | No-store M3U playlist by code  |
+| `GET /tv/playlist/:code/json`                   | TV code + rate limit | No-store JSON playlist by code |
 | `GET /user-playlist/by-code/:code/channels`     | None    | Channel list by code  |
 | `GET /user-playlist/by-code/:code/playlist.m3u` | None    | M3U by code           |
 | `PUT /users/:id/regenerate-code`                | Session | Regenerate code       |
 
 ### Legacy
 
-`GET /channels/playlist.m3u?code=<code>` — falls back to `PLAYLIST_CODE` or `SUPER_ADMIN_CHANNEL_LIST_CODE` env var.
+`GET /channels/playlist.m3u?code=<code>` — legacy route. New TV playlist routes are rate-limited, send `Cache-Control: no-store`, and enforce `SUBSCRIPTION_EXPIRED` when `SUBSCRIPTION_REQUIRED=true`.
+
+### Security contract
+
+TV codes are bearer-like credentials. Do not put them in logs, analytics, support tickets, or public screenshots. Playlist and JSON responses are marked `no-store`; repeated requests are throttled per client. When subscription enforcement is enabled, administrators bypass the gate and regular users need an active subscription.
 
 ## Playlist URL Format
 

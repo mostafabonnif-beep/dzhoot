@@ -24,6 +24,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -44,18 +46,18 @@ import com.dzhoof.iptv.presentation.viewmodel.SettingsViewModel
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
-private const val SERVER_GUIDE_URL = "https://github.com/akshaynikhare/FireVisionIPTVServer/blob/main/docs/workflow/SELF_HOSTING_GUIDE.md"
+private const val SERVER_GUIDE_URL = "https://github.com/merci1994dz/dzhoot/blob/main/android/docs/README.md"
 
-private enum class SourceTab(val label: String) {
-    SELF_HOST("Self-hosted server"),
-    M3U("M3U"),
-    XTREAM("Xtream")
+private enum class SourceTab(@StringRes val labelRes: Int) {
+    SELF_HOST(R.string.source_tab_self_host),
+    M3U(R.string.source_tab_m3u),
+    XTREAM(R.string.source_tab_xtream)
 }
 
 /**
  * Unified "Add a different source" screen — the single Advanced entry reached from
  * both onboarding (Pairing) and Settings → Connection. A segmented toggle picks one
- * of three bring-your-own sources: a self-hosted FireVision server (URL + pairing
+ * of three bring-your-own sources: a self-hosted DZ HOOF server (URL + pairing
  * code), an M3U playlist URL, or Xtream Codes login. Replaces the former
  * SelfHostSetupScreen, which conflated all three on one scrolling page.
  */
@@ -126,7 +128,7 @@ fun AddSourceScreen(
             }
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Add a different source",
+                text = stringResource(R.string.source_add_title),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -187,7 +189,7 @@ private fun SourceTabSelector(
                 border = BorderStroke(1.dp, if (active) activeColor else subtleBorder)
             ) {
                 Text(
-                    text = tab.label,
+                    text = stringResource(tab.labelRes),
                     fontWeight = if (active) FontWeight.SemiBold else FontWeight.Medium,
                     color = if (active) activeColor else MaterialTheme.colorScheme.onSurface
                 )
@@ -232,7 +234,7 @@ private fun SelfHostContent(
         ) {
             SettingsCard(title = null, modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Text(
-                    text = "Scan to view the server setup guide, or visit:",
+                    text = stringResource(R.string.source_scan_guide),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -248,17 +250,17 @@ private fun SelfHostContent(
                     Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                         ThemeAwareQrCode(
                             bitmap = bitmap,
-                            contentDescription = "Server setup guide QR code",
+                            contentDescription = stringResource(R.string.source_setup_qr_description),
                             size = 180.dp
                         )
                     }
                 }
                 Spacer(modifier = Modifier.height(8.dp))
-                SetupStep(number = "1", text = "Deploy FireVision IPTV Server on your machine")
+                SetupStep(number = "1", text = stringResource(R.string.source_setup_step_1))
                 Spacer(modifier = Modifier.height(4.dp))
-                SetupStep(number = "2", text = "Add your IPTV channels via the web dashboard")
+                SetupStep(number = "2", text = stringResource(R.string.source_setup_step_2))
                 Spacer(modifier = Modifier.height(4.dp))
-                SetupStep(number = "3", text = "Enter your server URL and pairing code here")
+                SetupStep(number = "3", text = stringResource(R.string.source_setup_step_3))
             }
 
             ServerConfigCard(
@@ -289,9 +291,9 @@ private fun M3uCard(
     // Pre-fill with the currently saved URL so editing an active source starts
     // from its real value instead of a blank field.
     var m3uUrl by remember { mutableStateOf(initialUrl) }
-    SettingsCard(title = "M3U Playlist", modifier = modifier) {
+    SettingsCard(title = stringResource(R.string.source_m3u_title), modifier = modifier) {
         Text(
-            text = "Paste an M3U / M3U8 playlist URL — no FireVision server required.",
+            text = stringResource(R.string.source_m3u_description),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -315,9 +317,9 @@ private fun XtreamCard(
     var host by remember { mutableStateOf(initialHost) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    SettingsCard(title = "Xtream Codes", modifier = modifier) {
+    SettingsCard(title = stringResource(R.string.source_xtream_title), modifier = modifier) {
         Text(
-            text = "Enter your Xtream Codes login — no FireVision server required.",
+            text = stringResource(R.string.source_xtream_description),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -349,7 +351,7 @@ private fun LoadPlaylistRow(
                 contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
-            Text("Load Playlist", fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.source_load_playlist), fontWeight = FontWeight.SemiBold)
         }
         if (isLoading) {
             AppSpinner()
@@ -368,11 +370,11 @@ private fun LoadPlaylistRow(
 private fun SetupGuideCardPortrait() {
     val context = LocalContext.current
     SettingsCard(title = null, modifier = Modifier.fillMaxWidth()) {
-        SetupStep(number = "1", text = "Deploy FireVision IPTV Server on your machine")
+        SetupStep(number = "1", text = stringResource(R.string.source_setup_step_1))
         Spacer(modifier = Modifier.height(6.dp))
-        SetupStep(number = "2", text = "Add your IPTV channels via the web dashboard")
+        SetupStep(number = "2", text = stringResource(R.string.source_setup_step_2))
         Spacer(modifier = Modifier.height(6.dp))
-        SetupStep(number = "3", text = "Enter your server URL and pairing code below")
+        SetupStep(number = "3", text = stringResource(R.string.source_setup_step_3_below))
         Spacer(modifier = Modifier.height(14.dp))
         FocusAwareOutlinedButton(
             onClick = {
@@ -388,7 +390,7 @@ private fun SetupGuideCardPortrait() {
                 tint = SteelBlue
             )
             Spacer(modifier = Modifier.width(6.dp))
-            Text(text = "View Setup Guide", fontWeight = FontWeight.Medium, color = SteelBlue)
+            Text(text = stringResource(R.string.source_setup_guide), fontWeight = FontWeight.Medium, color = SteelBlue)
         }
     }
 }
@@ -438,7 +440,7 @@ private fun ServerConfigCard(
 
     SettingsCard(title = null, modifier = modifier) {
         Text(
-            text = "Server URL",
+            text = stringResource(R.string.source_server_url),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium
         )
@@ -453,7 +455,7 @@ private fun ServerConfigCard(
         Spacer(modifier = Modifier.height(10.dp))
 
         Text(
-            text = "TV Pairing Code",
+            text = stringResource(R.string.source_tv_pairing_code),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelMedium
         )
@@ -461,7 +463,7 @@ private fun ServerConfigCard(
         AppTextField(
             value = tvCode,
             onValueChange = { onTvCodeChange(it); validationError = null },
-            placeholder = "Enter TV code",
+            placeholder = stringResource(R.string.source_enter_tv_code),
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -474,10 +476,10 @@ private fun ServerConfigCard(
             FocusAwareButton(
                 onClick = {
                     validationError = if (onSave()) null else when {
-                        serverUrl.isBlank() || tvCode.isBlank() -> "Server URL and TV code are required"
+                        serverUrl.isBlank() || tvCode.isBlank() -> stringResource(R.string.source_server_and_code_required)
                         !serverUrl.startsWith("http://") && !serverUrl.startsWith("https://") ->
-                            "URL must start with http:// or https://"
-                        else -> "Invalid settings"
+                            stringResource(R.string.source_url_protocol_error)
+                        else -> stringResource(R.string.source_invalid_settings)
                     }
                 },
                 colors = ButtonDefaults.buttonColors(
@@ -485,7 +487,7 @@ private fun ServerConfigCard(
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {
-                Text("Connect", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.source_connect), fontWeight = FontWeight.SemiBold)
             }
 
             AnimatedVisibility(
@@ -494,7 +496,7 @@ private fun ServerConfigCard(
                 exit = fadeOut(tween(DURATION_NORMAL, easing = EaseOutQuart))
             ) {
                 StatusText(
-                    text = "Saved",
+                    text = stringResource(R.string.source_saved),
                     status = Status.SUCCESS,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold
@@ -527,9 +529,9 @@ private fun ServerConfigCard(
                 if (isTestingConnection) {
                     AppSpinner()
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Testing...", fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.source_testing), fontWeight = FontWeight.Medium)
                 } else {
-                    Text("Test Connection", fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.source_test_connection), fontWeight = FontWeight.Medium)
                 }
             }
             connectionTestResult?.let { result ->
@@ -557,7 +559,7 @@ private fun PairWithPinLink(onClick: () -> Unit) {
         modifier = Modifier.onFocusChanged { focused = it.isFocused }
     ) {
         Text(
-            text = "No code? Pair with a PIN instead",
+            text = stringResource(R.string.source_pair_with_pin),
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.Medium,
             color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,

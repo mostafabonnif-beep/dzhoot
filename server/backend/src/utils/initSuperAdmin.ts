@@ -16,13 +16,14 @@ async function initializeSuperAdmin(): Promise<IUserDocument> {
     }
     const password = process.env.SUPER_ADMIN_PASSWORD || 'ChangeMeNow123!';
 
-    if (
-      process.env.NODE_ENV === 'production' &&
-      (!process.env.SUPER_ADMIN_PASSWORD || process.env.SUPER_ADMIN_PASSWORD === 'admin123')
-    ) {
-      console.warn(
-        '[SECURITY] SUPER_ADMIN_PASSWORD is unset or the known default in production — set a strong SUPER_ADMIN_PASSWORD in your .env immediately.',
-      );
+    if (process.env.NODE_ENV === 'production') {
+      const configuredPassword = String(process.env.SUPER_ADMIN_PASSWORD || '');
+      const normalizedEmail = String(process.env.SUPER_ADMIN_EMAIL || '').toLowerCase();
+      const placeholderPassword = /change[-_]?me|your-|example\.com|changemenow123!/i.test(configuredPassword);
+      const placeholderEmail = !normalizedEmail || normalizedEmail.includes('example.com');
+      if (configuredPassword.length < 16 || placeholderPassword || placeholderEmail) {
+        throw new Error('Production super-admin credentials must be replaced with strong non-placeholder values');
+      }
     }
 
     const channelListCode =
@@ -99,7 +100,7 @@ async function initializeSuperAdmin(): Promise<IUserDocument> {
     console.log('Super Admin user created successfully');
     console.log(`   Username: ${username}`);
     console.log(`   Email: ${email}`);
-    console.log(`   Channel List Code: ${superAdmin.channelListCode}`);
+    console.log('   Channel list code generated and withheld from logs');
 
     return superAdmin;
   } catch (error) {

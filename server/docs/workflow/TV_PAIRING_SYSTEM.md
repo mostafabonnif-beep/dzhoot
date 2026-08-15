@@ -123,10 +123,11 @@ TVs are **not** stored as separate documents. Device info lives in `User.metadat
 
 | Method | Endpoint                  | Description                    |
 | ------ | ------------------------- | ------------------------------ |
-| GET    | `/tv/playlist/:code`      | M3U playlist by code           |
-| GET    | `/tv/playlist/:code/json` | JSON playlist by code          |
+| GET    | `/tv/playlist/:code`      | No-store M3U playlist; rate limited |
+| GET    | `/tv/playlist/:code/json` | No-store JSON playlist; rate limited |
 | POST   | `/tv/pair`                | Pair device with code (legacy) |
-| GET    | `/tv/verify/:code`        | Check code validity            |
+| GET    | `/tv/verify/:code`        | Check validity only; no user data |
+
 | POST   | `/tv/pairing/request`     | Generate pairing PIN           |
 | GET    | `/tv/pairing/status/:pin` | Poll PIN status                |
 
@@ -138,9 +139,12 @@ TVs are **not** stored as separate documents. Device info lives in `User.metadat
 
 ## Security
 
+The channel list code is a bearer-like credential. Do not log or publish it. Successful verification returns only `{ success: true, valid: true }`; it never returns username, role, or catalog size. Playlist and EPG responses use `Cache-Control: no-store`, and playlist, EPG, and verification requests are rate-limited. When subscription enforcement is enabled, playlist generation and playback return `403 SUBSCRIPTION_EXPIRED` for regular users without an active subscription.
+
+
 | Measure          | Details                                                             |
 | ---------------- | ------------------------------------------------------------------- |
-| Code brute-force | 36^6 = 2.2B combinations, rate limited (10 req / 5 min)             |
+| Code brute-force | 36^6 = 2.2B combinations; verify/pair 10 req / 5 min, playlist/EPG 60 req / 10 min |
 | PIN expiry       | 10 min default, configurable via `PAIRING_PIN_EXPIRY_MINUTES`       |
 | PIN confirmation | Requires valid session (authenticated user)                         |
 | Status polling   | Rate limited: 120 req / 10 min                                      |

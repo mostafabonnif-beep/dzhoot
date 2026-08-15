@@ -20,6 +20,7 @@ import {
 import Link from 'next/link';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
+import { useLocale } from '@/components/locale-provider';
 import { useToast } from '@/hooks/use-toast';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import { useClientSideTable } from '@/hooks/use-client-side-table';
@@ -100,6 +101,7 @@ type SortDir = 'asc' | 'desc';
 export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   const isAdmin = mode === 'admin';
   const { toast } = useToast();
+  const { t } = useLocale();
   const { user } = useAuthStore();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -610,19 +612,19 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
 
   async function handleDelete(id: string) {
     if (isAdmin) {
-      if (!confirm('Delete this channel?')) return;
+      if (!window.confirm(t('channels.confirmDelete'))) return;
       try {
         await api.delete(`/admin/channels/${id}`);
         setChannels((prev) => prev.filter((c) => c._id !== id));
       } catch {
-        toast('Failed to delete channel', 'error');
+        toast(t('channels.deleteFailed'), 'error');
       }
     } else {
       try {
         await api.post('/user-playlist/me/channels/remove', { channelIds: [id] });
         setChannels((prev) => prev.filter((c) => c._id !== id));
       } catch {
-        toast('Failed to remove channel', 'error');
+        toast(t('channels.removeFailed'), 'error');
       }
     }
   }
@@ -637,17 +639,17 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         setShowBulkDelete(false);
         refreshFilterOptions();
       } catch {
-        toast('Failed to delete all channels', 'error');
+        toast(t('channels.deleteAllFailed'), 'error');
       } finally {
         setBulkDeleteLoading(false);
       }
     } else {
-      if (!confirm('Remove all channels from your list?')) return;
+      if (!window.confirm(t('channels.confirmRemoveAll'))) return;
       try {
         await api.put('/user-playlist/me/channels', { channelIds: [] });
         setChannels([]);
       } catch {
-        toast('Failed to clear channels', 'error');
+        toast(t('channels.clearFailed'), 'error');
       }
     }
   }

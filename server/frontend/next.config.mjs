@@ -5,6 +5,9 @@ const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8009';
 
 const nextConfig = {
   output: 'standalone',
+  experimental: {
+    webpackMemoryOptimizations: true,
+  },
 
   // Proxy API calls to Express backend in development
   async rewrites() {
@@ -21,9 +24,6 @@ const nextConfig = {
   },
 
   // Dev server on port 3001 to avoid conflict with Express on 3000
-  ...(process.env.NODE_ENV === 'development' && {
-    experimental: {},
-  }),
 };
 
 export default withSentryConfig(nextConfig, {
