@@ -142,7 +142,7 @@ internal fun GuideGapCell(
     width: Dp,
     isCompact: Boolean,
     modifier: Modifier = Modifier,
-    label: String = "No information"
+    label: String = "لا تتوفر معلومات"
 ) {
     val shape = ShapeMedium
     Box(

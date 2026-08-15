@@ -493,11 +493,11 @@ private fun HealthIndicatorDot(
     }
 
     val label = when (status) {
-        ChannelHealthStatus.ONLINE -> "Stream online"
-        ChannelHealthStatus.CHECKING -> "Checking stream"
-        ChannelHealthStatus.OFFLINE -> "Stream offline"
-        ChannelHealthStatus.UNRESPONSIVE -> "Stream unresponsive"
-        ChannelHealthStatus.UNKNOWN -> "Stream status unknown"
+        ChannelHealthStatus.ONLINE -> "البث يعمل"
+        ChannelHealthStatus.CHECKING -> "جارٍ فحص البث"
+        ChannelHealthStatus.OFFLINE -> "البث غير متاح"
+        ChannelHealthStatus.UNRESPONSIVE -> "البث لا يستجيب"
+        ChannelHealthStatus.UNKNOWN -> "حالة البث غير معروفة"
     }
 
     val alpha = if (status == ChannelHealthStatus.CHECKING) {

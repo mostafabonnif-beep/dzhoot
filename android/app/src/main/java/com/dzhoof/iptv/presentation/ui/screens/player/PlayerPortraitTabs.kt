@@ -227,7 +227,7 @@ private fun ScheduleTab(
         }
         programs.isEmpty() -> {
             TabEmptyState(
-                if (hasEpgId) "No guide data for this channel" else "This channel has no program guide"
+                if (hasEpgId) "لا تتوفر بيانات دليل البرامج لهذه القناة" else "لا تملك هذه القناة دليل برامج"
             )
             return
         }

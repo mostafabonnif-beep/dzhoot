@@ -113,7 +113,7 @@ private fun GuideHeaderDetail(
         // With no timeline there are no program cells to focus — show the
         // notice pill instead of the (always empty) program details.
         Text(
-            text = "No program schedule available — showing channels only",
+            text = "لا يتوفر جدول البرامج — عرض القنوات فقط",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
