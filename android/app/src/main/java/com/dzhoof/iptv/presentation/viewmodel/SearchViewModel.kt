@@ -147,7 +147,7 @@ class SearchViewModel @Inject constructor(
                                 } else {
                                     state.copy(
                                         isLoading = false,
-                                        error = result.exception.message ?: "Search failed",
+                                        error = result.exception.message ?: "تعذر تنفيذ البحث",
                                     )
                                 }
                             }

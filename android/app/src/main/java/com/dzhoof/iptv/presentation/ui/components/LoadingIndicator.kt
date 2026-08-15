@@ -15,7 +15,7 @@ import com.dzhoof.iptv.presentation.ui.theme.Dimens
 
 @Composable
 fun LoadingIndicator(
-    message: String = "Loading...",
+    message: String = "جارٍ التحميل…",
     modifier: Modifier = Modifier
 ) {
     Box(

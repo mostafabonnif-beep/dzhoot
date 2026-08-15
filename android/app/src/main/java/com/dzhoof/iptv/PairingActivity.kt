@@ -171,7 +171,7 @@ class PairingActivity : ComponentActivity() {
                             withContext(Dispatchers.Main) {
                                 isLoading = false
                                 pin = currentPin ?: "------"
-                                statusMessage = "Waiting for confirmation..."
+                                statusMessage = "في انتظار التأكيد…"
                                 statusColor = androidx.compose.ui.graphics.Color.White
                                 showCountdown = true
                                 pairingUrl = "$baseUrl/pair?pin=${currentPin ?: ""}"
@@ -182,15 +182,15 @@ class PairingActivity : ComponentActivity() {
                                 startCountdown()
                             }
                         } else {
-                            showError("Failed to generate PIN: ${jsonResponse.optString("error", "Unknown error")}")
+                            showError("تعذر إنشاء PIN: ${jsonResponse.optString("error", "حدث خطأ غير متوقع")}")
                         }
                     } else {
-                        showError("Server error: ${resp.code}")
+                        showError("خطأ في الخادم: ${resp.code}")
                     }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error requesting pairing", e)
-                showError("Connection error: ${e.message}")
+                showError("خطأ في الاتصال: ${e.message}")
             } finally {
                 isRequestingPin = false
             }

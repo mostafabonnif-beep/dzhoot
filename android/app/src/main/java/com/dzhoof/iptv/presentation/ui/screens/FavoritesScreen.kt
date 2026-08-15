@@ -42,7 +42,7 @@ fun FavoritesScreen(
     // Hoisted so scroll position survives navigation to the player and back
     val gridState = rememberLazyGridState()
 
-    ScreenScaffold(title = "Favorites", modifier = modifier) {
+    ScreenScaffold(title = "المفضلة", modifier = modifier) {
         val hasAnyContent = uiState.favorites.isNotEmpty() || uiState.favoriteCategories.isNotEmpty()
         val contentState = when {
             uiState.isLoading && !hasAnyContent -> "loading"
@@ -59,10 +59,10 @@ fun FavoritesScreen(
             when (state) {
                 "loading" -> ChannelsGridLoadingSkeleton()
                 "error" -> ErrorState(
-                    message = uiState.error ?: "Failed to load favorites",
+                    message = uiState.error ?: "تعذر تحميل المفضلة",
                     onRetry = { viewModel.retryLoadFavorites() }
                 )
-                "empty" -> EmptyState(message = "No favorites yet")
+                "empty" -> EmptyState(message = "لا توجد مفضلة بعد")
                 else -> FavoritesContent(
                     favorites = uiState.favorites,
                     favoriteCategories = uiState.favoriteCategories,
@@ -107,7 +107,7 @@ private fun FavoritesContent(
         if (favoriteCategories.isNotEmpty()) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column {
-                    SectionHeader(title = "Categories", accentColor = MaterialTheme.colorScheme.primary)
+                    SectionHeader(title = "التصنيفات", accentColor = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(if (isCompact) Dimens.RowTitleGapMobile else Dimens.RowTitleGap))
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(if (isCompact) Dimens.CardGapMobile else Dimens.CategoryCardGap)
@@ -120,7 +120,7 @@ private fun FavoritesContent(
                                 isFavorite = true,
                                 onClick = { onCategoryClick(category.name) },
                                 subtitle = "${category.channelCount} " +
-                                    if (category.channelCount == 1) "channel" else "channels",
+                                    if (category.channelCount == 1) "قناة" else "قنوات",
                                 modifier = Modifier
                                     .width(if (isCompact) Dimens.CategoryCardWidthMobile else Dimens.CategoryCardWidthTv)
                                     .height(if (isCompact) Dimens.CategoryCardHeightMobile else Dimens.CategoryCardHeightTv)
@@ -129,7 +129,7 @@ private fun FavoritesContent(
                     }
                     if (favorites.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(if (isCompact) Dimens.HeroCardGapMobile else Dimens.HeroCardGap))
-                        SectionHeader(title = "Channels", accentColor = MaterialTheme.colorScheme.primary)
+                        SectionHeader(title = "القنوات", accentColor = MaterialTheme.colorScheme.primary)
                     }
                 }
             }

@@ -7,8 +7,11 @@ import crypto from 'crypto';
  */
 
 function getKey(): Buffer {
-  const secret = process.env.XTREAM_SECRET_KEY || process.env.JWT_ACCESS_SECRET || 'dzhoof-dev-secret';
-  return crypto.createHash('sha256').update(secret).digest();
+  const secret = process.env.XTREAM_SECRET_KEY || process.env.JWT_ACCESS_SECRET;
+  if (!secret && process.env.NODE_ENV === 'production') {
+    throw new Error('XTREAM_SECRET_KEY or JWT_ACCESS_SECRET must be configured in production');
+  }
+  return crypto.createHash('sha256').update(secret || 'dzhoof-dev-secret').digest();
 }
 
 export function encryptSecret(plain: string): string {

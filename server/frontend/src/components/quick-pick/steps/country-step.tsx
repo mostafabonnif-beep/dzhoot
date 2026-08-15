@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import api from '@/lib/api';
+import { useLocale } from '@/components/locale-provider';
 import type { SourceType } from '../wizard-shell';
 
 // Common countries for IPTV-org (no dedicated API)
@@ -39,9 +40,18 @@ const IPTV_ORG_COUNTRIES = [
   { code: 'PL', name: 'Poland' },
 ];
 
+const COUNTRY_NAMES_AR: Record<string, string> = {
+  IN: 'الهند', US: 'الولايات المتحدة', GB: 'المملكة المتحدة', CA: 'كندا', AU: 'أستراليا',
+  DE: 'ألمانيا', FR: 'فرنسا', ES: 'إسبانيا', IT: 'إيطاليا', BR: 'البرازيل', MX: 'المكسيك',
+  AR: 'الأرجنتين', JP: 'اليابان', KR: 'كوريا الجنوبية', CN: 'الصين', RU: 'روسيا', TR: 'تركيا',
+  SA: 'السعودية', AE: 'الإمارات', PK: 'باكستان', BD: 'بنغلاديش', ID: 'إندونيسيا', TH: 'تايلاند',
+  PH: 'الفلبين', NG: 'نيجيريا', ZA: 'جنوب أفريقيا', EG: 'مصر', NL: 'هولندا', SE: 'السويد', PL: 'بولندا',
+};
+
 interface Region {
   code: string;
   name: string;
+  nameAr?: string;
   channelCount?: number;
 }
 
@@ -62,6 +72,7 @@ export function CountryStep({
   countrySelections,
   onSetCountry,
 }: CountryStepProps) {
+  const { t, locale } = useLocale();
   const [regions, setRegions] = useState<Record<string, Region[]>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
@@ -74,7 +85,10 @@ export function CountryStep({
       const promises: Promise<void>[] = [];
 
       if (selectedSources.includes('iptv-org')) {
-        result['iptv-org'] = IPTV_ORG_COUNTRIES;
+        result['iptv-org'] = IPTV_ORG_COUNTRIES.map((region) => ({
+          ...region,
+          nameAr: COUNTRY_NAMES_AR[region.code],
+        }));
       }
 
       if (selectedSources.includes('pluto-tv')) {
@@ -114,7 +128,7 @@ export function CountryStep({
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">Loading regions...</span>
+        <span className="ml-2 text-sm text-muted-foreground">{t('common.loading')}</span>
       </div>
     );
   }
@@ -122,12 +136,12 @@ export function CountryStep({
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">Step 2</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">{t('quickPick.step2')}</p>
         <h2 className="text-base font-display font-bold uppercase tracking-[0.08em]">
-          Select Country / Region
+          {t('quickPick.selectCountry')}
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Pick a country for each source, or skip to browse all regions.
+          {t('quickPick.countryDescription')}
         </p>
       </div>
 
@@ -138,6 +152,7 @@ export function CountryStep({
           ? sourceRegions.filter(
               (r) =>
                 r.name.toLowerCase().includes(search.toLowerCase()) ||
+                r.nameAr?.toLowerCase().includes(search.toLowerCase()) ||
                 r.code.toLowerCase().includes(search.toLowerCase()),
             )
           : sourceRegions;
@@ -154,8 +169,8 @@ export function CountryStep({
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Search countries..."
-                  aria-label="Search countries"
+                  placeholder={t('quickPick.searchCountries')}
+                  aria-label={t('quickPick.searchCountries')}
                   value={search}
                   onChange={(e) =>
                     setSearchTerms((prev) => ({ ...prev, [source]: e.target.value }))
@@ -168,7 +183,7 @@ export function CountryStep({
             <div
               className="flex flex-wrap gap-1.5 max-h-[200px] overflow-y-auto"
               role="group"
-              aria-label={`${SOURCE_LABELS[source]} country selection`}
+              aria-label={`${SOURCE_LABELS[source]} — ${t('quickPick.selectSourceCountry')}`}
             >
               {filtered.map((r) => {
                 const isActive = selected === r.code;
@@ -183,7 +198,7 @@ export function CountryStep({
                         : 'border-border bg-card hover:border-primary/40'
                     }`}
                   >
-                    {r.name}
+                    {locale === 'ar' && r.nameAr ? r.nameAr : r.name}
                     {r.channelCount != null && (
                       <span className="text-muted-foreground">({r.channelCount})</span>
                     )}
@@ -191,7 +206,7 @@ export function CountryStep({
                 );
               })}
               {filtered.length === 0 && (
-                <p className="text-xs text-muted-foreground py-2">No regions found.</p>
+                <p className="text-xs text-muted-foreground py-2">{t('quickPick.noRegions')}</p>
               )}
             </div>
           </div>
