@@ -101,7 +101,7 @@ internal fun OverlayDetailStrip(
             }
             if (next != null) {
                 Text(
-                    text = "Next: ${next.title}  ${formatEpgTimeRange(next)}",
+                    text = "التالي: ${next.title}  ${formatEpgTimeRange(next)}",
                     style = LabelToast,
                     color = OnVideo.copy(alpha = EmphasisMedium),
                     maxLines = 1,
@@ -110,7 +110,7 @@ internal fun OverlayDetailStrip(
             }
         } else {
             Text(
-                text = "No program info",
+                text = "لا توجد معلومات للبرنامج",
                 style = LabelToast,
                 color = TextSecondary,
                 maxLines = 1

@@ -172,7 +172,7 @@ fun HomeContent(
                 ChannelRow(
                     // Live re-tune shortcut — quick jump back to channels the
                     // user was just watching (never a resumed file position).
-                    title = "Recently Watched",
+                    title = "شاهدت مؤخرًا",
                     channels = recentlyWatched,
                     onChannelClick = onChannelClick,
                     onToggleFavorite = onToggleFavorite,
@@ -189,7 +189,7 @@ fun HomeContent(
         if (forYou.isNotEmpty()) {
             item(key = "for_you") {
                 ChannelRow(
-                    title = "For You",
+                    title = "مقترح لك",
                     channels = forYou,
                     onChannelClick = onChannelClick,
                     onToggleFavorite = onToggleFavorite,
