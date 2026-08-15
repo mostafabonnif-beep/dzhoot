@@ -136,6 +136,20 @@ DZ HOOF لا يوفر قنوات أو أفلامًا أو اشتراكات جا�
 - [ ] إضافة بطاقات Poster وصور المحتوى داخل نتائج البحث.
 - [ ] اختبار Android على جهاز TV فعلي أو Emulator ضمن CI.
 
+### جولة Control Plane للقنوات — 2026-08-15
+
+- [x] مقارنة DZ HOOF مع TiviMate وSparkle TV وOTT Navigator وIPTV Smarters وTelevizo وTvheadend وJellyfin.
+- [x] إضافة `health` URL-free إلى استجابات القنوات مع Availability Score وحالة `primary/fallback/probe/offline`.
+- [x] إضافة `m3uSourceId` إلى Channel metadata وshared schema حتى يعمل ربط EPG لمصادر M3U بصورة موثوقة.
+- [x] إضافة مؤشرات EPG التشغيلية: مدة آخر تحديث، البرامج المعالجة، عدد أخطاء المصادر، وعينات مصادر الخطأ.
+- [x] إضافة `GET /api/v1/admin/stats/channel-operations` لدمج صحة القنوات والمصادر وEPG في Control Plane واحد.
+- [x] إضافة بطاقة عمليات القنوات في لوحة الإدارة مع typed API client.
+- [x] توثيق العقد في `docs/CHANNEL_OPERATIONS_API.md` وإنشاء مقارنة السوق في `CHANNELS_COMPETITIVE_COMPARISON_AR.md`.
+- [ ] إضافة Channel Identity موحدة تربط القناة المنطقية بعدة مصادر بدل الاعتماد على تكرار `channelId` فقط.
+- [ ] إضافة معاينة مزامنة وrollback لمصادر M3U/Xtream قبل تعطيل القنوات المختفية.
+- [ ] ربط health score في Android بترتيب المفضلة وواجهة الحالة دون تخزين روابط أو أسرار.
+- [ ] إضافة telemetry مجهول لتجربة التشغيل: زمن البدء، إعادة المحاولة، rebuffer، ونجاح التحويل إلى البديل.
+
 ### المرحلة 4 — VOD وSeries
 
 الهدف: إضافة الأفلام والمسلسلات عندما يوفر المصدر بياناتها.

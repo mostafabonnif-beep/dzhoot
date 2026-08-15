@@ -95,6 +95,7 @@ const channelSchema = new Schema<IChannelDocument>(
       responseTime: Number,
       // Provenance for imported (Xtream) channels.
       source: String,
+      m3uSourceId: String,
       xtreamSourceId: String,
       xtreamStreamId: Number,
     },
