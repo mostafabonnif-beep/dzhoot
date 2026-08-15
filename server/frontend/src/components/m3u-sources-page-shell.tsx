@@ -1,9 +1,31 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { CheckCircle2, Link2, Loader2, Play, Plus, RefreshCw, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Eye, Link2, Loader2, Play, Plus, RefreshCw, RotateCcw, Trash2, XCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+
+interface SyncDiff {
+  added: number;
+  changed: number;
+  removed: number;
+  unchanged: number;
+  blocked: number;
+  duplicate: number;
+}
+
+interface SyncPreview {
+  snapshotId: string;
+  channelCount: number;
+  diff: SyncDiff;
+}
+
+interface SyncSnapshotSummary {
+  _id: string;
+  status: 'preview' | 'applied' | 'rolled_back';
+  createdAt: string;
+  diff: SyncDiff;
+}
 
 interface M3USource {
   _id: string;
@@ -22,6 +44,8 @@ export default function M3USourcesPageShell() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', playlistUrl: '', epgUrl: '' });
+  const [previews, setPreviews] = useState<Record<string, SyncPreview | undefined>>({});
+  const [busySourceId, setBusySourceId] = useState<string | null>(null);
 
   const loadSources = useCallback(async () => {
     setLoading(true);
@@ -73,6 +97,44 @@ export default function M3USourcesPageShell() {
       );
     } catch {
       toast('تعذر اختبار مصدر M3U', 'error');
+    }
+  }
+
+  async function previewSource(source: M3USource) {
+    setBusySourceId(source._id);
+    try {
+      const response = await api.post(`/admin/m3u-sources/${source._id}/preview`);
+      const preview = response.data.data as SyncPreview;
+      setPreviews((current) => ({ ...current, [source._id]: preview }));
+      toast(
+        `Preview: +${preview.diff.added} إضافة، ${preview.diff.changed} تغيير، -${preview.diff.removed} حذف`,
+        'info',
+      );
+    } catch {
+      toast('تعذر إنشاء معاينة المزامنة', 'error');
+    } finally {
+      setBusySourceId(null);
+    }
+  }
+
+  async function rollbackSource(source: M3USource) {
+    setBusySourceId(source._id);
+    try {
+      const response = await api.get(`/admin/m3u-sources/${source._id}/snapshots?limit=10`);
+      const snapshots = (response.data.data || []) as SyncSnapshotSummary[];
+      const latestApplied = snapshots.find((snapshot) => snapshot.status === 'applied');
+      if (!latestApplied) {
+        toast('لا توجد مزامنة مطبقة قابلة للاسترجاع', 'info');
+        return;
+      }
+      if (!window.confirm(`استرجاع آخر مزامنة لمصدر «${source.name}»؟`)) return;
+      await api.post(`/admin/m3u-sources/${source._id}/rollback/${latestApplied._id}`);
+      toast('تم استرجاع القنوات إلى snapshot السابق', 'success');
+      await loadSources();
+    } catch {
+      toast('تعذر استرجاع snapshot المزامنة', 'error');
+    } finally {
+      setBusySourceId(null);
     }
   }
 
@@ -191,10 +253,20 @@ export default function M3USourcesPageShell() {
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <button onClick={() => testSource(source)} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted"><Play className="h-3.5 w-3.5" /> اختبار</button>
-                <button onClick={() => syncSource(source)} disabled={source.syncStatus === 'syncing'} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} /> مزامنة الآن</button>
+                <button onClick={() => previewSource(source)} disabled={busySourceId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50"><Eye className="h-3.5 w-3.5" /> معاينة</button>
+                <button onClick={() => syncSource(source)} disabled={source.syncStatus === 'syncing' || busySourceId === source._id} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} /> مزامنة الآن</button>
+                <button onClick={() => rollbackSource(source)} disabled={busySourceId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50"><RotateCcw className="h-3.5 w-3.5" /> استرجاع</button>
                 <button onClick={() => toggleSource(source)} className="rounded-md border px-3 py-2 text-xs hover:bg-muted">{source.status === 'Active' ? 'إيقاف' : 'تفعيل'}</button>
                 <button onClick={() => deleteSource(source)} className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"><Trash2 className="h-3.5 w-3.5" /> حذف</button>
               </div>
+              {previews[source._id] && (
+                <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs">
+                  <p className="font-medium text-primary">معاينة جاهزة قبل التطبيق</p>
+                  <p className="mt-1 text-muted-foreground">
+                    +{previews[source._id]?.diff.added} إضافة · {previews[source._id]?.diff.changed} تغيير · -{previews[source._id]?.diff.removed} حذف · {previews[source._id]?.diff.unchanged} دون تغيير
+                  </p>
+                </div>
+              )}
             </div>
           ))}
         </div>

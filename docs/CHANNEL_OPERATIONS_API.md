@@ -63,6 +63,29 @@ Authorization: Bearer <admin-token>
 
 يعيد المسار عدد الهويات والقنوات المرتبطة وعدد الهويات متعددة المصادر وعدد المطابقات منخفضة الثقة. تتم المطابقة تلقائيًا عبر `tvg-id` الحقيقي بدرجة ثقة عالية، أو عبر الاسم والبلد بدرجة أقل. القنوات التي لا تملك tvg-id أو بلدًا لا تُدمج تلقائيًا مع قنوات أخرى؛ تُنشأ لها هوية منخفضة الثقة مرتبطة بمعرف المصدر حتى يراجعها المشرف.
 
+## Sync Preview وRollback
+
+تدعم إدارة M3U وXtream مسارات المشرف التالية:
+
+| المسار | الوظيفة |
+|---|---|
+| `POST /api/v1/admin/m3u-sources/:id/preview` | تنزيل وتحليل المصدر وحساب `added/changed/removed/unchanged/blocked/duplicate` دون تطبيق التغييرات. |
+| `POST /api/v1/admin/xtream-sources/:id/preview` | معاينة تغييرات Live TV في Xtream دون تطبيقها على الكتالوج. |
+| `GET /api/v1/admin/{m3u-sources|xtream-sources}/:id/snapshots` | عرض سجل snapshots المختصر، دون تضمين القنوات أو الروابط. |
+| `POST /api/v1/admin/{m3u-sources|xtream-sources}/:id/rollback/:snapshotId` | استرجاع آخر snapshot مطبق، مع التحقق من نوع المصدر وملكيته. |
+
+تُحفظ حالة القنوات السابقة داخل snapshot مع تشفير `channelUrl` at-rest، وتُحذف snapshots تلقائيًا بعد 14 يومًا. المزامنة العادية تنشئ snapshot قبل التطبيق وتوسمه `applied` بعد نجاح التحديث. لا يمكن استرجاع snapshot ما لم يكن مطبقًا، وتُسجل عمليات preview وrollback في audit log.
+
+## EPG Coverage وUnmatched Console
+
+يعرض `GET /api/v1/admin/stats/epg-coverage` إجمالي القنوات، القنوات ذات البرنامج المطابق، النسبة الكلية، والقنوات غير المطابقة لكل مصدر EPG. الاستجابة تعرض `channelId` واسم القناة و`tvgId` فقط، ولا تعرض روابط القنوات أو أسرار المصادر. يستخدم المشرف هذه البيانات لإصلاح tvg-id أو إنشاء alias آمن قبل اعتماد دليل المصدر.
+
+## QoE Telemetry المجهولة
+
+يرسل تطبيق TV بعد محاولة التشغيل إلى `POST /api/v1/channels/:id/report-playback-event` الحقول الاختيارية التالية: `eventType` (`startup_success` أو `startup_failure`)، `startupMs`، `rebufferCount`، `fallbackUsed`، `fallbackSucceeded`، `errorCode`، `platform`، و`appVersion`. يفرض الخادم حدودًا للأرقام وحدًا أقصى 12 حدثًا لكل قناة لكل principal أو عنوان IP في الدقيقة.
+
+لا يحفظ هذا المسار `deviceId` أو عنوان IP أو session ID أو user-agent أو stream URL؛ تُستخدم هوية الطلب في الذاكرة فقط لخفض الضوضاء. يعيد الخادم `202 Accepted` بعد التخزين الناجح. يعرض `GET /api/v1/admin/stats/playback-quality?days=7` ملخصًا يوميًا مجهولًا لزمن البدء، نسبة نجاح البدء، rebuffer، نجاح التحويل إلى البديل، وأكثر أكواد الخطأ شيوعًا.
+
 ## رؤوس المصدر في Failover
 
 عند ترقية بديل إلى المصدر الأساسي، يمكن للخادم حفظ `user-agent` و`referrer` داخليًا. تُمرر هذه القيم داخل playback token المشفر فقط، ثم يستخدمها proxy عند الاتصال بالمصدر. لا تظهر هذه القيم في استجابات القنوات أو قوائم M3U/JSON، وتُرفض قيم headers التي تحتوي على CRLF أو تتجاوز حدود الطول.

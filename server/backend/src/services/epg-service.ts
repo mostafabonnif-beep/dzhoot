@@ -33,6 +33,22 @@ interface ParsedProgram {
   language: string | null;
 }
 
+interface EpgCoverageItem {
+  source: string;
+  coveredChannelCount: number;
+  matchedChannelCount: number;
+  coveragePercent: number;
+  unmatchedChannels: Array<{ channelId: string; name: string; tvgId: string | null }>;
+}
+
+interface EpgCoverageStats {
+  totalSystemChannels: number;
+  matchedSystemChannels: number;
+  overallCoveragePercent: number;
+  unmatchedChannelCount: number;
+  sources: EpgCoverageItem[];
+}
+
 interface EpgStats {
   totalPrograms: number;
   channelsWithEpg: number;
@@ -509,6 +525,56 @@ export class EpgService {
   }
 
   // ─── Stats ──────────────────────────────────────────────
+
+  async getCoverage(): Promise<EpgCoverageStats> {
+    const [channels, programIds, sources] = await Promise.all([
+      Channel.find({ ownerId: null }).select('channelId channelName tvgId metadata').lean(),
+      EpgProgram.distinct('channelEpgId'),
+      this.discoverEpgSources(),
+    ]);
+    const programIdSet = new Set(programIds.map((id: any) => String(id).toLowerCase()));
+    const channelByIdentifier = new Map<string, any>();
+    for (const channel of channels as any[]) {
+      for (const identifier of [channel.tvgId, channel.channelId].filter(Boolean)) {
+        channelByIdentifier.set(String(identifier).toLowerCase(), channel);
+      }
+    }
+
+    const coverageSources = sources.map((source) => {
+      const identifiers = [...new Set(source.coveredChannelIds.map((id) => String(id).toLowerCase()))];
+      const matchedIdentifiers = identifiers.filter((id) => programIdSet.has(id));
+      const unmatchedChannels = identifiers
+        .filter((id) => !programIdSet.has(id))
+        .map((id) => channelByIdentifier.get(id))
+        .filter(Boolean)
+        .slice(0, 100)
+        .map((channel: any) => ({
+          channelId: String(channel.channelId),
+          name: String(channel.channelName || ''),
+          tvgId: channel.tvgId ? String(channel.tvgId) : null,
+        }));
+      return {
+        source: source.source,
+        coveredChannelCount: identifiers.length,
+        matchedChannelCount: matchedIdentifiers.length,
+        coveragePercent: identifiers.length === 0 ? 0 : Math.round((matchedIdentifiers.length / identifiers.length) * 100),
+        unmatchedChannels,
+      };
+    });
+
+    const matchedSystemChannels = channels.filter((channel: any) =>
+      [channel.tvgId, channel.channelId].filter(Boolean).some((id: any) => programIdSet.has(String(id).toLowerCase())),
+    ).length;
+    const unmatchedChannelCount = Math.max(0, channels.length - matchedSystemChannels);
+
+    return {
+      totalSystemChannels: channels.length,
+      matchedSystemChannels,
+      overallCoveragePercent: channels.length === 0 ? 0 : Math.round((matchedSystemChannels / channels.length) * 100),
+      unmatchedChannelCount,
+      sources: coverageSources,
+    };
+  }
 
   async getStats(): Promise<EpgStats> {
     const [totalPrograms, distinctChannels, totalSystemChannels] = await Promise.all([

@@ -14,7 +14,7 @@ import {
   ExternalLink,
   Radio,
 } from 'lucide-react';
-import api, { getChannelOperations, type ChannelOperationsData } from '@/lib/api';
+import api, { getChannelOperations, getEpgCoverage, getPlaybackQuality, type ChannelOperationsData, type EpgCoverageData, type PlaybackQualityData } from '@/lib/api';
 
 interface DashboardStats {
   channels: { total: number; active: number; inactive: number };
@@ -70,6 +70,8 @@ export default function AdminDashboard() {
   const [config, setConfig] = useState<ConfigDefaults | null>(null);
   const [streamHealth, setStreamHealth] = useState<StreamHealthData | null>(null);
   const [channelOperations, setChannelOperations] = useState<ChannelOperationsData | null>(null);
+  const [epgCoverage, setEpgCoverage] = useState<EpgCoverageData | null>(null);
+  const [playbackQuality, setPlaybackQuality] = useState<PlaybackQualityData | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -85,11 +87,13 @@ export default function AdminDashboard() {
 
     async function fetchStats() {
       try {
-        const [statsRes, configRes, healthRes, operationsRes] = await Promise.all([
+        const [statsRes, configRes, healthRes, operationsRes, coverageRes, qualityRes] = await Promise.all([
           api.get('/admin/stats/detailed', { signal: controller.signal }),
           api.get('/config/defaults', { signal: controller.signal }),
           api.get('/admin/stats/stream-health', { signal: controller.signal }).catch(() => null),
           getChannelOperations(controller.signal).catch(() => null),
+          getEpgCoverage(controller.signal).catch(() => null),
+          getPlaybackQuality(controller.signal).catch(() => null),
         ]);
         if (controller.signal.aborted) return;
         const res = statsRes;
@@ -101,6 +105,12 @@ export default function AdminDashboard() {
         }
         if (operationsRes) {
           setChannelOperations(operationsRes);
+        }
+        if (coverageRes) {
+          setEpgCoverage(coverageRes);
+        }
+        if (qualityRes) {
+          setPlaybackQuality(qualityRes);
         }
         const data = res.data?.data || res.data;
 
@@ -355,6 +365,56 @@ export default function AdminDashboard() {
                 {channelOperations.epg.lastRefreshErrorCount}
               </p>
             </div>
+          </div>
+        </Link>
+      )}
+
+      {epgCoverage && (
+        <section className="brand-surface overflow-hidden rounded-3xl border border-border/70">
+          <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2">
+            <div>
+              <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">تغطية EPG ومطابقة القنوات</h2>
+              <p className="mt-1 text-xs text-muted-foreground">القنوات غير المطابقة تحتاج tvg-id صحيحًا أو alias يدويًا قبل اعتماد الدليل.</p>
+            </div>
+            <Link href="/admin/epg" className="text-xs text-primary hover:underline">فتح إدارة EPG</Link>
+          </div>
+          <div className="grid gap-4 p-4 md:grid-cols-4">
+            <div><p className="text-xs text-muted-foreground">التغطية الكلية</p><p className="mt-1 text-2xl font-display font-bold text-primary">{epgCoverage.overallCoveragePercent}%</p></div>
+            <div><p className="text-xs text-muted-foreground">مطابقة القنوات</p><p className="mt-1 text-2xl font-display font-bold">{epgCoverage.matchedSystemChannels}/{epgCoverage.totalSystemChannels}</p></div>
+            <div><p className="text-xs text-muted-foreground">غير مطابقة</p><p className="mt-1 text-2xl font-display font-bold text-signal-red">{epgCoverage.unmatchedChannelCount}</p></div>
+            <div><p className="text-xs text-muted-foreground">مصادر الدليل</p><p className="mt-1 text-2xl font-display font-bold">{epgCoverage.sources.length}</p></div>
+          </div>
+          <div className="grid gap-3 border-t border-border p-4 md:grid-cols-2">
+            {epgCoverage.sources.slice(0, 6).map((source) => (
+              <div key={source.source} className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="truncate font-medium" dir="ltr">{source.source}</span>
+                  <span className={source.coveragePercent >= 80 ? 'text-signal-green' : 'text-signal-red'}>{source.coveragePercent}%</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{source.matchedChannelCount}/{source.coveredChannelCount} مطابقة</p>
+                {source.unmatchedChannels.slice(0, 3).length > 0 && (
+                  <p className="mt-2 truncate text-xs text-signal-red">غير مطابقة: {source.unmatchedChannels.slice(0, 3).map((channel) => channel.name).join('، ')}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {playbackQuality && playbackQuality.summary.totalEvents > 0 && (
+        <Link href="/admin/stats" className="brand-surface interactive-lift block overflow-hidden rounded-3xl border border-border/70 hover:border-primary/30">
+          <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2">
+            <div>
+              <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">جودة التشغيل المجهولة</h2>
+              <p className="mt-1 text-xs text-muted-foreground">تجميع آخر {playbackQuality.windowDays} أيام، دون حفظ معرفات المستخدمين أو روابط البث.</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-4">
+            <div><p className="text-xs text-muted-foreground">نجاح بدء التشغيل</p><p className="mt-1 text-xl font-display font-bold text-signal-green">{playbackQuality.summary.startupSuccessRate ?? '—'}{playbackQuality.summary.startupSuccessRate === null ? '' : '%'}</p></div>
+            <div><p className="text-xs text-muted-foreground">متوسط زمن البدء</p><p className="mt-1 text-xl font-display font-bold">{playbackQuality.summary.avgStartupMs ?? '—'}<span className="text-xs font-normal text-muted-foreground"> مللي ثانية</span></p></div>
+            <div><p className="text-xs text-muted-foreground">متوسط rebuffer</p><p className="mt-1 text-xl font-display font-bold">{playbackQuality.summary.avgRebufferCount}</p></div>
+            <div><p className="text-xs text-muted-foreground">نجاح التحويل للبديل</p><p className="mt-1 text-xl font-display font-bold text-primary">{playbackQuality.summary.fallbackSuccessRate ?? '—'}{playbackQuality.summary.fallbackSuccessRate === null ? '' : '%'}</p></div>
           </div>
         </Link>
       )}

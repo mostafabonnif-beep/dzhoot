@@ -19,6 +19,7 @@ import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
 import com.dzhoof.iptv.domain.usecase.GetGuideProgramsUseCase
 import com.dzhoof.iptv.domain.usecase.GetPlaybackPositionUseCase
 import com.dzhoof.iptv.domain.usecase.ReportStreamPlayUseCase
+import com.dzhoof.iptv.domain.usecase.ReportPlaybackQoeUseCase
 import com.dzhoof.iptv.domain.usecase.ReportStreamStatusUseCase
 import com.dzhoof.iptv.domain.usecase.SavePlaybackPositionUseCase
 import com.dzhoof.iptv.domain.usecase.ToggleFavoriteUseCase
@@ -72,6 +73,7 @@ class PlayerViewModel @Inject constructor(
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase,
     private val reportStreamStatusUseCase: ReportStreamStatusUseCase,
     private val reportStreamPlayUseCase: ReportStreamPlayUseCase,
+    private val reportPlaybackQoeUseCase: ReportPlaybackQoeUseCase,
     private val channelUiMapper: ChannelUiMapper,
     private val channelHealthDao: ChannelHealthDao,
     private val thumbnailExtractor: ChannelThumbnailExtractor,
@@ -171,10 +173,52 @@ class PlayerViewModel @Inject constructor(
     private var stillWatchingJob: Job? = null
     private var inactivityJob: Job? = null
     private var playReportedForChannel: String? = null
+    private var playbackQoeChannelId: String? = null
+    private var playbackQoeStartedAt: Long = 0L
+    private var playbackQoeStartupReported = false
+    private var playbackQoeFallbackReported = false
+    private var playbackQoeRebufferCount = 0
+    private var playbackQoeFallbackUsed = false
     private var channelViewStartTime: Long = 0L
     private var sleepTimerDefaultMinutes: Int = 0
     private var sleepTimerDefaultApplied = false
     private var lastInteractionTime: Long = System.currentTimeMillis()
+
+    private fun beginPlaybackQoeSession(channelId: String) {
+        playbackQoeChannelId = channelId
+        playbackQoeStartedAt = System.currentTimeMillis()
+        playbackQoeStartupReported = false
+        playbackQoeFallbackReported = false
+        playbackQoeRebufferCount = 0
+        playbackQoeFallbackUsed = false
+    }
+
+    private fun reportPlaybackQoe(
+        eventType: String,
+        fallbackSucceeded: Boolean?,
+        errorCode: String? = null,
+        forceFallbackSnapshot: Boolean = false,
+    ) {
+        val channelId = playbackQoeChannelId ?: return
+        if (eventType == "startup_success" && !forceFallbackSnapshot && playbackQoeStartupReported) return
+        if (forceFallbackSnapshot && playbackQoeFallbackReported) return
+        if (eventType == "startup_success" && !forceFallbackSnapshot) playbackQoeStartupReported = true
+        if (forceFallbackSnapshot) playbackQoeFallbackReported = true
+        val startupMs = (System.currentTimeMillis() - playbackQoeStartedAt).coerceAtLeast(0L)
+        viewModelScope.launch {
+            reportPlaybackQoeUseCase(
+                ReportPlaybackQoeUseCase.Params(
+                    channelId = channelId,
+                    eventType = eventType,
+                    startupMs = startupMs,
+                    rebufferCount = playbackQoeRebufferCount,
+                    fallbackUsed = playbackQoeFallbackUsed,
+                    fallbackSucceeded = fallbackSucceeded,
+                    errorCode = errorCode,
+                )
+            )
+        }
+    }
 
     private fun logWatchDuration() {
         val state = _uiState.value
@@ -214,6 +258,7 @@ class PlayerViewModel @Inject constructor(
                             )
                         }
                         channelViewStartTime = System.currentTimeMillis()
+                        beginPlaybackQoeSession(channelId)
                         analyticsHelper.logEvent(
                             "channel_view",
                             "channel_id" to channel.id,
@@ -232,7 +277,7 @@ class PlayerViewModel @Inject constructor(
                         _uiState.update {
                             it.copy(
                                 isLoading = false,
-                                error = result.exception.message ?: "Failed to load channel"
+                                error = result.exception.message ?: "تعذر تحميل القناة"
                             )
                         }
                     }
@@ -410,6 +455,7 @@ class PlayerViewModel @Inject constructor(
             it.copy(isPlaying = isPlaying, position = position, duration = duration)
         }
         if (isPlaying) {
+            reportPlaybackQoe("startup_success", fallbackSucceeded = false)
             startPeriodicPositionSaving()
             startPlayReportTimer()
             if (!sleepTimerDefaultApplied && sleepTimerDefaultMinutes > 0) {
@@ -547,6 +593,10 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun updateBufferingState(isBuffering: Boolean) {
+        val wasBuffering = _uiState.value.isBuffering
+        if (isBuffering && !wasBuffering && playbackQoeStartupReported) {
+            playbackQoeRebufferCount = (playbackQoeRebufferCount + 1).coerceAtMost(1000)
+        }
         _uiState.update { it.copy(isBuffering = isBuffering) }
     }
 
@@ -802,6 +852,7 @@ class PlayerViewModel @Inject constructor(
                 when (result) {
                     is Result.Success -> {
                         val channel = result.data
+                        beginPlaybackQoeSession(channelId)
                         _uiState.update {
                             it.copy(
                                 channel = channelUiMapper.toUiModel(channel),
@@ -869,6 +920,9 @@ class PlayerViewModel @Inject constructor(
     // ── Stream Recovery & Dead-Stream Handling ─────────────────────
 
     fun onPlaybackError(error: String) {
+        if (!playbackQoeStartupReported) {
+            reportPlaybackQoe("startup_failure", fallbackSucceeded = false, errorCode = "playback_error")
+        }
         _uiState.update { it.copy(error = error, isPlaying = false) }
     }
 
@@ -888,6 +942,9 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun onRecovered() {
+        if (playbackQoeFallbackUsed) {
+            reportPlaybackQoe("startup_success", fallbackSucceeded = true, forceFallbackSnapshot = true)
+        }
         countdownJob?.cancel()
         _uiState.update {
             it.copy(
@@ -901,15 +958,25 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun onProxyFallback() {
+        playbackQoeFallbackUsed = true
         _uiState.update { it.copy(isUsingProxy = true) }
     }
 
     fun onAlternateFallback(streamUrl: String) {
+        playbackQoeFallbackUsed = true
         _uiState.update { it.copy(activeStreamUrl = streamUrl, isUsingProxy = false) }
     }
 
     fun onStreamDead(errorMessage: String) {
         val channelId = _uiState.value.channel?.id ?: return
+        if (!playbackQoeStartupReported || playbackQoeFallbackUsed) {
+            reportPlaybackQoe(
+                eventType = "startup_failure",
+                fallbackSucceeded = false,
+                errorCode = "stream_unavailable",
+                forceFallbackSnapshot = playbackQoeFallbackUsed,
+            )
+        }
         val channelName = _uiState.value.channel?.name ?: ""
         val category = _uiState.value.channel?.category ?: ""
 
@@ -927,7 +994,7 @@ class PlayerViewModel @Inject constructor(
                 isRecovering = false,
                 isPlaying = false,
                 isStreamDead = true,
-                deadStreamTitle = "Stream Unavailable",
+                deadStreamTitle = "البث غير متاح",
                 deadStreamExplanation = "",
                 error = null
             )

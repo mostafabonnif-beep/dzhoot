@@ -22,6 +22,7 @@ import com.dzhoof.iptv.data.model.dto.SeasonsResponse
 import com.dzhoof.iptv.data.model.dto.EpisodesResponse
 import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationRequest
 import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationResponse
+import com.dzhoof.iptv.data.model.dto.PlaybackQoeReport
 import com.dzhoof.iptv.data.model.dto.UnifiedSearchResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
@@ -164,6 +165,12 @@ interface FireVisionApiService {
     suspend fun reportStreamStatus(
         @Path("channelId") channelId: String,
         @Body report: StreamStatusReport
+    ): Response<Unit>
+
+    @POST("api/v1/channels/{channelId}/report-playback-event")
+    suspend fun reportPlaybackQoe(
+        @Path("channelId") channelId: String,
+        @Body report: PlaybackQoeReport
     ): Response<Unit>
 
     @POST("api/v1/channels/{channelId}/report-play")

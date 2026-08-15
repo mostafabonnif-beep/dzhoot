@@ -82,9 +82,9 @@ internal fun PlayerStateOverlays(
         label = "playerState"
     ) { state ->
         when (state) {
-            "loading" -> LoadingIndicator(message = "Loading channel...")
+            "loading" -> LoadingIndicator(message = "جارٍ تحميل القناة…")
             "error" -> ErrorState(
-                message = uiState.error ?: "Failed to load channel",
+                message = uiState.error ?: "تعذر تحميل القناة",
                 onRetry = onRetry
             )
             else -> { }

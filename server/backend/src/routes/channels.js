@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 const Channel = require('../models/Channel');
+const { recordPlaybackEvent } = require('../services/playback-event-service');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('./auth');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
@@ -27,6 +28,7 @@ const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 2000;
 // In-memory rate-limit maps for stream metrics reporting
 const reportStatusLimits = new Map();
 const reportPlayLimits = new Map();
+const qoeReportLimits = new Map();
 const healthSyncLimits = new Map();
 const flagLimits = new Map();
 
@@ -41,6 +43,11 @@ setInterval(
     for (const [key, ts] of reportPlayLimits) {
       if (now - ts > 60 * 1000) reportPlayLimits.delete(key);
     }
+    for (const [key, timestamps] of qoeReportLimits) {
+      const recent = timestamps.filter((ts) => now - ts <= 60 * 1000);
+      if (recent.length === 0) qoeReportLimits.delete(key);
+      else qoeReportLimits.set(key, recent);
+    }
     for (const [key, ts] of healthSyncLimits) {
       if (now - ts > 5 * 60 * 1000) healthSyncLimits.delete(key);
     }
@@ -50,6 +57,7 @@ setInterval(
     // Cap map sizes to prevent unbounded growth between cleanups
     if (reportStatusLimits.size > 50000) reportStatusLimits.clear();
     if (reportPlayLimits.size > 50000) reportPlayLimits.clear();
+    if (qoeReportLimits.size > 50000) qoeReportLimits.clear();
     if (healthSyncLimits.size > 50000) healthSyncLimits.clear();
     if (flagLimits.size > 50000) flagLimits.clear();
   },
@@ -937,6 +945,70 @@ router.post('/:id/report-status', requireTvOrSessionAuth, async (req, res) => {
   } catch (error) {
     console.error('Error reporting channel status:', error);
     res.status(500).json({ success: false, error: 'Failed to report channel status' });
+  }
+});
+
+// Anonymous QoE event — stores aggregate-friendly playback quality data only.
+// No device ID, IP address, stream URL, user agent, or session identifier is persisted.
+// Rate limit: at most 12 events per channel per authenticated principal/IP per minute.
+router.post('/:id/report-playback-event', requireTvOrSessionAuth, async (req, res) => {
+  try {
+    const {
+      eventType,
+      startupMs,
+      rebufferCount,
+      fallbackUsed,
+      fallbackSucceeded,
+      errorCode,
+      platform,
+      appVersion,
+    } = req.body || {};
+
+    if (!['startup_success', 'startup_failure'].includes(eventType)) {
+      return res.status(400).json({ success: false, error: 'eventType must be startup_success or startup_failure' });
+    }
+    if (startupMs !== undefined && startupMs !== null && (!Number.isFinite(Number(startupMs)) || Number(startupMs) < 0)) {
+      return res.status(400).json({ success: false, error: 'startupMs must be a non-negative number' });
+    }
+    if (rebufferCount !== undefined && (!Number.isFinite(Number(rebufferCount)) || Number(rebufferCount) < 0)) {
+      return res.status(400).json({ success: false, error: 'rebufferCount must be a non-negative number' });
+    }
+    if (fallbackUsed !== undefined && typeof fallbackUsed !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'fallbackUsed must be boolean' });
+    }
+    if (fallbackSucceeded !== undefined && fallbackSucceeded !== null && typeof fallbackSucceeded !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'fallbackSucceeded must be boolean or null' });
+    }
+
+    const channel = await Channel.findById(req.params.id).select('_id').lean();
+    if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
+
+    // The principal is used only as an in-memory throttle key and never reaches MongoDB.
+    const principal = req.user?.id?.toString() || req.headers['x-session-id']?.toString() || req.ip || 'anonymous';
+    const rateLimitKey = `qoe:${req.params.id}:${principal}`;
+    const now = Date.now();
+    const recent = (qoeReportLimits.get(rateLimitKey) || []).filter((timestamp) => now - timestamp <= 60 * 1000);
+    if (recent.length >= 12) {
+      return res.status(429).json({ success: false, error: 'Rate limit exceeded. Too many playback quality events.' });
+    }
+
+    await recordPlaybackEvent({
+      channelId: req.params.id,
+      eventType,
+      startupMs: startupMs === undefined || startupMs === null ? null : Math.min(Number(startupMs), 10 * 60 * 1000),
+      rebufferCount: rebufferCount === undefined ? 0 : Math.min(Math.floor(Number(rebufferCount)), 1000),
+      fallbackUsed: fallbackUsed === true,
+      fallbackSucceeded: fallbackUsed === true ? fallbackSucceeded ?? eventType === 'startup_success' : null,
+      errorCode,
+      platform,
+      appVersion,
+    });
+    qoeReportLimits.set(rateLimitKey, [...recent, now]);
+
+    return res.status(202).json({ success: true, data: { accepted: true } });
+  } catch (error) {
+    console.error('Error recording playback quality event:', error);
+    return res.status(500).json({ success: false, error: 'Failed to record playback quality event' });
   }
 });
 
