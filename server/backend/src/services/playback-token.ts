@@ -9,9 +9,28 @@ export interface PlaybackTokenPayload {
   userId: string;
   channelListCode: string;
   streamUrl: string;
+  upstreamHeaders?: {
+    userAgent?: string;
+    referrer?: string;
+  };
   issuedAt: number;
   expiresAt: number;
   nonce: string;
+}
+
+function sanitizeHeader(value: unknown, maxLength = 512): string | undefined {
+  if (typeof value !== 'string' || !value || value.length > maxLength || /[\r\n]/.test(value)) {
+    return undefined;
+  }
+  return value;
+}
+
+function sanitizeUpstreamHeaders(headers?: { userAgent?: string; referrer?: string }) {
+  if (!headers) return undefined;
+  const userAgent = sanitizeHeader(headers.userAgent);
+  const referrer = sanitizeHeader(headers.referrer, 2048);
+  if (!userAgent && !referrer) return undefined;
+  return { ...(userAgent ? { userAgent } : {}), ...(referrer ? { referrer } : {}) };
 }
 
 function getKey(): Buffer {
@@ -47,6 +66,10 @@ export function issuePlaybackToken(input: {
   userId: string;
   channelListCode: string;
   streamUrl: string;
+  upstreamHeaders?: {
+    userAgent?: string;
+    referrer?: string;
+  };
   ttlMs?: number;
 }): { token: string; expiresAt: number } {
   const now = Date.now();
@@ -57,6 +80,7 @@ export function issuePlaybackToken(input: {
     userId: String(input.userId),
     channelListCode: String(input.channelListCode).trim().toUpperCase(),
     streamUrl: validateStreamUrl(input.streamUrl),
+    upstreamHeaders: sanitizeUpstreamHeaders(input.upstreamHeaders),
     issuedAt: now,
     expiresAt: now + ttlMs,
     nonce: crypto.randomBytes(16).toString('hex'),

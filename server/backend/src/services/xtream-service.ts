@@ -11,6 +11,7 @@ import Episode from '../models/Episode';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
+import { reconcileChannelIdentities } from './channel-identity-service';
 
 const API_TIMEOUT_MS = 30000;
 
@@ -308,7 +309,14 @@ export async function syncXtreamSource(sourceId: string) {
     // Prune: deactivate channels/movies/series from this source that disappeared.
     await Channel.updateMany(
       { ownerId: null, 'metadata.xtreamSourceId': String(id), channelId: { $nin: [...liveIds] } },
-      { $set: { isActive: false } },
+      {
+        $set: {
+          isActive: false,
+          identityKey: null,
+          identityConfidence: null,
+          identityMatch: null,
+        },
+      },
     ).exec();
     await Movie.updateMany(
       { sourceId: id, externalId: { $nin: [...vodIds] } },
@@ -319,12 +327,13 @@ export async function syncXtreamSource(sourceId: string) {
       { $set: { isActive: false } },
     ).exec();
 
+    const identity = await reconcileChannelIdentities();
     source.stats = { channels, movies, series: seriesCount };
     source.syncStatus = 'idle';
     source.lastSyncAt = new Date();
     await source.save();
 
-    return { ok: true, stats: source.stats };
+    return { ok: true, stats: source.stats, identity };
   } catch (err: any) {
     source.syncStatus = 'error';
     source.lastError = redactSensitiveText(err);

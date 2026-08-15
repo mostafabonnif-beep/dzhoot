@@ -71,6 +71,9 @@ describe('GET /admin/stats/channel-operations', () => {
     expect(response.body.data.channels.failing).toBeGreaterThanOrEqual(1);
     expect(response.body.data.channels.withFallback).toBeGreaterThanOrEqual(1);
     expect(response.body.data.epg.totalPrograms).toBe(12);
+    expect(response.body.data.identities).toEqual(
+      expect.objectContaining({ total: expect.any(Number), multiSource: expect.any(Number) }),
+    );
     expect(response.body.data.sources).toEqual({ m3u: [], xtream: [] });
     expect(JSON.stringify(response.body)).not.toContain('healthy.m3u8');
   });

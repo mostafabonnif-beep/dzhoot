@@ -324,10 +324,18 @@ export default function AdminDashboard() {
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </div>
-          <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-4 p-4 md:grid-cols-7">
             <div>
               <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">قنوات الكتالوج</p>
               <p className="mt-1 text-xl font-display font-bold tabular-nums">{channelOperations.channels.total}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">هويات القنوات</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums">{channelOperations.identities.total}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">متعددة المصادر</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums text-primary">{channelOperations.identities.multiSource}</p>
             </div>
             <div>
               <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">لها بديل</p>

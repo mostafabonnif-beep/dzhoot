@@ -56,10 +56,27 @@ const channelSchema = new Schema<IChannelDocument>(
       type: String,
       default: '',
     },
-    tvgLogo: {
+    // Logical channel identity shared by equivalent entries across sources.
+    // channelId remains source-specific for backward compatibility.
+    identityKey: {
       type: String,
-      default: '',
+      default: null,
+      index: true,
     },
+    identityConfidence: {
+      type: Number,
+      min: 0,
+      max: 1,
+      default: null,
+    },
+    identityMatch: {
+      type: String,
+      enum: ['tvg-id', 'name-country', 'name', null],
+      default: null,
+    },
+    // Headers for the currently promoted stream; never serialized to clients.
+    activeUserAgent: { type: String, default: null },
+    activeReferrer: { type: String, default: null },
     order: {
       type: Number,
       default: 0,
@@ -160,6 +177,7 @@ const channelSchema = new Schema<IChannelDocument>(
 // Index for faster queries
 channelSchema.index({ channelGroup: 1, order: 1 });
 channelSchema.index({ channelName: 'text' });
+channelSchema.index({ ownerId: 1, identityKey: 1 });
 // channelId is unique PER OWNER (catalog = ownerId:null), not globally, so different
 // users can import the same channelId as their own private channels.
 channelSchema.index({ ownerId: 1, channelId: 1 }, { unique: true });

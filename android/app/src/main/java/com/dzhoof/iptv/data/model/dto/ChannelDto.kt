@@ -38,12 +38,27 @@ data class ChannelDto(
     val isActive: Boolean = true,
     val metadata: ChannelMetadataDto? = null,
     val catchup: ChannelCatchupDto? = null,
-    val alternateStreams: List<AlternateStreamDto>? = null
+    val alternateStreams: List<AlternateStreamDto>? = null,
+    val identityKey: String? = null,
+    val identityConfidence: Double? = null,
+    val identityMatch: String? = null,
+    val health: ChannelHealthDto? = null
 ) {
     /** Resolved logo URL: prefers tvgLogo, falls back to channelImg */
     val logoUrl: String?
         get() = tvgLogo?.takeIf { it.isNotEmpty() } ?: channelImg?.takeIf { it.isNotEmpty() }
 }
+
+data class ChannelHealthDto(
+    val status: String? = null,
+    val score: Int? = null,
+    val primaryStatus: String? = null,
+    val fallbackCount: Int? = null,
+    val successRate: Double? = null,
+    val responseTimeMs: Int? = null,
+    val lastCheckedAt: String? = null,
+    val recommendation: String? = null
+)
 
 data class ChannelMetadataDto(
     @SerializedName("language")

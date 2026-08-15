@@ -93,6 +93,7 @@ const CHANNEL_LIST_FIELDS = [
   'metadata.country metadata.language metadata.quality',
   'metadata.isWorking metadata.lastTested metadata.responseTime',
   'metadata.source metadata.xtreamStreamId',
+  'identityKey identityConfidence identityMatch',
   'catchup.type catchup.days',
   'flaggedBad.isFlagged flaggedBad.reason',
   'alternateStreams.streamUrl alternateStreams.quality',

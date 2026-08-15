@@ -392,6 +392,14 @@ private fun ChannelCardContent(
                 if (showHealth) {
                     HealthIndicatorDot(status = channel.healthStatus)
                 }
+                if (channel.serverHealthScore != null) {
+                    Text(
+                        text = "${channel.serverHealthScore}%",
+                        style = LabelBadge,
+                        color = OnVideo.copy(alpha = EmphasisMedium),
+                        maxLines = 1
+                    )
+                }
             }
         }
 

@@ -9,6 +9,7 @@ import { clubByChannelId, extractExtinfTitle, resolveChannelGroups } from './imp
 import { decryptSecret, encryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
+import { reconcileChannelIdentities } from './channel-identity-service';
 
 const PLAYLIST_TIMEOUT_MS = 30000;
 const MAX_PLAYLIST_BYTES = 50 * 1024 * 1024;
@@ -194,9 +195,17 @@ export async function syncM3USource(sourceId: string) {
         'metadata.m3uSourceId': String(source._id),
         channelId: { $nin: activeIds },
       },
-      { $set: { isActive: false } },
+      {
+        $set: {
+          isActive: false,
+          identityKey: null,
+          identityConfidence: null,
+          identityMatch: null,
+        },
+      },
     ).exec();
 
+    const identity = await reconcileChannelIdentities();
     const stats = {
       channels: clubbed.length,
       blocked: validation.blocked,
@@ -207,7 +216,7 @@ export async function syncM3USource(sourceId: string) {
     source.lastSyncAt = new Date();
     await source.save();
 
-    return { ok: true, stats };
+    return { ok: true, stats, identity };
   } catch (error: any) {
     source.syncStatus = 'error';
     source.lastError = redactSensitiveText(error);

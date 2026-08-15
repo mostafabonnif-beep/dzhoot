@@ -7,6 +7,16 @@ package com.dzhoof.iptv.domain.model
  * data source or UI framework. It contains only the essential information
  * needed by the business logic.
  */
+data class ChannelServerMetadata(
+    val identityKey: String? = null,
+    val identityConfidence: Double? = null,
+    val identityMatch: String? = null,
+    val healthStatus: String? = null,
+    val healthScore: Int? = null,
+    val fallbackCount: Int? = null,
+    val recommendation: String? = null
+)
+
 data class Channel(
     val id: String,
     val name: String,
@@ -21,7 +31,14 @@ data class Channel(
     /** Catch-up (timeshift) capability, e.g. "append", "timeshift" — null when unsupported. */
     val catchupType: String? = null,
     /** Provider's catch-up history window in days (null = server default). */
-    val catchupDays: Int? = null
+    val catchupDays: Int? = null,
+    val identityKey: String? = null,
+    val identityConfidence: Double? = null,
+    val identityMatch: String? = null,
+    val serverHealthStatus: String? = null,
+    val serverHealthScore: Int? = null,
+    val serverFallbackCount: Int? = null,
+    val serverRecommendation: String? = null
 ) {
     /** Whether the server advertises catch-up for this channel. */
     val supportsCatchup: Boolean
