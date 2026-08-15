@@ -82,6 +82,9 @@ class CatalogViewModel @Inject constructor(
             movieError = null,
             isLoadingMovie = false,
             selectedSeries = null,
+            selectedSeason = null,
+            seasons = emptyList(),
+            episodes = emptyList(),
         )
     }
 
@@ -91,6 +94,9 @@ class CatalogViewModel @Inject constructor(
             movieError = null,
             isLoadingMovie = true,
             selectedSeries = null,
+            selectedSeason = null,
+            seasons = emptyList(),
+            episodes = emptyList(),
         )
         viewModelScope.launch {
             when (val result = repository.getMovieById(movieId)) {
@@ -121,8 +127,10 @@ class CatalogViewModel @Inject constructor(
 
     fun selectSeries(series: Series) {
         _uiState.value = _uiState.value.copy(
+            selectedMovie = null,
             selectedSeries = series,
             selectedSeason = null,
+            movieError = null,
             seasons = emptyList(),
             episodes = emptyList(),
             isLoadingDetails = true,

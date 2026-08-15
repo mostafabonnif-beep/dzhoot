@@ -107,7 +107,7 @@ class SubscriptionViewModel @Inject constructor(
             "CODE_EXPIRED" -> "انتهت صلاحية هذا الكود."
             "PLAN_UNAVAILABLE" -> "الخطة المرتبطة بهذا الكود غير متاحة حاليًا."
             "INVALID_CODE" -> "كود التفعيل غير صالح."
-            else -> raw?.substringAfter(':', raw)?.trim().takeUnless { it.isNullOrBlank() } ?: fallback
+            else -> raw?.substringAfter(':')?.trim().takeUnless { it.isNullOrBlank() } ?: fallback
         }
     }
 
