@@ -71,7 +71,7 @@ internal fun ChannelsSection(
 ) {
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
     val dividerGap = if (isCompact) 14.dp else 10.dp
-    SettingsCard(title = "Channels", modifier = modifier) {
+    SettingsCard(title = "القنوات", modifier = modifier) {
         StreamHealthRow(scanProgress = scanProgress, onCheckLiveliness = onCheckLiveliness)
 
         Spacer(modifier = Modifier.height(dividerGap))
@@ -117,7 +117,7 @@ private fun StreamHealthRow(
                 } else 0f
 
                 Text(
-                    text = "Scanning channels...",
+                    text = "جارٍ فحص القنوات…",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -145,7 +145,7 @@ private fun StreamHealthRow(
                 }
             } else {
                 Text(
-                    text = "Stream Health",
+                    text = "صحة البث",
                     color = MaterialTheme.colorScheme.onSurface,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold
@@ -153,9 +153,9 @@ private fun StreamHealthRow(
                 Spacer(modifier = Modifier.height(2.dp))
                 StatusText(
                     text = if (scanProgress.total > 0)
-                        "Last scan: ${scanProgress.scanned}/${scanProgress.total} checked"
+                        "آخر فحص: تم التحقق من ${scanProgress.scanned}/${scanProgress.total}"
                     else
-                        "Scan channels to check if streams are online",
+                        "افحص القنوات للتحقق من عمل مصادر البث",
                     status = if (scanProgress.total > 0) Status.SUCCESS else Status.NEUTRAL
                 )
             }
@@ -175,7 +175,7 @@ private fun StreamHealthRow(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text(
-                    text = if (scanProgress.isScanning) "Scanning..." else "Check Liveness",
+                    text = if (scanProgress.isScanning) "جارٍ الفحص…" else "فحص الحالة",
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -192,7 +192,7 @@ private fun CacheRow(
     SettingRowLayout(
         text = {
             Text(
-                text = "Local Cache",
+                text = "التخزين المؤقت المحلي",
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold
@@ -204,13 +204,13 @@ private fun CacheRow(
                 exit = fadeOut(tween(DURATION_NORMAL, easing = EaseOutQuart))
             ) {
                 StatusText(
-                    text = "Cache cleared — refreshing channels",
+                    text = "تم مسح التخزين المؤقت — جارٍ تحديث القنوات",
                     status = Status.SUCCESS
                 )
             }
             if (!cacheCleared) {
                 Text(
-                    text = "Clear cached channels, guide data, and thumbnails",
+                    text = "مسح القنوات وبيانات الدليل والصور المخزنة محليًا",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -225,7 +225,7 @@ private fun CacheRow(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text(
-                    text = if (isClearingCache) "Clearing..." else "Clear Cache",
+                    text = if (isClearingCache) "جارٍ المسح…" else "مسح التخزين المؤقت",
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -242,7 +242,7 @@ private fun GuideDataRow(
     SettingRowLayout(
         text = {
             Text(
-                text = "Guide Data",
+                text = "بيانات الدليل",
                 color = MaterialTheme.colorScheme.onSurface,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold
@@ -254,13 +254,13 @@ private fun GuideDataRow(
                 exit = fadeOut(tween(DURATION_NORMAL, easing = EaseOutQuart))
             ) {
                 StatusText(
-                    text = "Guide data reset — schedule re-downloaded",
+                    text = "تمت إعادة ضبط الدليل — جارٍ تنزيل الجدول",
                     status = Status.SUCCESS
                 )
             }
             if (!guideReset) {
                 Text(
-                    text = "Purge the program guide and re-download the schedule",
+                    text = "حذف دليل البرامج وإعادة تنزيل الجدول",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -273,7 +273,7 @@ private fun GuideDataRow(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
                 Text(
-                    text = if (isResettingGuide) "Resetting..." else "Reset Guide",
+                    text = if (isResettingGuide) "جارٍ الإعادة…" else "إعادة ضبط الدليل",
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -288,14 +288,14 @@ private fun ResetAppDataRow(onResetAppData: () -> Unit) {
     SettingRowLayout(
         text = {
             Text(
-                text = "Reset App Data",
+                text = "إعادة ضبط بيانات التطبيق",
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold
             )
             Spacer(modifier = Modifier.height(2.dp))
             Text(
-                text = "Erase pairing, favorites, and all settings — like a fresh install",
+                text = "حذف الربط والمفضلة وجميع الإعدادات — مثل تثبيت جديد",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 style = MaterialTheme.typography.bodySmall
             )
@@ -306,7 +306,7 @@ private fun ResetAppDataRow(onResetAppData: () -> Unit) {
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
             ) {
                 Text(
-                    text = "Reset App",
+                    text = "إعادة ضبط التطبيق",
                     color = MaterialTheme.colorScheme.error,
                     fontWeight = FontWeight.SemiBold
                 )

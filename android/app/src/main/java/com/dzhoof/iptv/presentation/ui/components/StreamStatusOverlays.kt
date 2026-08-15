@@ -27,9 +27,9 @@ fun RecoveringOverlay(
     modifier: Modifier = Modifier
 ) {
     val statusMessage = when {
-        attempt <= 1 -> "Checking stream source..."
-        attempt == maxAttempts -> "Last attempt..."
-        else -> "Trying alternate connection..."
+        attempt <= 1 -> "جارٍ فحص مصدر البث…"
+        attempt == maxAttempts -> "المحاولة الأخيرة…"
+        else -> "جارٍ تجربة اتصال بديل…"
     }
 
     Box(
@@ -49,7 +49,7 @@ fun RecoveringOverlay(
                 strokeWidth = 3.dp
             )
             Text(
-                text = "Reconnecting... ($attempt/$maxAttempts)",
+                text = "جارٍ إعادة الاتصال… ($attempt/$maxAttempts)",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )
@@ -91,7 +91,7 @@ fun DeadStreamOverlay(
         ) {
             Icon(
                 imageVector = Icons.Default.Warning,
-                contentDescription = "Stream unavailable",
+                contentDescription = "البث غير متاح",
                 tint = MaterialTheme.colorScheme.error,
                 modifier = Modifier.size(48.dp)
             )
@@ -112,14 +112,14 @@ fun DeadStreamOverlay(
             }
             if (countdown > 0) {
                 Text(
-                    text = "Going back in $countdown...",
+                    text = "العودة خلال $countdown…",
                     style = MaterialTheme.typography.bodyMedium,
                     color = TextSecondary
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Press any button to stay",
+                text = "اضغط أي زر للبقاء هنا",
                 style = MaterialTheme.typography.labelSmall,
                 color = TextDim
             )
