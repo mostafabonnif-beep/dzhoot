@@ -8,6 +8,7 @@ import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.PlaybackAuthorization
 import com.dzhoof.iptv.domain.model.Season
 import com.dzhoof.iptv.domain.model.Series
+import com.dzhoof.iptv.domain.model.UnifiedSearchResults
 import com.dzhoof.iptv.domain.repository.CatalogRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -57,6 +58,17 @@ class CatalogViewModelTest {
     }
 
     @Test
+    fun `loads series details by id for direct search navigation`() = runTest {
+        val repository = FakeCatalogRepository(series = listOf(series), seasons = listOf(season))
+        val viewModel = CatalogViewModel(repository)
+        viewModel.selectSeriesById(series.id)
+        advanceUntilIdle()
+
+        assertEquals(series, viewModel.uiState.value.selectedSeries)
+        assertEquals(listOf(season), viewModel.uiState.value.seasons)
+    }
+
+    @Test
     fun `authorizes VOD playback through repository`() = runTest {
         val repository = FakeCatalogRepository(authorization = PlaybackAuthorization("/api/v1/tv/playback/token", 123L))
         val viewModel = CatalogViewModel(repository)
@@ -75,11 +87,17 @@ class CatalogViewModelTest {
     ) : CatalogRepository {
         var authorizedContent: Pair<String, String>? = null
 
+        override suspend fun searchCatalog(query: String): Result<UnifiedSearchResults> =
+            Result.Success(UnifiedSearchResults())
+
         override suspend fun getMovies(page: Int, limit: Int, search: String?): Result<CatalogPage<Movie>> =
             Result.Success(moviePage.copy(page = page))
 
         override suspend fun getSeries(page: Int, limit: Int, search: String?): Result<CatalogPage<Series>> =
             Result.Success(CatalogPage(series, series.size, page, limit))
+
+        override suspend fun getSeriesById(seriesId: String): Result<Series> =
+            Result.Success(series.firstOrNull { it.id == seriesId } ?: Series(id = seriesId, title = "Series"))
 
         override suspend fun getSeasons(seriesId: String): Result<List<Season>> = Result.Success(seasons)
 

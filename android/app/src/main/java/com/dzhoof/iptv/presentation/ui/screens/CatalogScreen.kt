@@ -29,6 +29,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,12 +55,20 @@ import com.dzhoof.iptv.presentation.viewmodel.CatalogViewModel
 fun CatalogScreen(
     onPlayMovie: (String, String) -> Unit,
     onPlayEpisode: (String, String) -> Unit,
+    initialSeriesId: String? = null,
+    initialSeriesTitle: String? = null,
     modifier: Modifier = Modifier,
     viewModel: CatalogViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
-    ScreenScaffold(title = "Movies & Series", modifier = modifier) {
+    LaunchedEffect(initialSeriesId) {
+        initialSeriesId?.takeIf { it.isNotBlank() }?.let { id ->
+            viewModel.selectSeriesById(id, initialSeriesTitle ?: "مسلسل")
+        }
+    }
+
+    ScreenScaffold(title = "الأفلام والمسلسلات", modifier = modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -114,21 +123,21 @@ private fun CatalogToolbar(
         FilterChip(
             selected = tab == CatalogTab.MOVIES,
             onClick = { onTabSelected(CatalogTab.MOVIES) },
-            label = { Text("Movies") },
+            label = { Text("أفلام") },
         )
         FilterChip(
             selected = tab == CatalogTab.SERIES,
             onClick = { onTabSelected(CatalogTab.SERIES) },
-            label = { Text("Series") },
+            label = { Text("مسلسلات") },
         )
         AppTextField(
             value = query,
             onValueChange = onQueryChanged,
-            placeholder = "Search titles",
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Search") },
+            placeholder = "ابحث في المحتوى",
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
             modifier = Modifier.weight(1f),
         )
-        Button(onClick = onSearch) { Text("Search") }
+        Button(onClick = onSearch) { Text("بحث") }
     }
 }
 
@@ -152,7 +161,7 @@ private fun CatalogContent(
     if (state.tab == CatalogTab.MOVIES && state.movies.isEmpty() ||
         state.tab == CatalogTab.SERIES && state.series.isEmpty()
     ) {
-        EmptyState(message = "No titles found")
+        EmptyState(message = "لم يتم العثور على محتوى")
         return
     }
 
@@ -219,7 +228,7 @@ private fun SeriesDetails(
 ) {
     if (series == null) return
     Row(verticalAlignment = Alignment.CenterVertically) {
-        OutlinedButton(onClick = onBack) { Text("Back") }
+        OutlinedButton(onClick = onBack) { Text("رجوع") }
         Spacer(modifier = Modifier.width(16.dp))
         Text(series.title, style = MaterialTheme.typography.headlineSmall)
     }
@@ -237,7 +246,7 @@ private fun SeriesDetails(
         return
     }
     if (seasons.isEmpty()) {
-        EmptyState(message = "No seasons found")
+        EmptyState(message = "لا توجد مواسم")
         return
     }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -251,9 +260,9 @@ private fun SeriesDetails(
     }
     Spacer(modifier = Modifier.height(16.dp))
     if (selectedSeason == null) {
-        Text("Select a season to view episodes")
+        Text("اختر موسمًا لعرض الحلقات")
     } else if (episodes.isEmpty()) {
-        EmptyState(message = "No episodes found")
+        EmptyState(message = "لا توجد حلقات")
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(episodes, key = { it.id }) { episode ->
@@ -312,7 +321,7 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
             )
             Spacer(modifier = Modifier.width(14.dp))
             Column {
-                Text("Episode ${episode.episodeNumber}: ${episode.title}", style = MaterialTheme.typography.titleMedium)
+                Text("الحلقة ${episode.episodeNumber}: ${episode.title}", style = MaterialTheme.typography.titleMedium)
                 episode.description?.takeIf { it.isNotBlank() }?.let {
                     Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }

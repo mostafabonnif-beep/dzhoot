@@ -65,6 +65,12 @@ data class SeriesPageResponse(
     val error: String? = null,
 )
 
+data class SeriesDetailResponse(
+    val success: Boolean = false,
+    val data: SeriesDto? = null,
+    val error: String? = null,
+)
+
 data class SeasonsResponse(
     val success: Boolean = false,
     val data: List<SeasonDto> = emptyList(),

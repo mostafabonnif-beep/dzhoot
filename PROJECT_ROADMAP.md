@@ -152,11 +152,11 @@ DZ HOOF لا يوفر قنوات أو أفلامًا أو اشتراكات جا�
 
 الهدف: تطبيق يعمل فعليًا مع خادم DZ HOOF.
 
-- [ ] إصلاح توافق package ID مع Firebase.
+- [x] إصلاح توافق package ID مع Firebase عبر `com.dzhoof.iptv` والتحقق الاختياري من `google-services.json` في CI/Release.
 
-- [ ] استبدال `BuildConfig` والاستيرادات القديمة.
+- [x] تثبيت `BuildConfig.API_BASE_URL` و`BuildConfig.FIREBASE_ENABLED` وإزالة الاعتماد التشغيلي على إعدادات Firebase غير الموجودة.
 
-- [ ] ضبط API URL عبر إعداد build بدل القيمة الثابتة.
+- [x] ضبط API URL عبر `dzhoofApiUrl` أو `DZHOOF_API_URL` مع فرض HTTPS.
 
 - [ ] اختبار Android TV وFire TV.
 
@@ -202,9 +202,9 @@ DZ HOOF لا يوفر قنوات أو أفلامًا أو اشتراكات جا�
 
 - [x] توثيق عقد API في `docs/CATALOG_SEARCH_API.md`.
 
-- [ ] ربط نتيجة المسلسل بصفحة تفاصيل/مواسم مباشرة بدلاً من فتح الكتالوج العام.
+- [x] ربط نتيجة المسلسل بصفحة تفاصيل/مواسم مباشرة بدلاً من فتح الكتالوج العام.
 
-- [ ] إضافة بطاقات Poster وصور المحتوى داخل نتائج البحث.
+- [x] إضافة بطاقات Poster وصور المحتوى داخل نتائج البحث.
 
 - [ ] اختبار Android على جهاز TV فعلي أو Emulator ضمن CI.
 

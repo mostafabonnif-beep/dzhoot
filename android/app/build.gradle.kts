@@ -50,7 +50,10 @@ android {
         require(configuredApiUrl.startsWith("https://")) {
             "DZHOOF_API_URL / dzhoofApiUrl must use HTTPS (got: $configuredApiUrl)"
         }
+        // Firebase is optional for local/debug builds because the real
+        // google-services.json is intentionally supplied only by CI/release.
         buildConfigField("String", "API_BASE_URL", "\"$configuredApiUrl\"")
+        buildConfigField("Boolean", "FIREBASE_ENABLED", googleServicesAvailable.toString())
         manifestPlaceholders["sentryDsn"] = System.getenv("SENTRY_DSN") ?: ""
         manifestPlaceholders["sentryEnvironment"] = "debug"
     }
