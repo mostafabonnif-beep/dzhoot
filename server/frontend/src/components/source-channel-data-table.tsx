@@ -21,6 +21,7 @@ import SelectionToolbar from '@/components/ui/selection-toolbar';
 import StatusDot from '@/components/ui/status-dot';
 import ChannelLogo from '@/components/ui/channel-logo';
 import type { SourceChannel } from '@/types/external-sources';
+import { useLocale } from '@/components/locale-provider';
 
 type SortField = 'name' | 'category' | 'country';
 type SortDir = 'asc' | 'desc';
@@ -50,6 +51,7 @@ export default function SourceChannelDataTable({
   onTestChannel,
   pageSize = 50,
 }: SourceChannelDataTableProps) {
+  const { t } = useLocale();
   const {
     isSelected,
     toggleOne,
@@ -68,6 +70,11 @@ export default function SourceChannelDataTable({
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const statusLabels: Record<string, string> = {
+    alive: t('sources.alive'),
+    dead: t('sources.dead'),
+    unknown: t('sources.unknown'),
+  };
 
   const categoryOptions = useMemo(() => {
     const set = new Set<string>();
@@ -205,8 +212,8 @@ export default function SourceChannelDataTable({
             setSearch(v);
             setPage(1);
           }}
-          placeholder="Search by name, category, or country..."
-          ariaLabel="Search channels"
+          placeholder={t('sources.searchPlaceholder')}
+          ariaLabel={t('sources.searchAria')}
           className="flex-1 max-w-md w-full"
         />
         {toolbarActions && (
@@ -227,7 +234,7 @@ export default function SourceChannelDataTable({
       {bannerSlot}
 
       <div className="overflow-x-auto">
-        <div role="table" aria-label="Channel management table" className="border border-border">
+        <div role="table" aria-label={t('sources.tableAria')} className="border border-border">
           <div role="rowgroup" className={headerGridCls}>
             <div role="columnheader" className="flex items-center justify-center">
               <button
@@ -237,7 +244,7 @@ export default function SourceChannelDataTable({
                     : selectMany(paginated.map((ch) => ch._uid))
                 }
                 className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Toggle page selection"
+                aria-label={t('sources.togglePageSelection')}
               >
                 {pageAllSelected ? (
                   <CheckSquare className="h-4 w-4 text-primary" />
@@ -250,13 +257,13 @@ export default function SourceChannelDataTable({
             <button
               role="columnheader"
               onClick={() => handleSort('name')}
-              aria-label="Sort by name"
+              aria-label={t('sources.sortName')}
               aria-sort={
                 sortField === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               }
               className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors text-left"
             >
-              Name <SortIcon field="name" />
+              {t('sources.name')} <SortIcon field="name" />
             </button>
             <div
               role="columnheader"
@@ -267,10 +274,10 @@ export default function SourceChannelDataTable({
             >
               <button
                 onClick={() => handleSort('category')}
-                aria-label="Sort by category"
+                aria-label={t('sources.sortCategory')}
                 className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors text-left"
               >
-                Category <SortIcon field="category" />
+                {t('sources.category')} <SortIcon field="category" />
               </button>
               <ColumnFilter
                 label=""
@@ -292,10 +299,10 @@ export default function SourceChannelDataTable({
             >
               <button
                 onClick={() => handleSort('country')}
-                aria-label="Sort by country"
+                aria-label={t('sources.sortCountry')}
                 className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors text-left"
               >
-                Country <SortIcon field="country" />
+                {t('sources.country')} <SortIcon field="country" />
               </button>
               <ColumnFilter
                 label=""
@@ -311,7 +318,7 @@ export default function SourceChannelDataTable({
             {showLiveness && (
               <span role="columnheader">
                 <ColumnFilter
-                  label="Status"
+                  label={t('sources.status')}
                   options={['alive', 'dead', 'unknown']}
                   selected={selectedStatuses}
                   onChange={(v) => {
@@ -323,7 +330,7 @@ export default function SourceChannelDataTable({
             )}
             <span role="columnheader" className="text-right">
               <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium ">
-                Actions
+                {t('sources.actions')}
               </span>
             </span>
           </div>
@@ -331,7 +338,7 @@ export default function SourceChannelDataTable({
           <div role="rowgroup" className="divide-y divide-border">
             {paginated.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                {search ? 'No channels match your search' : 'No channels found'}
+                {search ? t('sources.noSearchMatch') : t('sources.noChannels')}
               </div>
             ) : (
               paginated.map((ch) => {
@@ -393,14 +400,14 @@ export default function SourceChannelDataTable({
                           }`}
                         >
                           <StatusDot status={status} showLabel={false} size="sm" />
-                          {status}
+                          {statusLabels[status] || statusLabels.unknown}
                         </span>
                         {onTestChannel && (
                           <button
                             onClick={() => handleTestChannel(ch)}
                             disabled={testingChannelId === ch._uid}
                             className="flex items-center justify-center h-6 w-6 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                            title="Test stream"
+                            title={t('sources.testStream')}
                           >
                             {testingChannelId === ch._uid ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
@@ -416,8 +423,8 @@ export default function SourceChannelDataTable({
                       <button
                         onClick={() => onDetail(ch)}
                         className="flex items-center justify-center h-8 w-8 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label="View details"
-                        title="Channel info"
+                        aria-label={t('sources.viewDetails')}
+                        title={t('sources.channelInfo')}
                       >
                         <Eye className="h-4 w-4" />
                       </button>
@@ -425,8 +432,8 @@ export default function SourceChannelDataTable({
                         <button
                           onClick={() => onPlay(ch)}
                           className="flex items-center justify-center h-8 w-8 text-muted-foreground hover:text-primary transition-colors"
-                          aria-label="Preview stream"
-                          title="Preview stream"
+                          aria-label={t('sources.previewStream')}
+                          title={t('sources.previewStream')}
                         >
                           <Play className="h-4 w-4" />
                         </button>

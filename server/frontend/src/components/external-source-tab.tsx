@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useLocale } from '@/components/locale-provider';
 import type { SourceChannel, ChannelLiveness, Region } from '@/types/external-sources';
 import { regionDisplayName } from '@/types/external-sources';
 
@@ -27,6 +28,7 @@ export default function ExternalSourceTab({
   children,
 }: ExternalSourceTabProps) {
   const { toast } = useToast();
+  const { t } = useLocale();
   const [regions, setRegions] = useState<Region[]>([]);
   const [selectedRegion, setSelectedRegion] = useState(defaultRegion);
   const [channels, setChannels] = useState<SourceChannel[]>([]);
@@ -70,7 +72,7 @@ export default function ExternalSourceTab({
         (err.name === 'AbortError' || (err as { code?: string }).code === 'ERR_CANCELED')
       )
         return;
-      toast(`Failed to fetch ${sourceLabel} channels`, 'error');
+      toast(t('external.fetchFailed').replace('{source}', sourceLabel), 'error');
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
@@ -84,7 +86,7 @@ export default function ExternalSourceTab({
     <div className="space-y-4">
       {topSlot}
 
-      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Select Region</p>
+      <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">{t('external.selectRegion')}</p>
 
       {regionsLoading ? (
         <div className="flex items-center justify-center py-8">
@@ -115,7 +117,7 @@ export default function ExternalSourceTab({
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           <span className="ml-2 text-sm text-muted-foreground">
-            Fetching {sourceLabel} channels...
+            {t('external.fetching').replace('{source}', sourceLabel)}
           </span>
         </div>
       )}

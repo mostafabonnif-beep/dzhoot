@@ -283,7 +283,7 @@ class ChannelHealthScanner @Inject constructor(
                 channelId = channelId,
                 status = ChannelHealthStatus.OFFLINE.name,
                 lastCheckedAt = System.currentTimeMillis(),
-                errorMessage = "Cleartext HTTP not permitted"
+                errorMessage = "لا يُسمح باتصالات HTTP غير المشفرة"
             )
         }
 

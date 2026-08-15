@@ -7,6 +7,7 @@ import { proxyImageUrl } from '@/lib/image-proxy';
 import { useToast } from '@/hooks/use-toast';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import { useStreamPlayer } from '@/components/stream-player-context';
+import { useLocale } from '@/components/locale-provider';
 import ChannelDetailModal, { type ChannelField } from '@/components/channel-detail-modal';
 import ExternalSourceTab from '@/components/external-source-tab';
 import SourceChannelDataTable from '@/components/source-channel-data-table';
@@ -30,6 +31,7 @@ interface SourcesPageShellProps {
 }
 
 export default function SourcesPageShell({ mode }: SourcesPageShellProps) {
+  const { t } = useLocale();
   const [activeTab, setActiveTab] = useState<SourceTab>('pluto-tv');
   const { playStream } = useStreamPlayer();
   const [detailChannel, setDetailChannel] = useState<SourceChannel | null>(null);
@@ -42,38 +44,38 @@ export default function SourcesPageShell({ mode }: SourcesPageShellProps) {
     (ch: SourceChannel) => {
       playStream(
         {
-          name: ch.channelName || 'Stream Preview',
+          name: ch.channelName || t('sources.streamPreview'),
           url: ch.channelUrl,
           logo: ch.tvgLogo ? proxyImageUrl(ch.tvgLogo) : undefined,
         },
         { mode: 'direct-fallback' },
       );
     },
-    [playStream],
+    [playStream, t],
   );
 
   const detailFields: ChannelField[] = detailChannel
     ? [
-        { label: 'Stream URL', value: detailChannel.channelUrl },
-        ...(mode === 'admin' ? [{ label: 'Logo URL', value: detailChannel.tvgLogo }] : []),
-        { label: 'Category', value: detailChannel.groupTitle },
-        { label: 'Country', value: detailChannel.country },
-        ...(mode === 'admin' ? [{ label: 'Source', value: detailChannel.source }] : []),
-        { label: 'Codec', value: detailChannel.codec },
+        { label: t('sources.streamUrl'), value: detailChannel.channelUrl },
+        ...(mode === 'admin' ? [{ label: t('sources.logoUrl'), value: detailChannel.tvgLogo }] : []),
+        { label: t('sources.category'), value: detailChannel.groupTitle },
+        { label: t('sources.country'), value: detailChannel.country },
+        ...(mode === 'admin' ? [{ label: t('sources.source'), value: detailChannel.source }] : []),
+        { label: t('sources.codec'), value: detailChannel.codec },
         {
-          label: 'Bitrate',
+          label: t('sources.bitrate'),
           value: detailChannel.bitrate ? `${detailChannel.bitrate} kbps` : undefined,
         },
-        { label: 'Language', value: detailChannel.language },
+        { label: t('sources.language'), value: detailChannel.language },
         ...(mode === 'admin'
           ? [
               {
-                label: 'Votes',
+                label: t('sources.votes'),
                 value: detailChannel.votes != null ? String(detailChannel.votes) : undefined,
               },
-              { label: 'Homepage', value: detailChannel.homepage },
+              { label: t('sources.homepage'), value: detailChannel.homepage },
               {
-                label: 'Liveness',
+                label: t('sources.liveness'),
                 value: detailChannel.liveness
                   ? `${detailChannel.liveness.status}${detailChannel.liveness.responseTimeMs ? ` (${detailChannel.liveness.responseTimeMs}ms)` : ''}${detailChannel.liveness.error ? ` — ${detailChannel.liveness.error}` : ''}`
                   : undefined,
@@ -86,11 +88,11 @@ export default function SourcesPageShell({ mode }: SourcesPageShellProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">Other Sources</h1>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">{t('sources.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {mode === 'admin'
-            ? 'Import channels from free, ad-supported streaming services'
-            : 'Browse and import channels from free streaming services'}
+            ? t('sources.adminDescription')
+            : t('sources.userDescription')}
         </p>
       </div>
 
