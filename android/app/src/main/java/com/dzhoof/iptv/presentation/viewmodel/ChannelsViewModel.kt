@@ -141,8 +141,10 @@ class ChannelsViewModel @Inject constructor(
             }.collect { (result, healthList) ->
                 when (result) {
                     is Result.Success -> {
-                        val uiChannels = channelUiMapper.toUiModelsWithHealth(result.data, healthList)
-                            .map { enrichWithEpgIfReady(it) }
+                        val uiChannels = sortChannelsForTv(
+                            channelUiMapper.toUiModelsWithHealth(result.data, healthList)
+                                .map { enrichWithEpgIfReady(it) }
+                        )
 
                         // Only rebuild categories/logos when showing all channels (no filter).
                         // When a category is selected we show a filtered subset, but the full
@@ -392,6 +394,23 @@ class ChannelsViewModel @Inject constructor(
         _uiState.update { it.copy(error = null, errorType = ErrorType.NONE) }
     }
 
+    private fun healthRank(channel: ChannelUiModel): Int {
+        return when ((channel.serverHealthStatus ?: channel.healthStatus.name).lowercase()) {
+            "healthy" -> 3
+            "degraded" -> 2
+            "unknown" -> 1
+            else -> 0
+        }
+    }
+
+    private fun sortChannelsForTv(channels: List<ChannelUiModel>): List<ChannelUiModel> =
+        channels.sortedWith(
+            compareByDescending<ChannelUiModel> { it.isFavorite }
+                .thenByDescending { healthRank(it) }
+                .thenByDescending { it.serverHealthScore ?: -1 }
+                .thenBy { it.name.lowercase() }
+        )
+
     /**
      * Personalized "For You": channels from the categories the user watches
      * most (weighted by how recently/often they appear in [recentlyWatched]),
@@ -417,7 +436,12 @@ class ChannelsViewModel @Inject constructor(
             .asSequence()
             .filter { it.id !in recentIds }
             .filter { (categoryWeight[it.category.ifBlank { "Other" }] ?: 0) > 0 }
-            .sortedByDescending { categoryWeight[it.category.ifBlank { "Other" }] ?: 0 }
+            .sortedWith(
+                compareByDescending<ChannelUiModel> { categoryWeight[it.category.ifBlank { "Other" }] ?: 0 }
+                    .thenByDescending { it.isFavorite }
+                    .thenByDescending { healthRank(it) }
+                    .thenByDescending { it.serverHealthScore ?: -1 }
+            )
             .take(FOR_YOU_LIMIT)
             .toList()
     }

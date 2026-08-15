@@ -10,6 +10,7 @@ import { decryptSecret, encryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
 import { reconcileChannelIdentities } from './channel-identity-service';
+import { createSyncPreview, markSnapshotApplied } from './sync-snapshot-service';
 
 const PLAYLIST_TIMEOUT_MS = 30000;
 const MAX_PLAYLIST_BYTES = 50 * 1024 * 1024;
@@ -163,6 +164,46 @@ export async function testM3UConnection(url: string) {
   }
 }
 
+async function prepareM3USync(source: any) {
+  const playlistUrl = decryptSecret(source.playlistUrlEncrypted);
+  const { content } = await downloadText(playlistUrl);
+  const parsed = parseM3U(content, String(source._id));
+  const validation = await validateUrls(parsed.map((channel) => channel.channelUrl));
+  const safeIndexes = new Set(validation.safe.map((entry) => entry.index));
+  const safeChannels = parsed.filter((_, index) => safeIndexes.has(index));
+  const clubbed = clubByChannelId(safeChannels);
+  await resolveChannelGroups(clubbed);
+  return {
+    clubbed,
+    blocked: validation.blocked,
+    duplicates: Math.max(0, safeChannels.length - clubbed.length),
+  };
+}
+
+export async function previewM3USource(sourceId: string, createdBy?: string | null) {
+  const source = await M3USource.findById(sourceId).exec();
+  if (!source) throw new Error('M3U source not found');
+  if (source.status !== 'Active') throw new Error('M3U source is inactive');
+  if (source.syncStatus === 'syncing') throw new Error('Sync already in progress');
+  const prepared = await prepareM3USync(source);
+  const preview = await createSyncPreview({
+    sourceType: 'm3u',
+    sourceId: String(source._id),
+    nextChannels: prepared.clubbed,
+    blocked: prepared.blocked,
+    duplicate: prepared.duplicates,
+    createdBy,
+  });
+  return {
+    ...preview,
+    stats: {
+      channels: prepared.clubbed.length,
+      blocked: prepared.blocked,
+      duplicates: prepared.duplicates,
+    },
+  };
+}
+
 export async function syncM3USource(sourceId: string) {
   const source = await M3USource.findById(sourceId).exec();
   if (!source) throw new Error('M3U source not found');
@@ -174,15 +215,15 @@ export async function syncM3USource(sourceId: string) {
   await source.save();
 
   try {
-    const playlistUrl = decryptSecret(source.playlistUrlEncrypted);
-    const { content } = await downloadText(playlistUrl);
-    const parsed = parseM3U(content, String(source._id));
-    const validation = await validateUrls(parsed.map((channel) => channel.channelUrl));
-    const safeIndexes = new Set(validation.safe.map((entry) => entry.index));
-    const safeChannels = parsed.filter((_, index) => safeIndexes.has(index));
-
-    const clubbed = clubByChannelId(safeChannels);
-    await resolveChannelGroups(clubbed);
+    const prepared = await prepareM3USync(source);
+    const clubbed = prepared.clubbed;
+    const preview = await createSyncPreview({
+      sourceType: 'm3u',
+      sourceId: String(source._id),
+      nextChannels: clubbed,
+      blocked: prepared.blocked,
+      duplicate: prepared.duplicates,
+    });
 
     for (const channel of clubbed) {
       await upsertChannel(source._id, channel);
@@ -206,10 +247,11 @@ export async function syncM3USource(sourceId: string) {
     ).exec();
 
     const identity = await reconcileChannelIdentities();
+    await markSnapshotApplied(preview.snapshotId);
     const stats = {
       channels: clubbed.length,
-      blocked: validation.blocked,
-      duplicates: Math.max(0, safeChannels.length - clubbed.length),
+      blocked: prepared.blocked,
+      duplicates: prepared.duplicates,
     };
     source.stats = stats;
     source.syncStatus = 'idle';
@@ -238,6 +280,7 @@ module.exports = {
   parseM3U,
   testM3UConnection,
   syncM3USource,
+  previewM3USource,
   createM3USourceSecrets,
   decryptSecret,
 };

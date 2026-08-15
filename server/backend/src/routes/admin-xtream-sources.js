@@ -4,7 +4,16 @@ const mongoose = require('mongoose');
 const XtreamSource = require('../models/XtreamSource');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx, redactSensitiveText } = require('../services/audit-log');
-const { testXtreamConnection, syncXtreamSource, encryptSecret } = require('../services/xtream-service');
+const {
+  testXtreamConnection,
+  syncXtreamSource,
+  previewXtreamSource,
+  encryptSecret,
+} = require('../services/xtream-service');
+const {
+  rollbackSyncSnapshot,
+  listSyncSnapshots,
+} = require('../services/sync-snapshot-service');
 
 // Admin-only Xtream source management: /api/v1/admin/xtream-sources
 router.use(requireAuth);
@@ -99,6 +108,64 @@ router.post('/:id/test', async (req, res) => {
     const safeError = redactSensitiveText(err);
     console.error('[xtream] test error:', safeError);
     return res.status(500).json({ success: false, error: safeError || 'Test failed' });
+  }
+});
+
+// POST /:id/preview — preview live-channel changes without applying them
+router.post('/:id/preview', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const source = await XtreamSource.findById(id).lean();
+    if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+    const result = await previewXtreamSource(String(id), String(req.user?.id || ''));
+    audit({
+      ...reqCtx(req),
+      action: 'XTREAM_SOURCE_PREVIEW',
+      resource: 'XtreamSource',
+      resourceId: String(id),
+      changes: { after: result.diff },
+    });
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[xtream] preview error:', redactSensitiveText(err));
+    return res.status(500).json({ success: false, error: 'Xtream preview failed' });
+  }
+});
+
+router.get('/:id/snapshots', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const snapshots = await listSyncSnapshots('xtream', String(id), Number(req.query.limit) || 10);
+    return res.json({ success: true, data: snapshots });
+  } catch (err) {
+    console.error('[xtream] snapshots error:', redactSensitiveText(err));
+    return res.status(500).json({ success: false, error: 'Failed to fetch sync snapshots' });
+  }
+});
+
+router.post('/:id/rollback/:snapshotId', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id || !mongoose.Types.ObjectId.isValid(req.params.snapshotId)) {
+      return res.status(400).json({ success: false, error: 'Invalid source or snapshot id' });
+    }
+    const result = await rollbackSyncSnapshot(req.params.snapshotId);
+    if (result.sourceType !== 'xtream' || result.sourceId !== String(id)) {
+      return res.status(409).json({ success: false, error: 'Snapshot does not belong to this source' });
+    }
+    audit({
+      ...reqCtx(req),
+      action: 'XTREAM_SOURCE_ROLLBACK',
+      resource: 'XtreamSource',
+      resourceId: String(id),
+      changes: { after: { snapshotId: req.params.snapshotId, restoredChannels: result.restoredChannels } },
+    });
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[xtream] rollback error:', redactSensitiveText(err));
+    return res.status(500).json({ success: false, error: 'Xtream rollback failed' });
   }
 });
 

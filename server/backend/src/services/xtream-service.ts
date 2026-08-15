@@ -12,6 +12,7 @@ import { encryptSecret, decryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
 import { reconcileChannelIdentities } from './channel-identity-service';
+import { createSyncPreview, markSnapshotApplied } from './sync-snapshot-service';
 
 const API_TIMEOUT_MS = 30000;
 
@@ -215,6 +216,53 @@ async function syncSeriesEpisodes(sourceId: mongoose.Types.ObjectId, seriesDoc: 
   }
 }
 
+function liveChannelSnapshot(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials) {
+  return {
+    channelId: `xt:${String(sourceId)}:${item.stream_id}`,
+    channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
+    channelUrl: liveUrl(creds, item.stream_id),
+    channelImg: item.stream_icon || '',
+    channelGroup: group || 'Uncategorized',
+    tvgId: item.epg_channel_id || '',
+    tvgName: String(item.name || '').trim(),
+    order: Number(item.num) || 0,
+    metadata: {
+      source: 'xtream',
+      xtreamSourceId: String(sourceId),
+      xtreamStreamId: Number(item.stream_id),
+    },
+    catchup: { type: 'timeshift', days: XTREAM_TIMESHIFT_DAYS },
+  };
+}
+
+export async function previewXtreamSource(sourceId: string, createdBy?: string | null) {
+  const source = await XtreamSource.findById(sourceId).exec();
+  if (!source) throw new Error('Xtream source not found');
+  if (source.status !== 'Active') throw new Error('Xtream source is inactive');
+  if (source.syncStatus === 'syncing') throw new Error('Sync already in progress');
+
+  const creds: XtreamCredentials = {
+    serverUrl: source.serverUrl,
+    username: decryptSecret(source.usernameEncrypted),
+    password: decryptSecret(source.passwordEncrypted),
+  };
+  const [liveCats, liveStreams] = await Promise.all([
+    apiGet(creds, 'get_live_categories').catch(() => []),
+    apiGet(creds, 'get_live_streams'),
+  ]);
+  const liveCatMap = await mapCategories(liveCats);
+  const channels = (Array.isArray(liveStreams) ? liveStreams : []).map((item) =>
+    liveChannelSnapshot(source._id, item, liveCatMap.get(String(item.category_id)) || 'Uncategorized', creds),
+  );
+  const preview = await createSyncPreview({
+    sourceType: 'xtream',
+    sourceId: String(source._id),
+    nextChannels: channels,
+    createdBy,
+  });
+  return { ...preview, scope: 'live', stats: { channels: channels.length } };
+}
+
 async function mapCategories(items: any[]) {
   const map = new Map<string, string>();
   for (const c of Array.isArray(items) ? items : []) {
@@ -261,6 +309,13 @@ export async function syncXtreamSource(sourceId: string) {
 
     const liveCatMap = await mapCategories(liveCats);
     const vodCatMap = await mapCategories(vodCats);
+    const livePreview = await createSyncPreview({
+      sourceType: 'xtream',
+      sourceId: String(id),
+      nextChannels: (Array.isArray(liveStreams) ? liveStreams : []).map((item) =>
+        liveChannelSnapshot(id, item, liveCatMap.get(String(item.category_id)) || 'Uncategorized', creds),
+      ),
+    });
     const seriesCatMap = await mapCategories(seriesCats);
 
     // Live channels
@@ -328,6 +383,7 @@ export async function syncXtreamSource(sourceId: string) {
     ).exec();
 
     const identity = await reconcileChannelIdentities();
+    await markSnapshotApplied(livePreview.snapshotId);
     source.stats = { channels, movies, series: seriesCount };
     source.syncStatus = 'idle';
     source.lastSyncAt = new Date();
@@ -346,6 +402,7 @@ module.exports = {
   buildXtreamApiUrl,
   testXtreamConnection,
   syncXtreamSource,
+  previewXtreamSource,
   encryptSecret,
   decryptSecret,
 };

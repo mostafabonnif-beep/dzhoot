@@ -9,6 +9,7 @@ import request from 'supertest';
 import express from 'express';
 import mongoose from 'mongoose';
 import Channel from '../models/Channel';
+import PlaybackEvent from '../models/PlaybackEvent';
 
 // Pass-through auth middleware
 jest.mock('../middleware/requireTvOrSessionAuth', () => ({
@@ -194,7 +195,75 @@ describe('POST /channels/:id/report-play', () => {
   });
 });
 
-// ─── POST /channels/health-sync ─────────────────────────────────────────────
+// ─── POST /channels/:id/report-playback-event ────────────────────────────────
+
+describe('POST /channels/:id/report-playback-event', () => {
+  const app = buildApp();
+
+  it('validates the event type and numeric fields', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-playback-event`)
+      .send({ eventType: 'rebuffer', startupMs: -1 });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('stores only the anonymous QoE event fields', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-playback-event`)
+      .send({
+        eventType: 'startup_success',
+        startupMs: 1450,
+        rebufferCount: 2,
+        fallbackUsed: true,
+        fallbackSucceeded: true,
+        errorCode: 'ignored-on-success',
+        platform: 'android_tv',
+        appVersion: '1.2.3',
+        deviceId: 'must-not-be-stored',
+        streamUrl: 'https://secret.example/stream.m3u8',
+      });
+    expect(res.status).toBe(202);
+    expect(res.body.data.accepted).toBe(true);
+
+    const event: any = await PlaybackEvent.findOne({ channelId: ch._id }).lean();
+    expect(event).toEqual(expect.objectContaining({
+      eventType: 'startup_success',
+      startupMs: 1450,
+      rebufferCount: 2,
+      fallbackUsed: true,
+      fallbackSucceeded: true,
+      platform: 'android_tv',
+      appVersion: '1.2.3',
+    }));
+    expect(event.deviceId).toBeUndefined();
+    expect(event.streamUrl).toBeUndefined();
+  });
+
+  it('returns 404 for an unknown channel', async () => {
+    const res = await request(app)
+      .post(`/channels/${new mongoose.Types.ObjectId()}/report-playback-event`)
+      .send({ eventType: 'startup_failure' });
+    expect(res.status).toBe(404);
+  });
+
+  it('limits noisy clients without persisting their throttle key', async () => {
+    const ch = await createChannel();
+    const payload = { eventType: 'startup_failure', errorCode: 'timeout' };
+    const responses = [];
+    for (let index = 0; index < 13; index += 1) {
+      responses.push(await request(app).post(`/channels/${ch._id}/report-playback-event`).send(payload));
+    }
+    expect(responses.slice(0, 12).every((response) => response.status === 202)).toBe(true);
+    expect(responses[12].status).toBe(429);
+    const event: any = await PlaybackEvent.findOne({ channelId: ch._id }).lean();
+    expect(event).not.toHaveProperty('rateLimitKey');
+  });
+});
+
+// ─── POST /channels/health-sync ───────────────────────────────────────────────
 
 describe('POST /channels/health-sync', () => {
   const app = buildApp();
