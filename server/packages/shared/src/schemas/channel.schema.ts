@@ -10,6 +10,9 @@ export const channelMetadataSchema = z
     isWorking: z.boolean().optional(),
     responseTime: z.number().optional(),
     m3uSourceId: z.string().optional(),
+    identityKey: z.string().nullable().optional(),
+    identityConfidence: z.number().min(0).max(1).nullable().optional(),
+    identityMatch: z.enum(['tvg-id', 'name-country', 'name']).nullable().optional(),
   })
   .optional();
 

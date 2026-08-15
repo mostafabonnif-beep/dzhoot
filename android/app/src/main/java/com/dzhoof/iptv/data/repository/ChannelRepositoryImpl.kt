@@ -13,6 +13,7 @@ import com.dzhoof.iptv.data.source.remote.playlist.PlaylistFetch
 import com.dzhoof.iptv.data.source.remote.playlist.XtreamDataSource
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.model.Channel
+import com.dzhoof.iptv.domain.model.ChannelServerMetadata
 import com.dzhoof.iptv.domain.repository.ChannelRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -58,6 +59,11 @@ class ChannelRepositoryImpl @Inject constructor(
     @Volatile
     private var alternatesCache: Map<String, List<String>> = emptyMap()
 
+    // Server health and logical identity are advisory metadata. Keep them in memory so
+    // Android TV can use the latest values without a Room schema migration.
+    @Volatile
+    private var serverMetadataCache: Map<String, ChannelServerMetadata> = emptyMap()
+
     /**
      * Get all channels with offline-first strategy.
      *
@@ -72,7 +78,8 @@ class ChannelRepositoryImpl @Inject constructor(
                     channelMapper.toDomain(
                         entity,
                         isFavorite = favoriteIds.contains(entity.id),
-                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList()
+                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList(),
+                        serverMetadata = serverMetadataCache[entity.id]
                     )
                 }
             }
@@ -90,7 +97,8 @@ class ChannelRepositoryImpl @Inject constructor(
                     Result.Success(channelMapper.toDomain(
                         entity,
                         isFavorite,
-                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList()
+                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList(),
+                        serverMetadata = serverMetadataCache[entity.id]
                     ))
                 } else {
                     Result.Error(Exception("Channel not found: $id"))
@@ -110,7 +118,8 @@ class ChannelRepositoryImpl @Inject constructor(
                     channelMapper.toDomain(
                         entity,
                         isFavorite = favoriteIds.contains(entity.id),
-                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList()
+                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList(),
+                        serverMetadata = serverMetadataCache[entity.id]
                     )
                 }
             }
@@ -129,7 +138,8 @@ class ChannelRepositoryImpl @Inject constructor(
                     channelMapper.toDomain(
                         entity,
                         isFavorite = favoriteIds.contains(entity.id),
-                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList()
+                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList(),
+                        serverMetadata = serverMetadataCache[entity.id]
                     )
                 }
             }
@@ -168,11 +178,25 @@ class ChannelRepositoryImpl @Inject constructor(
             is Result.Success -> {
                 // Build new alternates map and swap atomically
                 val newAlternates = mutableMapOf<String, List<String>>()
+                val newServerMetadata = mutableMapOf<String, ChannelServerMetadata>()
                 result.data.forEach { dto ->
                     val alts = dto.alternateStreams?.map { it.streamUrl } ?: emptyList()
                     if (alts.isNotEmpty()) newAlternates[dto.id] = alts
+                    val health = dto.health
+                    if (dto.identityKey != null || health != null) {
+                        newServerMetadata[dto.id] = ChannelServerMetadata(
+                            identityKey = dto.identityKey,
+                            identityConfidence = dto.identityConfidence,
+                            identityMatch = dto.identityMatch,
+                            healthStatus = health?.status,
+                            healthScore = health?.score,
+                            fallbackCount = health?.fallbackCount,
+                            recommendation = health?.recommendation
+                        )
+                    }
                 }
                 alternatesCache = newAlternates
+                serverMetadataCache = newServerMetadata
                 // Paired server source has no playlist-derived guide — clear any stale one.
                 AppPreferences.setPlaylistEpgUrl(context, "")
                 localDataSource.replaceAllChannels(result.data.map { channelMapper.toEntity(it) })
@@ -192,6 +216,7 @@ class ChannelRepositoryImpl @Inject constructor(
             return Result.Error(Exception("No channels found in playlist"))
         }
         alternatesCache = emptyMap()
+        serverMetadataCache = emptyMap()
         // Always refresh the playlist-derived EPG URL (empty when the new playlist has none),
         // stored separately so it never overwrites the user's manual EPG setting.
         AppPreferences.setPlaylistEpgUrl(context, fetched.epgUrl?.takeIf { it.isNotBlank() } ?: "")
@@ -238,7 +263,8 @@ class ChannelRepositoryImpl @Inject constructor(
                     channelMapper.toDomain(
                         entity,
                         isFavorite = true,
-                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList()
+                        alternateStreamUrls = alternatesCache[entity.id] ?: emptyList(),
+                        serverMetadata = serverMetadataCache[entity.id]
                     )
                 }
             }

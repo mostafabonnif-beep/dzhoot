@@ -55,6 +55,10 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
       userId: String(user._id),
       channelListCode: user.channelListCode,
       streamUrl: source.channelUrl,
+      upstreamHeaders: {
+        userAgent: source.activeUserAgent || undefined,
+        referrer: source.activeReferrer || undefined,
+      },
     });
     safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}`;
   }
@@ -68,6 +72,10 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
           userId: String(user._id),
           channelListCode: user.channelListCode,
           streamUrl: alternate.streamUrl,
+          upstreamHeaders: {
+            userAgent: alternate.userAgent || undefined,
+            referrer: alternate.referrer || undefined,
+          },
         });
         return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}` };
       }),
@@ -312,10 +320,15 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     }
     if (!streamUrl) return res.status(404).json({ success: false, error: 'Stream slot not found' });
 
+    const selectedAlternate = slot > 0 ? viableAlternates[slot - 1] : null;
     const { token, expiresAt } = issuePlaybackToken({
       userId: String(user.id),
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
+      upstreamHeaders: {
+        userAgent: slot === 0 ? channel.activeUserAgent : selectedAlternate?.userAgent,
+        referrer: slot === 0 ? channel.activeReferrer : selectedAlternate?.referrer,
+      },
     });
 
     // Enforce the per-user concurrent stream limit (oldest session is evicted
@@ -390,7 +403,7 @@ router.get('/playback/:token', async (req, res) => {
     return proxyUpstreamStream(req, res, payload.streamUrl, {
       userId: String(user._id),
       channelListCode: user.channelListCode,
-    });
+    }, undefined, payload.upstreamHeaders);
   } catch (error) {
     console.error('Tokenized TV proxy error:', error);
     if (!res.headersSent) res.status(502).send('Bad Gateway');

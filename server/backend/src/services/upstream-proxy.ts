@@ -12,6 +12,11 @@ export interface ProxyTokenContext {
   channelListCode: string;
 }
 
+export interface UpstreamHeaders {
+  userAgent?: string;
+  referrer?: string;
+}
+
 function nestedPlaybackUrl(
   absoluteUrl: string,
   tokenContext?: ProxyTokenContext,
@@ -36,6 +41,7 @@ export async function proxyUpstreamStream(
   url: string,
   tokenContext?: ProxyTokenContext,
   legacyCode?: string,
+  upstreamHeaders?: UpstreamHeaders,
 ): Promise<void> {
   try {
     try {
@@ -60,7 +66,8 @@ export async function proxyUpstreamStream(
       httpAgent,
       httpsAgent,
       headers: {
-        'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18',
+        'User-Agent': upstreamHeaders?.userAgent || 'VLC/3.0.18 LibVLC/3.0.18',
+        ...(upstreamHeaders?.referrer ? { Referer: upstreamHeaders.referrer } : {}),
         Accept: '*/*',
         'Accept-Encoding': 'gzip, deflate',
         Connection: 'keep-alive',

@@ -3,6 +3,7 @@ package com.dzhoof.iptv.data.mapper
 import com.dzhoof.iptv.data.model.dto.ChannelDto
 import com.dzhoof.iptv.data.source.local.entity.ChannelEntity
 import com.dzhoof.iptv.domain.model.Channel
+import com.dzhoof.iptv.domain.model.ChannelServerMetadata
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,7 +30,8 @@ class ChannelMapper @Inject constructor() {
     fun toDomain(
         entity: ChannelEntity,
         isFavorite: Boolean = false,
-        alternateStreamUrls: List<String> = emptyList()
+        alternateStreamUrls: List<String> = emptyList(),
+        serverMetadata: ChannelServerMetadata? = null
     ): Channel {
         return Channel(
             id = entity.id,
@@ -43,7 +45,14 @@ class ChannelMapper @Inject constructor() {
             isFavorite = isFavorite,
             alternateStreamUrls = alternateStreamUrls,
             catchupType = entity.catchupType,
-            catchupDays = entity.catchupDays
+            catchupDays = entity.catchupDays,
+            identityKey = serverMetadata?.identityKey,
+            identityConfidence = serverMetadata?.identityConfidence,
+            identityMatch = serverMetadata?.identityMatch,
+            serverHealthStatus = serverMetadata?.healthStatus,
+            serverHealthScore = serverMetadata?.healthScore,
+            serverFallbackCount = serverMetadata?.fallbackCount,
+            serverRecommendation = serverMetadata?.recommendation
         )
     }
     

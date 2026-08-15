@@ -15,6 +15,38 @@ describe('playback tokens', () => {
     expect(verifyPlaybackToken(issued.token)).toMatchObject(input);
   });
 
+  it('round-trips safe upstream headers without exposing them in plaintext', () => {
+    const issued = issuePlaybackToken({
+      ...input,
+      upstreamHeaders: {
+        userAgent: 'ProviderPlayer/1.0',
+        referrer: 'https://provider.example/guide',
+      },
+    });
+
+    expect(issued.token).not.toContain('ProviderPlayer');
+    expect(verifyPlaybackToken(issued.token)).toMatchObject({
+      upstreamHeaders: {
+        userAgent: 'ProviderPlayer/1.0',
+        referrer: 'https://provider.example/guide',
+      },
+    });
+  });
+
+  it('drops header injection attempts before encryption', () => {
+    const issued = issuePlaybackToken({
+      ...input,
+      upstreamHeaders: {
+        userAgent: 'good\r\nX-Injected: yes',
+        referrer: 'https://provider.example/guide',
+      },
+    });
+
+    expect(verifyPlaybackToken(issued.token)?.upstreamHeaders).toEqual({
+      referrer: 'https://provider.example/guide',
+    });
+  });
+
   it('rejects tampered and expired tokens', () => {
     const issued = issuePlaybackToken({ ...input, ttlMs: 30_000 });
     const tokenParts = issued.token.split('.');
