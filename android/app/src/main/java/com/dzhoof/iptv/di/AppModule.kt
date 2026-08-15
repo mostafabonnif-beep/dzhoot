@@ -2,6 +2,7 @@ package com.dzhoof.iptv.di
 
 import android.app.Application
 import android.content.Context
+import com.dzhoof.iptv.BuildConfig
 import com.google.firebase.analytics.FirebaseAnalytics
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dagger.Module
@@ -43,11 +44,15 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideFirebaseAnalytics(context: Context): FirebaseAnalytics =
-        FirebaseAnalytics.getInstance(context)
+    fun provideFirebaseAnalytics(context: Context): FirebaseAnalytics? =
+        if (BuildConfig.FIREBASE_ENABLED) {
+            runCatching { FirebaseAnalytics.getInstance(context) }.getOrNull()
+        } else null
 
     @Provides
     @Singleton
-    fun provideFirebaseCrashlytics(): FirebaseCrashlytics =
-        FirebaseCrashlytics.getInstance()
+    fun provideFirebaseCrashlytics(): FirebaseCrashlytics? =
+        if (BuildConfig.FIREBASE_ENABLED) {
+            runCatching { FirebaseCrashlytics.getInstance() }.getOrNull()
+        } else null
 }

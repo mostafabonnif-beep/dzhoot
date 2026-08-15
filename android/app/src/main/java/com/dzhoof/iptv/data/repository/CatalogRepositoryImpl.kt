@@ -135,6 +135,35 @@ class CatalogRepositoryImpl @Inject constructor(
             }
         }
 
+    override suspend fun getSeriesById(seriesId: String): Result<Series> = withContext(dispatcher) {
+        try {
+            val response = apiService.getSeriesById(seriesId)
+            val body = response.body()
+            val series = body?.data
+            if (response.isSuccessful && body?.success == true && series != null) {
+                Result.Success(
+                    Series(
+                        id = series.id,
+                        title = series.title,
+                        category = series.category,
+                        poster = series.poster,
+                        backdrop = series.backdrop,
+                        plot = series.plot,
+                        cast = series.cast,
+                        director = series.director,
+                        genre = series.genre,
+                        releaseDate = series.releaseDate,
+                        rating = series.rating,
+                    )
+                )
+            } else {
+                Result.Error(Exception(body?.error ?: response.message().ifBlank { "Unable to load series details" }))
+            }
+        } catch (error: Exception) {
+            Result.Error(error)
+        }
+    }
+
     override suspend fun getSeasons(seriesId: String): Result<List<Season>> = withContext(dispatcher) {
         try {
             val response = apiService.getSeasons(seriesId)

@@ -8,8 +8,8 @@ import javax.inject.Singleton
 
 @Singleton
 class AnalyticsHelper @Inject constructor(
-    private val analytics: FirebaseAnalytics,
-    private val crashlytics: FirebaseCrashlytics
+    private val analytics: FirebaseAnalytics?,
+    private val crashlytics: FirebaseCrashlytics?
 ) {
 
     // --- Analytics ---
@@ -26,7 +26,7 @@ class AnalyticsHelper @Inject constructor(
                 }
             }
         }
-        analytics.logEvent(name, bundle)
+        analytics?.logEvent(name, bundle)
     }
 
     fun logScreenView(screenName: String) {
@@ -34,26 +34,26 @@ class AnalyticsHelper @Inject constructor(
     }
 
     fun setUserProperty(key: String, value: String) {
-        analytics.setUserProperty(key, value)
+        analytics?.setUserProperty(key, value)
     }
 
     // --- Crashlytics ---
 
     fun logError(throwable: Throwable, message: String? = null) {
-        message?.let { crashlytics.log(it) }
-        crashlytics.recordException(throwable)
+        message?.let { crashlytics?.log(it) }
+        crashlytics?.recordException(throwable)
     }
 
     fun log(message: String) {
-        crashlytics.log(message)
+        crashlytics?.log(message)
     }
 
     fun setUserId(userId: String) {
-        analytics.setUserId(userId)
-        crashlytics.setUserId(userId)
+        analytics?.setUserId(userId)
+        crashlytics?.setUserId(userId)
     }
 
     fun setCustomKey(key: String, value: String) {
-        crashlytics.setCustomKey(key, value)
+        crashlytics?.setCustomKey(key, value)
     }
 }

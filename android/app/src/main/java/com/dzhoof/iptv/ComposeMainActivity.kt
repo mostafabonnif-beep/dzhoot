@@ -129,7 +129,9 @@ class ComposeMainActivity : ComponentActivity() {
         if (isMobileDevice(this)) {
             enableEdgeToEdge()
         }
-        FirebaseApp.initializeApp(this)
+        if (BuildConfig.FIREBASE_ENABLED) {
+            runCatching { FirebaseApp.initializeApp(this) }
+        }
 
         // Non-blocking DRM check — log result for Amazon Appstore compliance
         AmazonDrmManager(this).verifyLicense { licensed ->
