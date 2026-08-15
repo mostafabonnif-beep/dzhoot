@@ -45,6 +45,23 @@ data class DeviceDto(
     @SerializedName("lastSeenAt") val lastSeenAt: String? = null,
 )
 
+/** Request body for POST /api/v1/activation/client-redeem. */
+typealias ClientRedeemRequest = RedeemCodeRequest
+
+/** Success payload of POST /api/v1/activation/client-redeem. */
+data class ClientRedeemResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("sessionId") val sessionId: String? = null,
+    @SerializedName("user") val user: ClientRedeemUserDto? = null,
+    @SerializedName("data") val data: SubscriptionViewDataDto? = null,
+    @SerializedName("error") val error: String? = null,
+    @SerializedName("code") val code: String? = null,
+)
+
+data class ClientRedeemUserDto(
+    @SerializedName("channelListCode") val channelListCode: String? = null,
+)
+
 /** Success payload of POST /api/v1/activation/redeem */
 data class RedeemResponseDto(
     @SerializedName("success") val success: Boolean = false,

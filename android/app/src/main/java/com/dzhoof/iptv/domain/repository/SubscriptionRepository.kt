@@ -21,6 +21,9 @@ interface SubscriptionRepository {
      */
     suspend fun redeemCode(code: String): Result<RedeemDataDto>
 
+    /** Bootstraps a customer install from an activation code without an account login. */
+    suspend fun clientRedeem(code: String): Result<SubscriptionViewDataDto>
+
     /**
      * Fetches the current subscription, plan and device usage.
      */

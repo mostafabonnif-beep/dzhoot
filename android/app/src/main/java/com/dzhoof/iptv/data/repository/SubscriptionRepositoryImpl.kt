@@ -6,7 +6,10 @@ import com.dzhoof.iptv.BuildConfig
 import com.google.firebase.messaging.FirebaseMessaging
 import com.dzhoof.iptv.DzHoofFirebaseMessagingService
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.model.dto.RedeemCodeRequest
+import com.dzhoof.iptv.data.model.dto.ClientRedeemRequest
+import com.dzhoof.iptv.data.model.dto.ClientRedeemResponse
 import com.dzhoof.iptv.data.model.dto.RedeemDataDto
 import com.dzhoof.iptv.data.model.dto.RedeemResponseDto
 import com.dzhoof.iptv.data.model.dto.RegisterDeviceRequest
@@ -107,6 +110,38 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     }
                 } else {
                     Result.error(backendError(response.errorBody()?.string(), "Activation failed (HTTP ${response.code()})"))
+                }
+            } catch (e: Exception) {
+                Result.error(e)
+            }
+        }
+
+    override suspend fun clientRedeem(code: String): Result<SubscriptionViewDataDto> =
+        withContext(dispatcher) {
+            try {
+                val response = apiService.clientRedeem(
+                    ClientRedeemRequest(
+                        code = code.trim(),
+                        deviceId = getDeviceId(),
+                        deviceName = deviceName(),
+                        platform = platform(),
+                        appVersion = BuildConfig.VERSION_NAME,
+                    ),
+                )
+                if (response.isSuccessful) {
+                    val body: ClientRedeemResponse? = response.body()
+                    val data = body?.data
+                    val sessionId = body?.sessionId
+                    val channelListCode = body?.user?.channelListCode
+                    if (body?.success == true && data != null && !sessionId.isNullOrBlank() && !channelListCode.isNullOrBlank()) {
+                        AppPreferences.setSessionId(appContext, sessionId)
+                        AppPreferences.setTvCode(appContext, channelListCode)
+                        Result.success(data)
+                    } else {
+                        Result.error(IOException(body?.error ?: "فشل تفعيل كود العميل"))
+                    }
+                } else {
+                    Result.error(backendError(response.errorBody()?.string(), "فشل تفعيل كود العميل (HTTP ${response.code()})"))
                 }
             } catch (e: Exception) {
                 Result.error(e)
