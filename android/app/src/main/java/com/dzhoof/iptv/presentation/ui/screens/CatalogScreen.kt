@@ -82,14 +82,15 @@ fun CatalogScreen(
                 .fillMaxSize()
                 .padding(horizontal = 24.dp, vertical = 16.dp),
         ) {
-            if (state.selectedMovie != null) {
+            val selectedMovie = state.selectedMovie
+            if (selectedMovie != null) {
                 MovieDetails(
-                    movie = state.selectedMovie,
+                    movie = selectedMovie,
                     isLoading = state.isLoadingMovie,
                     error = state.movieError,
                     onBack = viewModel::clearDetails,
                     onRetry = {
-                        state.selectedMovie?.id?.let { viewModel.selectMovieById(it, state.selectedMovie.title) }
+                        viewModel.selectMovieById(selectedMovie.id, selectedMovie.title)
                     },
                     onPlay = { movie -> onPlayMovie(movie.id, movie.title) },
                 )

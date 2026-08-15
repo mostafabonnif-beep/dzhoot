@@ -150,7 +150,7 @@ class GuideViewModelTest {
         assertEquals(ErrorType.NETWORK_ERROR, viewModel.uiState.value.errorType)
         assertEquals("تعذر الاتصال بالخادم — تحقق من عنوان الخادم في الإعدادات", viewModel.uiState.value.error)
     }
-}
+
     private fun stubSuccessfulLoad() {
         every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(news, sports)))
         every { getFavoriteChannelsUseCase(Unit) } returns favoritesFlow
