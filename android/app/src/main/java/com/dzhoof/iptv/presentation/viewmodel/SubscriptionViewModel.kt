@@ -42,7 +42,7 @@ class SubscriptionViewModel @Inject constructor(
                     subscription = result.data,
                 )
                 is Result.Error -> _uiState.value = SubscriptionUiState(
-                    error = result.exception.message ?: "Failed to load subscription",
+                    error = customerError(result.exception, "تعذر تحميل معلومات الاشتراك"),
                 )
             }
         }
@@ -58,7 +58,7 @@ class SubscriptionViewModel @Inject constructor(
                     val expires = result.data.subscription?.expiresAt
                     _uiState.value = _uiState.value.copy(
                         isRedeeming = false,
-                        redeemSuccess = "Subscription activated${if (!plan?.name.isNullOrBlank()) " — ${plan?.name}" else ""}${if (!expires.isNullOrBlank()) " · expires ${formatExpiry(expires!!)}" else ""}",
+                        redeemSuccess = buildActivationMessage(plan?.name, expires),
                         subscription = SubscriptionViewDataDto(
                             subscription = result.data.subscription,
                             plan = result.data.plan,
@@ -69,7 +69,7 @@ class SubscriptionViewModel @Inject constructor(
                 }
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     isRedeeming = false,
-                    error = result.exception.message ?: "Activation failed",
+                    error = customerError(result.exception, "تعذر تفعيل الاشتراك"),
                 )
             }
         }
@@ -81,19 +81,12 @@ class SubscriptionViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isRedeeming = true, error = null, redeemSuccess = null)
             when (val result = repository.redeemCode(code)) {
                 is Result.Success -> {
-                    val plan = result.data.plan
-                    val expires = result.data.subscription?.expiresAt
-                    val message = buildString {
-                        append("Subscription activated")
-                        if (!plan?.name.isNullOrBlank()) append(" — ${plan?.name}")
-                        if (!expires.isNullOrBlank()) {
-                            append(" · expires ")
-                            append(formatExpiry(expires))
-                        }
-                    }
                     _uiState.value = _uiState.value.copy(
                         isRedeeming = false,
-                        redeemSuccess = message,
+                        redeemSuccess = buildActivationMessage(
+                            result.data.plan?.name,
+                            result.data.subscription?.expiresAt,
+                        ),
                         subscription = SubscriptionViewDataDto(
                             subscription = result.data.subscription,
                             plan = result.data.plan,
@@ -106,7 +99,7 @@ class SubscriptionViewModel @Inject constructor(
                 }
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     isRedeeming = false,
-                    error = result.exception.message ?: "Activation failed",
+                    error = customerError(result.exception, "تعذر تفعيل الاشتراك"),
                 )
             }
         }
@@ -118,9 +111,29 @@ class SubscriptionViewModel @Inject constructor(
             when (val result = repository.removeDevice(deviceId)) {
                 is Result.Success -> refresh()
                 is Result.Error -> _uiState.value = _uiState.value.copy(
-                    error = result.exception.message ?: "Failed to remove device",
+                    error = customerError(result.exception, "تعذر إزالة الجهاز"),
                 )
             }
+        }
+    }
+
+    private fun buildActivationMessage(planName: String?, expiresAt: String?): String = buildString {
+        append("تم تفعيل اشتراكك بنجاح")
+        if (!planName.isNullOrBlank()) append(" — $planName")
+        if (!expiresAt.isNullOrBlank()) append(" · ينتهي في ${formatExpiry(expiresAt)}")
+    }
+
+    /** Hide transport/server details from customers while keeping useful guidance. */
+    private fun customerError(exception: Throwable, fallback: String): String {
+        val raw = exception.message.orEmpty().lowercase()
+        return when {
+            "http 400" in raw || "bad request" in raw || "invalid" in raw ->
+                "كود التفعيل غير صالح أو تم استخدامه من قبل. تحقق من الكود وحاول مرة أخرى."
+            "http 401" in raw || "http 403" in raw || "expired" in raw ->
+                "انتهت صلاحية الاشتراك أو لا يملك الحساب صلاحية الوصول. يمكنك تفعيل كود جديد."
+            "unable to resolve host" in raw || "timeout" in raw || "connect" in raw ->
+                "تعذر الاتصال بالخدمة حاليًا. تحقق من الإنترنت وحاول مرة أخرى."
+            else -> fallback
         }
     }
 
