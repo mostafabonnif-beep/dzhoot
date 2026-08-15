@@ -1,10 +1,28 @@
 # Changelog
 
-All notable changes to FireVision IPTV Server are documented in this file.
+All notable changes to the DZ HOOF server are documented in this file.
 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This project uses [Semantic Versioning](https://semver.org/).
 
 > Entries under **Unreleased** are updated automatically by CI when a new release tag is pushed.
+
+---
+
+## [Unreleased]
+
+### Added
+
+- Production deployment guide for the current DZ HOOF Docker Compose stack, health endpoints, backups, rollback, and release operations.
+- Request IDs in API error and 404 responses for safer support diagnostics.
+
+### Changed
+
+- Unified Android release workflow around the `com.dzhoof.iptv` application, HTTPS `DZHOOF_API_URL`, DZ HOOF artifact names, and GitHub Releases.
+- Updated project status and setup documentation to reflect current test coverage and Next.js production validation.
+
+### Security
+
+- CI now fails on high-or-above production dependency vulnerabilities and cancels obsolete runs.
 
 ---
 
@@ -13,7 +31,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 ### Fixed
 
 - container healthchecks use IPv4 loopback; bind Next.js standalone server to all interfaces
-- point production `REDIS_URL` at the `firevision-redis` service; disable scheduler HTTP healthcheck
+- point production `REDIS_URL` at the `dzhoof-redis` service; disable scheduler HTTP healthcheck
 
 ---
 

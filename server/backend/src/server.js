@@ -564,6 +564,7 @@ app.use((err, req, res, _next) => {
     error: {
       message: status === 500 ? 'Internal Server Error' : err.message,
       status,
+      requestId: req.requestId,
     },
   });
 });
@@ -574,12 +575,13 @@ app.use((req, res) => {
     error: {
       message: 'Route not found',
       status: 404,
+      requestId: req.requestId,
     },
   });
 });
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/firevision-iptv';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 const PORT = process.env.PORT || 3000;
 let httpServer = null;
 

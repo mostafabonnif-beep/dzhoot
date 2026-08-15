@@ -158,7 +158,7 @@ The channel list code is a bearer-like credential. Do not log or publish it. Suc
 | Variable                     | Default                    | Description              |
 | ---------------------------- | -------------------------- | ------------------------ |
 | `DEFAULT_TV_CODE`            | `5T6FEP`                   | Default code for testing |
-| `DEFAULT_SERVER_URL`         | `https://tv.cadnative.com` | Server URL               |
+| `DEFAULT_SERVER_URL`         | `https://tv.example.com`   | Server URL placeholder; set a real HTTPS URL per environment |
 | `PAIRING_PIN_EXPIRY_MINUTES` | `10`                       | PIN expiry time          |
 
 ### Android SharedPreferences

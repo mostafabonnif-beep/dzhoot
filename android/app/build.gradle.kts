@@ -222,7 +222,7 @@ dependencies {
 sentry {
     includeSourceContext = true
     org = "dzhoof"
-    projectName = "firevisioniptv"
+    projectName = "dzhoof"
     authToken = System.getenv("SENTRY_AUTH_TOKEN")
 }
 

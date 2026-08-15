@@ -1,4 +1,4 @@
-# Developer Setup Guide
+# DZ HOOF Android Setup
 
 ## Prerequisites
 
@@ -15,8 +15,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/akshaynikhare/FireVisionIPTV.git
-cd FireVisionIPTV
+git clone https://github.com/merci1994dz/dzhoot.git
+cd dzhoot/android
 
 # Build debug APK
 ./gradlew assembleDebug
@@ -45,10 +45,12 @@ cd FireVisionIPTV
 
 ### API Base URL
 
-Configured in `app/build.gradle.kts`:
+The URL is configured at build time in `app/build.gradle.kts`:
 
-```kotlin
-buildConfigField("String", "API_BASE_URL", "\"https://tv.cadnative.com/\"")
+```bash
+# Set the URL through a Gradle property instead of editing source:
+./gradlew assembleDebug -PdzhoofApiUrl=https://tv.example.com/
+# Or use: DZHOOF_API_URL=https://tv.example.com/ ./gradlew assembleDebug
 ```
 
 Access in code via `BuildConfig.API_BASE_URL`.
@@ -56,7 +58,7 @@ Access in code via `BuildConfig.API_BASE_URL`.
 ### Firebase
 
 1. Create a Firebase project at [console.firebase.google.com](https://console.firebase.google.com)
-2. Add an Android app with package name `com.cadnative.firevisioniptv`
+2. Add an Android app with package name `com.dzhoof.iptv`
 3. Download `google-services.json` and place it in the `app/` directory
 4. Firebase services used: Analytics, Realtime Database, Firestore
 
@@ -71,7 +73,7 @@ export SIGNING_KEY_ALIAS=your_key_alias
 export SIGNING_KEY_PASSWORD=your_key_password
 ```
 
-If these are not set, the release build will use debug signing.
+The release build requires these values for a signed APK. Do not place passwords or keystores in the repository; use GitHub Actions secrets or a local untracked environment.
 
 ## Running
 
@@ -95,7 +97,7 @@ adb devices
 adb install app/build/outputs/apk/debug/app-debug.apk
 
 # 6. Launch
-adb shell am start -n com.cadnative.firevisioniptv/.ComposeMainActivity
+adb shell am start -n com.dzhoof.iptv/.ComposeMainActivity
 ```
 
 ### On Android TV Emulator
@@ -122,7 +124,7 @@ adb shell am start -n com.cadnative.firevisioniptv/.ComposeMainActivity
 ./gradlew test
 
 # Run tests for a specific class
-./gradlew test --tests "com.cadnative.firevisioniptv.data.repository.ChannelRepositoryImplTest"
+./gradlew test --tests "com.dzhoof.iptv.data.repository.ChannelRepositoryImplTest"
 
 # Run with verbose output
 ./gradlew test --info
@@ -134,19 +136,19 @@ adb shell am start -n com.cadnative.firevisioniptv/.ComposeMainActivity
 - Remote data sources (2 test files)
 - Use cases (6 test files)
 
-Test files are located in `app/src/test/java/com/cadnative/firevisioniptv/`.
+Test files are located under `app/src/test/java/com/dzhoof/iptv/`.
 
 ### Manual Testing on Device
 
 ```bash
 # View app logs
-adb logcat | grep -i firevision
+adb logcat | grep -i dzhoof
 
 # View ExoPlayer logs
 adb logcat | grep -i ExoPlayer
 
 # Clear app data
-adb shell pm clear com.cadnative.firevisioniptv
+adb shell pm clear com.dzhoof.iptv
 ```
 
 **Test checklist:**
@@ -167,7 +169,7 @@ adb shell pm clear com.cadnative.firevisioniptv
 ## Project Structure Overview
 
 ```
-FireVisionIPTV/
+dzhoot/android/
 ├── app/
 │   ├── build.gradle.kts          # App-level build config
 │   ├── google-services.json      # Firebase config (not in git)
@@ -175,7 +177,7 @@ FireVisionIPTV/
 │   └── src/
 │       ├── main/
 │       │   ├── AndroidManifest.xml
-│       │   ├── java/com/cadnative/firevisioniptv/
+│       │   ├── java/com/dzhoof/iptv/
 │       │   │   ├── api/          # Legacy API client
 │       │   │   ├── data/         # Data layer (Room, Retrofit, repos)
 │       │   │   ├── di/           # Hilt DI modules
@@ -208,14 +210,12 @@ FireVisionIPTV/
 
 ### Missing google-services.json
 
-The build will fail without `app/google-services.json`. Either:
-1. Add your own Firebase config file, or
-2. Remove the `com.google.gms.google-services` plugin from `app/build.gradle.kts` and Firebase dependencies
+Firebase plugins are applied only when a real `google-services.json` is present. For a local build, omit the file and the build remains reproducible without Firebase configuration. For a release build, add the reviewed file under `app/` or the appropriate variant directory and keep it out of Git.
 
 ### Room Schema Changes
 
 When modifying Room entities:
-1. Increment the version in `@Database(version = ...)` in `FireVisionDatabase.kt`
+1. Increment the version in `@Database(version = ...)` in `the current Room database class`
 2. Either add a migration or keep `fallbackToDestructiveMigration()` for dev
 3. Schema JSON is exported to `app/schemas/` (committed to git for version tracking)
 
@@ -235,7 +235,7 @@ adb connect <FIRE_TV_IP>:5555
 The signing key changed between installs:
 ```bash
 # Uninstall first, then reinstall
-adb uninstall com.cadnative.firevisioniptv
+adb uninstall com.dzhoof.iptv
 adb install app-debug.apk
 ```
 

@@ -1,127 +1,120 @@
-# Local Development Setup
+# إعداد خادم DZ HOOF محليًا
 
-## Prerequisites
+هذا الدليل مخصص للتطوير والاختبار المحلي. للنشر العام استخدم [دليل النشر الإنتاجي](DEPLOYMENT_GUIDE.md)، وللاستضافة الذاتية استخدم [دليل SELF-HOSTING](SELF_HOSTING_GUIDE.md).
 
-- Docker & Docker Compose
-- Node.js 18+ (for running outside Docker)
-- Git
+## المتطلبات
 
-## Quick Start
+| الأداة | الإصدار |
+| --- | --- |
+| Docker وDocker Compose | إصدار حديث |
+| Node.js | 20 أو أحدث عند التشغيل خارج Docker |
+| Git | 2 أو أحدث |
+
+## التشغيل السريع عبر Docker
 
 ```bash
-cd FireVisionIPTVServer
+git clone https://github.com/merci1994dz/dzhoot.git
+cd dzhoot/server
 cp .env.example .env
-# Edit .env — see Configuration below
-npm run dev              # or: make up
+# راجع SUPER_ADMIN_* وME_CONFIG_MONGODB_BASICAUTH_PASSWORD في .env
+docker compose up -d
+docker compose ps
 ```
 
-## Configuration
+الخدمات المحلية الأساسية:
 
-Edit `.env` with at minimum:
+| الخدمة | العنوان |
+| --- | --- |
+| API | `http://localhost:8009` |
+| Frontend | `http://localhost:3001` |
+| MongoDB | `127.0.0.1:27017` فقط |
+| Redis | `127.0.0.1:6379` فقط |
+| Mongo Express | `http://localhost:8081` فقط |
+| MailHog | `http://localhost:8025` فقط |
 
-```env
-NODE_ENV=development
-PORT=3000
-MONGODB_URI=mongodb://mongodb:27017/firevision-iptv
+لا تفتح منافذ MongoDB وRedis وMongo Express للعامة. القيم الافتراضية للتطوير ليست صالحة للإنتاج.
 
-# Generate: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-JWT_ACCESS_SECRET=<random-string>
-JWT_REFRESH_SECRET=<random-string>
-
-SUPER_ADMIN_USERNAME=admin
-SUPER_ADMIN_PASSWORD=YourDevPassword123!
-SUPER_ADMIN_EMAIL=admin@dev.local
-```
-
-Full env var reference: see [SELF_HOSTING_GUIDE.md → Configuration Reference](./SELF_HOSTING_GUIDE.md#configuration-reference).
-
-## Super Admin
-
-- Created automatically on first startup from `SUPER_ADMIN_*` env vars
-- Password hashed with bcrypt (10 rounds)
-- Gets a unique 6-character playlist code
-- Won't be recreated if already exists
-- To reset password: set `FORCE_UPDATE_ADMIN_PASSWORD=true`, restart, then remove it
-
-Verify creation:
+## التحقق والإدارة
 
 ```bash
-docker-compose logs api | grep "Super Admin"
+curl --fail-with-body http://localhost:8009/health/live
+curl --fail-with-body http://localhost:8009/health/ready
+docker compose logs -f --tail=200 api frontend
 ```
 
-## Running
+يفتح المستخدم لوحة الإدارة من `http://localhost:3001`. يُنشأ المشرف الأول من `SUPER_ADMIN_USERNAME` و`SUPER_ADMIN_PASSWORD` و`SUPER_ADMIN_EMAIL`. إذا احتجت إلى إعادة ضبط كلمة المرور للتطوير، استخدم `FORCE_UPDATE_ADMIN_PASSWORD=true` مرة واحدة ثم أعدها إلى `false`.
 
-### Docker Compose (recommended)
+## التشغيل خارج Docker
+
+شغّل MongoDB وRedis محليًا أو عبر Compose، ثم ثبّت الحزم وابنِ الحزمة المشتركة:
 
 ```bash
-make up                   # Start all services
-docker-compose ps         # Check status
-docker-compose logs -f api  # View API logs
-make down                 # Stop
+npm ci
+npm run build -w @firevision/shared
+npm run dev -w @firevision/backend
+npm run dev -w @firevision/frontend
 ```
 
-Services started: API (:8009), Frontend (:3001), MongoDB, Redis, MailHog (:8025), Scheduler.
+عند التشغيل المحلي المباشر، استخدم `MONGODB_URI=mongodb://localhost:27017/dzhoof-iptv` و`REDIS_URL=redis://localhost:6379`، ولا تستخدم `localhost` داخل حاوية Docker؛ داخل Compose يجب استخدام أسماء الخدمات `mongodb` و`redis`.
 
-### Node.js directly
+## إنشاء مستخدم واختبار API
 
-```bash
-# Start MongoDB separately
-docker run -d -p 27017:27017 --name mongodb mongo:7.0
-
-# Set MONGODB_URI=mongodb://localhost:27017/firevision-iptv in .env
-npm install
-npm run dev
-```
-
-## First Login
-
-- Dashboard: `http://localhost:8009/admin` (legacy) or `http://localhost:3001` (Next.js)
-- Credentials: your `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD`
-
-## User Management
-
-### Via Dashboard
-
-Users section → Add User → set username, email, password, role (Admin/User).
-
-### Via API
+سجّل الدخول من الواجهة أو نفّذ:
 
 ```bash
-# Login — get session ID
 curl -X POST http://localhost:8009/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"YourDevPassword123!"}'
-
-# Create user
-curl -X POST http://localhost:8009/api/v1/users \
-  -H "Content-Type: application/json" \
-  -H "X-Session-Id: <session-id>" \
-  -d '{"username":"newuser","email":"user@dev.local","password":"Password123!","role":"User"}'
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"<local-password>"}'
 ```
 
-### Session info
+استخدم `X-Session-Id` الذي يرجعه الخادم في طلبات الإدارة. لا تحفظ session ID في ملفات أو سجلات عامة.
 
-- Sessions expire after 24 hours, stored in MongoDB
-- View sessions: `GET /api/v1/auth/sessions`
-- Revoke: `DELETE /api/v1/auth/sessions/:sessionId`
+## إضافة مصدر وقنوات
 
-### Playlist access
+أضف مصدر M3U مصرحًا به من لوحة الإدارة، ثم اختبر:
 
-Each user gets a 6-character code. Playlist URL: `http://localhost:8009/api/v1/tv/playlist/<CODE>`
+```bash
+curl --fail-with-body http://localhost:8009/api/v1/channels
+curl --fail-with-body http://localhost:8009/api/v1/epg/stats
+```
 
-## Troubleshooting
+تُخزّن أكواد القنوات كبيانات حاملة للصلاحية. لا تنشرها في issues أو screenshots أو logs.
 
-| Problem                  | Fix                                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------------------ |
-| Super admin not created  | `docker-compose logs api \| grep -i admin` then check `SUPER_ADMIN_*` env vars                         |
-| "Invalid credentials"    | Verify `.env` values, check `FORCE_UPDATE_ADMIN_PASSWORD=true` if changed after first run              |
-| MongoDB connection error | Ensure `MONGODB_URI` uses `mongodb://mongodb:27017/` (Docker) or `mongodb://localhost:27017/` (native) |
-| Port 8009 in use         | Change port mapping in `docker-compose.yml` or kill conflicting process: `lsof -i :8009`               |
-| Check user in DB         | `docker-compose exec mongodb mongosh firevision-iptv --eval "db.users.find({role:'Admin'}).pretty()"`  |
+## الاختبارات والبناء
 
-## Related Docs
+```bash
+npm run typecheck
+npm run lint
+npm run test:backend
+npm run test:frontend
+npm run build:backend
+npm run build -w @firevision/frontend
+npm audit --omit=dev --audit-level=high
+```
+
+اختبار Android:
+
+```bash
+cd ../android
+./gradlew testDebugUnitTest
+./gradlew assembleDebug -PdzhoofApiUrl=http://<SERVER_IP>:8009/
+```
+
+## استكشاف الأخطاء
+
+| المشكلة | الإجراء |
+| --- | --- |
+| API لا يبدأ | `docker compose logs api mongodb` ثم افحص `.env` و`/health/ready` |
+| Frontend لا يتصل | تحقق من `NEXT_PUBLIC_API_URL` وproxy، ثم أعد بناء الحاوية |
+| MongoDB connection refused | استخدم `mongodb` داخل Docker أو `localhost` خارج Docker |
+| Redis connection refused | استخدم `redis` داخل Docker أو `localhost` خارج Docker |
+| المشرف غير موجود | تحقق من `SUPER_ADMIN_*` ثم راجع سجلات `api` |
+| اختبار MongoDB يفشل عند التنزيل | أعد المحاولة بعد حذف cache الاختبار التالف؛ لا تعطّل MD5 في CI الإنتاجي |
+
+## وثائق مرتبطة
 
 - [API Documentation](./API_DOCUMENTATION.md)
 - [Deployment Guide](./DEPLOYMENT_GUIDE.md)
+- [Self-hosting Guide](./SELF_HOSTING_GUIDE.md)
 - [Architecture](./ARCHITECTURE.md)
 - [TV Pairing System](./TV_PAIRING_SYSTEM.md)
