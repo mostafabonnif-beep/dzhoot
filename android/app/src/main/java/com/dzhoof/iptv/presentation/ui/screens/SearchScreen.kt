@@ -36,6 +36,8 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
@@ -54,6 +56,9 @@ fun SearchScreen(
     onNavigateBack: () -> Unit,
     onChannelClick: (String) -> Unit,
     onMultiviewClick: (String) -> Unit = {},
+    onMovieClick: (String) -> Unit = {},
+    onSeriesClick: (String) -> Unit = {},
+    onProgramClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
@@ -81,7 +86,7 @@ fun SearchScreen(
     }
 
     if (isMobile) {
-        ScreenScaffold(title = "Search", modifier = modifier) {
+        ScreenScaffold(title = stringResource(R.string.search), modifier = modifier) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -98,12 +103,12 @@ fun SearchScreen(
                     AppTextField(
                         value = searchQuery,
                         onValueChange = { setQuery(it) },
-                        placeholder = "Search channels…",
+                        placeholder = stringResource(R.string.search_channels_content),
                         dpadEditToggle = false,
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "Search",
+                                contentDescription = stringResource(R.string.search),
                                 tint = if (searchQuery.isNotEmpty()) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(Dimens.IconMedium)
                             )
@@ -117,7 +122,7 @@ fun SearchScreen(
                                 IconButton(onClick = { setQuery("") }) {
                                     Icon(
                                         imageVector = Icons.Default.Clear,
-                                        contentDescription = "Clear",
+                                        contentDescription = stringResource(R.string.dismiss_error),
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -153,6 +158,9 @@ fun SearchScreen(
                     onChannelClick = onChannelClick,
                     onFavoriteClick = { viewModel.toggleFavorite(it) },
                     onMultiviewClick = onMultiviewClick,
+                    onMovieClick = onMovieClick,
+                    onSeriesClick = onSeriesClick,
+                    onProgramClick = onProgramClick,
                     onRetry = { viewModel.onQueryChange(searchQuery) },
                     onRecentSearchClick = { setQuery(it) },
                     onClearHistory = { viewModel.clearHistory() },
@@ -183,6 +191,9 @@ fun SearchScreen(
                 onChannelClick = onChannelClick,
                 onFavoriteClick = { viewModel.toggleFavorite(it) },
                 onMultiviewClick = onMultiviewClick,
+                onMovieClick = onMovieClick,
+                onSeriesClick = onSeriesClick,
+                onProgramClick = onProgramClick,
                 onRetry = { viewModel.onQueryChange(searchQuery) },
                 onRecentSearchClick = { setQuery(it) },
                 onClearHistory = { viewModel.clearHistory() },
