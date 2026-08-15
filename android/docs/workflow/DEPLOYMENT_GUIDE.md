@@ -1,129 +1,103 @@
-# Deployment Guide
+# DZ HOOF Android Release Guide
 
-Build, test, and distribute the FireVision IPTV Android app for Fire TV.
+هذا الدليل يشرح اختبار وإصدار تطبيق DZ HOOF على Android TV وFire TV. الإصدار النهائي يمر عبر workflow `android/.github/workflows/release.yml` بعد دفع tag يبدأ بـ`v`، بينما الإصدار المرشح اليدوي متاح في `.github/workflows/release-candidate.yml`.
 
-## Prerequisites
+## المتطلبات
 
-| Requirement | Version |
-|-------------|---------|
-| Android Studio | Arctic Fox+ |
-| JDK | 8+ |
-| Min SDK | 28 (Android 9) |
-| Target SDK | 34 |
-| Fire TV | Stick 4K, Cube, or newer |
+| المتطلب | القيمة |
+| --- | --- |
+| Android Studio | إصدار حديث يدعم JDK 17 |
+| JDK | 17 |
+| compile SDK | 34 |
+| min SDK | 28 |
+| الجهاز | Android TV أو Fire TV متوافق |
 
-## Configuration
+## إعداد عنوان API
 
-### API Base URL
-
-In `app/build.gradle.kts`:
-
-```kotlin
-buildConfigField("String", "API_BASE_URL", "\"https://tv.cadnative.com/\"")
-```
-
-### Firebase
-
-Download `google-services.json` from Firebase Console and place in `app/`.
-
-### Version Bumping
-
-Increment before each release:
-
-```kotlin
-defaultConfig {
-    versionCode 2         // Must increase for updates to work
-    versionName "1.1"
-}
-```
-
-## Building
+لا تعدّل المصدر لتغيير الخادم. مرّر عنوان HTTPS أثناء البناء:
 
 ```bash
-make debug       # Debug APK → app/build/outputs/apk/debug/app-debug.apk
-make release     # Release APK → app/build/outputs/apk/release/app-release.apk
+cd android
+./gradlew assembleDebug -PdzhoofApiUrl=https://tv.example.com/
+# أو:
+DZHOOF_API_URL=https://tv.example.com/ ./gradlew assembleDebug
 ```
 
-### Release Signing
+يرفض Gradle عناوين HTTP. استخدم عنوانًا حقيقيًا قابلًا للوصول من الجهاز، ولا تستخدم `example.invalid` إلا للبناء المحلي الذي لا يهدف إلى التشغيل.
 
-Set environment variables for signing (or create `keystore.properties`):
+## Firebase وSentry
+
+يُطبّق Firebase فقط عند وجود `app/google-services.json` أو ملف variant مناسب. لا ترفع الملف الحقيقي إلى Git إلا بعد مراجعته، ولا تضع keystore أو أسرار Sentry في المستودع. يمرر workflow الإصدار `SENTRY_DSN` و`SENTRY_AUTH_TOKEN` من GitHub Secrets عند توفرهما.
+
+## البناء المحلي
 
 ```bash
-export SIGNING_KEY_STORE=path/to/keystore.jks
-export SIGNING_KEY_ALIAS=firevision
-export SIGNING_STORE_PASSWORD=...
-export SIGNING_KEY_PASSWORD=...
+cd android
+./gradlew testDebugUnitTest --stacktrace
+./gradlew assembleDebug --stacktrace
+./gradlew assembleDev --stacktrace
 ```
 
-### Build Variants
+المخرجات:
 
-| Variant | Suffix | Debuggable | Optimized |
-|---------|--------|------------|-----------|
-| debug | `.debug` | Yes | No |
-| dev | `.dev` | Yes | No |
-| release | — | No | Yes (R8) |
+```text
+app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/dev/app-dev.apk
+app/build/outputs/apk/release/app-release.apk
+```
 
-## Testing on Fire TV
+إصدار release يتطلب متغيرات توقيع صالحة:
 
 ```bash
-# Enable ADB: Settings > My Fire TV > Developer Options > ADB Debugging
-adb connect <FIRE_TV_IP>:5555
-adb install app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.cadnative.firevisioniptv/.ComposeMainActivity
-make logcat      # View filtered logs
+export SIGNING_KEY_STORE=/secure/path/dzhoof-release.keystore
+export SIGNING_STORE_PASSWORD='...'
+export SIGNING_KEY_ALIAS='...'
+export SIGNING_KEY_PASSWORD='...'
+./gradlew assembleRelease -PversionName=1.5.0
 ```
 
-### Test Checklist
+لا تحفظ كلمات المرور في shell history أو ملفات متتبعة. في GitHub Actions استخدم `ANDROID_KEYSTORE_BASE64` وحقول التوقيع كأسرار مستودع.
 
-- [ ] App launches, channels load from server
-- [ ] D-pad navigation works on all screens
-- [ ] Channel playback (HLS streams)
-- [ ] PIN-based pairing flow
-- [ ] Favorites: add, remove, sync
-- [ ] Search with results
-- [ ] Health scanner runs and updates status indicators
-- [ ] Offline mode (disconnect network, channels still visible from cache)
-- [ ] Update check + download + install
-- [ ] Back button behavior (overlay dismiss → exit flow)
-
-## Distribution
-
-### GitHub Releases (primary)
+## الاختبار على الجهاز
 
 ```bash
-git tag -a v1.1 -m "Release 1.1"
-git push origin v1.1
+adb connect <ANDROID_TV_IP>:5555
+adb devices
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n com.dzhoof.iptv/.ComposeMainActivity
+adb logcat | grep -i dzhoof
 ```
 
-Upload `app-release.apk` as a release asset. Server auto-serves it via `GET /api/v1/app/version`.
+نفّذ على الأقل الاختبارات التالية قبل الإصدار:
 
-### Direct Upload
+| المجال | النتيجة المطلوبة |
+| --- | --- |
+| الاقتران عبر PIN | يظهر PIN وتنتهي صلاحيته وتكتمل عملية الربط |
+| الاتصال | يتصل التطبيق بعنوان HTTPS المحدد في BuildConfig |
+| القنوات | تظهر القنوات والتصنيفات وتعمل HLS المعتمدة |
+| التنقل | يعمل D-pad والرجوع والتركيز البصري |
+| المفضلة | الإضافة والحذف والمزامنة تعملان |
+| EPG وCatch-up | يظهران فقط عند توفر بيانات المصدر |
+| الاشتراك | يمنع الخادم التشغيل بعد الانتهاء أو تجاوز حد الأجهزة |
+| التحديث | يظهر الإصدار الجديد ويستخدم APK الموقّع الصحيح |
+
+## الإصدار عبر GitHub
+
+ارفع tag بعد مراجعة `versionCode` و`versionName`:
 
 ```bash
-curl -X POST https://tv.cadnative.com/api/v1/admin/app/upload \
-  -H "X-API-Key: <API_KEY>" \
-  -F "apk=@app/build/outputs/apk/release/app-release.apk" \
-  -F "versionName=1.1" \
-  -F "versionCode=2" \
-  -F "releaseNotes=Bug fixes" \
-  -F "isMandatory=false"
+git tag -a v1.5.0 -m "DZ HOOF 1.5.0"
+git push origin v1.5.0
 ```
 
-Download URL: `https://tv.cadnative.com/api/v1/app/download`
+سيتحقق workflow من الأسرار و`DZHOOF_API_URL`، يبني APK موقّعًا، يعيد تسميته إلى `dzhoof-1.5.0.apk`، ثم ينشئ GitHub Release ويرفعه. لا ترفع APK يدويًا إلى Git.
 
-### Update Types
+## أعطال شائعة
 
-| Flag | Behavior |
-|------|----------|
-| `isMandatory=false` | User can skip update |
-| `isMandatory=true` | Must update to continue |
-| `minCompatibleVersion=1` | Minimum version that can update |
-
-## Troubleshooting
-
-| Problem | Fix |
-|---------|-----|
-| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | `adb uninstall com.cadnative.firevisioniptv` then reinstall |
-| Signature mismatch | Uninstall existing app (debug vs release signing differs) |
-| Channels not loading | Verify API URL in build config, check server: `curl https://tv.cadnative.com/health` |
-| Update not working | Verify `versionCode` is higher than installed version |
+| المشكلة | الإجراء |
+| --- | --- |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | أزل النسخة الموقعة بمفتاح مختلف ثم ثبّت النسخة الجديدة |
+| التطبيق لا يصل إلى الخادم | افحص `BuildConfig.API_BASE_URL`، شهادة HTTPS، و`/health/ready` |
+| القنوات فارغة | تحقق من مصدر M3U المصرح به ومن حالة المزامنة في الخادم |
+| release لا يبدأ | راجع `ANDROID_KEYSTORE_BASE64` وأسرار التوقيع و`DZHOOF_API_URL` |
+| التحديث لا يظهر | تحقق من tag واسم asset `dzhoof-<version>.apk` وإعدادات GitHub Release |

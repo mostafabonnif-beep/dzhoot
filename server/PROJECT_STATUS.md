@@ -20,10 +20,12 @@ The local server `.env` contains development-only bootstrap credentials. Replace
 ## Validation status
 
 - Shared TypeScript package builds.
-- Backend TypeScript typecheck passes.
-- Backend tests pass: 89 tests across 5 suites.
-- Android APK build is not yet validated because this environment has no Java/Android SDK.
+- Backend TypeScript typecheck and ESLint pass.
+- Backend tests pass: 157 tests across 18 suites.
+- Frontend ESLint, typecheck, tests, and Next.js production build pass; the build generates 39 routes.
+- Dependency audit passes with 0 high-or-above vulnerabilities.
+- Android APK build still requires validation in GitHub Actions or on a machine with Java 17 and Android SDK 34.
 
 ## Next implementation step
 
-Set the real HTTPS server URL in `android/app/build.gradle.kts`, import one authorized test M3U playlist, run the server with MongoDB/Redis, then build and install the debug APK on an Android TV emulator or device.
+Set `DZHOOF_API_URL` to the real HTTPS server URL through Gradle properties or the release workflow, import one authorized test M3U playlist, run the server with MongoDB/Redis, then build and install the debug APK on an Android TV emulator or device. Use `server/docs/workflow/DEPLOYMENT_GUIDE.md` for the production checklist.

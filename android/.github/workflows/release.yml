@@ -1,9 +1,12 @@
-name: Build and Release APK
+name: Android Release
 
 on:
   push:
     tags:
       - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -17,36 +20,70 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Grant execute permission to Gradle wrapper
+        run: chmod +x android/gradlew
 
       - name: Get version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF/refs\/tags\/v/}" >> $GITHUB_ENV
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
 
-      - name: Decode Keystore
-        id: decode_keystore
-        uses: timheuer/base64-to-file@v1
-        with:
-          fileName: keystore.jks
-          encodedString: ${{ secrets.SIGNING_KEY_STORE_BASE64 }}
-
-      - name: Build with Gradle
+      - name: Validate release configuration
         env:
-          SIGNING_KEY_STORE: ${{ steps.decode_keystore.outputs.filePath }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          DZHOOF_API_URL: ${{ vars.DZHOOF_API_URL || secrets.DZHOOF_API_URL }}
+        run: |
+          set -euo pipefail
+          for name in ANDROID_KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD DZHOOF_API_URL; do
+            if [ -z "${!name}" ]; then
+              echo "Missing required release value: $name" >&2
+              exit 1
+            fi
+          done
+          case "$DZHOOF_API_URL" in
+            https://*) ;;
+            *) echo "DZHOOF_API_URL must use HTTPS" >&2; exit 1 ;;
+          esac
+
+      - name: Restore signing keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/dzhoof-release.keystore"
+          chmod 600 "$RUNNER_TEMP/dzhoof-release.keystore"
+
+      - name: Build signed release APK
+        working-directory: android
+        env:
+          SIGNING_KEY_STORE: ${{ runner.temp }}/dzhoof-release.keystore
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-        run: ./gradlew assembleRelease -PversionName=${{ env.VERSION }}
+          DZHOOF_API_URL: ${{ vars.DZHOOF_API_URL || secrets.DZHOOF_API_URL }}
+        run: ./gradlew assembleRelease --stacktrace --no-daemon -PversionName="${VERSION}"
 
       - name: Rename APK
-        run: mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/FireVisionIPTV-${{ env.VERSION }}.apk
+        run: mv android/app/build/outputs/apk/release/app-release.apk "android/app/build/outputs/apk/release/dzhoof-${VERSION}.apk"
 
-      - name: Create Release and Upload APK
+      - name: Create GitHub Release and upload APK
         uses: softprops/action-gh-release@v2
         with:
-          name: Release ${{ github.ref_name }}
-          files: app/build/outputs/apk/release/FireVisionIPTV-${{ env.VERSION }}.apk
+          name: DZ HOOF ${{ github.ref_name }}
+          generate_release_notes: true
+          files: android/app/build/outputs/apk/release/dzhoof-${{ env.VERSION }}.apk
+
+      - name: Remove signing material
+        if: always()
+        run: rm -f "$RUNNER_TEMP/dzhoof-release.keystore"
