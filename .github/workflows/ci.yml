@@ -64,6 +64,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: server/package-lock.json
       - run: npm ci --ignore-scripts
+      - run: npm run lint -w @firevision/frontend
       - run: npm run build -w @firevision/frontend
       - run: npm run test:frontend
       - run: npm audit --omit=dev --audit-level=critical

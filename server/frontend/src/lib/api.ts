@@ -53,6 +53,9 @@ api.interceptors.response.use(
             ? `/login?message=account_disabled&admin_email=${encodeURIComponent(email)}`
             : '/login?message=account_disabled';
         } else {
+          // This interceptor runs outside React components, so a router hook is
+          // unavailable; replace performs the same full navigation safely.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
           window.location.href = '/login';
         }
         // No timeout reset — module reloads on navigation, resetting isRedirecting naturally
