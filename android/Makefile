@@ -13,7 +13,7 @@ export ANDROID_SDK_ROOT
 export JAVA_HOME
 export PATH   := $(JAVA_HOME)/bin:$(ANDROID_HOME)/platform-tools:$(ANDROID_HOME)/emulator:$(PATH)
 
-PACKAGE       := com.cadnative.firevisioniptv
+PACKAGE       := com.dzhoof.iptv
 ACTIVITY      := $(PACKAGE)/.ComposeMainActivity
 APK           := app/build/outputs/apk/debug/app-debug.apk
 
@@ -23,7 +23,7 @@ DEVICE        ?= Android_TV_1080p
 # Default target
 help:
 	@echo ""
-	@echo "FireVision IPTV — Available Commands"
+	@echo "DZ HOOF — Available Commands"
 	@echo "======================================"
 	@echo ""
 	@echo "Emulator & Device:"
@@ -52,7 +52,7 @@ help:
 	@echo "  make setup                Install git hooks (lint before commit)"
 	@echo ""
 	@echo "Logging:"
-	@echo "  make logcat               Show app logs (filtered to FireVision)"
+	@echo "  make logcat               Show app logs (filtered to DZ HOOF)"
 	@echo ""
 	@echo "Release Management:"
 	@echo "  make tag v=v1.2.3         Create and push an annotated release tag"
@@ -125,7 +125,7 @@ test:
 logcat:
 	@$(ADB) logcat --pid=$$($(ADB) shell pidof $(PACKAGE)) 2>/dev/null || \
 		(echo "App not running. Showing all logs filtered by tag..." && \
-		 $(ADB) logcat -s FireVision:* AndroidRuntime:E)
+		 $(ADB) logcat -s DZHOOF:* AndroidRuntime:E)
 
 # ── Release tagging ──────────────────────────────────────────────────────────
 

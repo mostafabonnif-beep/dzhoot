@@ -66,9 +66,9 @@ internal fun ConnectionSection(
             // Check the active playlist source first: a lingering demo/paired flag
             // must not mask a bring-your-own M3U/Xtream source that's now in use.
             uiState.sourceType == SOURCE_M3U && uiState.m3uUrl.isNotBlank() ->
-                PlaylistSourceBanner(title = "M3U playlist", detail = uiState.m3uUrl)
+                PlaylistSourceBanner(title = "قائمة M3U", detail = uiState.m3uUrl)
             uiState.sourceType == SOURCE_XTREAM && uiState.xtreamHost.isNotBlank() ->
-                PlaylistSourceBanner(title = "Xtream Codes", detail = uiState.xtreamHost)
+                PlaylistSourceBanner(title = "رموز Xtream", detail = uiState.xtreamHost)
             uiState.isPaired -> PairedStatusBanner(
                 serverUrl = uiState.serverUrl,
                 tvCode = uiState.tvCode,
@@ -170,7 +170,7 @@ private fun PairedStatusBanner(
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Paired",
+                        text = "تم الربط",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -188,7 +188,7 @@ private fun PairedStatusBanner(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.4f))
                 ) {
                     Text(
-                        "Reset",
+                        "إلغاء الربط",
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -214,13 +214,13 @@ private fun DemoModeBanner(
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Demo Mode",
+                        text = "الوضع التجريبي",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Browsing shared demo channels. Pair your device to access your personal channel list.",
+                        text = "تتصفح قنوات تجريبية مشتركة. اربط جهازك للوصول إلى قائمتك الشخصية.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -235,7 +235,7 @@ private fun DemoModeBanner(
             },
             action = {
                 FocusAwareOutlinedButton(onClick = onPairDevice) {
-                    Text("Pair Now", fontWeight = FontWeight.SemiBold)
+                    Text("الربط الآن", fontWeight = FontWeight.SemiBold)
                 }
             }
         )
@@ -286,13 +286,13 @@ private fun NoSourceCard(
             content = {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "No channel source",
+                        text = "لا يوجد مصدر للقنوات",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Pair your TV or add a playlist to start watching.",
+                        text = "اربط التلفاز أو أضف قائمة لبدء المشاهدة.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -300,7 +300,7 @@ private fun NoSourceCard(
             },
             action = {
                 FocusAwareOutlinedButton(onClick = onSetup) {
-                    Text("Set up", fontWeight = FontWeight.SemiBold)
+                    Text("إعداد", fontWeight = FontWeight.SemiBold)
                 }
             }
         )
@@ -319,13 +319,13 @@ private fun ChangeSourceRow(
             content = {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Change source",
+                        text = "تغيير المصدر",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Switch to pairing, a self-hosted server, or your own playlist.",
+                        text = "انتقل إلى الربط أو خادمك الخاص أو قائمتك الشخصية.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -333,7 +333,7 @@ private fun ChangeSourceRow(
             },
             action = {
                 FocusAwareOutlinedButton(onClick = onChangeSource) {
-                    Text("Change  ▸", fontWeight = FontWeight.Medium)
+                    Text("تغيير  ▸", fontWeight = FontWeight.Medium)
                 }
             }
         )
