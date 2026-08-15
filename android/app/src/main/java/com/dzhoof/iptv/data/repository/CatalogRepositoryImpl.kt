@@ -99,6 +99,33 @@ class CatalogRepositoryImpl @Inject constructor(
             }
         }
 
+    override suspend fun getMovieById(movieId: String): Result<Movie> = withContext(dispatcher) {
+        try {
+            val response = apiService.getMovieById(movieId)
+            val body = response.body()
+            val movie = body?.data
+            if (response.isSuccessful && body?.success == true && movie != null) {
+                Result.Success(
+                    Movie(
+                        id = movie.id,
+                        title = movie.title,
+                        category = movie.category,
+                        poster = movie.poster,
+                        backdrop = movie.backdrop,
+                        description = movie.description,
+                        year = movie.year,
+                        durationMinutes = movie.duration,
+                        rating = movie.rating,
+                    )
+                )
+            } else {
+                Result.Error(Exception(body?.error ?: response.message().ifBlank { "تعذر تحميل تفاصيل الفيلم" }))
+            }
+        } catch (error: Exception) {
+            Result.Error(error)
+        }
+    }
+
     override suspend fun getSeries(page: Int, limit: Int, search: String?): Result<CatalogPage<Series>> =
         withContext(dispatcher) {
             try {

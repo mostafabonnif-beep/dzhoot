@@ -23,8 +23,11 @@ data class CatalogUiState(
     val series: List<Series> = emptyList(),
     val seasons: List<Season> = emptyList(),
     val episodes: List<Episode> = emptyList(),
+    val selectedMovie: Movie? = null,
     val selectedSeries: Series? = null,
     val selectedSeason: Season? = null,
+    val isLoadingMovie: Boolean = false,
+    val movieError: String? = null,
     val page: Int = 1,
     val totalCount: Int = 0,
     val isLoading: Boolean = false,
@@ -73,14 +76,44 @@ class CatalogViewModel @Inject constructor(
         else loadSeries(page = current.page + 1, append = true)
     }
 
-    fun selectSeriesById(seriesId: String, fallbackTitle: String = "Series") {
+    fun selectMovie(movie: Movie) {
+        _uiState.value = _uiState.value.copy(
+            selectedMovie = movie,
+            movieError = null,
+            isLoadingMovie = false,
+            selectedSeries = null,
+        )
+    }
+
+    fun selectMovieById(movieId: String, fallbackTitle: String = "فيلم") {
+        _uiState.value = _uiState.value.copy(
+            selectedMovie = Movie(id = movieId, title = fallbackTitle),
+            movieError = null,
+            isLoadingMovie = true,
+            selectedSeries = null,
+        )
+        viewModelScope.launch {
+            when (val result = repository.getMovieById(movieId)) {
+                is Result.Success -> _uiState.value = _uiState.value.copy(
+                    selectedMovie = result.data,
+                    isLoadingMovie = false,
+                )
+                is Result.Error -> _uiState.value = _uiState.value.copy(
+                    isLoadingMovie = false,
+                    movieError = result.exception.message ?: "تعذر تحميل تفاصيل الفيلم",
+                )
+            }
+        }
+    }
+
+    fun selectSeriesById(seriesId: String, fallbackTitle: String = "مسلسل") {
         viewModelScope.launch {
             when (val result = repository.getSeriesById(seriesId)) {
                 is Result.Success -> selectSeries(result.data)
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     selectedSeries = Series(id = seriesId, title = fallbackTitle),
                     isLoadingDetails = false,
-                    detailsError = result.exception.message ?: "Unable to load series details",
+                    detailsError = result.exception.message ?: "تعذر تحميل تفاصيل المسلسل",
                 )
             }
         }
@@ -103,7 +136,7 @@ class CatalogViewModel @Inject constructor(
                 )
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     isLoadingDetails = false,
-                    detailsError = result.exception.message ?: "Unable to load seasons",
+                    detailsError = result.exception.message ?: "تعذر تحميل المواسم",
                 )
             }
         }
@@ -124,17 +157,22 @@ class CatalogViewModel @Inject constructor(
                 )
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     isLoadingDetails = false,
-                    detailsError = result.exception.message ?: "Unable to load episodes",
+                    detailsError = result.exception.message ?: "تعذر تحميل الحلقات",
                 )
             }
         }
+    }
+
+    fun retryDetails() {
+        val current = _uiState.value
+        current.selectedSeason?.let { selectSeason(it) } ?: current.selectedSeries?.let { selectSeries(it) }
     }
 
     suspend fun authorizePlayback(contentType: String, contentId: String): String? {
         return when (val result = repository.authorizePlayback(contentType, contentId)) {
             is Result.Success -> result.data.url
             is Result.Error -> {
-                _uiState.value = _uiState.value.copy(error = result.exception.message ?: "Playback authorization failed")
+                _uiState.value = _uiState.value.copy(error = result.exception.message ?: "تعذر تفويض تشغيل المحتوى")
                 null
             }
         }
@@ -142,7 +180,10 @@ class CatalogViewModel @Inject constructor(
 
     fun clearDetails() {
         _uiState.value = _uiState.value.copy(
+            selectedMovie = null,
             selectedSeries = null,
+            isLoadingMovie = false,
+            movieError = null,
             selectedSeason = null,
             seasons = emptyList(),
             episodes = emptyList(),
@@ -168,7 +209,7 @@ class CatalogViewModel @Inject constructor(
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isLoadingMore = false,
-                    error = result.exception.message ?: "Unable to load movies",
+                    error = result.exception.message ?: "تعذر تحميل الأفلام",
                 )
             }
         }
@@ -192,7 +233,7 @@ class CatalogViewModel @Inject constructor(
                 is Result.Error -> _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     isLoadingMore = false,
-                    error = result.exception.message ?: "Unable to load series",
+                    error = result.exception.message ?: "تعذر تحميل المسلسلات",
                 )
             }
         }

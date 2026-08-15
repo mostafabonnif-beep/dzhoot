@@ -50,12 +50,22 @@ fun VodPlayerScreen(
         state.playbackUrl?.let { url ->
             player.setMediaItem(MediaItem.fromUri(url))
             player.prepare()
+            if (state.resumePositionMs > 0L) player.seekTo(state.resumePositionMs)
             player.playWhenReady = true
         }
     }
 
+    LaunchedEffect(state.playbackUrl, state.resumePositionMs) {
+        if (state.playbackUrl != null && state.resumePositionMs > 0L && player.currentPosition < 1_000L) {
+            player.seekTo(state.resumePositionMs)
+        }
+    }
+
     DisposableEffect(player) {
-        onDispose { player.release() }
+        onDispose {
+            viewModel.saveCurrentProgress()
+            player.release()
+        }
     }
 
     Box(
@@ -94,7 +104,7 @@ fun VodPlayerScreen(
                 Text(text = title, style = MaterialTheme.typography.titleLarge, color = Color.White)
                 Text(text = error, color = Color.White)
                 Button(onClick = viewModel::retry) {
-                    Text("Retry")
+                    Text("إعادة المحاولة")
                 }
             }
         }

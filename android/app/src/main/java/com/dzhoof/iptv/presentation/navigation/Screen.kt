@@ -12,6 +12,9 @@ sealed class Screen(val route: String) {
     object Channels : Screen("channels")
     object Categories : Screen("categories")
     object Catalog : Screen("catalog")
+    object MovieDetails : Screen("movie_details/{movieId}") {
+        fun createRoute(movieId: String): String = "movie_details/${URLEncoder.encode(movieId, "UTF-8")}"
+    }
     object SeriesDetails : Screen("series_details/{seriesId}") {
         fun createRoute(seriesId: String): String = "series_details/${URLEncoder.encode(seriesId, "UTF-8")}"
     }
