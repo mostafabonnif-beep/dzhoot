@@ -9,8 +9,8 @@
     "dev": "tsx watch src/server.js",
     "build": "tsc && rm -rf dist/templates && cp -R src/templates dist/templates",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/",
-    "lint:fix": "eslint src/ --fix",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src/",
+    "lint:fix": "ESLINT_USE_FLAT_CONFIG=false eslint src/ --fix",
     "test": "jest",
     "migrate:fix-indexes": "tsx src/scripts/migrations/0002-fix-indexes.ts",
     "migrate:sync-indexes": "tsx src/scripts/migrations/0003-sync-indexes.ts",
@@ -61,7 +61,7 @@
     "mongodb-memory-server": "^11.0.1",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.6",
-    "tsx": "^4.7.0",
+    "tsx": "^4.23.12",
     "typescript": "^5.3.3"
   },
   "engines": {
