@@ -75,7 +75,7 @@ export async function proxyUpstreamStream(
     });
 
     const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || url;
-    const contentType = (response.headers['content-type'] || '').toLowerCase();
+    const contentType = String(response.headers['content-type'] || '').toLowerCase();
     const isManifest =
       url.includes('.m3u8') ||
       finalUrl.includes('.m3u8') ||

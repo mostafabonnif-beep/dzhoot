@@ -1,20 +1,20 @@
-# FireVision IPTV
+# DZ HOOF IPTV
 
-[![Release](https://img.shields.io/github/v/release/akshaynikhare/FireVisionIPTV)](https://github.com/akshaynikhare/FireVisionIPTV/releases/latest)
-[![Build](https://github.com/akshaynikhare/FireVisionIPTV/actions/workflows/release.yml/badge.svg)](https://github.com/akshaynikhare/FireVisionIPTV/actions/workflows/release.yml)
-[![Platform](https://img.shields.io/badge/platform-Fire%20TV%20%7C%20Android%20TV-orange)](https://github.com/akshaynikhare/FireVisionIPTV)
-[![License](https://img.shields.io/github/license/akshaynikhare/FireVisionIPTV)](LICENSE)
-[![Min SDK](https://img.shields.io/badge/min%20SDK-28%20(Android%209)-green)](https://github.com/akshaynikhare/FireVisionIPTV)
+[![Release](https://img.shields.io/github/v/release/merci1994dz/dzhoot)](https://github.com/merci1994dz/dzhoot/releases/latest)
+[![Build](https://github.com/merci1994dz/dzhoot/actions/workflows/ci.yml/badge.svg)](https://github.com/merci1994dz/dzhoot/actions/workflows/ci.yml)
+[![Platform](https://img.shields.io/badge/platform-Fire%20TV%20%7C%20Android%20TV-orange)](https://github.com/merci1994dz/dzhoot)
+[![License](https://img.shields.io/github/license/merci1994dz/dzhoot)](LICENSE)
+[![Min SDK](https://img.shields.io/badge/min%20SDK-28%20(Android%209)-green)](https://github.com/merci1994dz/dzhoot)
 
 **Open-source IPTV player for Amazon Fire TV and Android TV.** Stream live channels with server-synced lists, category browsing, favorites, and background health scanning.
 
-Works standalone with any M3U source, or pairs with [FireVision IPTV Server](https://github.com/akshaynikhare/FireVisionIPTVServer) for full channel management, EPG, and OTA updates.
+Works standalone with any M3U source, or pairs with [DZ HOOF Server](https://github.com/merci1994dz/dzhoot) for full channel management, EPG, and OTA updates.
 
 ---
 
 ## Preview
 
-<img src="/preview/preview.gif" alt="FireVision IPTV Demo" width="800px">
+<img src="/preview/preview.gif" alt="DZ HOOF IPTV Demo" width="800px">
 
 <img src="/preview/preview1.jpg" alt="Home" width="200" height="150"> <img src="/preview/preview2.jpg" alt="Channel Browser" width="200" height="150"> <img src="/preview/preview3.jpg" alt="Player" width="200" height="150"> <img src="/preview/preview4.jpg" alt="Settings" width="200" height="150">
 
@@ -23,7 +23,7 @@ Works standalone with any M3U source, or pairs with [FireVision IPTV Server](htt
 ## Features
 
 - **Live Streaming** — HLS playback via Media3 ExoPlayer with position save and resume
-- **Server Sync** — Channel lists, favorites, and health status synced from [FireVision IPTV Server](https://github.com/akshaynikhare/FireVisionIPTVServer)
+- **Server Sync** — Channel lists, favorites, and health status synced from [DZ HOOF Server](https://github.com/merci1994dz/dzhoot)
 - **Smart Browsing** — Browse by category and language, full-text search with history
 - **Health Scanning** — Background channel health checks with online/offline indicators
 - **Device Pairing** — PIN-based pairing with QR code — links to your self-hosted server
@@ -34,7 +34,7 @@ Works standalone with any M3U source, or pairs with [FireVision IPTV Server](htt
 
 ## Download
 
-Get the latest APK from [GitHub Releases](https://github.com/akshaynikhare/FireVisionIPTV/releases/latest).
+Get the latest APK from [GitHub Releases](https://github.com/merci1994dz/dzhoot/releases/latest).
 
 **Install on Fire TV:**
 1. Enable _Apps from Unknown Sources_ in Fire TV Settings → My Fire TV → Developer Options
@@ -50,13 +50,13 @@ Get the latest APK from [GitHub Releases](https://github.com/akshaynikhare/FireV
 2. Open Settings → Add Source → enter your M3U playlist URL
 3. Browse and stream channels
 
-### With FireVision IPTV Server
+### With DZ HOOF Server
 1. Install the APK
 2. Open Settings → Server Pairing
 3. Scan the QR code from the admin panel, or enter the PIN manually
 4. Channel list, favorites, and EPG sync automatically
 
-See the [TV Pairing System docs](https://github.com/akshaynikhare/FireVisionIPTVServer/blob/main/docs/workflow/TV_PAIRING_SYSTEM.md) for the full pairing flow.
+See the [TV Pairing System docs](https://github.com/merci1994dz/dzhoot/blob/main/server/docs/workflow/TV_PAIRING_SYSTEM.md) for the full pairing flow.
 
 ---
 
@@ -78,7 +78,7 @@ See the [TV Pairing System docs](https://github.com/akshaynikhare/FireVisionIPTV
 
 ## Backend
 
-This app is designed to pair with **[FireVision IPTV Server](https://github.com/akshaynikhare/FireVisionIPTVServer)** — a self-hosted Node.js/Docker server for managing channels, users, EPG, and devices from an admin panel.
+This app is designed to pair with **[DZ HOOF Server](https://github.com/merci1994dz/dzhoot)** — a self-hosted Node.js/Docker server for managing channels, users, EPG, and devices from an admin panel.
 
 ---
 

@@ -21,6 +21,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
+      - run: npm run build:backend
+      - run: npm audit --omit=dev --audit-level=critical
       - run: npm run test:backend
       - name: E2E smoke (subscription loop)
         run: npx tsx scripts/smoke-activation.ts
@@ -64,3 +66,4 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build -w @firevision/frontend
       - run: npm run test:frontend
+      - run: npm audit --omit=dev --audit-level=critical

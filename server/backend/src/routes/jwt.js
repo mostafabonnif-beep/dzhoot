@@ -21,6 +21,7 @@ const effectiveRefreshSecret = REFRESH_SECRET || 'dev-refresh-secret-change-me';
 // Use shared middleware instead of duplicating
 const { requireJwtAuth } = require('../middleware/requireJwtAuth');
 const { verifyTotpToken } = require('../services/totp-service');
+const { checkPlaybackSubscription } = require('../services/playback-access-service');
 
 // Login (password) -> JWT tokens
 router.post('/login', async (req, res) => {
@@ -146,6 +147,14 @@ router.get('/playlist.m3u', requireJwtAuth, async (req, res) => {
     const user = await User.findById(req.userId);
     if (!user) {
       return res.status(404).send('#EXTM3U\n#ERROR:User not found');
+    }
+    const playbackAccess = await checkPlaybackSubscription(String(user._id), user.role);
+    if (!playbackAccess.allowed) {
+      return res.status(403).json({
+        success: false,
+        error: 'Your subscription has expired. Activate a new code to continue watching.',
+        code: 'SUBSCRIPTION_EXPIRED',
+      });
     }
     const baseUrl = getPublicBaseUrl(req);
     const m3u = await user.generateUserPlaylist(baseUrl);

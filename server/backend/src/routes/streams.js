@@ -7,10 +7,7 @@ const Movie = require('../models/Movie');
 const Episode = require('../models/Episode');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { resolveUser } = require('../middleware/resolveUser');
-const {
-  isSubscriptionRequired,
-  getActiveSubscription,
-} = require('../services/subscription-service');
+const { checkPlaybackSubscription } = require('../services/playback-access-service');
 const { issuePlaybackToken } = require('../services/playback-token');
 const { registerStreamSession } = require('../services/stream-session-service');
 const { getPublicBaseUrl } = require('../utils/public-url');
@@ -41,23 +38,21 @@ router.post('/authorize', async (req, res) => {
     const id = parseId(contentId);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid contentId' });
 
+    const playbackAccess = await checkPlaybackSubscription(
+      req.user?.id ? String(req.user.id) : undefined,
+      req.user?.role,
+    );
     const isAdmin = req.user?.role === 'Admin';
-    const subscriptionRequired = await isSubscriptionRequired();
-
-    // Subscription gate (skipped for admins, and while the flag is off).
-    let subscription = null;
-    if (subscriptionRequired && !isAdmin) {
-      if (!req.user) {
-        return res.status(401).json({ success: false, error: 'Authentication required' });
-      }
-      subscription = await getActiveSubscription(req.user.id);
-      if (!subscription) {
-        return res.status(403).json({
-          success: false,
-          error: 'Your subscription has expired. Activate a new code to continue watching.',
-          code: 'SUBSCRIPTION_EXPIRED',
-        });
-      }
+    const subscriptionRequired = playbackAccess.required;
+    const subscription = playbackAccess.subscription;
+    if (!playbackAccess.allowed) {
+      return res.status(req.user ? 403 : 401).json({
+        success: false,
+        error: req.user
+          ? 'Your subscription has expired. Activate a new code to continue watching.'
+          : 'Authentication required',
+        code: req.user ? 'SUBSCRIPTION_EXPIRED' : 'AUTHENTICATION_REQUIRED',
+      });
     }
 
     let content = null;

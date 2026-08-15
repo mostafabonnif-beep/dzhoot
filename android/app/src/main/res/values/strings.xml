@@ -48,4 +48,36 @@
     <string name="pair_device">Pair Device</string>
     <string name="tv_input_label">DZ HOOF IPTV</string>
     <string name="tv_setup_label">DZ HOOF Channel Setup</string>
+    <!-- Add source screen -->
+    <string name="source_tab_self_host">Self-hosted server</string>
+    <string name="source_tab_m3u">M3U</string>
+    <string name="source_tab_xtream">Xtream</string>
+    <string name="source_add_title">Add a different source</string>
+    <string name="source_setup_guide">View setup guide</string>
+    <string name="source_scan_guide">Scan to view the server setup guide, or visit:</string>
+    <string name="source_setup_qr_description">Server setup guide QR code</string>
+    <string name="source_setup_step_1">Deploy the DZ HOOF server on your machine</string>
+    <string name="source_setup_step_2">Add your authorized IPTV channels via the web dashboard</string>
+    <string name="source_setup_step_3">Enter your server URL and pairing code here</string>
+    <string name="source_setup_step_3_below">Enter your server URL and pairing code below</string>
+    <string name="source_m3u_title">M3U Playlist</string>
+    <string name="source_m3u_description">Paste an M3U / M3U8 playlist URL — no managed server required.</string>
+    <string name="source_xtream_title">Xtream Codes</string>
+    <string name="source_xtream_description">Enter your Xtream Codes login — no managed server required.</string>
+    <string name="source_load_playlist">Load playlist</string>
+    <string name="source_username">Username</string>
+    <string name="source_password">Password</string>
+    <string name="source_server_url">Server URL</string>
+    <string name="source_tv_pairing_code">TV pairing code</string>
+    <string name="source_enter_tv_code">Enter TV code</string>
+    <string name="source_connect">Connect</string>
+    <string name="source_saved">Saved</string>
+    <string name="source_test_connection">Test connection</string>
+    <string name="source_testing">Testing…</string>
+    <string name="source_pair_with_pin">No code? Pair with a PIN instead</string>
+    <string name="source_server_and_code_required">Server URL and TV code are required</string>
+    <string name="source_invalid_settings">Invalid settings</string>
+    <string name="source_url_protocol_error">URL must start with http:// or https://</string>
+    <string name="source_playlist_loaded">Playlist loaded</string>
+    <string name="source_connected">Connected</string>
 </resources>

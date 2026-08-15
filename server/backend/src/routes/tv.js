@@ -18,6 +18,18 @@ const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth
 const { epgCache } = require('../services/cache');
 const { decryptSecret } = require('../utils/crypto');
 const { getPublicBaseUrl } = require('../utils/public-url');
+const { checkPlaybackSubscription } = require('../services/playback-access-service');
+
+async function ensurePlaybackSubscription(user, res) {
+  const access = await checkPlaybackSubscription(String(user?._id || user?.id || ''), user?.role);
+  if (access.allowed) return true;
+  res.status(403).json({
+    success: false,
+    error: 'Your subscription has expired. Activate a new code to continue watching.',
+    code: 'SUBSCRIPTION_EXPIRED',
+  });
+  return false;
+}
 
 // Same cap as the /channels sync — the EPG only needs to cover what the TV can list.
 const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 2000;
@@ -147,6 +159,7 @@ router.get('/playlist/:code', async (req, res) => {
   try {
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
+    if (!(await ensurePlaybackSubscription(user, res))) return;
 
     // Generate M3U playlist for this user (with EPG URL)
     const baseUrl = getPublicBaseUrl(req);
@@ -154,6 +167,8 @@ router.get('/playlist/:code', async (req, res) => {
 
     // Set response headers for M3U
     res.setHeader('Content-Type', 'audio/x-mpegurl');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
     const safeUsername = user.username.replace(/[^a-zA-Z0-9_-]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${safeUsername}-playlist.m3u"`);
     res.send(m3uContent);
@@ -171,6 +186,7 @@ router.get('/playlist/:code/json', async (req, res) => {
   try {
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
+    if (!(await ensurePlaybackSubscription(user, res))) return;
 
     const Channel = require('../models/Channel');
     let channels;
@@ -191,11 +207,12 @@ router.get('/playlist/:code/json', async (req, res) => {
     const tokenizedChannels = await Promise.all(
       channels.map((channel) => tokenizeChannelForClient(channel, user, baseUrl)),
     );
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Pragma', 'no-cache');
     res.json({
       success: true,
       user: {
         username: user.username,
-        channelListCode: user.channelListCode,
       },
       count: tokenizedChannels.length,
       channels: tokenizedChannels,
@@ -366,8 +383,9 @@ router.get('/playback/:token', async (req, res) => {
       _id: payload.userId,
       channelListCode: payload.channelListCode,
       isActive: true,
-    }).select('_id channelListCode');
+    }).select('_id channelListCode role');
     if (!user) return res.status(401).send('Playback authorization revoked');
+    if (!(await ensurePlaybackSubscription(user, res))) return;
 
     return proxyUpstreamStream(req, res, payload.streamUrl, {
       userId: String(user._id),
@@ -488,14 +506,11 @@ router.get('/verify/:code', async (req, res) => {
       });
     }
 
+    // This endpoint is an oracle for a bearer credential. Return only validity;
+    // never disclose the matched username, role, or catalog size.
     res.json({
       success: true,
       valid: true,
-      data: {
-        username: user.username,
-        role: user.role,
-        channelsCount: user.role === 'Admin' ? 'All' : user.channels.length,
-      },
     });
   } catch (error) {
     console.error('Error verifying code:', error);
@@ -547,7 +562,8 @@ router.get('/epg/:code', async (req, res) => {
     await epgCache.set(cacheKey, xmltv);
 
     res.setHeader('Content-Type', 'application/xml');
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Pragma', 'no-cache');
     res.send(xmltv);
   } catch (error) {
     console.error('Error fetching EPG:', error);
