@@ -66,3 +66,53 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+
+export interface ChannelOperationsSource {
+  _id: string;
+  name: string;
+  status: 'Active' | 'Inactive';
+  syncStatus: 'idle' | 'syncing' | 'error';
+  lastSyncAt?: string | null;
+  lastError?: string | null;
+  stats?: Record<string, number>;
+  updatedAt?: string;
+}
+
+export interface ChannelOperationsData {
+  channels: {
+    total: number;
+    active: number;
+    healthy: number;
+    failing: number;
+    unknown: number;
+    withFallback: number;
+    avgResponseTime: number | null;
+  };
+  sources: {
+    m3u: ChannelOperationsSource[];
+    xtream: ChannelOperationsSource[];
+  };
+  epg: {
+    totalPrograms: number;
+    channelsWithEpg: number;
+    totalSystemChannels: number;
+    lastRefreshedAt: string | null;
+    nextRefreshAt: string | null;
+    sourcesDiscovered: number;
+    refreshInProgress: boolean;
+    lastRefreshDurationMs: number;
+    lastRefreshProgramCount: number;
+    lastRefreshErrorCount: number;
+    lastRefreshErrorSources: string[];
+  };
+  generatedAt: string;
+}
+
+export async function getChannelOperations(signal?: AbortSignal): Promise<ChannelOperationsData> {
+  const response = await api.get<{ success: boolean; data: ChannelOperationsData }>(
+    '/admin/stats/channel-operations',
+    { signal },
+  );
+  return response.data.data;
+}

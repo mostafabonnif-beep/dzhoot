@@ -65,6 +65,8 @@ export interface IChannel {
     responseTime?: number;
     /** Provenance: which pipeline imported this channel (e.g. "xtream"). */
     source?: string;
+    /** M3U source document id when source === "m3u". */
+    m3uSourceId?: string;
     /** Xtream source document id (when source === "xtream"). */
     xtreamSourceId?: string;
     /** Original stream_id on the Xtream panel. */
