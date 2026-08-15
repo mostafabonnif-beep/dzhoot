@@ -13,13 +13,25 @@ export function useRequireAuth(requiredRole?: 'Admin' | 'User') {
 
   useEffect(() => {
     if (hydrated) return;
-    const unsub = useAuthStore.persist?.onFinishHydration?.(() => {
-      setHydrated(true);
-    });
-    if (useAuthStore.persist?.hasHydrated?.()) {
-      setHydrated(true);
+    let active = true;
+    const finishHydration = () => {
+      if (active) setHydrated(true);
+    };
+    const persistApi = useAuthStore.persist;
+    const unsub = persistApi?.onFinishHydration?.(finishHydration);
+
+    if (persistApi?.hasHydrated?.()) {
+      finishHydration();
+    } else if (persistApi?.rehydrate) {
+      void Promise.resolve(persistApi.rehydrate()).then(finishHydration, finishHydration);
+    } else {
+      finishHydration();
     }
-    return () => unsub?.();
+
+    return () => {
+      active = false;
+      unsub?.();
+    };
   }, [hydrated]);
 
   useEffect(() => {
