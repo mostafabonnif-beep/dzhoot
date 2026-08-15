@@ -15,6 +15,7 @@ const { ScheduledTaskRun } = require('../models/ScheduledTaskRun');
 const M3USource = require('../models/M3USource');
 const XtreamSource = require('../models/XtreamSource');
 const { epgService } = require('../services/epg-service');
+const { getPlaybackQualityStats } = require('../services/playback-event-service');
 const {
   getChannelIdentityStats,
   reconcileChannelIdentities,
@@ -948,6 +949,29 @@ router.get('/stats/channel-operations', async (req, res) => {
   } catch (error) {
     console.error('Error fetching channel operations:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch channel operations' });
+  }
+});
+
+// EPG mapping diagnostics: coverage and unmatched channels per discovered source.
+router.get('/stats/epg-coverage', async (_req, res) => {
+  try {
+    const coverage = await epgService.getCoverage();
+    res.json({ success: true, data: coverage, generatedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error fetching EPG coverage:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch EPG coverage' });
+  }
+});
+
+// Anonymous playback quality telemetry, aggregated by day for operations review.
+router.get('/stats/playback-quality', async (req, res) => {
+  try {
+    const days = Number.parseInt(String(req.query.days || '7'), 10);
+    const quality = await getPlaybackQualityStats(Number.isFinite(days) ? days : 7);
+    res.json({ success: true, data: quality, generatedAt: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error fetching playback quality stats:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch playback quality stats' });
   }
 });
 

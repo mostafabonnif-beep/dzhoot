@@ -23,35 +23,32 @@ object StreamErrorMessageResolver {
             context.categoryOfflineCount >= context.categoryScannedCount / 2
         ) {
             return StreamErrorMessage(
-                title = "Source Provider Issue",
-                explanation = "Multiple channels in this group are down. " +
-                        "This usually means the source provider is experiencing problems."
+                title = "مشكلة في مزود المصدر",
+                explanation = "عدة قنوات في هذه المجموعة متوقفة. " +
+                        "يبدو أن مزود المصدر يواجه مشكلة مؤقتة."
             ).withRecentSuffix(context)
         }
 
         val (title, explanation) = when {
             context.errorMessage.contains("Network connection", ignoreCase = true) ->
-                "Connection Lost" to
-                        "Your device lost its network connection. Check your Wi-Fi or ethernet and try again."
+                "انقطع الاتصال" to
+                        "فقد الجهاز اتصال الشبكة. تحقق من Wi-Fi أو كابل الشبكة ثم حاول مجددًا."
 
             context.errorMessage.contains("Server error", ignoreCase = true) ->
-                "Server Not Responding" to
-                        "The channel's streaming server isn't responding. " +
-                        "This is a third-party server outside our control."
+                "خادم البث لا يستجيب" to
+                        "خادم بث القناة لا يستجيب حاليًا. قد تكون المشكلة مؤقتة لدى مزود المصدر."
 
             context.errorMessage.contains("Invalid stream format", ignoreCase = true) ->
-                "Stream Format Error" to
-                        "The stream format has changed or is incompatible. " +
-                        "The source provider may have updated their feed."
+                "تنسيق البث غير متوافق" to
+                        "تغير تنسيق البث أو لم يعد متوافقًا مع المشغل. قد يكون مزود المصدر حدّث قائمته."
 
             context.errorMessage.contains("All streams exhausted", ignoreCase = true) ->
-                "Channel Offline" to
-                        "We tried all available sources for this channel and none are responding right now."
+                "القناة غير متاحة" to
+                        "تمت تجربة جميع المصادر المتاحة لهذه القناة، ولا يستجيب أي منها حاليًا."
 
             else ->
-                "Stream Unavailable" to
-                        "This channel's stream couldn't be loaded. " +
-                        "IPTV streams depend on third-party sources that can go offline at any time."
+                "البث غير متاح" to
+                        "تعذر تحميل بث هذه القناة. قد تتوقف مصادر البث الخارجية مؤقتًا أو تعود للعمل لاحقًا."
         }
 
         return StreamErrorMessage(title, explanation).withRecentSuffix(context)
@@ -62,7 +59,7 @@ object StreamErrorMessageResolver {
             val elapsed = System.currentTimeMillis() - context.lastCheckedAt
             if (elapsed < RECENT_THRESHOLD_MS) {
                 return copy(
-                    explanation = "$explanation This channel was working recently and may come back soon."
+                    explanation = "$explanation كانت القناة تعمل مؤخرًا وقد تعود للعمل قريبًا."
                 )
             }
         }

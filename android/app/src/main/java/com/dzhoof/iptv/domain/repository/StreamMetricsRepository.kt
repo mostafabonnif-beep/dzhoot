@@ -12,6 +12,16 @@ interface StreamMetricsRepository {
 
     suspend fun reportStreamPlay(channelId: String, proxyPlay: Boolean = false, streamUrl: String? = null): Result<Unit>
 
+    suspend fun reportPlaybackQoe(
+        channelId: String,
+        eventType: String,
+        startupMs: Long?,
+        rebufferCount: Int,
+        fallbackUsed: Boolean,
+        fallbackSucceeded: Boolean?,
+        errorCode: String?
+    ): Result<Unit>
+
     suspend fun syncHealthResults(results: List<HealthSyncEntry>): Result<Unit>
 }
 
