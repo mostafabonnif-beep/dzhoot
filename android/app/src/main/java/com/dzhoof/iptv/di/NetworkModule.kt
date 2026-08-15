@@ -69,10 +69,12 @@ object NetworkModule {
 
             .addInterceptor { chain ->
                 val tvCode = AppPreferences.getTvCode(context)
+                val sessionId = AppPreferences.getSessionId(context)
                 val original = chain.request()
                 val builder = original.newBuilder()
                     .addHeader("Accept", "application/json")
                     .addHeader("X-TV-Code", tvCode)
+                if (sessionId.isNotBlank()) builder.addHeader("X-Session-Id", sessionId)
                 if (original.body != null) {
                     builder.addHeader("Content-Type", "application/json")
                 }
