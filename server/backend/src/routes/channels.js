@@ -262,12 +262,20 @@ router.get('/search', requireTvOrSessionAuth, async (req, res) => {
       ],
     };
 
-    if (req.user.role !== 'Admin' && req.user.allCatalog !== true) {
+    const scope = await getContentScope(req.user);
+    const catalogView = req.user.role === 'Admin' || (req.user.allCatalog === true && scope.mode === 'all');
+    if (catalogView) {
+      // Admin/allCatalog search the shared catalog only, never users' private channels.
+      searchFilter.ownerId = null;
+    } else if (scope.mode === 'selected') {
+      searchFilter.ownerId = null;
+      searchFilter._id = { $in: scope.channelIds };
+      searchFilter.isActive = { $ne: false };
+    } else if (scope.mode === 'none') {
+      searchFilter._id = { $in: [] };
+    } else {
       searchFilter._id = { $in: (req.user.channels || []).filter(Boolean) };
       searchFilter.isActive = { $ne: false };
-    } else {
-      // Admin/demo/allCatalog search the shared catalog only, never users' private channels.
-      searchFilter.ownerId = null;
     }
 
     const channels = await Channel.find(searchFilter)

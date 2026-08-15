@@ -38,4 +38,15 @@ function canAccess(scope, type, id) {
   return ids === null || ids.includes(String(id));
 }
 
-module.exports = { getContentScope, idsFor, canAccess };
+/**
+ * Add the plan scope to a Mongo filter. The filter is unchanged for an
+ * unrestricted scope, while selected/empty scopes become an explicit $in
+ * constraint. This keeps list, search, category, and home queries aligned.
+ */
+function applyScopeFilter(filter, scope, type, field = '_id') {
+  const ids = idsFor(scope, type);
+  if (ids !== null) filter[field] = { $in: ids };
+  return filter;
+}
+
+module.exports = { getContentScope, idsFor, canAccess, applyScopeFilter };
