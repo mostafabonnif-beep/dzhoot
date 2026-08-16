@@ -85,4 +85,8 @@
     <string name="channel_status_offline">غير متاح</string>
     <string name="channel_status_unresponsive">لا يستجيب</string>
     <string name="channel_status_checking">جارٍ الفحص</string>
+    <string name="guide_all">الكل</string>
+    <string name="guide_favorites">★ المفضلة</string>
+    <string name="guide_loading">جارٍ تحميل دليل البرامج…</string>
+    <string name="guide_empty">لا توجد قنوات متاحة في الدليل</string>
 </resources>
