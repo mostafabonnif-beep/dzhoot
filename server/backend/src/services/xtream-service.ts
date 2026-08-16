@@ -82,6 +82,7 @@ export async function testXtreamConnection(creds: XtreamCredentials) {
 }
 
 export type XtreamPlaybackFormat = 'm3u8' | 'ts';
+type XtreamProbeFormat = XtreamPlaybackFormat | 'direct';
 
 export interface XtreamDiagnostics {
   api: { ok: boolean; error: string | null; auth: number | null; status: string | null };
@@ -97,10 +98,10 @@ export interface XtreamDiagnostics {
     tested: number;
     alive: number;
     dead: number;
-    playbackFormat: XtreamPlaybackFormat | null;
+    playbackFormat: XtreamProbeFormat | null;
     samples: Array<{
       streamId: string;
-      format: XtreamPlaybackFormat;
+      format: XtreamProbeFormat;
       status: ProbeResult['status'];
       statusCode: number | null;
       error: string | null;
@@ -152,12 +153,19 @@ export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit
       const streamId = String(item?.stream_id ?? '');
       if (!streamId) continue;
 
-      let selectedFormat: XtreamPlaybackFormat = 'm3u8';
+      let selectedFormat: XtreamProbeFormat = 'm3u8';
       let probe: ProbeResult | null = null;
-      for (const format of ['m3u8', 'ts'] as const) {
-        selectedFormat = format;
-        probe = await probeStream(liveUrl(creds, streamId, format), { timeout: 12000 });
-        if (probe.status === 'alive') break;
+      const directSource = directSourceUrl(item);
+      if (directSource) {
+        selectedFormat = 'direct';
+        probe = await probeStream(directSource, { timeout: 12000 });
+      }
+      if (!probe || probe.status !== 'alive') {
+        for (const format of ['m3u8', 'ts'] as const) {
+          selectedFormat = format;
+          probe = await probeStream(liveUrl(creds, streamId, format), { timeout: 12000 });
+          if (probe.status === 'alive') break;
+        }
       }
       if (!probe) continue;
 
@@ -208,7 +216,9 @@ export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
   source.lastDiagnosticsAt = now;
   source.lastDiagnostics = diagnostics as unknown as Record<string, unknown>;
   source.lastError = error;
-  source.playbackFormat = verified ? diagnostics.live.playbackFormat : null;
+  source.playbackFormat = verified && diagnostics.live.playbackFormat !== 'direct'
+    ? diagnostics.live.playbackFormat
+    : null;
   if (verified) source.verifiedAt = now;
   await source.save();
 
@@ -231,8 +241,23 @@ function getContainerExt(item: any): string {
   return String(ext).replace(/^\./, '');
 }
 
+function directSourceUrl(item: any): string | null {
+  const candidate = typeof item?.direct_source === 'string' ? item.direct_source.trim() : '';
+  if (!candidate) return null;
+  try {
+    const parsed = new URL(candidate);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
 function liveUrl(creds: XtreamCredentials, streamId: string | number, format: XtreamPlaybackFormat = 'm3u8'): string {
   return `${creds.serverUrl.replace(/\/+$/, '')}/live/${creds.username}/${creds.password}/${streamId}.${format}`;
+}
+
+function resolvedLiveUrl(creds: XtreamCredentials, item: any, playbackFormat: XtreamPlaybackFormat = 'm3u8'): string {
+  return directSourceUrl(item) || liveUrl(creds, item.stream_id, playbackFormat);
 }
 
 function m3uUrl(creds: XtreamCredentials): string {
@@ -260,7 +285,7 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
       $set: {
         channelId,
         channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
-        channelUrl: liveUrl(creds, item.stream_id, playbackFormat),
+        channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
         channelImg: item.stream_icon || '',
         channelGroup: group || 'Uncategorized',
         tvgId: item.epg_channel_id || '',
@@ -373,7 +398,7 @@ function liveChannelSnapshot(sourceId: mongoose.Types.ObjectId, item: any, group
   return {
     channelId: `xt:${String(sourceId)}:${item.stream_id}`,
     channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
-    channelUrl: liveUrl(creds, item.stream_id, playbackFormat),
+    channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
     channelImg: item.stream_icon || '',
     channelGroup: group || 'Uncategorized',
     tvgId: item.epg_channel_id || '',
