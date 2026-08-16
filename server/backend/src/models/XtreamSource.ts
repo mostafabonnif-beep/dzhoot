@@ -7,6 +7,7 @@ export interface IXtreamSourceDocument extends Document {
   passwordEncrypted: string;
   status: 'Active' | 'Inactive';
   verificationStatus: 'pending' | 'verified' | 'degraded' | 'blocked';
+  playbackFormat?: 'm3u8' | 'ts' | null;
   syncStatus: 'idle' | 'syncing' | 'error';
   lastSyncAt?: Date | null;
   lastError?: string | null;
@@ -29,6 +30,7 @@ const xtreamSourceSchema = new Schema<IXtreamSourceDocument>(
     usernameEncrypted: { type: String, required: true },
     passwordEncrypted: { type: String, required: true },
     status: { type: String, enum: ['Active', 'Inactive'], default: 'Inactive', index: true },
+    playbackFormat: { type: String, enum: ['m3u8', 'ts'], default: null },
     verificationStatus: {
       type: String,
       enum: ['pending', 'verified', 'degraded', 'blocked'],
