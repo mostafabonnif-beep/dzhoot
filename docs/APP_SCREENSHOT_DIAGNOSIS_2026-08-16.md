@@ -48,3 +48,9 @@
 `GET /api/v1/channels` مع `X-TV-Code` و`X-Session-Id`.
 
 النتيجة بقيت `count=3`، وجميع القنوات تحمل `metadata.source=iptv-org`. حالة مصدر Xtream بقيت `Inactive/degraded` مع `lastError=No tested live stream is playable`. لذلك لا توجد مشكلة cache أو APK أو مسار Android في هذه الحالة؛ الهاتف يعرض بالضبط القائمة التي يرسلها الخادم.
+
+## تفسير شاشة «تم التحقق من 3/3»
+
+الشاشة المرفقة تعرض `تم التحقق من 3/3`. هذا الرقم لا يعني أن 16,609 قناة Xtream تم فحصها؛ بل يعني أن الكتالوج الحالي يحتوي 3 قنوات فقط، وهي قنوات `iptv-org` الثلاث التي أعادها `/api/v1/channels`. لذلك ظهور اللون الأخضر في صحة البث لا يثبت دخول مصدر Xtream.
+
+كما فُحصت استجابة Xtream `get_live_streams` كاملة، ولم تحتوِ أي قناة من 16,609 على `direct_source` رسمي بديل يمكن للتطبيق أو Backend استخدامه. هذا يستبعد إضافة direct-source كحل لهذا الحساب تحديداً.
