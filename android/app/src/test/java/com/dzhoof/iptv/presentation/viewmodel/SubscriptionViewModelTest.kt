@@ -10,7 +10,6 @@ import com.dzhoof.iptv.data.model.dto.SubscriptionViewDataDto
 import com.dzhoof.iptv.domain.repository.SubscriptionRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
-import io.mockk.any
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle

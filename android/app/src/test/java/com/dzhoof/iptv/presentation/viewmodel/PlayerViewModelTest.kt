@@ -18,6 +18,7 @@ import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
 import com.dzhoof.iptv.domain.usecase.GetGuideProgramsUseCase
 import com.dzhoof.iptv.domain.usecase.GetPlaybackPositionUseCase
 import com.dzhoof.iptv.domain.usecase.ReportStreamPlayUseCase
+import com.dzhoof.iptv.domain.usecase.ReportPlaybackQoeUseCase
 import com.dzhoof.iptv.domain.usecase.ReportStreamStatusUseCase
 import com.dzhoof.iptv.domain.usecase.SavePlaybackPositionUseCase
 import com.dzhoof.iptv.domain.usecase.ToggleFavoriteUseCase
@@ -55,6 +56,7 @@ class PlayerViewModelTest {
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase = mockk()
     private val reportStreamStatusUseCase: ReportStreamStatusUseCase = mockk()
     private val reportStreamPlayUseCase: ReportStreamPlayUseCase = mockk()
+    private val reportPlaybackQoeUseCase: ReportPlaybackQoeUseCase = mockk()
     private val channelUiMapper = ChannelUiMapper()
     private val channelHealthDao: ChannelHealthDao = mockk(relaxed = true)
     private val thumbnailExtractor: ChannelThumbnailExtractor = mockk(relaxed = true)
@@ -92,6 +94,7 @@ class PlayerViewModelTest {
         coEvery { savePlaybackPositionUseCase(any()) } returns Result.Success(Unit)
         coEvery { reportStreamStatusUseCase(any()) } returns Result.Success(Unit)
         coEvery { reportStreamPlayUseCase(any()) } returns Result.Success(Unit)
+        coEvery { reportPlaybackQoeUseCase(any()) } returns Result.Success(Unit)
         every { getPlaybackPositionUseCase(any()) } returns flowOf(Result.Success(null))
         every { channelHealthDao.getAllHealth() } returns flowOf(emptyList())
         coEvery { epgRepository.getNowNext(any()) } returns Pair(null, null)
@@ -101,7 +104,7 @@ class PlayerViewModelTest {
         viewModel = PlayerViewModel(
             getChannelByIdUseCase, getChannelsUseCase, getChannelsByCategoryUseCase,
             savePlaybackPositionUseCase, getPlaybackPositionUseCase, toggleFavoriteUseCase,
-            reportStreamStatusUseCase, reportStreamPlayUseCase, channelUiMapper,
+            reportStreamStatusUseCase, reportStreamPlayUseCase, reportPlaybackQoeUseCase, channelUiMapper,
             channelHealthDao, thumbnailExtractor, epgRepository, getGuideProgramsUseCase,
             analyticsHelper, userPreferencesRepository, playerFactory, apiService
         )
@@ -408,7 +411,7 @@ class PlayerViewModelTest {
         assertTrue(state.isStreamDead)
         assertFalse(state.isRecovering)
         assertFalse(state.isPlaying)
-        assertEquals("Stream Unavailable", state.deadStreamTitle)
+        assertEquals("البث غير متاح", state.deadStreamTitle)
         coVerify { reportStreamStatusUseCase(any()) }
     }
 

@@ -3,16 +3,19 @@ package com.dzhoof.iptv.presentation.viewmodel
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.Build
+import com.google.gson.JsonParser
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.AppPreferences
+import com.dzhoof.iptv.di.IoDispatcher
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -52,7 +55,8 @@ data class PairingUiState(
  */
 @HiltViewModel
 class PairingViewModel @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PairingUiState())
@@ -89,26 +93,26 @@ class PairingViewModel @Inject constructor(
             )
         }
 
-        requestJob = viewModelScope.launch(Dispatchers.IO) {
+        requestJob = viewModelScope.launch(ioDispatcher) {
             try {
                 val baseUrl = AppPreferences.getServerUrl(context)
-                val requestData = JSONObject().apply {
-                    put("deviceName", Build.MODEL)
-                    put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
-                }
+                val model = Build.MODEL?.takeIf { it.isNotBlank() } ?: "Android device"
+                val manufacturer = Build.MANUFACTURER?.takeIf { it.isNotBlank() } ?: "Android"
+                val requestBody = """{"deviceName":"${model.toJsonStringValue()}","deviceModel":"${"$manufacturer $model".toJsonStringValue()}"}"""
 
                 val response = PinnedHttpClient.post(
                     "$baseUrl/api/v1/tv/pairing/request",
-                    requestData.toString()
+                    requestBody
                 )
 
                 response.use { resp ->
                     if (resp.isSuccessful) {
-                        val json = JSONObject(resp.body?.string() ?: "{}")
+                        val json = JsonParser.parseString(resp.body?.string() ?: "{}").asJsonObject
 
-                        if (json.optBoolean("success", false)) {
-                            val pin = json.getString("pin")
-                            val expiresAtStr = json.getString("expiresAt")
+                        if (json.get("success")?.asBoolean == true) {
+                            val pin = json.get("pin")?.asString?.takeIf { it.isNotBlank() }
+                                ?: "------"
+                            val expiresAtStr = json.get("expiresAt")?.asString.orEmpty()
                             val expiry = parseISO8601(expiresAtStr)
                             expiresAt = expiry
 
@@ -130,7 +134,7 @@ class PairingViewModel @Inject constructor(
                             startCountdown(expiry)
                         } else {
                             showError(
-                                "تعذر إنشاء PIN: ${json.optString("error", "حدث خطأ غير متوقع")}"
+                                "تعذر إنشاء PIN: ${json.get("error")?.asString?.takeIf { it.isNotBlank() } ?: "حدث خطأ غير متوقع"}"
                             )
                         }
                     } else {
@@ -149,7 +153,7 @@ class PairingViewModel @Inject constructor(
 
         _uiState.update { it.copy(isLoading = true, statusMessage = "جارٍ جلب القنوات التجريبية…") }
 
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch(ioDispatcher) {
             try {
                 val baseUrl = AppPreferences.getServerUrl(context)
                 val response = PinnedHttpClient.get(
@@ -185,7 +189,7 @@ class PairingViewModel @Inject constructor(
     }
 
     private fun startPolling(pin: String) {
-        pollingJob = viewModelScope.launch(Dispatchers.IO) {
+        pollingJob = viewModelScope.launch(ioDispatcher) {
             // Use time-based termination instead of fixed attempt count
             while (isActive && System.currentTimeMillis() < expiresAt) {
                 delay(POLL_INTERVAL_MS)
@@ -275,6 +279,12 @@ class PairingViewModel @Inject constructor(
             )
         }
     }
+
+    private fun String.toJsonStringValue(): String = replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
 
     private fun generateQrCode(serverUrl: String, pin: String) {
         viewModelScope.launch(Dispatchers.Default) {

@@ -3,9 +3,10 @@ package com.dzhoof.iptv.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.presentation.model.UpdateInfo
+import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.update.AppUpdater
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +36,8 @@ data class AppUpdateUiState(
  */
 @HiltViewModel
 class AppUpdateViewModel @Inject constructor(
-    private val appUpdater: AppUpdater
+    private val appUpdater: AppUpdater,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AppUpdateUiState())
@@ -48,7 +50,7 @@ class AppUpdateViewModel @Inject constructor(
         if (checked) return
         checked = true
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) { appUpdater.check() }
+            val result = withContext(ioDispatcher) { appUpdater.check() }
             if (result != null) _uiState.update { it.copy(updateInfo = result) }
         }
     }

@@ -9,8 +9,6 @@ import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.PlaybackRepository
 import com.dzhoof.iptv.presentation.ui.player.PlayerFactory
 import io.mockk.Runs
-import io.mockk.any
-import io.mockk.capture
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every

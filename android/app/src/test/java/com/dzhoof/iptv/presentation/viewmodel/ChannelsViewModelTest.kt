@@ -161,7 +161,7 @@ class ChannelsViewModelTest {
         runCurrent()
 
         assertEquals(ErrorType.NETWORK_ERROR, vm.uiState.value.errorType)
-        assertTrue(vm.uiState.value.error?.contains("server") == true || vm.uiState.value.error?.contains("connect") == true)
+        assertEquals("تعذر الاتصال بالخادم — تحقق من عنوان الخادم في الإعدادات", vm.uiState.value.error)
     }
 
     @Test

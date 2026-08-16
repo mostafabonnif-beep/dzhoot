@@ -6,6 +6,8 @@ import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.model.SearchFilter
+import com.dzhoof.iptv.domain.model.UnifiedSearchResults
+import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.usecase.ClearSearchHistoryUseCase
 import com.dzhoof.iptv.domain.usecase.GetRecentSearchesUseCase
 import com.dzhoof.iptv.domain.usecase.SaveSearchQueryUseCase
@@ -42,6 +44,7 @@ class SearchViewModelTest {
     private val toggleFavoriteUseCase: ToggleFavoriteUseCase = mockk()
     private val channelUiMapper = ChannelUiMapper()
     private val channelHealthDao: ChannelHealthDao = mockk()
+    private val catalogRepository: CatalogRepository = mockk()
 
     private val testChannel = Channel(
         id = "ch1",
@@ -62,6 +65,7 @@ class SearchViewModelTest {
     fun setup() {
         // Default mocks for init flows
         every { getRecentSearchesUseCase(10) } returns flowOf(Result.Success(listOf("recent1", "recent2")))
+        coEvery { catalogRepository.searchCatalog(any()) } returns Result.Success(UnifiedSearchResults())
         every { channelHealthDao.getAllHealth() } returns flowOf(emptyList())
         coEvery { saveSearchQueryUseCase(any()) } returns Result.Success(Unit)
         every { searchChannelsUseCase(any()) } returns flowOf(Result.Success(emptyList()))
@@ -74,7 +78,8 @@ class SearchViewModelTest {
         clearSearchHistoryUseCase = clearSearchHistoryUseCase,
         toggleFavoriteUseCase = toggleFavoriteUseCase,
         channelUiMapper = channelUiMapper,
-        channelHealthDao = channelHealthDao
+        channelHealthDao = channelHealthDao,
+        catalogRepository = catalogRepository
     )
 
     @Test
