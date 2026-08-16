@@ -18,7 +18,9 @@ Android: unit tests and Kotlin compilation passed; debug APK assembly passed.
 
 Backend URL embedded in the APK: `https://3000-iqjm9mreut3wspli9dxce-cfee851e.us4.manus.computer/`
 
-APK SHA-256: `3fa5db251feeb82485de0f9d674efbe664d1139b823e6a65c703735af531f181`
+The unused legacy Lottie splash asset and dependency were removed after the branded static splash was verified. This reduces legacy surface area and avoids shipping an unused old visual asset.
+
+Final APK SHA-256: `5006ec49973dc5c2ce56a39a377cf2cb1bee2fdcd70ba8f979a8c9c966e694a6`
 
 ## Remaining note
 
