@@ -46,7 +46,13 @@ data class DeviceDto(
 )
 
 /** Request body for POST /api/v1/activation/client-redeem. */
-typealias ClientRedeemRequest = RedeemCodeRequest
+data class ClientRedeemRequest(
+    @SerializedName("code") val code: String,
+    @SerializedName("deviceId") val deviceId: String,
+    @SerializedName("deviceName") val deviceName: String? = null,
+    @SerializedName("platform") val platform: String? = null,
+    @SerializedName("appVersion") val appVersion: String? = null,
+)
 
 /** Success payload of POST /api/v1/activation/client-redeem. */
 data class ClientRedeemResponse(
