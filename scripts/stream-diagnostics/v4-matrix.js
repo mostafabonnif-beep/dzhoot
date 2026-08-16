@@ -11,7 +11,7 @@ const MAX_LOG_BYTES = 256 * 1024;
 function redact(value) {
   return String(value || '')
     .replace(/(username|user|password|pass|token|jwt|key|auth|signature|data|expires)=([^&\s]+)/gi, '$1=REDACTED')
-    .replace(/(Bearer\\s+)[^\\s]+/gi, '$1REDACTED')
+    .replace(/(Bearer\s+)[^\s]+/gi, '$1REDACTED')
     .replace(/(https?:\/\/[^/\s]+\/live\/)[^/\s]+\/[^/\s]+/gi, '$1USER/REDACTED');
 }
 
@@ -47,7 +47,7 @@ function run(command, args, outputPath, timeoutMs) {
     maxBuffer: MAX_LOG_BYTES,
   });
   const combined = `${result.stdout || ''}\n${result.stderr || ''}`;
-  fs.writeFileSync(outputPath, combined, { mode: 0o600 });
+  fs.writeFileSync(outputPath, redact(combined), { mode: 0o600 });
   return {
     command,
     exitCode: result.status,
@@ -55,6 +55,48 @@ function run(command, args, outputPath, timeoutMs) {
     timedOut: result.error?.code === 'ETIMEDOUT',
     outputBytes: Buffer.byteLength(combined),
   };
+}
+
+function redactFile(filePath) {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, 'utf8');
+  fs.writeFileSync(filePath, redact(content));
+  fs.chmodSync(filePath, 0o600);
+}
+
+function curlArgs(rawUrl, headersPath, profile) {
+  const args = [
+    '-L', '--max-time', '20', '--connect-timeout', '8', '--silent', '--show-error',
+    '-D', headersPath, '-o', '/dev/null',
+    '-w', '%{http_code}\\t%{content_type}\\t%{size_download}\\t%{time_starttransfer}\\t%{time_total}\\t%{url_effective}\\n', rawUrl,
+  ];
+  if (profile === 'vlc') args.splice(7, 0, '-A', 'VLC/3.0.18 LibVLC/3.0.18', '-H', 'Accept: */*', '--compressed');
+  return args;
+}
+
+function runCurlProfile(rawUrl, privateDir, runId, profile) {
+  const headersPath = path.join(privateDir, `${runId}-${profile}-curl.headers`);
+  const logPath = path.join(privateDir, `${runId}-${profile}-curl.log`);
+  const result = run('curl', curlArgs(rawUrl, headersPath, profile), logPath, 30000);
+  redactFile(headersPath);
+  return { ...result, ...parseCurlMetrics(fs.readFileSync(logPath, 'utf8')) };
+}
+
+function classifyFfprobe(result, parsed, text) {
+  if (result.timedOut) return 'connection_timeout';
+  if (parsed?.format && Array.isArray(parsed.streams) && parsed.streams.length > 0) return 'valid_media';
+  if (/<!doctype html|<html\b|text\/html/i.test(text)) return 'html_response';
+  if (/timed out|timeout|connection refused|could not resolve|network is unreachable|failed to open/i.test(text)) return 'connection_failure';
+  return 'invalid_media';
+}
+
+function classifyVlc(result, text) {
+  const detectedMedia = /stream output|es_out|codec debug/i.test(text) && !/can't be opened|unable to open|cannot be opened|no access|error:/i.test(text);
+  if (result.exitCode === null && /ENOENT|not found/i.test(text)) return { detectedMedia: false, classification: 'missing_dependency' };
+  if (detectedMedia) return { detectedMedia: true, classification: 'media_detected' };
+  if (result.timedOut) return { detectedMedia: false, classification: 'media_playback_timeout' };
+  if (/can't be opened|unable to open|cannot be opened|no access|error:/i.test(text)) return { detectedMedia: false, classification: 'media_playback_failed' };
+  return { detectedMedia: false, classification: 'process_started_no_media' };
 }
 
 function parseCurlMetrics(output) {
@@ -83,37 +125,43 @@ function main() {
   const runId = `${Date.now()}-${process.pid}`;
   const privateDir = process.env.DZ_FORENSIC_PRIVATE_DIR || fs.mkdtempSync(path.join(os.tmpdir(), 'dzhoot-v4-'));
   fs.mkdirSync(privateDir, { recursive: true, mode: 0o700 });
-  const curlHeaders = path.join(privateDir, `${runId}-curl.headers`);
-  const curlLog = path.join(privateDir, `${runId}-curl.log`);
+  fs.chmodSync(privateDir, 0o700);
   const ffprobeLog = path.join(privateDir, `${runId}-ffprobe.json`);
   const vlcLog = path.join(privateDir, `${runId}-vlc.log`);
 
-  const curl = run('curl', [
-    '-L', '--max-time', '20', '--connect-timeout', '8', '--silent', '--show-error',
-    '-A', 'VLC/3.0.18 LibVLC/3.0.18', '-H', 'Accept: */*', '--compressed',
-    '-D', curlHeaders, '-o', '/dev/null',
-    '-w', '%{http_code}\t%{content_type}\t%{size_download}\t%{time_starttransfer}\t%{time_total}\t%{url_effective}\n', rawUrl,
-  ], curlLog, 30000);
-  const curlMetrics = parseCurlMetrics(fs.readFileSync(curlLog, 'utf8'));
+  const curlNative = runCurlProfile(rawUrl, privateDir, runId, 'native');
+  const curlVlcProfile = runCurlProfile(rawUrl, privateDir, runId, 'vlc');
   const ffprobe = run('ffprobe', [
     '-v', 'error', '-of', 'json', '-show_entries',
     'format=format_name,format_long_name,duration,bit_rate:stream=index,codec_name,codec_type,width,height,bit_rate',
     '-rw_timeout', '15000000', rawUrl,
   ], ffprobeLog, 30000);
+  const ffprobeText = fs.readFileSync(ffprobeLog, 'utf8');
   const ffprobeJson = readJson(ffprobeLog);
   const vlc = run('cvlc', [
     '--intf', 'dummy', '--play-and-exit', '--no-video-title-show', '--network-caching=1000', rawUrl,
   ], vlcLog, 20000);
   const vlcText = fs.readFileSync(vlcLog, 'utf8');
+  const vlcClassification = classifyVlc(vlc, vlcText);
   const output = {
     generatedAt: new Date().toISOString(),
     host: os.hostname(),
     source: safeUrl(rawUrl),
-    artifacts: { privateDir, curlHeaders, curlLog, ffprobeLog, vlcLog },
+    artifacts: {
+      privateDir,
+      curlNativeHeaders: path.join(privateDir, `${runId}-native-curl.headers`),
+      curlNativeLog: path.join(privateDir, `${runId}-native-curl.log`),
+      curlVlcHeaders: path.join(privateDir, `${runId}-vlc-curl.headers`),
+      curlVlcLog: path.join(privateDir, `${runId}-vlc-curl.log`),
+      ffprobeLog,
+      vlcLog,
+    },
     matrix: {
-      curl: { ...curl, ...curlMetrics },
+      curl_native: curlNative,
+      curl_vlc_profile: curlVlcProfile,
       ffprobe: {
         ...ffprobe,
+        classification: classifyFfprobe(ffprobe, ffprobeJson, ffprobeText),
         format: ffprobeJson?.format ? {
           formatName: ffprobeJson.format.format_name || null,
           duration: ffprobeJson.format.duration || null,
@@ -129,7 +177,7 @@ function main() {
       },
       vlc: {
         ...vlc,
-        detectedMedia: /stream output|es_out|codec debug/i.test(vlcText) && !/can't be opened|unable to open|cannot be opened|no access|error:/i.test(vlcText),
+        ...vlcClassification,
         errorHints: [...vlcText.matchAll(/(?:error|failed|cannot|no access|http\/\d\.\d\s+\d{3})[^\n]*/gi)].slice(0, 5).map((match) => redact(match[0])),
       },
     },
