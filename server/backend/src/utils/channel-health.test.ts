@@ -23,6 +23,23 @@ describe('buildChannelHealth', () => {
     expect(result.responseTimeMs).toBe(180);
   });
 
+  it('keeps a recently confirmed primary healthy after the one-hour freshness step-down', () => {
+    const result = buildChannelHealth(
+      {
+        metadata: {
+          isWorking: true,
+          lastTested: '2026-08-15T10:30:00.000Z',
+          responseTime: 500,
+        },
+      },
+      now,
+    );
+
+    expect(result.score).toBe(66);
+    expect(result.status).toBe('healthy');
+    expect(result.recommendation).toBe('primary');
+  });
+
   it('recommends a viable fallback when the primary is dead', () => {
     const result = buildChannelHealth(
       {
