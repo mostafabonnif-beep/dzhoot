@@ -141,11 +141,12 @@ async function downloadText(url: string): Promise<{ content: string; resolvedAdd
   return { content: response.data, resolvedAddresses: validation.resolvedAddresses };
 }
 
-async function probeStream(url: string): Promise<{ ok: boolean; format: 'hls' | 'ts' | null; httpStatus: number | null; bytes: number; reason?: string }> {
+async function probeStream(url: string): Promise<{ ok: boolean; format: 'hls' | 'ts' | null; httpStatus: number | null; bytes: number; latencyMs: number; reason?: string }> {
+  const startedAt = Date.now();
   try {
     const validation = await validateUrlForSSRF(url);
     if (!validation.safe || !validation.resolvedAddresses?.length) {
-      return { ok: false, format: null, httpStatus: null, bytes: 0, reason: validation.reason || 'unsafe URL' };
+      return { ok: false, format: null, httpStatus: null, bytes: 0, latencyMs: Date.now() - startedAt, reason: validation.reason || 'unsafe URL' };
     }
     const parsed = new URL(url);
     const lookup = createPinnedLookup(validation.resolvedAddresses);
@@ -173,20 +174,41 @@ async function probeStream(url: string): Promise<{ ok: boolean; format: 'hls' | 
       format: isHls ? 'hls' : isTs ? 'ts' : null,
       httpStatus: response.status,
       bytes: bytes.length,
+      latencyMs: Date.now() - startedAt,
       reason: response.status >= 300 ? `HTTP ${response.status}` : (!isHls && !isTs ? 'response is not HLS or MPEG-TS' : undefined),
     };
   } catch (error: any) {
-    return { ok: false, format: null, httpStatus: null, bytes: 0, reason: redactSensitiveText(error?.message || 'probe failed') };
+    return { ok: false, format: null, httpStatus: null, bytes: 0, latencyMs: Date.now() - startedAt, reason: redactSensitiveText(error?.message || 'probe failed') };
   }
+}
+
+export function classifyPlaybackHealth(results: Array<{ ok: boolean; httpStatus: number | null }>) {
+  const playable = results.filter((result) => result.ok).length;
+  const blocked = results.filter((result) => result.httpStatus === 401 || result.httpStatus === 403).length;
+  return playable > 0
+    ? (playable < results.length ? 'DEGRADED' : 'ONLINE')
+    : blocked > 0
+      ? 'BLOCKED'
+      : results.some((result) => result.httpStatus === 408 || result.httpStatus === 504)
+        ? 'TIMEOUT'
+        : results.some((result) => result.httpStatus && result.httpStatus >= 500)
+          ? 'OFFLINE'
+          : 'INVALID_STREAM';
 }
 
 async function probeChannels(channels: any[]) {
   const samples = channels.slice(0, PLAYBACK_PROBE_COUNT);
   const results = await Promise.all(samples.map((channel) => probeStream(channel.channelUrl)));
+  const statuses = results.map((result) => result.httpStatus).filter((status): status is number => Number.isFinite(status));
+  const playable = results.filter((result) => result.ok).length;
+  const healthStatus = classifyPlaybackHealth(results);
   return {
     checked: results.length,
-    playable: results.filter((result) => result.ok).length,
+    playable,
     formats: results.filter((result) => result.ok).map((result) => result.format),
+    healthStatus,
+    httpStatus: statuses[0] ?? null,
+    latencyMs: results.length ? Math.max(...results.map((result) => result.latencyMs)) : null,
     results,
   };
 }
@@ -350,6 +372,7 @@ module.exports = {
   syncM3USource,
   previewM3USource,
   probeStream,
+  classifyPlaybackHealth,
   createM3USourceSecrets,
   decryptSecret,
 };

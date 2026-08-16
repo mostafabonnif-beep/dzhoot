@@ -1,4 +1,33 @@
-import { parseM3U } from './m3u-service';
+import { classifyPlaybackHealth, parseM3U } from './m3u-service';
+
+describe('classifyPlaybackHealth', () => {
+  it('marks all playable samples as ONLINE', () => {
+    expect(classifyPlaybackHealth([
+      { ok: true, httpStatus: 200 },
+      { ok: true, httpStatus: 200 },
+    ])).toBe('ONLINE');
+  });
+
+  it('marks a mixed sample set as DEGRADED', () => {
+    expect(classifyPlaybackHealth([
+      { ok: true, httpStatus: 200 },
+      { ok: false, httpStatus: 403 },
+    ])).toBe('DEGRADED');
+  });
+
+  it('marks HTTP 401/403 samples as BLOCKED', () => {
+    expect(classifyPlaybackHealth([
+      { ok: false, httpStatus: 403 },
+      { ok: false, httpStatus: 401 },
+    ])).toBe('BLOCKED');
+  });
+
+  it('distinguishes timeout, upstream outage, and invalid streams', () => {
+    expect(classifyPlaybackHealth([{ ok: false, httpStatus: 504 }])).toBe('TIMEOUT');
+    expect(classifyPlaybackHealth([{ ok: false, httpStatus: 502 }])).toBe('OFFLINE');
+    expect(classifyPlaybackHealth([{ ok: false, httpStatus: 200 }])).toBe('INVALID_STREAM');
+  });
+});
 
 describe('parseM3U', () => {
   it('parses EXTINF metadata and preserves commas inside quoted attributes', () => {
