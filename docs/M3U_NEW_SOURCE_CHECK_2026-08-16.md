@@ -25,4 +25,8 @@ However, ten sample Live URLs from the supplied file all returned HTTP 403 with 
 
 The source is **not imported into the customer catalog**. It authenticates and exports metadata, but its Live URLs are blocked by Cloudflare at the delivery host from the DZ HOOF server environment. A proxy, FFmpeg relay, or MediaMTX cannot fix this because the upstream response is an access-denied HTML page rather than media bytes.
 
+## Protection added to DZ HOOF
+
+The M3U import path now probes up to five safe sample URLs and accepts a sample only when the response contains a valid HLS manifest or MPEG-TS signature. A source is created as `Inactive` until this test succeeds. A failed test records the result and keeps the source inactive; synchronization also stops when no tested stream is playable. The new source was run through this internal gate and returned `ok=false`, `playableSampleCount=0`, so no customer channels were published.
+
 The provider must either whitelist the VPS IP at `ibo.lynxiptv.com`, provide a B2B/restream endpoint, provide a direct Live URL that works from the VPS, or remove the Cloudflare/data-center restriction. Once one sample returns a valid HLS manifest or TS bytes from the VPS, the existing DZ HOOF proxy pipeline can be used without changing the Android app.

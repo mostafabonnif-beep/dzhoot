@@ -16,6 +16,8 @@ const PLAYLIST_TIMEOUT_MS = 30000;
 const MAX_PLAYLIST_BYTES = 50 * 1024 * 1024;
 const MAX_PLAYLIST_LINES = 100000;
 const SSRF_CONCURRENCY = 20;
+const PLAYBACK_PROBE_COUNT = 5;
+const PLAYBACK_PROBE_BYTES = 64 * 1024;
 
 export interface M3UCredentials {
   playlistUrl: string;
@@ -139,6 +141,56 @@ async function downloadText(url: string): Promise<{ content: string; resolvedAdd
   return { content: response.data, resolvedAddresses: validation.resolvedAddresses };
 }
 
+async function probeStream(url: string): Promise<{ ok: boolean; format: 'hls' | 'ts' | null; httpStatus: number | null; bytes: number; reason?: string }> {
+  try {
+    const validation = await validateUrlForSSRF(url);
+    if (!validation.safe || !validation.resolvedAddresses?.length) {
+      return { ok: false, format: null, httpStatus: null, bytes: 0, reason: validation.reason || 'unsafe URL' };
+    }
+    const parsed = new URL(url);
+    const lookup = createPinnedLookup(validation.resolvedAddresses);
+    const agent = parsed.protocol === 'https:'
+      ? new https.Agent({ lookup: lookup as any })
+      : new http.Agent({ lookup: lookup as any });
+    const response = await axios.get<ArrayBuffer>(url, {
+      timeout: 12000,
+      responseType: 'arraybuffer',
+      maxContentLength: PLAYBACK_PROBE_BYTES,
+      maxBodyLength: PLAYBACK_PROBE_BYTES,
+      maxRedirects: 0,
+      headers: { Range: `bytes=0-${PLAYBACK_PROBE_BYTES - 1}`, 'User-Agent': 'DZ-HOOF/1.0' },
+      httpAgent: parsed.protocol === 'http:' ? agent : undefined,
+      httpsAgent: parsed.protocol === 'https:' ? agent : undefined,
+      validateStatus: () => true,
+    });
+    const bytes = Buffer.from(response.data || new ArrayBuffer(0));
+    const text = bytes.toString('utf8', 0, Math.min(bytes.length, 256)).trimStart();
+    const contentType = String(response.headers?.['content-type'] || '').toLowerCase();
+    const isHls = text.startsWith('#EXTM3U') || contentType.includes('mpegurl');
+    const isTs = bytes.length > 0 && bytes[0] === 0x47;
+    return {
+      ok: response.status >= 200 && response.status < 300 && (isHls || isTs),
+      format: isHls ? 'hls' : isTs ? 'ts' : null,
+      httpStatus: response.status,
+      bytes: bytes.length,
+      reason: response.status >= 300 ? `HTTP ${response.status}` : (!isHls && !isTs ? 'response is not HLS or MPEG-TS' : undefined),
+    };
+  } catch (error: any) {
+    return { ok: false, format: null, httpStatus: null, bytes: 0, reason: redactSensitiveText(error?.message || 'probe failed') };
+  }
+}
+
+async function probeChannels(channels: any[]) {
+  const samples = channels.slice(0, PLAYBACK_PROBE_COUNT);
+  const results = await Promise.all(samples.map((channel) => probeStream(channel.channelUrl)));
+  return {
+    checked: results.length,
+    playable: results.filter((result) => result.ok).length,
+    formats: results.filter((result) => result.ok).map((result) => result.format),
+    results,
+  };
+}
+
 async function upsertChannel(sourceId: mongoose.Types.ObjectId, channel: any) {
   return Channel.findOneAndUpdate(
     { ownerId: null, channelId: channel.channelId },
@@ -158,9 +210,18 @@ export async function testM3UConnection(url: string) {
   try {
     const { content } = await downloadText(url);
     const channels = parseM3U(content, 'test');
-    return { ok: channels.length > 0, channelCount: channels.length, error: channels.length ? null : 'No valid channels found' };
+    if (!channels.length) return { ok: false, channelCount: 0, playableSampleCount: 0, error: 'No valid channels found' };
+    const playback = await probeChannels(channels);
+    const ok = playback.playable > 0;
+    return {
+      ok,
+      channelCount: channels.length,
+      playableSampleCount: playback.playable,
+      playback,
+      error: ok ? null : 'No tested M3U stream is playable from the server',
+    };
   } catch (error: any) {
-    return { ok: false, channelCount: 0, error: error.message || 'M3U connection failed' };
+    return { ok: false, channelCount: 0, playableSampleCount: 0, error: error.message || 'M3U connection failed' };
   }
 }
 
@@ -171,12 +232,14 @@ async function prepareM3USync(source: any) {
   const validation = await validateUrls(parsed.map((channel) => channel.channelUrl));
   const safeIndexes = new Set(validation.safe.map((entry) => entry.index));
   const safeChannels = parsed.filter((_, index) => safeIndexes.has(index));
+  const playback = await probeChannels(safeChannels);
   const clubbed = clubByChannelId(safeChannels);
   await resolveChannelGroups(clubbed);
   return {
     clubbed,
     blocked: validation.blocked,
     duplicates: Math.max(0, safeChannels.length - clubbed.length),
+    playback,
   };
 }
 
@@ -200,6 +263,7 @@ export async function previewM3USource(sourceId: string, createdBy?: string | nu
       channels: prepared.clubbed.length,
       blocked: prepared.blocked,
       duplicates: prepared.duplicates,
+      playback: prepared.playback,
     },
   };
 }
@@ -216,6 +280,9 @@ export async function syncM3USource(sourceId: string) {
 
   try {
     const prepared = await prepareM3USync(source);
+    if (!prepared.playback.playable) {
+      throw new Error('No tested M3U stream is playable from the server');
+    }
     const clubbed = prepared.clubbed;
     const preview = await createSyncPreview({
       sourceType: 'm3u',
@@ -252,6 +319,7 @@ export async function syncM3USource(sourceId: string) {
       channels: clubbed.length,
       blocked: prepared.blocked,
       duplicates: prepared.duplicates,
+      playback: prepared.playback,
     };
     source.stats = stats;
     source.syncStatus = 'idle';
@@ -281,6 +349,7 @@ module.exports = {
   testM3UConnection,
   syncM3USource,
   previewM3USource,
+  probeStream,
   createM3USourceSecrets,
   decryptSecret,
 };
