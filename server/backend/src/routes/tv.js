@@ -28,6 +28,10 @@ async function getVerifiedXtreamSourceIds() {
 }
 
 function isCustomerVisibleChannel(channel, verifiedSourceIds) {
+  // A known-dead stream must never be offered to a customer, regardless of
+  // whether it came from IPTV-org, Xtream, or another managed source.
+  if (channel.isActive === false || channel.flaggedBad?.isFlagged === true) return false;
+  if (channel.metadata?.isWorking === false) return false;
   if (channel.metadata?.source !== 'xtream') return true;
   return verifiedSourceIds.has(String(channel.metadata?.xtreamSourceId || ''));
 }
