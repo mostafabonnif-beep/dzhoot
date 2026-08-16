@@ -46,6 +46,10 @@ function publicShape(src) {
     syncStatus: src.syncStatus,
     lastSyncAt: src.lastSyncAt,
     lastError: src.lastError,
+    lastTestAt: src.lastTestAt,
+    lastTestOk: src.lastTestOk,
+    lastTestError: src.lastTestError,
+    lastTestPlayableSampleCount: src.lastTestPlayableSampleCount,
     stats: src.stats,
     createdAt: src.createdAt,
   };
@@ -74,7 +78,7 @@ router.post('/', async (req, res) => {
     const source = await M3USource.create({
       name: String(name).trim(),
       ...secrets,
-      status: 'Active',
+      status: 'Inactive',
     });
 
     audit({
@@ -100,6 +104,17 @@ router.post('/:id/test', async (req, res) => {
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
     const result = await testM3UConnection(decryptSecret(source.playlistUrlEncrypted));
+    await M3USource.findByIdAndUpdate(id, {
+      $set: {
+        lastTestAt: new Date(),
+        lastTestOk: Boolean(result.ok && result.playableSampleCount > 0),
+        lastTestError: result.ok && result.playableSampleCount > 0 ? null : (result.error || 'No playable sample returned by source'),
+        lastTestPlayableSampleCount: Number(result.playableSampleCount || 0),
+        status: result.ok && result.playableSampleCount > 0 ? 'Active' : 'Inactive',
+      },
+    }).exec();
+    result.ok = Boolean(result.ok && result.playableSampleCount > 0);
+    if (!result.ok && !result.error) result.error = 'No playable sample returned by source';
     audit({
       ...reqCtx(req),
       action: 'M3U_SOURCE_TEST',

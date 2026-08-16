@@ -8,6 +8,10 @@ export interface IM3USourceDocument extends Document {
   syncStatus: 'idle' | 'syncing' | 'error';
   lastSyncAt?: Date | null;
   lastError?: string | null;
+  lastTestAt?: Date | null;
+  lastTestOk?: boolean;
+  lastTestError?: string | null;
+  lastTestPlayableSampleCount?: number;
   stats: {
     channels: number;
     blocked: number;
@@ -22,7 +26,11 @@ const m3uSourceSchema = new Schema<IM3USourceDocument>(
     name: { type: String, required: true, trim: true, maxlength: 100 },
     playlistUrlEncrypted: { type: String, required: true },
     epgUrlEncrypted: { type: String, default: null },
-    status: { type: String, enum: ['Active', 'Inactive'], default: 'Active', index: true },
+    status: { type: String, enum: ['Active', 'Inactive'], default: 'Inactive', index: true },
+    lastTestAt: { type: Date, default: null },
+    lastTestOk: { type: Boolean, default: false },
+    lastTestError: { type: String, default: null },
+    lastTestPlayableSampleCount: { type: Number, default: 0 },
     syncStatus: { type: String, enum: ['idle', 'syncing', 'error'], default: 'idle', index: true },
     lastSyncAt: { type: Date, default: null },
     lastError: { type: String, default: null },
