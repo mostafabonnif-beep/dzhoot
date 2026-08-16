@@ -13,6 +13,7 @@ import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
 import { reconcileChannelIdentities } from './channel-identity-service';
 import { createSyncPreview, markSnapshotApplied } from './sync-snapshot-service';
+import { probeStream, type ProbeResult } from './stream-prober';
 
 const API_TIMEOUT_MS = 30000;
 
@@ -79,6 +80,65 @@ export async function testXtreamConnection(creds: XtreamCredentials) {
   };
 }
 
+export interface XtreamDiagnostics {
+  api: { ok: boolean; error: string | null; auth: number | null; status: string | null };
+  m3u: { status: 'not-tested' | 'alive' | 'dead'; statusCode: number | null; error: string | null };
+  live: { tested: number; alive: number; dead: number; samples: Array<{ streamId: string; status: ProbeResult['status']; statusCode: number | null; error: string | null; responseTimeMs: number }> };
+}
+
+/**
+ * Diagnose a source without importing it. This deliberately separates API
+ * metadata from actual playback so an account that only lists channels is not
+ * presented as a working source to the customer.
+ */
+export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit = 3): Promise<XtreamDiagnostics> {
+  const result: XtreamDiagnostics = {
+    api: { ok: false, error: null, auth: null, status: null },
+    m3u: { status: 'not-tested', statusCode: null, error: null },
+    live: { tested: 0, alive: 0, dead: 0, samples: [] },
+  };
+
+  try {
+    const auth = await testXtreamConnection(creds);
+    result.api = {
+      ok: auth.ok,
+      error: auth.error,
+      auth: auth.userInfo?.auth ?? null,
+      status: auth.userInfo?.status ?? null,
+    };
+    if (!auth.ok) return result;
+
+    const m3uProbe = await probeStream(m3uUrl(creds), { timeout: 12000 });
+    result.m3u = {
+      status: m3uProbe.status,
+      statusCode: m3uProbe.statusCode,
+      error: m3uProbe.error,
+    };
+
+    const streams = await apiGet(creds, 'get_live_streams');
+    const samples = Array.isArray(streams) ? streams.slice(0, Math.max(1, Math.min(sampleLimit, 10))) : [];
+    for (const item of samples) {
+      const streamId = String(item?.stream_id ?? '');
+      if (!streamId) continue;
+      const probe = await probeStream(liveUrl(creds, streamId), { timeout: 12000 });
+      result.live.tested += 1;
+      if (probe.status === 'alive') result.live.alive += 1;
+      else result.live.dead += 1;
+      result.live.samples.push({
+        streamId,
+        status: probe.status,
+        statusCode: probe.statusCode,
+        error: probe.error,
+        responseTimeMs: probe.responseTimeMs,
+      });
+    }
+  } catch (error: any) {
+    result.api.error = error?.response?.status ? `HTTP ${error.response.status}` : String(error?.message || 'Diagnostics failed');
+  }
+
+  return result;
+}
+
 function getContainerExt(item: any): string {
   const ext = item?.container_extension || 'm3u8';
   return String(ext).replace(/^\./, '');
@@ -86,6 +146,12 @@ function getContainerExt(item: any): string {
 
 function liveUrl(creds: XtreamCredentials, streamId: string | number): string {
   return `${creds.serverUrl.replace(/\/+$/, '')}/live/${creds.username}/${creds.password}/${streamId}.m3u8`;
+}
+
+function m3uUrl(creds: XtreamCredentials): string {
+  const base = creds.serverUrl.replace(/\/+$/, '');
+  const params = new URLSearchParams({ username: creds.username, password: creds.password, type: 'm3u_plus', output: 'ts' });
+  return `${base}/get.php?${params.toString()}`;
 }
 
 function vodUrl(creds: XtreamCredentials, streamId: string | number, ext: string): string {
@@ -401,6 +467,7 @@ export async function syncXtreamSource(sourceId: string) {
 module.exports = {
   buildXtreamApiUrl,
   testXtreamConnection,
+  diagnoseXtreamSource,
   syncXtreamSource,
   previewXtreamSource,
   encryptSecret,

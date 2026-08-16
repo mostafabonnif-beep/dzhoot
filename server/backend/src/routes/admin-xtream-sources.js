@@ -6,6 +6,7 @@ const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx, redactSensitiveText } = require('../services/audit-log');
 const {
   testXtreamConnection,
+  diagnoseXtreamSource,
   syncXtreamSource,
   previewXtreamSource,
   encryptSecret,
@@ -108,6 +109,36 @@ router.post('/:id/test', async (req, res) => {
     const safeError = redactSensitiveText(err);
     console.error('[xtream] test error:', safeError);
     return res.status(500).json({ success: false, error: safeError || 'Test failed' });
+  }
+});
+
+// POST /:id/diagnostics — verify API metadata, M3U access and actual live playback
+router.post('/:id/diagnostics', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const source = await XtreamSource.findById(id).exec();
+    if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+
+    const { decryptSecret } = require('../services/xtream-service');
+    const result = await diagnoseXtreamSource({
+      serverUrl: source.serverUrl,
+      username: decryptSecret(source.usernameEncrypted),
+      password: decryptSecret(source.passwordEncrypted),
+    }, Number(req.body?.sampleLimit) || 3);
+
+    audit({
+      ...reqCtx(req),
+      action: 'XTREAM_SOURCE_DIAGNOSTICS',
+      resource: 'XtreamSource',
+      resourceId: String(id),
+      status: result.api.ok && result.live.alive > 0 ? 'success' : 'failure',
+      changes: { after: { apiOk: result.api.ok, m3u: result.m3u.status, live: result.live } },
+    });
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[xtream] diagnostics error:', redactSensitiveText(err));
+    return res.status(500).json({ success: false, error: 'Xtream diagnostics failed' });
   }
 });
 
