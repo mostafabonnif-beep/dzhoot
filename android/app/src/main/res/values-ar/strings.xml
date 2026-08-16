@@ -81,4 +81,8 @@
     <string name="source_url_protocol_error">يجب أن يبدأ الرابط بـ http:// أو https://</string>
     <string name="source_playlist_loaded">تم تحميل القائمة</string>
     <string name="source_connected">تم الاتصال</string>
+    <string name="channel_status_online">مباشر</string>
+    <string name="channel_status_offline">غير متاح</string>
+    <string name="channel_status_unresponsive">لا يستجيب</string>
+    <string name="channel_status_checking">جارٍ الفحص</string>
 </resources>

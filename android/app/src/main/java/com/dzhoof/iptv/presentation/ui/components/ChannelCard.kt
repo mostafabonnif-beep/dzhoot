@@ -35,6 +35,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
@@ -45,6 +46,7 @@ import android.graphics.Bitmap
 import android.view.KeyEvent
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
@@ -393,8 +395,15 @@ private fun ChannelCardContent(
                     HealthIndicatorDot(status = channel.healthStatus)
                 }
                 if (channel.serverHealthScore != null) {
+                    val statusLabel = when (channel.healthStatus) {
+                        ChannelHealthStatus.ONLINE -> stringResource(R.string.channel_status_online)
+                        ChannelHealthStatus.OFFLINE -> stringResource(R.string.channel_status_offline)
+                        ChannelHealthStatus.UNRESPONSIVE -> stringResource(R.string.channel_status_unresponsive)
+                        ChannelHealthStatus.CHECKING -> stringResource(R.string.channel_status_checking)
+                        ChannelHealthStatus.UNKNOWN -> null
+                    }
                     Text(
-                        text = "${channel.serverHealthScore}%",
+                        text = listOfNotNull(statusLabel, "${channel.serverHealthScore}%").joinToString(" "),
                         style = LabelBadge,
                         color = OnVideo.copy(alpha = EmphasisMedium),
                         maxLines = 1
