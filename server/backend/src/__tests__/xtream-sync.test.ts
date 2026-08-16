@@ -6,7 +6,8 @@ import Movie from '../models/Movie';
 import Series from '../models/Series';
 import Season from '../models/Season';
 import Episode from '../models/Episode';
-import { syncXtreamSource, buildXtreamApiUrl } from '../services/xtream-service';
+import { diagnoseXtreamSource, syncXtreamSource, buildXtreamApiUrl } from '../services/xtream-service';
+import { probeStream } from '../services/stream-prober';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 
 jest.mock('axios');
@@ -15,7 +16,12 @@ jest.mock('../utils/ssrf-guard', () => ({
   createPinnedLookup: jest.fn(() => undefined),
 }));
 
+jest.mock('../services/stream-prober', () => ({
+  probeStream: jest.fn(),
+}));
+
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+const mockedProbeStream = probeStream as jest.MockedFunction<typeof probeStream>;
 
 const SERVER = 'http://panel.example:8080';
 const USER = 'user1';
@@ -85,6 +91,20 @@ describe('xtream-service', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('diagnoses metadata separately from M3U and live playback', async () => {
+    const source = await makeSource();
+    mockedProbeStream
+      .mockResolvedValueOnce({ status: 'dead', statusCode: 884, error: 'HTTP 884', responseTimeMs: 20, manifestValid: null, segmentReachable: null, manifestInfo: null })
+      .mockResolvedValue({ status: 'dead', statusCode: 456, error: 'HTTP 456', responseTimeMs: 30, manifestValid: null, segmentReachable: null, manifestInfo: null });
+
+    const result = await diagnoseXtreamSource({ serverUrl: SERVER, username: USER, password: PASS }, 2);
+
+    expect(result.api).toMatchObject({ ok: true, auth: 1, status: 'Active' });
+    expect(result.m3u).toMatchObject({ status: 'dead', statusCode: 884 });
+    expect(result.live).toMatchObject({ tested: 2, alive: 0, dead: 2 });
+    expect(result.live.samples.map((sample) => sample.statusCode)).toEqual([456, 456]);
   });
 
   it('builds player_api URLs with credentials', () => {
