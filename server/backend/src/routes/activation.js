@@ -63,12 +63,13 @@ router.post('/client-redeem', async (req, res) => {
       const plan = await Plan.findById(activation.planId).lean().exec();
       if (!plan || plan.status !== 'Active') return res.status(400).json({ success: false, error: 'Subscription plan is unavailable', code: 'PLAN_UNAVAILABLE' });
       const clientId = crypto.randomBytes(10).toString('hex');
+      const channelListCode = await User.generateChannelListCode();
       user = await User.create({
         username: `client_${clientId}`,
         email: `${clientId}@clients.dzhoof.invalid`,
         password: crypto.randomBytes(32).toString('hex'),
         role: 'User',
-        channelListCode: normalized,
+        channelListCode,
         allCatalog: plan.features?.allCatalog !== false,
         isActive: true,
         emailVerified: true,
