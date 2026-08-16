@@ -25,8 +25,10 @@ data class PlaybackTokenResponse(
 data class PlaybackTokenData(
     @SerializedName("playbackUrl")
     val playbackUrl: String,
+    @SerializedName("mimeType")
+    val mimeType: String? = null,
     @SerializedName("expiresAt")
-    val expiresAt: Long,
+    val expiresAt: Long = 0L,
     @SerializedName("slot")
-    val slot: Int,
+    val slot: Int = 0,
 )

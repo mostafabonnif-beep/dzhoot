@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.di
 
 import android.content.Context
+import android.net.Uri
 import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.source.remote.FireVisionApiService
@@ -68,15 +69,25 @@ object NetworkModule {
             )
 
             .addInterceptor { chain ->
-                val tvCode = AppPreferences.getTvCode(context)
-                val sessionId = AppPreferences.getSessionId(context)
                 val original = chain.request()
+                val apiHost = Uri.parse(BuildConfig.API_BASE_URL).host
+                val isManagedApiRequest = apiHost != null && original.url.host == apiHost
+                val isPlaybackRequest = original.url.encodedPath.contains("/api/v1/tv/playback/")
                 val builder = original.newBuilder()
-                    .addHeader("Accept", "application/json")
-                    .addHeader("X-TV-Code", tvCode)
-                if (sessionId.isNotBlank()) builder.addHeader("X-Session-Id", sessionId)
-                if (original.body != null) {
-                    builder.addHeader("Content-Type", "application/json")
+                    // Manifests and segments are media, not JSON. Sending an
+                    // API-only Accept header can make strict IPTV/CDN servers
+                    // reject an otherwise valid stream.
+                    .addHeader("Accept", if (isPlaybackRequest) "*/*" else "application/json")
+
+                // Never leak the paired customer's credentials to a BYO source.
+                // Managed playback requests still carry the headers required by
+                // the server-side token/auth contract.
+                if (isManagedApiRequest) {
+                    val tvCode = AppPreferences.getTvCode(context)
+                    val sessionId = AppPreferences.getSessionId(context)
+                    builder.addHeader("X-TV-Code", tvCode)
+                    if (sessionId.isNotBlank()) builder.addHeader("X-Session-Id", sessionId)
+                    if (original.body != null) builder.addHeader("Content-Type", "application/json")
                 }
                 chain.proceed(builder.build())
             }

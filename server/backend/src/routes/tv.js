@@ -36,6 +36,18 @@ function isCustomerVisibleChannel(channel, verifiedSourceIds) {
   return verifiedSourceIds.has(String(channel.metadata?.xtreamSourceId || ''));
 }
 
+function inferPlaybackMimeType(streamUrl) {
+  const raw = String(streamUrl || '').toLowerCase();
+  const path = raw.split(/[?#]/, 1)[0];
+  if (/\.(m3u8|m3u)$/.test(path) || raw.includes('output=m3u8')) {
+    return 'application/vnd.apple.mpegurl';
+  }
+  if (/\.(ts|mpeg|mp2t)$/.test(path) || raw.includes('output=ts')) {
+    return 'video/mp2t';
+  }
+  return null;
+}
+
 async function ensurePlaybackSubscription(user, res) {
   const access = await checkPlaybackSubscription(String(user?._id || user?.id || ''), user?.role);
   if (access.allowed) return true;
@@ -384,6 +396,10 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       success: true,
       data: {
         playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`,
+        // The token URL has no file extension. Tell clients whether the first
+        // response is an HLS manifest or an MPEG-TS stream so Media3 does not
+        // have to guess from an opaque URL.
+        mimeType: inferPlaybackMimeType(streamUrl),
         expiresAt,
         slot,
         streamLimit: { max: session.max, active: session.active },
