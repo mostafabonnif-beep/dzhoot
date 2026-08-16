@@ -31,6 +31,11 @@ async function verifiedXtreamChannelQuery(baseQuery) {
     $and: [
       baseQuery,
       {
+        isActive: { $ne: false },
+        'metadata.isWorking': { $ne: false },
+        'flaggedBad.isFlagged': { $ne: true },
+      },
+      {
         $nor: [
           {
             'metadata.source': 'xtream',

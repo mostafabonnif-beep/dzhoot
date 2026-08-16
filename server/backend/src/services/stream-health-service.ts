@@ -23,26 +23,27 @@ export class StreamHealthService {
       flaggedSkipped: 0,
     };
 
-    // Only process channels that have alternate streams
-    const totalCount = await Channel.countDocuments({
-      'alternateStreams.0': { $exists: true },
-    });
+    // Check every shared catalog channel with a primary URL. Primary-only dead
+    // channels must not remain `unknown` forever and stay visible to customers.
+    const healthQuery = {
+      ownerId: null,
+      channelUrl: { $exists: true, $nin: ['', null] },
+    };
+    const totalCount = await Channel.countDocuments(healthQuery);
 
     if (totalCount === 0) {
-      console.log('[stream-health] No channels with alternate streams, skipping');
+      console.log('[stream-health] No catalog channels with a primary URL, skipping');
       return stats;
     }
 
     console.log(
-      `[stream-health] Starting health check for ${totalCount} channels with alternates (concurrency: ${CONCURRENCY})`,
+      `[stream-health] Starting health check for ${totalCount} catalog channels (concurrency: ${CONCURRENCY})`,
     );
 
     let lastId: unknown = null;
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      const query: Record<string, unknown> = {
-        'alternateStreams.0': { $exists: true },
-      };
+      const query: Record<string, unknown> = { ...healthQuery };
       if (lastId) query._id = { $gt: lastId };
 
       const batch = await Channel.find(query).sort({ _id: 1 }).limit(BATCH_SIZE);
@@ -106,8 +107,14 @@ export class StreamHealthService {
         await channel.save();
 
         if (probeResult.status === 'alive') return 'ok';
-      } catch {
-        // Probe failed — treat as dead, continue to check alternates
+      } catch (error: unknown) {
+        // A transport/probe exception is also a failed primary. Persist it so
+        // customer endpoints can hide the channel immediately.
+        channel.metadata = channel.metadata || {};
+        channel.metadata.isWorking = false;
+        channel.metadata.lastTested = new Date();
+        (channel.metadata as Record<string, unknown>).testError = redactSensitiveText(error) || 'Probe failed';
+        await channel.save();
       }
     }
 
