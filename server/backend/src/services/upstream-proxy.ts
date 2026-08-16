@@ -102,6 +102,12 @@ export async function proxyUpstreamStream(
     if (isManifest) {
       let data = '';
       let dataSize = 0;
+      const closeUpstream = () => {
+        if (!response.data.destroyed) response.data.destroy();
+      };
+      req.once('aborted', closeUpstream);
+      req.once('close', closeUpstream);
+      res.once('close', closeUpstream);
       response.data.on('data', (chunk: Buffer) => {
         dataSize += chunk.length;
         if (dataSize > MAX_MANIFEST_SIZE) {
@@ -150,8 +156,16 @@ export async function proxyUpstreamStream(
       });
 
       response.data.on('error', (error: unknown) => {
+        req.off('aborted', closeUpstream);
+        req.off('close', closeUpstream);
+        res.off('close', closeUpstream);
         console.error('[upstream-proxy] manifest error:', redactSensitiveText(error));
         if (!res.headersSent) res.status(500).send('Stream error');
+      });
+      response.data.on('end', () => {
+        req.off('aborted', closeUpstream);
+        req.off('close', closeUpstream);
+        res.off('close', closeUpstream);
       });
     } else {
       response.data.pipe(res);
