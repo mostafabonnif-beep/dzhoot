@@ -103,6 +103,7 @@ describe('xtream-service', () => {
     const result = await diagnoseXtreamSource({ serverUrl: SERVER, username: USER, password: PASS }, 2);
 
     expect(result.api).toMatchObject({ ok: true, auth: 1, status: 'Active' });
+    expect(result.server).toMatchObject({ url: SERVER, protocol: null, port: null });
     expect(result.m3u).toMatchObject({ status: 'dead', statusCode: 884 });
     expect(result.live).toMatchObject({ tested: 2, alive: 0, dead: 2 });
     expect(result.live.samples.map((sample) => sample.statusCode)).toEqual([456, 456]);

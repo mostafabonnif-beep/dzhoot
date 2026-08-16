@@ -85,6 +85,13 @@ export type XtreamPlaybackFormat = 'm3u8' | 'ts';
 
 export interface XtreamDiagnostics {
   api: { ok: boolean; error: string | null; auth: number | null; status: string | null };
+  server: {
+    url: string | null;
+    protocol: string | null;
+    port: string | null;
+    httpsPort: string | null;
+    rtmpPort: string | null;
+  };
   m3u: { status: 'not-tested' | 'alive' | 'dead'; statusCode: number | null; error: string | null };
   live: {
     tested: number;
@@ -110,6 +117,7 @@ export interface XtreamDiagnostics {
 export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit = 3): Promise<XtreamDiagnostics> {
   const result: XtreamDiagnostics = {
     api: { ok: false, error: null, auth: null, status: null },
+    server: { url: null, protocol: null, port: null, httpsPort: null, rtmpPort: null },
     m3u: { status: 'not-tested', statusCode: null, error: null },
     live: { tested: 0, alive: 0, dead: 0, playbackFormat: null, samples: [] },
   };
@@ -121,6 +129,13 @@ export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit
       error: auth.error,
       auth: auth.userInfo?.auth ?? null,
       status: auth.userInfo?.status ?? null,
+    };
+    result.server = {
+      url: auth.serverInfo?.url ? String(auth.serverInfo.url) : null,
+      protocol: auth.serverInfo?.server_protocol ? String(auth.serverInfo.server_protocol) : null,
+      port: auth.serverInfo?.port ? String(auth.serverInfo.port) : null,
+      httpsPort: auth.serverInfo?.https_port ? String(auth.serverInfo.https_port) : null,
+      rtmpPort: auth.serverInfo?.rtmp_port ? String(auth.serverInfo.rtmp_port) : null,
     };
     if (!auth.ok) return result;
 
