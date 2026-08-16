@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
+import com.dzhoof.iptv.domain.model.PlaybackTarget
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -26,6 +27,12 @@ import com.dzhoof.iptv.presentation.viewmodel.PlayerViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
+private fun mediaItem(url: String, mimeType: String?): MediaItem {
+    val builder = MediaItem.Builder().setUri(url)
+    if (!mimeType.isNullOrBlank()) builder.setMimeType(mimeType)
+    return builder.build()
+}
+
 /**
  * Point the player at a channel: builds the live stream slots (primary +
  * alternates, each with an optional proxy fallback) or the Xtream catch-up
@@ -39,7 +46,7 @@ internal suspend fun prepareChannelStream(
     channel: ChannelUiModel,
     catchupStartMs: Long,
     catchupDurationMin: Int,
-    resolvePlaybackUrl: suspend (channelId: String, slot: Int, catchupStartMs: Long, catchupDurationMin: Int) -> String?,
+    resolvePlaybackUrl: suspend (channelId: String, slot: Int, catchupStartMs: Long, catchupDurationMin: Int) -> PlaybackTarget?,
 ): Boolean {
     errorRecoveryManager.reset()
     val serverUrl = AppPreferences.getServerUrl(context).trimEnd('/')
@@ -48,28 +55,29 @@ internal suspend fun prepareChannelStream(
 
     if (useTokenizedServerPlayback) {
         if (catchupStartMs > 0) {
-            val catchupUrl = resolvePlaybackUrl(channel.id, 0, catchupStartMs, catchupDurationMin)
+            val catchupTarget = resolvePlaybackUrl(channel.id, 0, catchupStartMs, catchupDurationMin)
                 ?: return false
             errorRecoveryManager.setStreamSlots(
-                listOf(ErrorRecoveryManager.StreamSlot(catchupUrl, null, isPrimary = true)),
+                listOf(ErrorRecoveryManager.StreamSlot(catchupTarget.url, null, isPrimary = true, mimeType = catchupTarget.mimeType)),
             )
-            exoPlayer.setMediaItem(MediaItem.Builder().setUri(catchupUrl).build())
+            exoPlayer.setMediaItem(mediaItem(catchupTarget.url, catchupTarget.mimeType))
         } else {
-            val slotUrls = coroutineScope {
+            val slotTargets = coroutineScope {
                 (0..3).map { slot ->
                     async { resolvePlaybackUrl(channel.id, slot, 0L, 0) }
                 }.mapNotNull { it.await() }
             }
-            val primaryUrl = slotUrls.firstOrNull() ?: return false
-            val slots = slotUrls.mapIndexed { index, playbackUrl ->
+            val primaryTarget = slotTargets.firstOrNull() ?: return false
+            val slots = slotTargets.mapIndexed { index, playbackTarget ->
                 ErrorRecoveryManager.StreamSlot(
-                    directUrl = playbackUrl,
+                    directUrl = playbackTarget.url,
                     proxyUrl = null,
                     isPrimary = index == 0,
+                    mimeType = playbackTarget.mimeType,
                 )
             }
             errorRecoveryManager.setStreamSlots(slots)
-            exoPlayer.setMediaItem(MediaItem.Builder().setUri(primaryUrl).build())
+            exoPlayer.setMediaItem(mediaItem(primaryTarget.url, primaryTarget.mimeType))
         }
         exoPlayer.prepare()
         return true

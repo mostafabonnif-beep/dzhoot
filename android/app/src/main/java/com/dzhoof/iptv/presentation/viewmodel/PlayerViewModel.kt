@@ -9,6 +9,7 @@ import com.dzhoof.iptv.data.source.remote.FireVisionApiService
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.model.EpgProgram
+import com.dzhoof.iptv.domain.model.PlaybackTarget
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
 import com.dzhoof.iptv.domain.service.AnalyticsHelper
@@ -100,7 +101,7 @@ class PlayerViewModel @Inject constructor(
         slot: Int = 0,
         catchupStartMs: Long = 0L,
         catchupDurationMin: Int = 0,
-    ): String? {
+    ): PlaybackTarget? {
         return try {
             // Use the TV playback contract: it validates the channel source,
             // selects the requested fallback slot, and keeps upstream URLs
@@ -115,7 +116,7 @@ class PlayerViewModel @Inject constructor(
             )
             val body = response.body()
             if (response.isSuccessful && body?.success == true) {
-                body.data?.playbackUrl
+                body.data?.let { PlaybackTarget(url = it.playbackUrl, mimeType = it.mimeType) }
             } else {
                 _uiState.update {
                     it.copy(error = when (body?.error) {

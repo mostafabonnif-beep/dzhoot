@@ -33,7 +33,8 @@ class ErrorRecoveryManager(
     data class StreamSlot(
         val directUrl: String,
         val proxyUrl: String?,
-        val isPrimary: Boolean
+        val isPrimary: Boolean,
+        val mimeType: String? = null,
     )
 
     private var reconnectJob: Job? = null
@@ -183,18 +184,23 @@ class ErrorRecoveryManager(
                 val newSlot = streamSlots[currentSlotIndex]
                 onAlternateFallback?.invoke(newSlot.directUrl)
 
-                val mediaItem = MediaItem.Builder()
+                val mediaItemBuilder = MediaItem.Builder()
                     .setUri(newSlot.directUrl)
-                    .build()
-                player.setMediaItem(mediaItem)
+                if (!newSlot.mimeType.isNullOrBlank()) {
+                    mediaItemBuilder.setMimeType(newSlot.mimeType)
+                }
+                player.setMediaItem(mediaItemBuilder.build())
             } else if (isProxyAttempt()) {
                 // Switch to proxy for current slot
-                val proxyUrl = streamSlots[currentSlotIndex].proxyUrl!!
+                val slot = streamSlots[currentSlotIndex]
+                val proxyUrl = slot.proxyUrl!!
                 onProxyFallback?.invoke()
-                val mediaItem = MediaItem.Builder()
+                val mediaItemBuilder = MediaItem.Builder()
                     .setUri(proxyUrl)
-                    .build()
-                player.setMediaItem(mediaItem)
+                if (!slot.mimeType.isNullOrBlank()) {
+                    mediaItemBuilder.setMimeType(slot.mimeType)
+                }
+                player.setMediaItem(mediaItemBuilder.build())
             }
 
             val delayTime = reconnectDelayMs * attemptInSlot
