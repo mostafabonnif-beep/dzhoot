@@ -34,7 +34,7 @@ async function withDeviceLock<T>(userId: string, task: () => Promise<T>): Promis
   await previous;
 
   const redis = isRedisReady() ? getRedisClient() : null;
-  const lockKey = `firevision:device-lock:${userId}`;
+  const lockKey = `dzhoof:device-lock:${userId}`;
   const lockToken = crypto.randomBytes(16).toString('hex');
   const startedAt = Date.now();
   let redisLocked = false;

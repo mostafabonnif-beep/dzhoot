@@ -53,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: 'firevision-auth',
+      name: 'dzhoof-auth',
       partialize: (state) => ({
         user: state.user,
         sessionId: state.sessionId,

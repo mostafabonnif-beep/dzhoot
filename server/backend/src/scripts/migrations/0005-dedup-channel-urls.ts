@@ -31,7 +31,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../../.env') });
 import Channel from '../../models/Channel';
 const User = require('../../models/User');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/firevision-iptv';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 const COMMIT = process.argv.includes('--commit');
 
 // Tested-working > untested > tested-dead; then richer alternates; then oldest row.

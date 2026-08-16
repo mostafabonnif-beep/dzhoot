@@ -25,7 +25,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../../.env') });
 import Channel from '../../models/Channel';
 import { resolveChannelGroups } from '../../services/import-helpers';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/firevision-iptv';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 const COMMIT = process.argv.includes('--commit');
 
 async function run(): Promise<void> {

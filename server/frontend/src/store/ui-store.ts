@@ -21,7 +21,7 @@ export const useUIStore = create<UIState>()(
       toggleMobileSidebar: () => set((state) => ({ mobileSidebarOpen: !state.mobileSidebarOpen })),
     }),
     {
-      name: 'firevision-ui',
+      name: 'dzhoof-ui',
       partialize: (state) => ({ sidebarCollapsed: state.sidebarCollapsed }),
     },
   ),

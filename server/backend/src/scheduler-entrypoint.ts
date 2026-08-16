@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 // Load env vars (same path resolution as server.js)
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/firevision-iptv';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 
 async function main() {
   console.log('[scheduler-entrypoint] Starting scheduler service...');

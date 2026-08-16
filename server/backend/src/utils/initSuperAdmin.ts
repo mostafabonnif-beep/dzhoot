@@ -9,7 +9,7 @@ import { IUserDocument } from '@firevision/shared';
 async function initializeSuperAdmin(): Promise<IUserDocument> {
   try {
     const username = process.env.SUPER_ADMIN_USERNAME || 'superadmin';
-    const email = process.env.SUPER_ADMIN_EMAIL || 'admin@firevision.local';
+    const email = process.env.SUPER_ADMIN_EMAIL || 'admin@dzhoof.local';
 
     if (!process.env.SUPER_ADMIN_PASSWORD && process.env.NODE_ENV === 'production') {
       throw new Error('SUPER_ADMIN_PASSWORD must be set in production');

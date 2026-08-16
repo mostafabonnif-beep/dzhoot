@@ -1,8 +1,8 @@
-# FireVision IPTV
+# DZ HOOF IPTV
 
 > Self-hosted IPTV management console for Android TV and Fire TV
 
-FireVision IPTV is a free, open-source platform for managing IPTV channels on Android TV and Amazon Fire TV devices. It includes a Next.js web dashboard and a Kotlin Android TV player app.
+DZ HOOF IPTV is a free, open-source platform for managing IPTV channels on Android TV and Amazon Fire TV devices. It includes a Next.js web dashboard and a Kotlin Android TV player app.
 
 ## Core Features
 
@@ -16,9 +16,9 @@ FireVision IPTV is a free, open-source platform for managing IPTV channels on An
 ## Links
 
 - Website: https://tv.cadnative.com
-- Android TV App: https://github.com/akshaynikhare/FireVisionIPTV/releases/latest
-- Server Source: https://github.com/akshaynikhare/FireVisionIPTVServer
-- App Source: https://github.com/akshaynikhare/FireVisionIPTV
+- Android TV App: https://github.com/akshaynikhare/dzhoot/releases/latest
+- Server Source: https://github.com/akshaynikhare/dzhoot
+- App Source: https://github.com/akshaynikhare/dzhoot
 - API Documentation: https://tv.cadnative.com/api/v1/
 
 ## Tech Stack
