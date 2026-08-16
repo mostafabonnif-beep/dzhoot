@@ -78,3 +78,11 @@ Android / Android TV customer app
 [6] [Threadfin — GitHub repository](https://github.com/Threadfin/Threadfin)
 
 [7] [iptv-org — publicly available IPTV collection](https://github.com/iptv-org/iptv)
+
+## تحسين إضافي: direct_source الرسمي
+
+أضيف إلى تكامل Xtream مسار آمن لاستخدام الحقل `direct_source` إذا أرسله المزود لكل قناة. لا يُستخدم هذا الحقل إلا بعد أن ينجح الرابط نفسه في فحص Live Playback، ثم يُحفظ رابط القناة من المصدر الرسمي ويُحمى خلف playback token. إذا فشل direct_source يعود النظام إلى m3u8 ثم TS القياسي.
+
+هذا التحسين يدعم بعض لوحات Xtream التي تعيد رابطاً مباشراً صالحاً، لكنه لا يغير صلاحية الحساب الحالي: فحص `get_live_streams` لكل 16,609 قناة أعاد `direct_source_count=0`، ولذلك لا يوجد رابط رسمي بديل يمكن استخدامه لهذا الحساب.
+
+تم التحقق من التحسين باختبار end-to-end جديد، وأصبحت اختبارات Xtream 9/9 واختبارات Backend الكاملة 189/189 ناجحة.

@@ -133,6 +133,52 @@ describe('xtream-service', () => {
     expect(refreshed!.verificationStatus).toBe('verified');
   });
 
+  it('uses a provider-supplied direct_source after it passes live verification', async () => {
+    const source = await XtreamSource.create({
+      name: 'Direct-source Panel',
+      serverUrl: SERVER,
+      usernameEncrypted: encryptSecret(USER),
+      passwordEncrypted: encryptSecret(PASS),
+      status: 'Inactive',
+      verificationStatus: 'pending',
+    });
+    const directUrl = 'https://cdn.example/live/entv.ts';
+
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      const parsed = new URL(url);
+      const action = parsed.searchParams.get('action') || undefined;
+      if (action === 'get_live_streams') {
+        return {
+          data: [{
+            num: 1,
+            name: 'ENTV',
+            stream_id: 101,
+            direct_source: directUrl,
+            category_id: '1',
+          }],
+        };
+      }
+      return { data: fixturePayload(action) };
+    });
+    mockedProbeStream
+      .mockResolvedValueOnce({ status: 'dead', statusCode: 884, error: 'HTTP 884', responseTimeMs: 20, manifestValid: null, segmentReachable: null, manifestInfo: null })
+      .mockResolvedValueOnce({ status: 'alive', statusCode: 200, error: null, responseTimeMs: 25, manifestValid: null, segmentReachable: null, manifestInfo: null });
+
+    const result = await verifyXtreamSource(String(source._id), 1);
+
+    expect(result.live).toMatchObject({ tested: 1, alive: 1, dead: 0, playbackFormat: 'direct' });
+    expect(result.live.samples[0]).toMatchObject({ streamId: '101', format: 'direct', statusCode: 200 });
+    const refreshed = await XtreamSource.findById(source._id).lean();
+    expect(refreshed!.status).toBe('Active');
+    expect(refreshed!.verificationStatus).toBe('verified');
+    expect(refreshed!.playbackFormat).toBeNull();
+
+    const synced = await syncXtreamSource(String(source._id));
+    expect(synced.ok).toBe(true);
+    const channels = await Channel.find({ ownerId: null, 'metadata.xtreamSourceId': String(source._id) }).lean();
+    expect(channels.find((channel) => channel.channelName === 'ENTV')!.channelUrl).toBe(directUrl);
+  });
+
   it('keeps a metadata-only source inactive and verifies it after live playback succeeds', async () => {
     const source = await XtreamSource.create({
       name: 'Pending Panel',
