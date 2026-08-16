@@ -6,7 +6,7 @@ import Movie from '../models/Movie';
 import Series from '../models/Series';
 import Season from '../models/Season';
 import Episode from '../models/Episode';
-import { diagnoseXtreamSource, syncXtreamSource, buildXtreamApiUrl } from '../services/xtream-service';
+import { diagnoseXtreamSource, verifyXtreamSource, syncXtreamSource, buildXtreamApiUrl } from '../services/xtream-service';
 import { probeStream } from '../services/stream-prober';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 
@@ -76,6 +76,7 @@ async function makeSource() {
     usernameEncrypted: encryptSecret(USER),
     passwordEncrypted: encryptSecret(PASS),
     status: 'Active',
+    verificationStatus: 'verified',
   });
 }
 
@@ -105,6 +106,33 @@ describe('xtream-service', () => {
     expect(result.m3u).toMatchObject({ status: 'dead', statusCode: 884 });
     expect(result.live).toMatchObject({ tested: 2, alive: 0, dead: 2 });
     expect(result.live.samples.map((sample) => sample.statusCode)).toEqual([456, 456]);
+  });
+
+  it('keeps a metadata-only source inactive and verifies it after live playback succeeds', async () => {
+    const source = await XtreamSource.create({
+      name: 'Pending Panel',
+      serverUrl: SERVER,
+      usernameEncrypted: encryptSecret(USER),
+      passwordEncrypted: encryptSecret(PASS),
+      status: 'Inactive',
+      verificationStatus: 'pending',
+    });
+
+    mockedProbeStream
+      .mockResolvedValueOnce({ status: 'dead', statusCode: 884, error: 'HTTP 884', responseTimeMs: 20, manifestValid: null, segmentReachable: null, manifestInfo: null })
+      .mockResolvedValue({ status: 'dead', statusCode: 456, error: 'HTTP 456', responseTimeMs: 30, manifestValid: null, segmentReachable: null, manifestInfo: null });
+    const rejected = await verifyXtreamSource(String(source._id), 2);
+    expect(rejected.decision).toMatchObject({ verified: false, status: 'Inactive', verificationStatus: 'degraded' });
+
+    mockedProbeStream
+      .mockResolvedValueOnce({ status: 'alive', statusCode: 200, error: null, responseTimeMs: 20, manifestValid: null, segmentReachable: null, manifestInfo: null })
+      .mockResolvedValue({ status: 'alive', statusCode: 200, error: null, responseTimeMs: 30, manifestValid: null, segmentReachable: null, manifestInfo: null });
+    const accepted = await verifyXtreamSource(String(source._id), 2);
+    expect(accepted.decision).toMatchObject({ verified: true, status: 'Active', verificationStatus: 'verified' });
+
+    const refreshed = await XtreamSource.findById(source._id).lean();
+    expect(refreshed!.status).toBe('Active');
+    expect(refreshed!.verificationStatus).toBe('verified');
   });
 
   it('builds player_api URLs with credentials', () => {

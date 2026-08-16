@@ -208,14 +208,27 @@ userSchema.methods.generateUserPlaylist = async function (
   baseUrl?: string,
 ): Promise<string> {
   const ChannelModel = mongoose.model('Channel');
+  const XtreamSourceModel = mongoose.model('XtreamSource');
+  const verifiedXtreamSourceIds = (await XtreamSourceModel.find({
+    status: 'Active',
+    verificationStatus: 'verified',
+  }).distinct('_id')).map((id: any) => String(id));
+  const xtreamVisibilityGuard = {
+    $nor: [
+      {
+        'metadata.source': 'xtream',
+        'metadata.xtreamSourceId': { $nin: verifiedXtreamSourceIds },
+      },
+    ],
+  };
 
   let channels;
   if (this.role === 'Admin') {
     // Admin playlist = the shared catalog only, never users' private channels.
-    channels = await ChannelModel.find({ ownerId: null }).sort({ channelGroup: 1, order: 1 });
+    channels = await ChannelModel.find({ $and: [{ ownerId: null }, xtreamVisibilityGuard] }).sort({ channelGroup: 1, order: 1 });
   } else {
     channels = await ChannelModel.find({
-      _id: { $in: this.channels },
+      $and: [{ _id: { $in: this.channels } }, xtreamVisibilityGuard],
     }).sort({ channelGroup: 1, order: 1 });
   }
 
