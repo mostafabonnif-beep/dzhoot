@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 const Channel = require('../models/Channel');
+const XtreamSource = require('../models/XtreamSource');
 const { recordPlaybackEvent } = require('../services/playback-event-service');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('./auth');
@@ -17,6 +18,28 @@ const { buildChannelHealth } = require('../utils/channel-health');
 // Per-user lists are NOT cached here — they change through many assignment paths.
 function invalidateCatalogCache() {
   return channelCache.deletePattern('catalog:*');
+}
+
+// Xtream channels are customer-visible only when their source has passed a live
+// playback probe. Missing verification is intentionally treated as unavailable.
+async function verifiedXtreamChannelQuery(baseQuery) {
+  const verifiedSourceIds = (await XtreamSource.find({
+    status: 'Active',
+    verificationStatus: 'verified',
+  }).distinct('_id')).map((id) => String(id));
+  return {
+    $and: [
+      baseQuery,
+      {
+        $nor: [
+          {
+            'metadata.source': 'xtream',
+            'metadata.xtreamSourceId': { $nin: verifiedSourceIds },
+          },
+        ],
+      },
+    ],
+  };
 }
 
 // Max channels the TV app receives in one sync. An Admin's "channel list" is the
@@ -123,9 +146,10 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     }
 
     // Catalog view sees the shared catalog only (ownerId:null); a user sees their own selection.
-    const query = catalogView
+    const baseQuery = catalogView
       ? { ownerId: null }
       : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
+    const query = await verifiedXtreamChannelQuery(baseQuery);
 
     const channels = await Channel.find(query)
       .sort({ channelGroup: 1, order: 1 })
@@ -163,9 +187,10 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
     }
 
     // Catalog view sees the shared catalog only (ownerId:null); a user sees their own selection.
-    const query = catalogView
+    const baseQuery = catalogView
       ? { ownerId: null }
       : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
+    const query = await verifiedXtreamChannelQuery(baseQuery);
 
     const channels = await Channel.find(query)
       .sort({ channelGroup: 1, order: 1 })

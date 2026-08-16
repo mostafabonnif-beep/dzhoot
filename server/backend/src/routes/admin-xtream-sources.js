@@ -6,10 +6,11 @@ const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx, redactSensitiveText } = require('../services/audit-log');
 const {
   testXtreamConnection,
-  diagnoseXtreamSource,
+  verifyXtreamSource,
   syncXtreamSource,
   previewXtreamSource,
   encryptSecret,
+  decryptSecret,
 } = require('../services/xtream-service');
 const {
   rollbackSyncSnapshot,
@@ -31,9 +32,12 @@ function publicShape(src) {
     serverUrl: src.serverUrl,
     hasCredentials: !!(src.usernameEncrypted && src.passwordEncrypted),
     status: src.status,
+    verificationStatus: src.verificationStatus || 'pending',
     syncStatus: src.syncStatus,
     lastSyncAt: src.lastSyncAt,
     lastError: src.lastError,
+    lastDiagnosticsAt: src.lastDiagnosticsAt,
+    verifiedAt: src.verifiedAt,
     stats: src.stats,
     createdAt: src.createdAt,
   };
@@ -69,10 +73,21 @@ router.post('/', async (req, res) => {
       serverUrl: url.origin,
       usernameEncrypted: encryptSecret(String(username)),
       passwordEncrypted: encryptSecret(String(password)),
-      status: 'Active',
+      status: 'Inactive',
+      verificationStatus: 'pending',
     });
 
     audit({ ...reqCtx(req), action: 'XTREAM_SOURCE_CREATE', resource: 'XtreamSource', resourceId: String(source._id) });
+    verifyXtreamSource(String(source._id)).catch(async (err) => {
+      console.error('[xtream] automatic verification failed:', redactSensitiveText(err));
+      await XtreamSource.findByIdAndUpdate(source._id, {
+        $set: {
+          status: 'Inactive',
+          verificationStatus: 'blocked',
+          lastError: 'Automatic verification failed',
+        },
+      }).catch(() => undefined);
+    });
     return res.status(201).json({ success: true, data: publicShape(source.toObject()) });
   } catch (err) {
     console.error('[xtream] create error:', err);
@@ -120,12 +135,7 @@ router.post('/:id/diagnostics', async (req, res) => {
     const source = await XtreamSource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    const { decryptSecret } = require('../services/xtream-service');
-    const result = await diagnoseXtreamSource({
-      serverUrl: source.serverUrl,
-      username: decryptSecret(source.usernameEncrypted),
-      password: decryptSecret(source.passwordEncrypted),
-    }, Number(req.body?.sampleLimit) || 3);
+    const result = await verifyXtreamSource(String(id), Number(req.body?.sampleLimit) || 3);
 
     audit({
       ...reqCtx(req),
@@ -207,6 +217,13 @@ router.post('/:id/sync', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
     const source = await XtreamSource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+    if (source.status !== 'Active' || source.verificationStatus !== 'verified') {
+      return res.status(409).json({
+        success: false,
+        error: 'Source must pass live playback verification before synchronization',
+        code: 'SOURCE_NOT_VERIFIED',
+      });
+    }
 
     // Run in background so the request returns immediately (long operation).
     syncXtreamSource(String(id))
@@ -248,10 +265,21 @@ router.patch('/:id', async (req, res) => {
 
     const { name, status, username, password } = req.body || {};
     if (name !== undefined) source.name = String(name).trim();
-    if (status !== undefined) source.status = status === 'Inactive' ? 'Inactive' : 'Active';
-    if (username !== undefined) source.usernameEncrypted = encryptSecret(String(username));
-    if (password !== undefined) source.passwordEncrypted = encryptSecret(String(password));
+    const credentialsChanged = username !== undefined || password !== undefined;
+    if (credentialsChanged) {
+      source.usernameEncrypted = encryptSecret(String(username ?? decryptSecret(source.usernameEncrypted)));
+      source.passwordEncrypted = encryptSecret(String(password ?? decryptSecret(source.passwordEncrypted)));
+      source.status = 'Inactive';
+      source.verificationStatus = 'pending';
+      source.lastError = null;
+    } else if (status !== undefined) {
+      if (status === 'Active' && source.verificationStatus !== 'verified') {
+        return res.status(409).json({ success: false, error: 'Run diagnostics successfully before activating this source', code: 'SOURCE_NOT_VERIFIED' });
+      }
+      source.status = status === 'Inactive' ? 'Inactive' : 'Active';
+    }
     await source.save();
+    if (credentialsChanged) verifyXtreamSource(String(id)).catch((err) => console.error('[xtream] re-verification failed:', redactSensitiveText(err)));
 
     audit({ ...reqCtx(req), action: 'XTREAM_SOURCE_UPDATE', resource: 'XtreamSource', resourceId: String(id) });
     return res.json({ success: true, data: publicShape(source.toObject()) });

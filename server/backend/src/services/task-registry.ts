@@ -6,7 +6,7 @@ import { ExternalSourceCacheMeta, ExternalSourceChannel } from '../models/Extern
 import { IptvOrgChannel } from '../models/IptvOrgCache';
 import XtreamSource from '../models/XtreamSource';
 import M3USource from '../models/M3USource';
-import { syncXtreamSource } from './xtream-service';
+import { syncXtreamSource, verifyXtreamSource } from './xtream-service';
 import { syncM3USource } from './m3u-service';
 
 export interface SubtaskResult {
@@ -230,9 +230,16 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
   for (const source of sources) {
     const sourceStartedAt = Date.now();
     try {
-      const result = kind === 'xtream'
-        ? await syncXtreamSource(String(source._id))
-        : await syncM3USource(String(source._id));
+      let result;
+      if (kind === 'xtream') {
+        const verification = await verifyXtreamSource(String(source._id), 2);
+        if (!verification.decision.verified) {
+          throw new Error(`Source verification failed: ${verification.decision.reason || verification.decision.verificationStatus}`);
+        }
+        result = await syncXtreamSource(String(source._id));
+      } else {
+        result = await syncM3USource(String(source._id));
+      }
       subtasks.push({
         name: `${kind}:${source.name}`,
         status: 'completed',

@@ -20,6 +20,18 @@ const { decryptSecret } = require('../utils/crypto');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
 
+async function getVerifiedXtreamSourceIds() {
+  return new Set((await XtreamSource.find({
+    status: 'Active',
+    verificationStatus: 'verified',
+  }).distinct('_id')).map((id) => String(id)));
+}
+
+function isCustomerVisibleChannel(channel, verifiedSourceIds) {
+  if (channel.metadata?.source !== 'xtream') return true;
+  return verifiedSourceIds.has(String(channel.metadata?.xtreamSourceId || ''));
+}
+
 async function ensurePlaybackSubscription(user, res) {
   const access = await checkPlaybackSubscription(String(user?._id || user?.id || ''), user?.role);
   if (access.allowed) return true;
@@ -90,7 +102,21 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
 // data (~1.7k) — otherwise the $in carries 3 ids per channel (~100k+) for nothing.
 async function loadEpgChannelIds(user) {
   const catalogView = user.role === 'Admin' || user.allCatalog === true;
-  const query = catalogView ? { ownerId: null } : { _id: { $in: user.channels } };
+  const verifiedSourceIds = await getVerifiedXtreamSourceIds();
+  const baseQuery = catalogView ? { ownerId: null } : { _id: { $in: user.channels } };
+  const query = {
+    $and: [
+      baseQuery,
+      {
+        $nor: [
+          {
+            'metadata.source': 'xtream',
+            'metadata.xtreamSourceId': { $nin: [...verifiedSourceIds] },
+          },
+        ],
+      },
+    ],
+  };
   const channels = await Channel.find(query)
     .sort({ channelGroup: 1, order: 1 })
     .limit(TV_CHANNELS_MAX)
@@ -211,9 +237,11 @@ router.get('/playlist/:code/json', async (req, res) => {
       }).sort({ channelGroup: 1, order: 1 });
     }
 
+    const verifiedSourceIds = await getVerifiedXtreamSourceIds();
+    const visibleChannels = channels.filter((channel) => isCustomerVisibleChannel(channel, verifiedSourceIds));
     const baseUrl = getPublicBaseUrl(req);
     const tokenizedChannels = await Promise.all(
-      channels.map((channel) => tokenizeChannelForClient(channel, user, baseUrl)),
+      visibleChannels.map((channel) => tokenizeChannelForClient(channel, user, baseUrl)),
     );
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');
@@ -261,6 +289,15 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
 
     const channel = await Channel.findOne({ channelId: channelRef, isActive: { $ne: false } }).lean();
     if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
+
+    if (channel.metadata?.source === 'xtream') {
+      const source = await XtreamSource.findOne({
+        _id: channel.metadata.xtreamSourceId,
+        status: 'Active',
+        verificationStatus: 'verified',
+      }).lean();
+      if (!source) return res.status(404).json({ success: false, error: 'Channel source is not verified', code: 'SOURCE_NOT_VERIFIED' });
+    }
 
     const isCatalogUser = user.role === 'Admin' || user.allCatalog === true;
     const assigned = (user.channels || []).some((id) => String(id) === String(channel._id));

@@ -14,6 +14,7 @@ import { redactSensitiveText } from './audit-log';
 import { reconcileChannelIdentities } from './channel-identity-service';
 import { createSyncPreview, markSnapshotApplied } from './sync-snapshot-service';
 import { probeStream, type ProbeResult } from './stream-prober';
+import { channelCache } from './cache';
 
 const API_TIMEOUT_MS = 30000;
 
@@ -137,6 +138,49 @@ export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit
   }
 
   return result;
+}
+
+export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
+  const source = await XtreamSource.findById(sourceId).exec();
+  if (!source) throw new Error('Source not found');
+
+  const diagnostics = await diagnoseXtreamSource({
+    serverUrl: source.serverUrl,
+    username: decryptSecret(source.usernameEncrypted),
+    password: decryptSecret(source.passwordEncrypted),
+  }, sampleLimit);
+
+  const now = new Date();
+  const liveAvailable = diagnostics.live.alive > 0;
+  const apiAvailable = diagnostics.api.ok;
+  const verified = apiAvailable && liveAvailable;
+  const verificationStatus = verified ? 'verified' : apiAvailable ? 'degraded' : 'blocked';
+  const error = verified
+    ? diagnostics.m3u.status === 'dead'
+      ? 'Live playback is available, but M3U export is unavailable'
+      : null
+    : diagnostics.api.error || (diagnostics.live.tested > 0 ? 'No tested live stream is playable' : 'No live stream could be verified');
+
+  source.verificationStatus = verificationStatus;
+  source.status = verified ? 'Active' : 'Inactive';
+  source.lastDiagnosticsAt = now;
+  source.lastDiagnostics = diagnostics as unknown as Record<string, unknown>;
+  source.lastError = error;
+  if (verified) source.verifiedAt = now;
+  await source.save();
+
+  // Verification changes whether shared catalog cache may expose these channels.
+  await channelCache.deletePattern('catalog:*');
+
+  return {
+    ...diagnostics,
+    decision: {
+      verificationStatus,
+      status: source.status,
+      verified,
+      reason: error,
+    },
+  };
 }
 
 function getContainerExt(item: any): string {
@@ -344,6 +388,9 @@ async function mapCategories(items: any[]) {
 export async function syncXtreamSource(sourceId: string) {
   const source = await XtreamSource.findById(sourceId).exec();
   if (!source) throw new Error('Xtream source not found');
+  if (source.status !== 'Active' || source.verificationStatus !== 'verified') {
+    throw new Error('Xtream source must pass live playback verification before sync');
+  }
   if (source.syncStatus === 'syncing') throw new Error('Sync already in progress');
 
   const creds: XtreamCredentials = {
@@ -468,6 +515,7 @@ module.exports = {
   buildXtreamApiUrl,
   testXtreamConnection,
   diagnoseXtreamSource,
+  verifyXtreamSource,
   syncXtreamSource,
   previewXtreamSource,
   encryptSecret,
