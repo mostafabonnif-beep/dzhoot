@@ -3,7 +3,6 @@ package com.dzhoof.iptv.presentation.viewmodel
 import com.dzhoof.iptv.MainDispatcherRule
 import com.dzhoof.iptv.presentation.model.UpdateInfo
 import com.dzhoof.iptv.update.AppUpdater
-import io.mockk.any
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -33,7 +32,7 @@ class AppUpdateViewModelTest {
     @Test
     fun `checks for an update only once and publishes available update`() = runTest {
         every { appUpdater.check() } returns update
-        val viewModel = AppUpdateViewModel(appUpdater)
+        val viewModel = AppUpdateViewModel(appUpdater, mainDispatcherRule.testDispatcher)
 
         viewModel.checkForUpdate()
         viewModel.checkForUpdate()
@@ -45,7 +44,7 @@ class AppUpdateViewModelTest {
 
     @Test
     fun `dismiss marks the update overlay as dismissed`() = runTest {
-        val viewModel = AppUpdateViewModel(appUpdater)
+        val viewModel = AppUpdateViewModel(appUpdater, mainDispatcherRule.testDispatcher)
 
         viewModel.dismiss()
 
@@ -60,7 +59,7 @@ class AppUpdateViewModelTest {
                 AppUpdater.DownloadState.Failed("تعذر تثبيت التحديث"),
             )
         }
-        val viewModel = AppUpdateViewModel(appUpdater)
+        val viewModel = AppUpdateViewModel(appUpdater, mainDispatcherRule.testDispatcher)
         viewModel.checkForUpdate()
         advanceUntilIdle()
 

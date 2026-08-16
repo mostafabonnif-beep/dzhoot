@@ -6,7 +6,6 @@ import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.PinnedHttpClient
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
 import com.google.zxing.qrcode.QRCodeWriter
-import io.mockk.any
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkConstructor
@@ -57,9 +56,9 @@ class PairingViewModelTest {
 
     @Test
     fun `connection failure exposes retry state`() = runTest {
-        every { PinnedHttpClient.post(any(), any(), any()) } throws IOException("offline")
+        every { PinnedHttpClient.post(any(), any()) } throws IOException("offline")
 
-        val viewModel = PairingViewModel(context)
+        val viewModel = PairingViewModel(context, mainDispatcherRule.testDispatcher)
         advanceUntilIdle()
 
         assertEquals("خطأ في الاتصال: offline", viewModel.uiState.value.statusMessage)
@@ -69,12 +68,12 @@ class PairingViewModelTest {
 
     @Test
     fun `server rejection exposes the returned pairing error`() = runTest {
-        every { PinnedHttpClient.post(any(), any(), any()) } returns response(
+        every { PinnedHttpClient.post(any(), any()) } returns response(
             200,
             "{\"success\":false,\"error\":\"الخادم مشغول\"}",
         )
 
-        val viewModel = PairingViewModel(context)
+        val viewModel = PairingViewModel(context, mainDispatcherRule.testDispatcher)
         advanceUntilIdle()
 
         assertEquals("تعذر إنشاء PIN: الخادم مشغول", viewModel.uiState.value.statusMessage)
@@ -83,12 +82,12 @@ class PairingViewModelTest {
 
     @Test
     fun `successful request publishes PIN and pairing URL`() = runTest {
-        every { PinnedHttpClient.post(any(), any(), any()) } returns response(
+        every { PinnedHttpClient.post(any(), any()) } returns response(
             200,
             "{\"success\":true,\"pin\":\"123456\",\"expiresAt\":\"2000-01-01T00:00:00.000Z\"}",
         )
 
-        val viewModel = PairingViewModel(context)
+        val viewModel = PairingViewModel(context, mainDispatcherRule.testDispatcher)
         advanceUntilIdle()
 
         assertEquals("123456", viewModel.uiState.value.pin)

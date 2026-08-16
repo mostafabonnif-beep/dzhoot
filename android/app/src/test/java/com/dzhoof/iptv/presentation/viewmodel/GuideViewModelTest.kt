@@ -14,8 +14,6 @@ import com.dzhoof.iptv.presentation.model.GuideFilter
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
-import io.mockk.any
-import io.mockk.match
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow

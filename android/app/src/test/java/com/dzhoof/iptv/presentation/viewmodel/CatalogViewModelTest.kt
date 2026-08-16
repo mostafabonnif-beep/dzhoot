@@ -112,7 +112,19 @@ class CatalogViewModelTest {
             Result.Success(CatalogPage(series, series.size, page, limit))
 
         override suspend fun getSeriesById(seriesId: String): Result<Series> =
-            Result.Success(series.firstOrNull { it.id == seriesId } ?: Series(id = seriesId, title = "Series"))
+            Result.Success(series.firstOrNull { it.id == seriesId } ?: Series(
+                id = seriesId,
+                title = "Series",
+                category = "",
+                poster = null,
+                backdrop = null,
+                plot = null,
+                cast = null,
+                director = null,
+                genre = null,
+                releaseDate = null,
+                rating = null,
+            ))
 
         override suspend fun getSeasons(seriesId: String): Result<List<Season>> = Result.Success(seasons)
 
