@@ -23,8 +23,14 @@ Sentry.init({
 {
   const required = [
     'MONGODB_URI',
+    'REDIS_URL',
+    'PUBLIC_BASE_URL',
+    'ALLOWED_ORIGINS',
     'JWT_ACCESS_SECRET',
     'JWT_REFRESH_SECRET',
+    'PLAYBACK_TOKEN_SECRET',
+    'XTREAM_SECRET_KEY',
+    'TOTP_ENCRYPTION_KEY',
     'SUPER_ADMIN_PASSWORD',
   ];
   const missing = required.filter((key) => !process.env[key]);
@@ -68,6 +74,17 @@ if (process.env.NODE_ENV === 'production') {
     problems.push('JWT_ACCESS_SECRET is a default/placeholder or shorter than 32 characters');
   if (isWeakSecret(process.env.JWT_REFRESH_SECRET))
     problems.push('JWT_REFRESH_SECRET is a default/placeholder or shorter than 32 characters');
+  if (isWeakSecret(process.env.PLAYBACK_TOKEN_SECRET))
+    problems.push('PLAYBACK_TOKEN_SECRET is a default/placeholder or shorter than 32 characters');
+  if (isWeakSecret(process.env.XTREAM_SECRET_KEY))
+    problems.push('XTREAM_SECRET_KEY is a default/placeholder or shorter than 32 characters');
+  if (!/^[a-f0-9]{64}$/i.test(String(process.env.TOTP_ENCRYPTION_KEY || '')))
+    problems.push('TOTP_ENCRYPTION_KEY must be a 64-character hexadecimal value');
+  const publicBaseUrl = String(process.env.PUBLIC_BASE_URL || '').trim();
+  if (!/^https:\/\/[^\s/]+(?:\/.*)?$/i.test(publicBaseUrl) || /example\.com|localhost|127\.0\.0\.1/i.test(publicBaseUrl))
+    problems.push('PUBLIC_BASE_URL must be a real HTTPS URL, not localhost or a placeholder');
+  if (!String(process.env.ALLOWED_ORIGINS || '').trim() || String(process.env.ALLOWED_ORIGINS).split(',').some((origin) => !/^https:\/\/[^\s/]+$/i.test(origin.trim())))
+    problems.push('ALLOWED_ORIGINS must contain only explicit HTTPS origins');
   if (isPlaceholder(process.env.SUPER_ADMIN_PASSWORD) || String(process.env.SUPER_ADMIN_PASSWORD || '').length < 16)
     problems.push('SUPER_ADMIN_PASSWORD is a placeholder or shorter than 16 characters');
   if (isPlaceholder(process.env.SUPER_ADMIN_EMAIL))
