@@ -40,3 +40,11 @@
 لا يوجد خلل في Android يجعل قنوات Xtream تختفي بعد أن تصل إلى التطبيق؛ قنوات Xtream لم تدخل الكتالوج أصلاً لأن المصدر غير متحقق من Live Playback. نظام الحماية الحالي يتصرف كما صُمم: لا يعرض مصدر metadata-only للعملاء ولا يسمح بمزامنته، بينما يظل كتالوج IPTV-org التجريبي ظاهراً للمستخدم ذي `allCatalog=true`.
 
 إظهار قنوات Xtream الآن يتطلب أن ينجح مصدر Live فعلياً من خادم DZ HOOF، عبر whitelist لعنوان VPS أو حساب B2B/Reseller أو رابط قناة اختبار مرخص. إزالة شرط التحقق ستجعل أسماء القنوات تظهر، لكنها ستُبقي رسالة «البث غير متاح» ولن تحل التشغيل.
+
+## إعادة التحقق بعد إعادة تشغيل Backend
+
+تمت مطابقة APK: `BuildConfig.API_BASE_URL` يشير إلى خادم الاختبار الحالي، ونسخة APK بنيت في 16 أغسطس 2026. تم إعادة تشغيل Backend من آخر commit مع نفس MongoDB، ثم استدعاء endpoint الذي يستخدمه Android فعلياً:
+
+`GET /api/v1/channels` مع `X-TV-Code` و`X-Session-Id`.
+
+النتيجة بقيت `count=3`، وجميع القنوات تحمل `metadata.source=iptv-org`. حالة مصدر Xtream بقيت `Inactive/degraded` مع `lastError=No tested live stream is playable`. لذلك لا توجد مشكلة cache أو APK أو مسار Android في هذه الحالة؛ الهاتف يعرض بالضبط القائمة التي يرسلها الخادم.
