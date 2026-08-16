@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
-import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationRequest
+import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
 import com.dzhoof.iptv.data.source.remote.FireVisionApiService
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
@@ -102,15 +102,23 @@ class PlayerViewModel @Inject constructor(
         catchupDurationMin: Int = 0,
     ): String? {
         return try {
-            val response = apiService.authorizePlayback(
-                PlaybackAuthorizationRequest(contentType = "LIVE", contentId = channelId),
+            // Use the TV playback contract: it validates the channel source,
+            // selects the requested fallback slot, and keeps upstream URLs
+            // and credentials server-side.
+            val response = apiService.issuePlaybackToken(
+                PlaybackTokenRequest(
+                    channelId = channelId,
+                    slot = slot,
+                    catchupStartMs = catchupStartMs,
+                    catchupDurationMin = catchupDurationMin,
+                ),
             )
-            if (response.isSuccessful && response.body()?.success == true) {
-                response.body()?.data?.url
+            val body = response.body()
+            if (response.isSuccessful && body?.success == true) {
+                body.data?.playbackUrl
             } else {
-                val body = response.body()
                 _uiState.update {
-                    it.copy(error = when (body?.code) {
+                    it.copy(error = when (body?.error) {
                         "SUBSCRIPTION_EXPIRED" -> "انتهى اشتراكك. فعّل كودًا جديدًا لمتابعة المشاهدة."
                         "PLAYBACK_DEVICE_REQUIRED" -> "سجّل هذا الجهاز قبل بدء التشغيل."
                         "DEVICE_LIMIT_REACHED" -> "تم بلوغ الحد الأقصى للأجهزة في خطتك."
@@ -120,6 +128,7 @@ class PlayerViewModel @Inject constructor(
                 null
             }
         } catch (_: Exception) {
+            _uiState.update { it.copy(error = "تعذر الاتصال بخادم البث") }
             null
         }
     }
