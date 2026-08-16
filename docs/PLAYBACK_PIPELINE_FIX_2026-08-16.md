@@ -40,13 +40,21 @@
 
 ## APK
 
-تم بناء APK Debug النهائي بعد الإصلاح:
+كشفت صورة الاختبار سبباً إضافياً مستقلاً: رسالة `No address associated with hostname` كانت ناتجة عن بناء APK سابق من دون تمرير `dzhoofApiUrl`، فاختار Gradle القيمة الاحتياطية `https://example.invalid/`. تم إعادة البناء مع عنوان Backend العام الصحيح، وتم التحقق من وجوده داخل `BuildConfig` قبل التسليم.
+
+تم بناء APK Debug المصحح:
 
 `android/app/build/outputs/apk/debug/app-debug.apk`
 
-SHA-256:
+SHA-256 للنسخة المصححة:
 
-`ede190042eeeadf85a265c08f7f1e4e0191bdc6840e049042adda1102a2e1a72`
+`ea8e9e62c2b7fae555be6fce8694cf1204f514c49f669ae2cffa95c2563ee617`
+
+عنوان Backend المضمّن:
+
+`https://3000-iqjm9mreut3wspli9dxce-cfee851e.us4.manus.computer/`
+
+كما تم تعديل `android/app/build.gradle.kts` بحيث يفشل البناء برسالة واضحة إذا لم يتم تمرير `-PdzhoofApiUrl` أو `DZHOOF_API_URL`، بدلاً من إنتاج APK قابل للتثبيت لكنه غير قابل للاتصال.
 
 ## ملاحظة بيئة الاختبار
 
