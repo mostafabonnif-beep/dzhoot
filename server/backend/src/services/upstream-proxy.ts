@@ -120,8 +120,14 @@ export async function proxyUpstreamStream(
 
       response.data.on('end', () => {
         if (res.headersSent) return;
-        const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf('/') + 1);
         const lines = data.split('\n');
+        const resolveAgainstFinalUrl = (rawUrl: string): string => {
+          try {
+            return new URL(rawUrl, finalUrl).toString();
+          } catch {
+            return rawUrl;
+          }
+        };
         const rewrittenLines = lines.map((line: string) => {
           const trimmedLine = line.trim();
           if (!trimmedLine) return line;
@@ -131,18 +137,7 @@ export async function proxyUpstreamStream(
             if (/^(data:|skd:|urn:|#)/i.test(trimmed)) return trimmed;
             if (trimmed.includes('/api/v1/tv/playback/') || trimmed.includes('/api/v1/tv/stream/')) return trimmed;
             let absolute: string;
-            if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-              absolute = trimmed;
-            } else if (trimmed.startsWith('/')) {
-              try {
-                const parsed = new URL(finalUrl);
-                absolute = `${parsed.protocol}//${parsed.host}${trimmed}`;
-              } catch {
-                absolute = baseUrl + trimmed;
-              }
-            } else {
-              absolute = baseUrl + trimmed;
-            }
+            absolute = resolveAgainstFinalUrl(trimmed);
             return nestedPlaybackUrl(absolute, tokenContext, legacyCode);
           };
           if (trimmedLine.startsWith('#')) {
