@@ -33,6 +33,7 @@ function publicShape(src) {
     hasCredentials: !!(src.usernameEncrypted && src.passwordEncrypted),
     status: src.status,
     verificationStatus: src.verificationStatus || 'pending',
+    playbackFormat: src.playbackFormat || null,
     syncStatus: src.syncStatus,
     lastSyncAt: src.lastSyncAt,
     lastError: src.lastError,

@@ -108,6 +108,30 @@ describe('xtream-service', () => {
     expect(result.live.samples.map((sample) => sample.statusCode)).toEqual([456, 456]);
   });
 
+  it('falls back to TS when the provider exposes live playback only in TS format', async () => {
+    const source = await XtreamSource.create({
+      name: 'TS-only Panel',
+      serverUrl: SERVER,
+      usernameEncrypted: encryptSecret(USER),
+      passwordEncrypted: encryptSecret(PASS),
+      status: 'Inactive',
+      verificationStatus: 'pending',
+    });
+
+    mockedProbeStream
+      .mockResolvedValueOnce({ status: 'dead', statusCode: 884, error: 'HTTP 884', responseTimeMs: 20, manifestValid: null, segmentReachable: null, manifestInfo: null })
+      .mockResolvedValueOnce({ status: 'dead', statusCode: 456, error: 'HTTP 456', responseTimeMs: 30, manifestValid: null, segmentReachable: null, manifestInfo: null })
+      .mockResolvedValueOnce({ status: 'alive', statusCode: 200, error: null, responseTimeMs: 40, manifestValid: null, segmentReachable: null, manifestInfo: null });
+
+    const result = await verifyXtreamSource(String(source._id), 1);
+
+    expect(result.live).toMatchObject({ tested: 1, alive: 1, dead: 0, playbackFormat: 'ts' });
+    expect(result.live.samples[0]).toMatchObject({ streamId: '101', format: 'ts', statusCode: 200 });
+    const refreshed = await XtreamSource.findById(source._id).lean();
+    expect(refreshed!.playbackFormat).toBe('ts');
+    expect(refreshed!.verificationStatus).toBe('verified');
+  });
+
   it('keeps a metadata-only source inactive and verifies it after live playback succeeds', async () => {
     const source = await XtreamSource.create({
       name: 'Pending Panel',

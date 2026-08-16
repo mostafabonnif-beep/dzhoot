@@ -81,10 +81,25 @@ export async function testXtreamConnection(creds: XtreamCredentials) {
   };
 }
 
+export type XtreamPlaybackFormat = 'm3u8' | 'ts';
+
 export interface XtreamDiagnostics {
   api: { ok: boolean; error: string | null; auth: number | null; status: string | null };
   m3u: { status: 'not-tested' | 'alive' | 'dead'; statusCode: number | null; error: string | null };
-  live: { tested: number; alive: number; dead: number; samples: Array<{ streamId: string; status: ProbeResult['status']; statusCode: number | null; error: string | null; responseTimeMs: number }> };
+  live: {
+    tested: number;
+    alive: number;
+    dead: number;
+    playbackFormat: XtreamPlaybackFormat | null;
+    samples: Array<{
+      streamId: string;
+      format: XtreamPlaybackFormat;
+      status: ProbeResult['status'];
+      statusCode: number | null;
+      error: string | null;
+      responseTimeMs: number;
+    }>;
+  };
 }
 
 /**
@@ -96,7 +111,7 @@ export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit
   const result: XtreamDiagnostics = {
     api: { ok: false, error: null, auth: null, status: null },
     m3u: { status: 'not-tested', statusCode: null, error: null },
-    live: { tested: 0, alive: 0, dead: 0, samples: [] },
+    live: { tested: 0, alive: 0, dead: 0, playbackFormat: null, samples: [] },
   };
 
   try {
@@ -121,12 +136,24 @@ export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit
     for (const item of samples) {
       const streamId = String(item?.stream_id ?? '');
       if (!streamId) continue;
-      const probe = await probeStream(liveUrl(creds, streamId), { timeout: 12000 });
+
+      let selectedFormat: XtreamPlaybackFormat = 'm3u8';
+      let probe: ProbeResult | null = null;
+      for (const format of ['m3u8', 'ts'] as const) {
+        selectedFormat = format;
+        probe = await probeStream(liveUrl(creds, streamId, format), { timeout: 12000 });
+        if (probe.status === 'alive') break;
+      }
+      if (!probe) continue;
+
       result.live.tested += 1;
-      if (probe.status === 'alive') result.live.alive += 1;
-      else result.live.dead += 1;
+      if (probe.status === 'alive') {
+        result.live.alive += 1;
+        result.live.playbackFormat ??= selectedFormat;
+      } else result.live.dead += 1;
       result.live.samples.push({
         streamId,
+        format: selectedFormat,
         status: probe.status,
         statusCode: probe.statusCode,
         error: probe.error,
@@ -166,6 +193,7 @@ export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
   source.lastDiagnosticsAt = now;
   source.lastDiagnostics = diagnostics as unknown as Record<string, unknown>;
   source.lastError = error;
+  source.playbackFormat = verified ? diagnostics.live.playbackFormat : null;
   if (verified) source.verifiedAt = now;
   await source.save();
 
@@ -188,8 +216,8 @@ function getContainerExt(item: any): string {
   return String(ext).replace(/^\./, '');
 }
 
-function liveUrl(creds: XtreamCredentials, streamId: string | number): string {
-  return `${creds.serverUrl.replace(/\/+$/, '')}/live/${creds.username}/${creds.password}/${streamId}.m3u8`;
+function liveUrl(creds: XtreamCredentials, streamId: string | number, format: XtreamPlaybackFormat = 'm3u8'): string {
+  return `${creds.serverUrl.replace(/\/+$/, '')}/live/${creds.username}/${creds.password}/${streamId}.${format}`;
 }
 
 function m3uUrl(creds: XtreamCredentials): string {
@@ -209,7 +237,7 @@ function episodeUrl(creds: XtreamCredentials, episodeId: string | number, ext: s
 /** Default timeshift window assumed for Xtream channels (days). */
 const XTREAM_TIMESHIFT_DAYS = Number(process.env.XTREAM_TIMESHIFT_DAYS) || 3;
 
-async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials) {
+async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials, playbackFormat: XtreamPlaybackFormat = 'm3u8') {
   const channelId = `xt:${String(sourceId)}:${item.stream_id}`;
   return Channel.findOneAndUpdate(
     { ownerId: null, channelId },
@@ -217,7 +245,7 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
       $set: {
         channelId,
         channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
-        channelUrl: liveUrl(creds, item.stream_id),
+        channelUrl: liveUrl(creds, item.stream_id, playbackFormat),
         channelImg: item.stream_icon || '',
         channelGroup: group || 'Uncategorized',
         tvgId: item.epg_channel_id || '',
@@ -326,11 +354,11 @@ async function syncSeriesEpisodes(sourceId: mongoose.Types.ObjectId, seriesDoc: 
   }
 }
 
-function liveChannelSnapshot(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials) {
+function liveChannelSnapshot(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials, playbackFormat: XtreamPlaybackFormat = 'm3u8') {
   return {
     channelId: `xt:${String(sourceId)}:${item.stream_id}`,
     channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
-    channelUrl: liveUrl(creds, item.stream_id),
+    channelUrl: liveUrl(creds, item.stream_id, playbackFormat),
     channelImg: item.stream_icon || '',
     channelGroup: group || 'Uncategorized',
     tvgId: item.epg_channel_id || '',
@@ -362,7 +390,7 @@ export async function previewXtreamSource(sourceId: string, createdBy?: string |
   ]);
   const liveCatMap = await mapCategories(liveCats);
   const channels = (Array.isArray(liveStreams) ? liveStreams : []).map((item) =>
-    liveChannelSnapshot(source._id, item, liveCatMap.get(String(item.category_id)) || 'Uncategorized', creds),
+    liveChannelSnapshot(source._id, item, liveCatMap.get(String(item.category_id)) || 'Uncategorized', creds, source.playbackFormat || 'm3u8'),
   );
   const preview = await createSyncPreview({
     sourceType: 'xtream',
@@ -426,7 +454,7 @@ export async function syncXtreamSource(sourceId: string) {
       sourceType: 'xtream',
       sourceId: String(id),
       nextChannels: (Array.isArray(liveStreams) ? liveStreams : []).map((item) =>
-        liveChannelSnapshot(id, item, liveCatMap.get(String(item.category_id)) || 'Uncategorized', creds),
+        liveChannelSnapshot(id, item, liveCatMap.get(String(item.category_id)) || 'Uncategorized', creds, source.playbackFormat || 'm3u8'),
       ),
     });
     const seriesCatMap = await mapCategories(seriesCats);
@@ -435,7 +463,7 @@ export async function syncXtreamSource(sourceId: string) {
     const liveIds = new Set<string>();
     for (const item of Array.isArray(liveStreams) ? liveStreams : []) {
       const group = liveCatMap.get(String(item.category_id)) || 'Uncategorized';
-      await upsertChannel(id, item, group, creds);
+      await upsertChannel(id, item, group, creds, source.playbackFormat || 'm3u8');
       liveIds.add(`xt:${String(id)}:${item.stream_id}`);
       channels += 1;
     }

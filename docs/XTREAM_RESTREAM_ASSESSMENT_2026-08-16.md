@@ -70,3 +70,9 @@
 [3] [Flussonic — How to launch an IPTV service: technical and business guide](https://flussonic.com/blog/article/launch-an-iptv-service)
 
 [4] [DZ HOOF — XTREAM_DEEP_RESEARCH_REPORT.md](./XTREAM_DEEP_RESEARCH_REPORT.md)
+
+## تحديث تنفيذي بعد إعادة الفحص
+
+تمت إعادة فحص الحساب من المسارات القياسية الرسمية. أعاد `player_api.php` حالة HTTP 200 وقائمة `get_live_streams` تضم 16,609 عنصراً، بينما أعاد M3U HTTP 884 دون bytes. واختُبرت ثلاث قنوات من العينة عبر `/live/{user}/{pass}/{stream_id}.m3u8` و`.ts`؛ أعادت الصيغتان HTTP 456 وحجم صفر لكل القنوات المختبرة.
+
+أُضيف إلى Backend تحسين توافق آمن: أثناء diagnostics يجرب النظام الصيغة القياسية `m3u8` ثم `ts` فقط، ويحفظ `playbackFormat` الذي نجح فعلياً، ثم يستخدمه عند إنشاء روابط القنوات وعند preview/sync. أُضيف اختبار regression يثبت أن مصدراً يعمل بصيغة TS فقط يُقبل ويحصل على روابط `.ts`. هذا التغيير لا يفتح مصدراً metadata-only ولا يتجاوز 401/456/884؛ وبالنسبة للحساب الحالي تبقى النتيجة `blocked/degraded` إلى أن يفعّل المزود Live Playback.
