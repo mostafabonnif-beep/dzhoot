@@ -225,8 +225,8 @@ router.get('/playlist/:code/json', async (req, res) => {
     const Channel = require('../models/Channel');
     let channels;
 
-    if (user.role === 'Admin') {
-      // Admin/demo gets the shared catalog only (never users' private channels)
+    if (user.role === 'Admin' || user.allCatalog === true) {
+      // Admin/demo and trial users with allCatalog get the shared catalog only.
       channels = await Channel.find({ ownerId: null }).sort({ channelGroup: 1, order: 1 });
     } else {
       // Regular users get only their assigned active channels

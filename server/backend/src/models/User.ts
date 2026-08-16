@@ -223,8 +223,8 @@ userSchema.methods.generateUserPlaylist = async function (
   };
 
   let channels;
-  if (this.role === 'Admin') {
-    // Admin playlist = the shared catalog only, never users' private channels.
+  if (this.role === 'Admin' || this.allCatalog === true) {
+    // Admin and trial users with allCatalog receive the shared catalog only.
     channels = await ChannelModel.find({ $and: [{ ownerId: null }, xtreamVisibilityGuard] }).sort({ channelGroup: 1, order: 1 });
   } else {
     channels = await ChannelModel.find({
