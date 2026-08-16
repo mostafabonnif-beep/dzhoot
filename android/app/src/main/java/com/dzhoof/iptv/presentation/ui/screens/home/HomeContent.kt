@@ -222,8 +222,19 @@ fun HomeContent(
             items = categoryEntries,
             key = { _, entry -> "category_${entry.key}" }
         ) { index, (category, categoryChannels) ->
+            val localizedCategory = when (category.trim().lowercase()) {
+                "sports", "sport", "رياضة" -> stringResource(R.string.category_sports)
+                "news", "أخبار" -> stringResource(R.string.category_news)
+                "movies", "movie", "أفلام" -> stringResource(R.string.category_movies)
+                "entertainment", "ترفيه" -> stringResource(R.string.category_entertainment)
+                "music", "موسيقى" -> stringResource(R.string.category_music)
+                "kids", "children", "أطفال" -> stringResource(R.string.category_kids)
+                "documentary", "وثائقي" -> stringResource(R.string.category_documentary)
+                "general", "other", "عام" -> stringResource(R.string.category_general)
+                else -> category
+            }
             ChannelRow(
-                title = category,
+                title = localizedCategory,
                 channels = categoryChannels,
                 onChannelClick = onChannelClick,
                 onToggleFavorite = onToggleFavorite,

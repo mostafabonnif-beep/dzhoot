@@ -88,8 +88,12 @@ export function buildChannelHealth(
   const reportScore = successRate === null ? 0 : Math.round(successRate * 10);
   const score = clamp(Math.round(primaryScore + fallbackScore + reportScore + freshnessScore), 0, 100);
 
+  // A confirmed live primary remains healthy while its liveness result is
+  // reasonably fresh. The old 70-point gate made a working channel appear
+  // degraded after one hour when it had no alternates or client reports: the
+  // score fell from 70 to 66 even though the stream was still known alive.
   const status: ChannelHealthStatus =
-    primaryStatus === 'alive' && score >= 70
+    primaryStatus === 'alive' && score >= 60
       ? 'healthy'
       : primaryStatus === 'dead' && fallbackCount === 0
         ? 'unavailable'
