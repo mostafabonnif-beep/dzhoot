@@ -12,7 +12,7 @@ const MAX_REDIRECTS = 5;
 
 function redact(value) {
   return String(value || '')
-    .replace(/(username|user|password|pass|token|jwt|key|auth|signature)=([^&\s]+)/gi, '$1=REDACTED')
+    .replace(/(username|user|password|pass|token|jwt|key|auth|signature|data|expires)=([^&\s]+)/gi, '$1=REDACTED')
     .replace(/(Bearer\s+)[^\s]+/gi, '$1REDACTED');
 }
 
@@ -20,7 +20,7 @@ function safeUrl(value) {
   try {
     const parsed = new URL(value);
     for (const key of ['username', 'password']) parsed.searchParams.set(key, 'REDACTED');
-    for (const key of ['token', 'jwt', 'auth', 'signature']) {
+    for (const key of ['token', 'jwt', 'auth', 'signature', 'data', 'expires']) {
       if (parsed.searchParams.has(key)) parsed.searchParams.set(key, 'REDACTED');
     }
     parsed.username = '';
