@@ -10,6 +10,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 import androidx.compose.ui.platform.LocalConfiguration
 import com.dzhoof.iptv.presentation.model.GuideFilter
 import com.dzhoof.iptv.presentation.ui.components.CategoryChip
@@ -53,7 +55,8 @@ internal fun GuideFilterBar(
     ) {
         item("all") {
             CategoryChip(
-                label = "All",
+                                    label = stringResource(R.string.guide_all),
+
                 isSelected = selectedFilter is GuideFilter.All,
                 selectedContainerColor = Amber,
                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
@@ -64,7 +67,7 @@ internal fun GuideFilterBar(
         if (hasFavorites) {
             item("favorites") {
                 CategoryChip(
-                    label = "★ Favorites",
+                    label = stringResource(R.string.guide_favorites),
                     isSelected = selectedFilter is GuideFilter.Favorites,
                     selectedContainerColor = Amber,
                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary,

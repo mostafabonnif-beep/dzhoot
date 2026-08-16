@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dzhoof.iptv.presentation.model.ErrorType
@@ -39,7 +41,7 @@ fun GuideScreen(
     Box(modifier = modifier.fillMaxSize()) {
         when {
             uiState.isLoading && uiState.isEmpty ->
-                LoadingIndicator(message = "جارٍ تحميل دليل البرامج…")
+                LoadingIndicator(message = stringResource(R.string.guide_loading))
 
             uiState.error != null && uiState.isEmpty ->
                 ErrorState(
@@ -50,8 +52,9 @@ fun GuideScreen(
                 )
 
             uiState.isEmpty ->
-                EmptyState(
-                    message = "لا توجد قنوات متاحة في الدليل",
+                                    EmptyState(
+                        message = stringResource(R.string.guide_empty),
+
                     onRetry = viewModel::retry
                 )
 
