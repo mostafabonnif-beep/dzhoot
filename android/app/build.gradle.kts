@@ -212,9 +212,6 @@ dependencies {
     // QR Code generation
     implementation("com.google.zxing:core:3.5.3")
 
-    // Lottie animation (splash screen)
-    implementation("com.airbnb.android:lottie-compose:6.4.0")
-
     // Testing
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
