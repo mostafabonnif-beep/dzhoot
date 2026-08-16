@@ -16,7 +16,7 @@ async function initializeTestUser(): Promise<IUserDocument | null> {
   }
 
   try {
-    const email = process.env.TEST_USER_EMAIL || 'testuser@firevision.local';
+    const email = process.env.TEST_USER_EMAIL || 'testuser@dzhoof.local';
     const password = process.env.TEST_USER_PASSWORD || 'TestUser123!';
     const channelListCode =
       process.env.TEST_USER_CHANNEL_LIST_CODE || (await (User as any).generateChannelListCode());

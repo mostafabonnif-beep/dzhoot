@@ -257,7 +257,7 @@ router.get('/github/callback', async (req, res) => {
 
     // Fetch primary user profile
     const userRes = await fetch('https://api.github.com/user', {
-      headers: { Authorization: `Bearer ${ghAccess}`, 'User-Agent': 'FireVision-IPTV' },
+      headers: { Authorization: `Bearer ${ghAccess}`, 'User-Agent': 'DZ-HOOF' },
     });
     const ghProfile = await userRes.json();
     if (!userRes.ok) {
@@ -268,7 +268,7 @@ router.get('/github/callback', async (req, res) => {
     let email = ghProfile.email;
     if (!email) {
       const emailRes = await fetch('https://api.github.com/user/emails', {
-        headers: { Authorization: `Bearer ${ghAccess}`, 'User-Agent': 'FireVision-IPTV' },
+        headers: { Authorization: `Bearer ${ghAccess}`, 'User-Agent': 'DZ-HOOF' },
       });
       if (emailRes.ok) {
         const emails = await emailRes.json();

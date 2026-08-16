@@ -333,7 +333,7 @@ export class EpgService {
       maxRedirects: 0,
       httpAgent: parsedUrl.protocol === 'http:' ? agent : undefined,
       httpsAgent: parsedUrl.protocol === 'https:' ? agent : undefined,
-      headers: { 'User-Agent': 'FireVision IPTV/1.0' },
+      headers: { 'User-Agent': 'DZ-HOOF/1.0' },
     });
 
     const xmlData = await new Promise<string>((resolve, reject) => {
@@ -483,7 +483,7 @@ export class EpgService {
   ): string {
     let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
     xml += '<!DOCTYPE tv SYSTEM "xmltv.dtd">\n';
-    xml += '<tv generator-info-name="FireVision IPTV">\n';
+    xml += '<tv generator-info-name="DZ HOOF">\n';
 
     // Channel definitions
     for (const ch of channels) {

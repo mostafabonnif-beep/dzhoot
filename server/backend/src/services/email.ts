@@ -93,7 +93,7 @@ export async function sendEmail(opts: SendEmailOptions): Promise<void> {
   const html = template(opts.variables);
 
   await getTransporter().sendMail({
-    from: process.env.MAIL_FROM || 'noreply@firevision.local',
+    from: process.env.MAIL_FROM || 'noreply@dzhoof.local',
     to: opts.to,
     subject: opts.subject,
     html,
@@ -109,7 +109,7 @@ const APP_URL = () => process.env.APP_URL || 'http://localhost:3000';
 export function sendWelcomeEmail(to: string, vars: { username: string }): void {
   sendEmail({
     to,
-    subject: 'Welcome to FireVision IPTV',
+    subject: 'Welcome to DZ HOOF',
     template: 'welcome',
     variables: {
       username: vars.username,
@@ -126,7 +126,7 @@ export function sendVerificationEmail(
 ): void {
   sendEmail({
     to,
-    subject: 'Verify your email - FireVision IPTV',
+    subject: 'Verify your email - DZ HOOF',
     template: 'verification',
     variables: {
       username: vars.username,
@@ -144,7 +144,7 @@ export function sendPasswordResetEmail(
 ): void {
   sendEmail({
     to,
-    subject: 'Reset your password - FireVision IPTV',
+    subject: 'Reset your password - DZ HOOF',
     template: 'password-reset',
     variables: {
       username: vars.username,

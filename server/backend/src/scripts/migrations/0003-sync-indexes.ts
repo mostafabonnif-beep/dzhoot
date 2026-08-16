@@ -36,7 +36,7 @@ import { ScheduledTaskRun } from '../../models/ScheduledTaskRun';
 import Channel from '../../models/Channel';
 import { IptvOrgChannel } from '../../models/IptvOrgCache';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/firevision-iptv';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 const COMMIT = process.argv.includes('--commit');
 
 type IndexInfo = {

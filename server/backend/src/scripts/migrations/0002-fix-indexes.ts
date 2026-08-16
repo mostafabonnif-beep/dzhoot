@@ -36,7 +36,7 @@ import EpgProgram from '../../models/EpgProgram';
 import { SeedChannel } from '../../models/SeedChannel';
 import PairingRequest from '../../models/PairingRequest';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/firevision-iptv';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 const COMMIT = process.argv.includes('--commit');
 
 type IndexInfo = { name: string; key: Record<string, number>; unique?: boolean; sparse?: boolean };

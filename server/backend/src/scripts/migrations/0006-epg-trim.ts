@@ -20,7 +20,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../../.env') });
 
 import EpgProgram from '../../models/EpgProgram';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/firevision-iptv';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 const COMMIT = process.argv.includes('--commit');
 const MAX_AHEAD_MS = (Number(process.env.EPG_MAX_LOOKAHEAD_HOURS) || 48) * 3600000;
 
