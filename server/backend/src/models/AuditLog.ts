@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IAuditLogDocument } from '@firevision/shared';
+import { IAuditLogDocument } from '@dzhoof/shared';
 
 const auditLogSchema = new Schema<IAuditLogDocument>({
   userId: {

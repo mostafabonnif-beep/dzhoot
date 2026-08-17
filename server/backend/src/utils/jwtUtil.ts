@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import RefreshToken from '../models/RefreshToken';
 import { Request } from 'express';
-import { IUserDocument } from '@firevision/shared';
+import { IUserDocument } from '@dzhoof/shared';
 
 function getRequiredEnv(key: string, devFallback: string): string {
   const value = process.env[key];

@@ -19,7 +19,7 @@ RUN npm ci --ignore-scripts && npm cache clean --force
 # Copy shared package source and build it
 COPY packages/shared/tsconfig.json ./packages/shared/
 COPY packages/shared/src ./packages/shared/src
-RUN npx -w @firevision/shared tsc
+RUN npx -w @dzhoof/shared tsc
 
 # Copy backend tsconfig (needed by tsx for path resolution)
 COPY backend/tsconfig.json ./backend/

@@ -3,7 +3,7 @@ import { ExternalSourceCacheMeta, ExternalSourceChannel } from '../models/Extern
 import { SeedChannel } from '../models/SeedChannel';
 import { probeStream } from './stream-prober';
 import { ytDlpResolver } from './yt-dlp-resolver';
-import type { ExternalSourceType } from '@firevision/shared';
+import type { ExternalSourceType } from '@dzhoof/shared';
 
 const CACHE_TTL = parseInt(process.env.EXT_SOURCE_CACHE_TTL_MS || '3600000', 10); // 1 hour
 const LIVENESS_CONCURRENCY = parseInt(process.env.EXT_SOURCE_LIVENESS_CONCURRENCY || '20', 10);

@@ -5,7 +5,7 @@
 | Environment | URL                              |
 | ----------- | -------------------------------- |
 | Development | `http://localhost:8009/admin`    |
-| Production  | `https://tv.cadnative.com/admin` |
+| Production  | `https://ld-11.net/admin` |
 
 Credentials: `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD` from `.env`.
 
