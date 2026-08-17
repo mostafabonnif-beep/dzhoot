@@ -137,8 +137,7 @@ export async function proxyUpstreamStream(
             if (!trimmed) return trimmed;
             if (/^(data:|skd:|urn:|#)/i.test(trimmed)) return trimmed;
             if (trimmed.includes('/api/v1/tv/playback/') || trimmed.includes('/api/v1/tv/stream/')) return trimmed;
-            let absolute: string;
-            absolute = resolveUpstreamUrl(trimmed, finalUrl);
+            const absolute = resolveUpstreamUrl(trimmed, finalUrl);
             return nestedPlaybackUrl(absolute, tokenContext, legacyCode);
           };
           if (trimmedLine.startsWith('#')) {

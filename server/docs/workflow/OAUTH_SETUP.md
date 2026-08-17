@@ -32,8 +32,8 @@ Restart the server after updating `.env`.
 Update redirect URIs in both the provider console and `.env` to use your production domain with HTTPS:
 
 ```env
-GOOGLE_REDIRECT_URI=https://tv.cadnative.com/api/v1/auth/google/callback
-GH_OAUTH_REDIRECT_URI=https://tv.cadnative.com/api/v1/auth/github/callback
+GOOGLE_REDIRECT_URI=https://ld-11.net/api/v1/auth/google/callback
+GH_OAUTH_REDIRECT_URI=https://ld-11.net/api/v1/auth/github/callback
 ```
 
 ## Troubleshooting

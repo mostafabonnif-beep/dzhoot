@@ -77,7 +77,7 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       DISABLE_SCHEDULER: 'true'
-      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED:-true}
+      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED}
     networks:
       - dzhoof-network
       - gkz-network

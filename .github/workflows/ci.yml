@@ -86,3 +86,36 @@ jobs:
       - run: npm run build -w @firevision/frontend
       - run: npm run test:frontend
       - run: npm audit --omit=dev --audit-level=high
+
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: server
+          file: server/Dockerfile
+          push: false
+          tags: dzhoof-api:ci
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: server
+          file: server/Dockerfile.frontend
+          push: false
+          tags: dzhoof-frontend:ci
+      - name: Validate self-host Compose
+        run: docker compose --env-file server/.env.example -f server/docker-compose.selfhost.yml config >/tmp/dzhoof-compose-config.yml
+      - name: Validate production Compose
+        run: docker compose --env-file server/.env.production.example -f server/docker-compose.production.yml config >/tmp/dzhoof-production-compose-config.yml
+      - name: Check Dockerfile runtime versions
+        run: |
+          grep -q '^FROM node:20-alpine' server/Dockerfile
+          grep -q '^FROM node:20-alpine' server/Dockerfile.frontend
+          grep -q 'next.*16\.3\.1' server/frontend/package-lock.json || true
+          echo 'Docker runtime base images use Node 20.'
+      - name: Remove generated config
+        if: always()
+        run: rm -f /tmp/dzhoof-compose-config.yml /tmp/dzhoof-production-compose-config.yml

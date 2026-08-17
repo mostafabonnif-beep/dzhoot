@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# FireVision IPTV Server Management Script
+# DZ HOOF Server Management Script
 # Usage: ./scripts/manage.sh [command]
 
 set -e
@@ -17,13 +17,13 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
-# Load .env if exists
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
-fi
+# Docker Compose reads .env automatically. Do not source it through xargs:
+# values may contain spaces or shell metacharacters.
+API_URL="${API_URL:-http://localhost:8009}"
+DB_NAME="${MONGODB_DB_NAME:-dzhoof-iptv}"
 
 print_help() {
-    echo "FireVision IPTV Server Management Script"
+    echo "DZ HOOF Server Management Script"
     echo ""
     echo "Usage: ./scripts/manage.sh [command]"
     echo ""
@@ -51,13 +51,13 @@ print_help() {
 }
 
 build_services_api() {
-    echo -e "${GREEN}Building FireVision IPTV services...${NC}"
+    echo -e "${GREEN}Building DZ HOOF services...${NC}"
     docker-compose up -d --build api
     echo -e "${GREEN}✓ Services built${NC}"
 }
 
 start_services() {
-    echo -e "${GREEN}Starting FireVision IPTV services...${NC}"
+    echo -e "${GREEN}Starting DZ HOOF services...${NC}"
     docker-compose up -d
     echo -e "${GREEN}✓ Services started${NC}"
     echo ""
@@ -65,13 +65,13 @@ start_services() {
 }
 
 stop_services() {
-    echo -e "${YELLOW}Stopping FireVision IPTV services...${NC}"
+    echo -e "${YELLOW}Stopping DZ HOOF services...${NC}"
     docker-compose down
     echo -e "${GREEN}✓ Services stopped${NC}"
 }
 
 restart_services() {
-    echo -e "${YELLOW}Restarting FireVision IPTV services...${NC}"
+    echo -e "${YELLOW}Restarting DZ HOOF services...${NC}"
     docker-compose restart
     echo -e "${GREEN}✓ Services restarted${NC}"
 }
@@ -97,7 +97,7 @@ check_health() {
     echo -e "${GREEN}Checking server health...${NC}"
 
     if command -v curl &> /dev/null; then
-        RESPONSE=$(curl -s http://localhost:8009/health || echo "Connection failed")
+        RESPONSE=$(curl -s "$API_URL/health" || echo "Connection failed")
         echo "$RESPONSE" | jq . 2>/dev/null || echo "$RESPONSE"
     else
         echo -e "${RED}curl not found. Please install curl.${NC}"
@@ -112,7 +112,7 @@ backup_data() {
     mkdir -p "$BACKUP_DIR"
 
     echo -e "${GREEN}Backing up database...${NC}"
-    docker-compose exec -T mongodb mongodump --db=firevision-iptv --archive > "$BACKUP_DIR/mongodb-$TIMESTAMP.archive"
+    docker-compose exec -T mongodb mongodump --db="$DB_NAME" --archive > "$BACKUP_DIR/mongodb-$TIMESTAMP.archive"
 
     echo -e "${GREEN}Backing up APK files...${NC}"
     tar -czf "$BACKUP_DIR/apks-$TIMESTAMP.tar.gz" apks/ 2>/dev/null || echo "No APK files to backup"
@@ -140,7 +140,7 @@ restore_data() {
 }
 
 initial_setup() {
-    echo -e "${GREEN}Setting up FireVision IPTV Server...${NC}"
+    echo -e "${GREEN}Setting up DZ HOOF Server...${NC}"
 
     # Create directories
     mkdir -p apks uploads logs
@@ -155,12 +155,18 @@ initial_setup() {
         if command -v openssl &> /dev/null; then
             JWT_ACCESS=$(openssl rand -hex 32)
             JWT_REFRESH=$(openssl rand -hex 32)
+            XTREAM_SECRET=$(openssl rand -hex 32)
+            PLAYBACK_SECRET=$(openssl rand -hex 32)
+            TOTP_SECRET=$(openssl rand -hex 32)
             ADMIN_PASS=$(openssl rand -base64 24)
             sed -i.bak "s|^JWT_ACCESS_SECRET=.*|JWT_ACCESS_SECRET=$JWT_ACCESS|" .env
             sed -i.bak "s|^JWT_REFRESH_SECRET=.*|JWT_REFRESH_SECRET=$JWT_REFRESH|" .env
+            sed -i.bak "s|^XTREAM_SECRET_KEY=.*|XTREAM_SECRET_KEY=$XTREAM_SECRET|" .env
+            sed -i.bak "s|^PLAYBACK_TOKEN_SECRET=.*|PLAYBACK_TOKEN_SECRET=$PLAYBACK_SECRET|" .env
+            sed -i.bak "s|^TOTP_ENCRYPTION_KEY=.*|TOTP_ENCRYPTION_KEY=$TOTP_SECRET|" .env
             sed -i.bak "s|^SUPER_ADMIN_PASSWORD=.*|SUPER_ADMIN_PASSWORD=$ADMIN_PASS|" .env
             rm .env.bak 2>/dev/null || true
-            echo -e "${GREEN}✓ Generated JWT secrets and super admin password${NC}"
+            echo -e "${GREEN}✓ Generated JWT, encryption, playback, TOTP secrets and super admin password${NC}"
             echo -e "${YELLOW}  Super admin password: $ADMIN_PASS${NC}"
             echo -e "${YELLOW}  Save this password! You'll need it to log in.${NC}"
         else
@@ -211,7 +217,7 @@ shell_api() {
 }
 
 shell_mongo() {
-    docker-compose exec mongodb mongosh firevision-iptv
+    docker-compose exec mongodb mongosh "$DB_NAME"
 }
 
 test_api() {
@@ -220,17 +226,17 @@ test_api() {
 
     # Test health
     echo -e "${YELLOW}1. Health check:${NC}"
-    curl -s http://localhost:8009/health | jq . || echo "Failed"
+    curl -s "$API_URL/health" | jq . || echo "Failed"
     echo ""
 
     # Test channels
     echo -e "${YELLOW}2. Get channels:${NC}"
-    curl -s http://localhost:8009/api/v1/channels | jq '.count' || echo "Failed"
+    curl -s "$API_URL/api/v1/channels" | jq '.count' || echo "Failed"
     echo ""
 
     # Test version check
     echo -e "${YELLOW}3. Check version:${NC}"
-    curl -s "http://localhost:8009/api/v1/app/version?currentVersion=0" | jq '.updateAvailable' || echo "Failed"
+    curl -s "$API_URL/api/v1/app/version?currentVersion=0" | jq '.updateAvailable' || echo "Failed"
     echo ""
 
     echo -e "${GREEN}✓ Tests completed${NC}"

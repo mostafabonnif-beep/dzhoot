@@ -51,10 +51,7 @@ class ErrorRecoveryManager(
 
     /** The stream URL that is currently being played (direct or proxy). */
     val activeStreamUrl: String?
-        get() {
-            val slot = streamSlots.getOrNull(currentSlotIndex) ?: return null
-            return slot.directUrl
-        }
+        get() = currentUrl()
 
     val maxTotalAttempts: Int
         get() = streamSlots.mapIndexed { index, _ -> maxAttemptsForSlot(index) }.sum()

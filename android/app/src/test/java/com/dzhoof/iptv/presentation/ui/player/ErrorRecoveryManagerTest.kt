@@ -274,6 +274,27 @@ class ErrorRecoveryManagerTest {
     }
 
     @Test
+    fun `activeStreamUrl reports proxy URL during proxy fallback`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(listOf(primarySlot(proxyUrl = "http://proxy.m3u8")))
+
+        listenerSlot.captured.onPlayerError(networkError())
+        advanceTimeBy(3000)
+        runCurrent()
+        listenerSlot.captured.onPlayerError(networkError())
+        advanceTimeBy(5000)
+        runCurrent()
+        listenerSlot.captured.onPlayerError(networkError())
+        advanceTimeBy(7000)
+        runCurrent()
+        listenerSlot.captured.onPlayerError(networkError())
+        advanceTimeBy(9000)
+        runCurrent()
+
+        assertEquals("http://proxy.m3u8", manager.activeStreamUrl)
+    }
+
+    @Test
     fun `activeStreamUrl returns null when no slots set`() = runTest {
         val manager = makeManager(this)
 
