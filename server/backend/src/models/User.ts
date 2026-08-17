@@ -1,7 +1,7 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { IUserDocument, IUserModel } from '@firevision/shared';
+import { IUserDocument, IUserModel } from '@dzhoof/shared';
 import { issuePlaybackToken } from '../services/playback-token';
 
 const userSchema = new Schema<IUserDocument>(

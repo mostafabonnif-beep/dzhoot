@@ -1,27 +1,27 @@
 {
-  "name": "firevision-iptv",
+  "name": "dzhoof-iptv",
   "version": "0.0.0",
   "private": true,
-  "description": "Server for FireVisionIPTV - Manages channel lists and app updates",
+  "description": "DZ HOOF server for managing channel lists, subscriptions, devices, and app updates",
   "workspaces": [
     "backend",
     "frontend",
     "packages/*"
   ],
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @firevision/backend\" \"npm run dev -w @firevision/frontend\"",
-    "dev:backend": "npm run dev -w @firevision/backend",
-    "dev:frontend": "npm run dev -w @firevision/frontend",
-    "build": "npm run build -w @firevision/shared && npm run build -w @firevision/backend && npm run build -w @firevision/frontend",
-    "build:backend": "npm run build -w @firevision/shared && npm run build -w @firevision/backend",
-    "lint": "npm run lint -w @firevision/backend",
-    "lint:fix": "npm run lint:fix -w @firevision/backend && npm run lint:fix -w @firevision/frontend",
-    "test": "npm run test -w @firevision/backend && npm run test -w @firevision/frontend",
-    "test:backend": "npm run test -w @firevision/backend",
-    "test:frontend": "npm run test -w @firevision/frontend",
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @dzhoof/backend\" \"npm run dev -w @dzhoof/frontend\"",
+    "dev:backend": "npm run dev -w @dzhoof/backend",
+    "dev:frontend": "npm run dev -w @dzhoof/frontend",
+    "build": "npm run build -w @dzhoof/shared && npm run build -w @dzhoof/backend && npm run build -w @dzhoof/frontend",
+    "build:backend": "npm run build -w @dzhoof/shared && npm run build -w @dzhoof/backend",
+    "lint": "npm run lint -w @dzhoof/backend",
+    "lint:fix": "npm run lint:fix -w @dzhoof/backend && npm run lint:fix -w @dzhoof/frontend",
+    "test": "npm run test -w @dzhoof/backend && npm run test -w @dzhoof/frontend",
+    "test:backend": "npm run test -w @dzhoof/backend",
+    "test:frontend": "npm run test -w @dzhoof/frontend",
     "test:e2e": "npx playwright test",
-    "typecheck": "npm run build -w @firevision/shared && npm run typecheck -w @firevision/shared && npm run typecheck -w @firevision/backend",
-    "start": "npm run start -w @firevision/backend",
+    "typecheck": "npm run build -w @dzhoof/shared && npm run typecheck -w @dzhoof/shared && npm run typecheck -w @dzhoof/backend",
+    "start": "npm run start -w @dzhoof/backend",
     "prepare": "husky || true"
   },
   "keywords": [
@@ -29,7 +29,7 @@
     "streaming",
     "channel-management"
   ],
-  "author": "CADnative",
+  "author": "merci1994dz",
   "license": "MIT",
   "dependencies": {
     "hls.js": "^1.6.15"
@@ -45,7 +45,7 @@
     "prettier": "^3.8.1"
   },
   "engines": {
-    "node": ">=18.0.0",
-    "npm": ">=9.0.0"
+    "node": ">=20.9.0",
+    "npm": ">=10.0.0"
   }
 }

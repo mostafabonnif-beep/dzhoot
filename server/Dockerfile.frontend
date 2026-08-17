@@ -13,12 +13,12 @@ RUN npm ci --ignore-scripts && npm cache clean --force
 # Build shared package
 COPY packages/shared/tsconfig.json ./packages/shared/
 COPY packages/shared/src ./packages/shared/src
-RUN npx -w @firevision/shared tsc
+RUN npx -w @dzhoof/shared tsc
 
 # Copy frontend source and build
 COPY frontend/ ./frontend/
 
-RUN mkdir -p frontend/public && npm run build -w @firevision/frontend
+RUN mkdir -p frontend/public && npm run build -w @dzhoof/frontend
 
 # --- Production stage ---
 FROM node:20-alpine

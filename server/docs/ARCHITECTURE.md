@@ -27,7 +27,7 @@ graph TB
 ## Project Structure
 
 ```
-FireVisionIPTVServer/
+dzhoot/
 ├── backend/                 Express API (JavaScript routes/server + TypeScript models/services)
 │   └── src/
 │       ├── server.js            Express app entry point
@@ -37,7 +37,7 @@ FireVisionIPTVServer/
 │       ├── middleware/          Auth & validation
 │       ├── services/            Scheduler, EPG, cache/Redis, stream health, external-source caches, import helpers
 │       └── utils/               JWT, init scripts
-├── frontend/                Next.js 14 App Router
+├── frontend/                Next.js 16 App Router
 │   └── src/
 │       ├── app/                 Pages & layouts
 │       ├── components/          UI & layout components
@@ -57,15 +57,15 @@ FireVisionIPTVServer/
 
 | Layer       | Technology                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------- |
-| Backend     | Node.js 18, Express.js 4 (routes/server in JS, models/services/middleware in TS)                   |
+| Backend     | Node.js 20, Express.js 4 (routes/server in JS, models/services/middleware in TS)                   |
 | Database    | MongoDB 7 (Mongoose 8)                                                                             |
-| Cache       | Redis 7 via ioredis (optional, graceful fallback; prod service `firevision-redis` via `REDIS_URL`) |
+| Cache       | Redis 7 via ioredis (optional, graceful fallback; prod service `dzhoof-redis` via `REDIS_URL`) |
 | Auth        | Session (X-Session-Id) + JWT (Bearer, ioredis-backed refresh tokens) + OAuth2 (Google, GitHub)     |
 | Bot defense | Google reCAPTCHA v3 on `/auth/register` (when configured)                                          |
-| Frontend    | Next.js 14, Tailwind CSS, Shadcn/ui, TanStack Query, Zustand                                       |
+| Frontend    | Next.js 16, Tailwind CSS, Shadcn/ui, TanStack Query, Zustand                                       |
 | CI/CD       | GitHub Actions → GHCR → Portainer                                                                  |
 | Testing     | Jest, Supertest, Playwright                                                                        |
-| Domain      | tv.cadnative.com (Let's Encrypt SSL)                                                               |
+| Domain      | ld-11.net (Let's Encrypt SSL via Caddy)                                                               |
 
 ## Database Schema
 

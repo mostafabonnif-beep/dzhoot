@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ISeedChannelDocument } from '@firevision/shared';
+import { ISeedChannelDocument } from '@dzhoof/shared';
 
 const seedChannelSchema = new Schema<ISeedChannelDocument>(
   {

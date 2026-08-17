@@ -10,7 +10,7 @@
  * The raw template is stored server-side only (it may embed credentials) and
  * is never exposed to clients — see routes/channels.js slimAlternates().
  */
-import type { IChannel } from '@firevision/shared';
+import type { IChannel } from '@dzhoof/shared';
 
 /** Max single catch-up session (minutes) — mirrors the 24h clamp in /tv/playback-token. */
 export const CATCHUP_MAX_DURATION_MIN = 24 * 60;

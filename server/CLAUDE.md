@@ -62,9 +62,9 @@ make up-prod              # Production
 
 This is an npm workspaces monorepo with three packages:
 
-- `@firevision/backend` — Express API server
-- `@firevision/frontend` — Next.js dashboard
-- `@firevision/shared` — Shared types and utilities
+- `@dzhoof/backend` — Express API server
+- `@dzhoof/frontend` — Next.js dashboard
+- `@dzhoof/shared` — Shared types and utilities
 
 Build order matters: `shared` → `backend` → `frontend`.
 

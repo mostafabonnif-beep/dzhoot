@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IRefreshTokenDocument } from '@firevision/shared';
+import { IRefreshTokenDocument } from '@dzhoof/shared';
 
 const refreshTokenSchema = new Schema<IRefreshTokenDocument>(
   {
