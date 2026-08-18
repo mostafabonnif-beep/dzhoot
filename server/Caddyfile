@@ -2,7 +2,7 @@
     encode gzip zstd
     tls {$ACME_EMAIL}
 
-    @api path /api/* /health /ready
+    @api path /api/* /health /health/* /ready /ready/*
     handle @api {
         reverse_proxy api:3000
     }
