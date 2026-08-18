@@ -5,7 +5,7 @@ let mongoServer: MongoMemoryServer | undefined;
 
 function requiresMongo(): boolean {
   const testPath = expect.getState().testPath || '';
-  return !/\/(stream-session-service|playback-access-service)\.test\./.test(testPath);
+  return !/\/(stream-session-service|playback-access-service|redis-rate-limit-store)\.test\./.test(testPath);
 }
 
 beforeAll(async () => {

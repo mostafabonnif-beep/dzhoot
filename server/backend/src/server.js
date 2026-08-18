@@ -275,10 +275,11 @@ function resolveRateLimitIdentity(req) {
   return null;
 }
 
-const distributedRateLimitStore = process.env.REDIS_URL ? new RedisRateLimitStore() : undefined;
+const rateLimitStoreOptions = (prefix) =>
+  process.env.REDIS_URL ? { store: new RedisRateLimitStore(prefix) } : {};
 
 const apiLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('api'),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000,
   standardHeaders: true,
@@ -313,7 +314,7 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 
 const authLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('auth'),
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
@@ -329,7 +330,7 @@ app.use('/api/v1/jwt/login', authLimiter);
 // Stricter rate limit for forgot-password and resend-verification
 // Per-IP limit: 3 requests per hour
 const emailActionLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('email-ip'),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3,
   standardHeaders: true,
@@ -338,7 +339,7 @@ const emailActionLimiter = rateLimit({
 });
 // Per-account limit: key by email in request body (prevents abuse of a single account)
 const emailAccountLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('email-account'),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3,
   standardHeaders: true,
@@ -353,7 +354,7 @@ app.use('/api/v1/auth/resend-verification', emailActionLimiter, emailAccountLimi
 
 // OAuth rate limiting — prevent abuse of OAuth initiation endpoints
 const oauthLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('oauth'),
   windowMs: 15 * 60 * 1000,
   max: 15,
   standardHeaders: true,
@@ -367,7 +368,7 @@ app.use('/api/v1/oauth/github/start', oauthLimiter);
 // separate, less aggressive limiter so normal playlist/EPG refreshes work while
 // distributed guessing from one client is throttled.
 const tvCodeReadLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('tv-code'),
   windowMs: 10 * 60 * 1000,
   max: 60,
   standardHeaders: true,
@@ -380,7 +381,7 @@ app.use('/api/v1/tv/epg', tvCodeReadLimiter);
 
 // Strict rate limiting for TV pairing mutation endpoints (prevent PIN brute-force)
 const pairingLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('pairing'),
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 10, // 10 attempts per 5 minutes per IP
   standardHeaders: true,
@@ -395,7 +396,7 @@ app.use('/api/v1/tv/verify', pairingLimiter);
 // Permissive rate limiting for pairing status polling (TV polls this endpoint repeatedly)
 // PIN expires in 10 minutes; allow up to 120 polls per 10-minute window (~1 every 5 seconds)
 const pairingStatusLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('pairing-status'),
   windowMs: 10 * 60 * 1000, // 10 minutes
   max: 120,
   standardHeaders: true,
@@ -408,7 +409,7 @@ app.use('/api/v1/tv/pairing/status', pairingStatusLimiter);
 // Strict activation-code redemption limiter: 5 attempts per 10 minutes per user/IP.
 // This protects hashed codes from online guessing without changing redemption semantics.
 const activationRedeemLimiter = rateLimit({
-  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
+  ...rateLimitStoreOptions('activation-redeem'),
   windowMs: 10 * 60 * 1000,
   max: 5,
   standardHeaders: true,
