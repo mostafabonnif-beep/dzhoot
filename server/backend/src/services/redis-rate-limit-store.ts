@@ -6,7 +6,12 @@ import { getRedisClient } from './redis';
  * Production preflight requires REDIS_URL, so API replicas share counters.
  */
 export class RedisRateLimitStore implements Store {
+  public readonly prefix: string;
   private windowMs = 60_000;
+
+  constructor(prefix = 'default') {
+    this.prefix = `dzhoof:rl:${prefix}:`;
+  }
 
   init(options: Options): void {
     this.windowMs = options.windowMs;
@@ -16,7 +21,7 @@ export class RedisRateLimitStore implements Store {
     const redis = getRedisClient();
     if (!redis) throw new Error('Redis rate-limit store is not configured');
 
-    const redisKey = `dzhoof:rl:${key}`;
+    const redisKey = `${this.prefix}${key}`;
     const results = await redis.multi().incr(redisKey).pttl(redisKey).exec();
     const hits = Number((results?.[0]?.[1] as number | string) ?? 0);
     let ttl = Number((results?.[1]?.[1] as number | string) ?? -1);
@@ -30,14 +35,14 @@ export class RedisRateLimitStore implements Store {
   async decrement(key: string): Promise<void> {
     const redis = getRedisClient();
     if (!redis) return;
-    const redisKey = `dzhoof:rl:${key}`;
+    const redisKey = `${this.prefix}${key}`;
     await redis.decr(redisKey);
   }
 
   async resetKey(key: string): Promise<void> {
     const redis = getRedisClient();
     if (!redis) return;
-    await redis.del(`dzhoof:rl:${key}`);
+    await redis.del(`${this.prefix}${key}`);
   }
 
   async shutdown(): Promise<void> {
