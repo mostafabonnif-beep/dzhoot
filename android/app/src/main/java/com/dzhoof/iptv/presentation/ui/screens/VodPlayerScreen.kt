@@ -23,11 +23,14 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
 import com.dzhoof.iptv.presentation.viewmodel.VodPlayerViewModel
 
+@OptIn(markerClass = [UnstableApi::class])
 @Composable
 fun VodPlayerScreen(
     contentType: String,

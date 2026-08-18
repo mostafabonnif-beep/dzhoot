@@ -236,6 +236,17 @@ export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
   };
 }
 
+function toStringOrEmpty(value: unknown): string {
+  if (Array.isArray(value)) return value.map((v) => String(v)).join(' ');
+  return String(value || '').trim();
+}
+
+function iconUrl(value: unknown): string {
+  // Some panels return stream_icon as an array of URLs for VOD/Series.
+  if (Array.isArray(value)) return String(value[0] || '').trim();
+  return String(value || '').trim();
+}
+
 function getContainerExt(item: any): string {
   const ext = item?.container_extension || 'm3u8';
   return String(ext).replace(/^\./, '');
@@ -286,7 +297,7 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
         channelId,
         channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
         channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
-        channelImg: item.stream_icon || '',
+        channelImg: iconUrl(item.stream_icon),
         channelGroup: group || 'Uncategorized',
         tvgId: item.epg_channel_id || '',
         tvgName: String(item.name || '').trim(),
@@ -313,9 +324,9 @@ async function upsertMovie(sourceId: mongoose.Types.ObjectId, item: any, group: 
       $set: {
         title: String(item.name || `Movie ${item.stream_id}`).trim(),
         category: group || 'Uncategorized',
-        poster: item.stream_icon || '',
+        poster: iconUrl(item.stream_icon),
         backdrop: '',
-        description: item.plot || item.description || '',
+        description: toStringOrEmpty(item.plot || item.description),
         year: item.year ? Number(item.year) : null,
         duration: item.duration ? Number(item.duration) : null,
         rating: item.rating_5based ? Number(item.rating_5based) : null,
@@ -336,7 +347,7 @@ async function upsertSeries(sourceId: mongoose.Types.ObjectId, item: any, group:
         title: String(item.name || `Series ${item.series_id}`).trim(),
         category: group || 'Uncategorized',
         poster: item.cover || '',
-        backdrop: item.backdrop_path || '',
+        backdrop: iconUrl(item.backdrop_path),
         plot: item.plot || '',
         cast: Array.isArray(item.cast) ? item.cast.join(', ') : String(item.cast || ''),
         director: item.director || '',
@@ -394,12 +405,51 @@ async function syncSeriesEpisodes(sourceId: mongoose.Types.ObjectId, seriesDoc: 
   }
 }
 
+/**
+ * Lazy series content loading: fetch seasons + episodes for one series from the
+ * panel on demand (when a user opens a series/season in the dashboard), then
+ * persist them. Best-effort — callers should catch and degrade gracefully.
+ */
+
+async function seriesSourceAndCreds(series: any): Promise<XtreamCredentials> {
+  const source = await XtreamSource.findOne({
+    _id: series.sourceId,
+    verificationStatus: { $ne: 'blocked' },
+  }).lean().exec();
+  if (!source) throw new Error('Xtream source unavailable for this series');
+  return {
+    serverUrl: source.serverUrl,
+    username: decryptSecret(source.usernameEncrypted),
+    password: decryptSecret(source.passwordEncrypted),
+  };
+}
+
+/** Fetch seasons (and episodes) for a series from its Xtream panel on demand. */
+export async function ensureSeriesSeasons(seriesId: string) {
+  const series = await Series.findOne({ _id: seriesId, isActive: true }).lean().exec();
+  if (!series) throw new Error('Series not found');
+  const creds = await seriesSourceAndCreds(series);
+  await syncSeriesEpisodes(series.sourceId, series, creds);
+  return Season.find({ seriesId: series._id }).sort({ seasonNumber: 1 }).lean().exec();
+}
+
+/** Fetch seasons + episodes for a season's series on demand; returns stored episode count. */
+export async function ensureSeasonEpisodes(seasonId: string): Promise<number> {
+  const season = await Season.findById(seasonId).lean().exec();
+  if (!season) throw new Error('Season not found');
+  const series = await Series.findOne({ _id: season.seriesId, isActive: true }).lean().exec();
+  if (!series) throw new Error('Series not found');
+  const creds = await seriesSourceAndCreds(series);
+  await syncSeriesEpisodes(series.sourceId, series, creds);
+  return Episode.countDocuments({ seasonId: season._id }).exec();
+}
+
 function liveChannelSnapshot(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials, playbackFormat: XtreamPlaybackFormat = 'm3u8') {
   return {
     channelId: `xt:${String(sourceId)}:${item.stream_id}`,
     channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
     channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
-    channelImg: item.stream_icon || '',
+    channelImg: iconUrl(item.stream_icon),
     channelGroup: group || 'Uncategorized',
     tvgId: item.epg_channel_id || '',
     tvgName: String(item.name || '').trim(),
@@ -453,11 +503,15 @@ async function mapCategories(items: any[]) {
  * Full sync of one Xtream source:
  * live streams → Channel catalog, VOD → Movies, series → Series/Seasons/Episodes.
  */
-export async function syncXtreamSource(sourceId: string) {
+export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnly?: boolean; syncEpisodes?: boolean } = {}) {
   const source = await XtreamSource.findById(sourceId).exec();
   if (!source) throw new Error('Xtream source not found');
-  if (source.status !== 'Active' || source.verificationStatus !== 'verified') {
+  const catalogOnly = opts.allowCatalogOnly === true;
+  if (!catalogOnly && (source.status !== 'Active' || source.verificationStatus !== 'verified')) {
     throw new Error('Xtream source must pass live playback verification before sync');
+  }
+  if (catalogOnly && source.verificationStatus === 'blocked') {
+    throw new Error('Xtream source API is blocked; catalog import cannot proceed');
   }
   if (source.syncStatus === 'syncing') throw new Error('Sync already in progress');
 
@@ -526,21 +580,26 @@ export async function syncXtreamSource(sourceId: string) {
       seriesCount += 1;
     }
 
-    // Episodes — bounded concurrency to avoid hammering the source panel.
-    const seriesDocs = await Series.find({
-      sourceId: id,
-      isActive: true,
-      externalId: { $in: [...seriesExternalIds] },
-    }).lean().exec();
-    const CONCURRENCY = 3;
-    let idx = 0;
-    const worker = async () => {
-      while (idx < seriesDocs.length) {
-        const doc = seriesDocs[idx++];
-        await syncSeriesEpisodes(id, doc, creds);
-      }
-    };
-    await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+    // Episodes are now LAZY: they are fetched on demand when a season is opened
+    // (see ensureSeasonEpisodes). A full backfill can still be triggered with
+    // opts.syncEpisodes=true — used for targeted imports, never for catalog-only
+    // imports of large panels (16k+ series would take hours).
+    if (opts.syncEpisodes === true) {
+      const seriesDocs = await Series.find({
+        sourceId: id,
+        isActive: true,
+        externalId: { $in: [...seriesExternalIds] },
+      }).lean().exec();
+      const CONCURRENCY = 3;
+      let idx = 0;
+      const worker = async () => {
+        while (idx < seriesDocs.length) {
+          const doc = seriesDocs[idx++];
+          await syncSeriesEpisodes(id, doc, creds);
+        }
+      };
+      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
+    }
 
     // Prune: deactivate channels/movies/series from this source that disappeared.
     await Channel.updateMany(
@@ -568,9 +627,10 @@ export async function syncXtreamSource(sourceId: string) {
     source.stats = { channels, movies, series: seriesCount };
     source.syncStatus = 'idle';
     source.lastSyncAt = new Date();
+    if (catalogOnly) source.catalogOnlyImportedAt = new Date();
     await source.save();
 
-    return { ok: true, stats: source.stats, identity };
+    return { ok: true, stats: source.stats, identity, catalogOnly };
   } catch (err: any) {
     source.syncStatus = 'error';
     source.lastError = redactSensitiveText(err);
@@ -586,6 +646,8 @@ module.exports = {
   verifyXtreamSource,
   syncXtreamSource,
   previewXtreamSource,
+  ensureSeriesSeasons,
+  ensureSeasonEpisodes,
   encryptSecret,
   decryptSecret,
 };

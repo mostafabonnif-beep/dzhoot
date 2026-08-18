@@ -144,7 +144,7 @@ export default function TermsOfService() {
               For questions about these Terms, contact the instance administrator or open an issue
               on the{' '}
               <a
-                href="https://github.com/akshaynikhare/DzhoofIPTV"
+                href="https://github.com/merci1994dz/dzhoot"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary hover:underline"
@@ -159,7 +159,7 @@ export default function TermsOfService() {
 
       <footer className="border-t border-border">
         <div className="max-w-3xl mx-auto px-6 lg:px-10 py-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span className="text-xs text-muted-foreground">&copy; 2025 Dzhoof IPTV</span>
+          <span className="text-xs text-muted-foreground">&copy; 2026 DZ HOOF</span>
           <Link
             href="/privacy"
             className="text-xs text-muted-foreground hover:text-primary transition-colors"

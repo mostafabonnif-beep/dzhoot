@@ -3,6 +3,7 @@ const router = express.Router();
 const Channel = require('../models/Channel');
 const AppVersion = require('../models/AppVersion');
 const User = require('../models/User');
+const Device = require('../models/Device');
 const Session = require('../models/Session');
 const PairingRequest = require('../models/PairingRequest');
 const { requireAuth, requireAdmin } = require('./auth');
@@ -40,6 +41,68 @@ function invalidateCatalogCache() {
 // Apply session authentication and admin role check to all admin routes
 router.use(requireAuth);
 router.use(requireAdmin);
+
+
+// ============ DEVICE MANAGEMENT ============
+router.get('/devices', async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
+    const devices = await Device.find({})
+      .populate('userId', 'username email')
+      .sort({ lastSeenAt: -1 })
+      .limit(limit)
+      .lean();
+    return res.json({ success: true, data: devices });
+  } catch (error) {
+    console.error('Error listing devices:', error);
+    return res.status(500).json({ success: false, error: 'Failed to list devices' });
+  }
+});
+
+router.post('/devices/:id/revoke', async (req, res) => {
+  try {
+    const device = await Device.findById(req.params.id).exec();
+    if (!device) return res.status(404).json({ success: false, error: 'Device not found' });
+    device.credentialRevokedAt = new Date();
+    device.credentialVersion = Math.max(1, Number(device.credentialVersion || 1)) + 1;
+    await device.save();
+    audit({
+      userId: req.user.id,
+      action: 'revoke_device_credential',
+      resource: 'device',
+      resourceId: String(device._id),
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    return res.json({ success: true, data: { id: String(device._id), revokedAt: device.credentialRevokedAt } });
+  } catch (error) {
+    console.error('Error revoking device:', error);
+    return res.status(500).json({ success: false, error: 'Failed to revoke device' });
+  }
+});
+
+router.delete('/devices/:id', async (req, res) => {
+  try {
+    const device = await Device.findById(req.params.id).exec();
+    if (!device) return res.status(404).json({ success: false, error: 'Device not found' });
+    device.credentialRevokedAt = new Date();
+    device.credentialVersion = Math.max(1, Number(device.credentialVersion || 1)) + 1;
+    await device.save();
+    await Device.deleteOne({ _id: device._id });
+    audit({
+      userId: req.user.id,
+      action: 'delete_device',
+      resource: 'device',
+      resourceId: String(device._id),
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting device:', error);
+    return res.status(500).json({ success: false, error: 'Failed to delete device' });
+  }
+});
 
 // ============ CHANNEL MANAGEMENT ============
 
@@ -347,8 +410,21 @@ router.post('/channels/import-m3u', async (req, res) => {
       }
     }
 
-    // Validate channel URLs against SSRF before inserting
-    const ssrfResults = await Promise.all(channels.map((ch) => validateUrlForSSRF(ch.channelUrl)));
+    // Validate channel URLs against SSRF before inserting — bounded concurrency:
+    // an unbounded Promise.all over thousands of URLs serializes on DNS and hangs.
+    const SSRF_VALIDATION_CONCURRENCY = 20;
+    const ssrfResults = new Array(channels.length);
+    let ssrfCursor = 0;
+    const ssrfWorker = async () => {
+      while (ssrfCursor < channels.length) {
+        const index = ssrfCursor;
+        ssrfCursor += 1;
+        ssrfResults[index] = await validateUrlForSSRF(channels[index].channelUrl);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(SSRF_VALIDATION_CONCURRENCY, Math.max(channels.length, 1)) }, () => ssrfWorker()),
+    );
     const blockedCount = ssrfResults.filter((r) => !r.safe).length;
     const safeChannels = channels.filter((_, i) => ssrfResults[i].safe);
 

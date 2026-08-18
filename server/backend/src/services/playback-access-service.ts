@@ -7,6 +7,16 @@ export interface PlaybackAccessResult {
   allowed: boolean;
   required: boolean;
   subscription: any | null;
+  plan: any | null;
+  entitlement: { allowLive: boolean; allowVod: boolean; maxConcurrentStreams: number | null };
+}
+
+type PopulatedPlan = {
+  features?: Record<string, unknown>;
+};
+
+function isPopulatedPlan(value: unknown): value is PopulatedPlan {
+  return Boolean(value && typeof value === 'object' && 'features' in value);
 }
 
 /**
@@ -20,13 +30,20 @@ export async function checkPlaybackSubscription(
 ): Promise<PlaybackAccessResult> {
   const required = await isSubscriptionRequired();
   if (!required || role === 'Admin') {
-    return { allowed: true, required, subscription: null };
+    return { allowed: true, required, subscription: null, plan: null, entitlement: { allowLive: true, allowVod: true, maxConcurrentStreams: null } };
   }
   if (!userId) {
-    return { allowed: false, required, subscription: null };
+    return { allowed: false, required, subscription: null, plan: null, entitlement: { allowLive: false, allowVod: false, maxConcurrentStreams: null } };
   }
   const subscription = await getActiveSubscription(String(userId));
-  return { allowed: Boolean(subscription), required, subscription };
+  if (!subscription) return { allowed: false, required, subscription: null, plan: null, entitlement: { allowLive: false, allowVod: false, maxConcurrentStreams: null } };
+  const plan = isPopulatedPlan(subscription.planId) ? subscription.planId : null;
+  const features = plan?.features && typeof plan.features === 'object' ? plan.features : {};
+  const allowLive = features.allowLive !== false;
+  const allowVod = features.allowVod !== false;
+  const configuredMax = Number(features.maxConcurrentStreams);
+  const maxConcurrentStreams = Number.isFinite(configuredMax) && configuredMax > 0 ? Math.floor(configuredMax) : null;
+  return { allowed: allowLive || allowVod, required, subscription, plan, entitlement: { allowLive, allowVod, maxConcurrentStreams } };
 }
 
 module.exports = { checkPlaybackSubscription };

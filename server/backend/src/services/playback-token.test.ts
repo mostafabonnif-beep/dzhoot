@@ -5,6 +5,7 @@ describe('playback tokens', () => {
     userId: 'user-123',
     channelListCode: 'ABC123',
     streamUrl: 'https://provider.example/live/user/secret/channel.m3u8?token=secret-value',
+    credentialVersion: 7,
   };
 
   it('round-trips an encrypted playback URL without exposing plaintext in the token', () => {
@@ -47,6 +48,17 @@ describe('playback tokens', () => {
     });
   });
 
+  it('preserves credential version and rejects tokens without it', () => {
+    const issued = issuePlaybackToken(input);
+    expect(verifyPlaybackToken(issued.token)?.credentialVersion).toBe(7);
+
+    const parts = issued.token.split('.');
+    const payload = JSON.parse(Buffer.from(parts[2], 'base64url').toString('utf8'));
+    delete payload.credentialVersion;
+    parts[2] = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    expect(verifyPlaybackToken(parts.join('.'))).toBeNull();
+  });
+
   it('rejects tampered and expired tokens', () => {
     const issued = issuePlaybackToken({ ...input, ttlMs: 30_000 });
     const tokenParts = issued.token.split('.');
@@ -56,5 +68,21 @@ describe('playback tokens', () => {
     jest.useFakeTimers().setSystemTime(new Date(issued.expiresAt + 1));
     expect(verifyPlaybackToken(issued.token)).toBeNull();
     jest.useRealTimers();
+  });
+});
+
+it('binds device-issued playback tokens to the device credential version', () => {
+  const issued = issuePlaybackToken({
+    userId: 'user-123',
+    channelListCode: 'ABC123',
+    credentialVersion: 7,
+    deviceId: 'living-room-tv',
+    deviceCredentialVersion: 3,
+    streamUrl: 'https://provider.example/live/channel.m3u8',
+  });
+
+  expect(verifyPlaybackToken(issued.token)).toMatchObject({
+    deviceId: 'living-room-tv',
+    deviceCredentialVersion: 3,
   });
 });

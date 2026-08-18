@@ -7,9 +7,20 @@ import { redactSensitiveText } from './audit-log';
 
 const MAX_MANIFEST_SIZE = 10 * 1024 * 1024;
 
+export function resolveUpstreamUrl(rawUrl: string, finalUrl: string): string {
+  try {
+    return new URL(rawUrl, finalUrl).toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 export interface ProxyTokenContext {
   userId: string;
   channelListCode: string;
+  credentialVersion: number;
+  deviceId?: string;
+  deviceCredentialVersion?: number;
 }
 
 export interface UpstreamHeaders {
@@ -26,6 +37,8 @@ function nestedPlaybackUrl(
     const { token } = issuePlaybackToken({
       userId: tokenContext.userId,
       channelListCode: tokenContext.channelListCode,
+      credentialVersion: tokenContext.credentialVersion,
+      ...(tokenContext.deviceId ? { deviceId: tokenContext.deviceId, deviceCredentialVersion: tokenContext.deviceCredentialVersion } : {}),
       streamUrl: absoluteUrl,
     });
     return `/api/v1/tv/playback/${token}`;
@@ -121,13 +134,6 @@ export async function proxyUpstreamStream(
       response.data.on('end', () => {
         if (res.headersSent) return;
         const lines = data.split('\n');
-        const resolveAgainstFinalUrl = (rawUrl: string): string => {
-          try {
-            return new URL(rawUrl, finalUrl).toString();
-          } catch {
-            return rawUrl;
-          }
-        };
         const rewrittenLines = lines.map((line: string) => {
           const trimmedLine = line.trim();
           if (!trimmedLine) return line;
@@ -136,8 +142,7 @@ export async function proxyUpstreamStream(
             if (!trimmed) return trimmed;
             if (/^(data:|skd:|urn:|#)/i.test(trimmed)) return trimmed;
             if (trimmed.includes('/api/v1/tv/playback/') || trimmed.includes('/api/v1/tv/stream/')) return trimmed;
-            let absolute: string;
-            absolute = resolveAgainstFinalUrl(trimmed);
+            const absolute = resolveUpstreamUrl(trimmed, finalUrl);
             return nestedPlaybackUrl(absolute, tokenContext, legacyCode);
           };
           if (trimmedLine.startsWith('#')) {
@@ -179,4 +184,4 @@ export async function proxyUpstreamStream(
   }
 }
 
-module.exports = { proxyUpstreamStream };
+module.exports = { proxyUpstreamStream, resolveUpstreamUrl };

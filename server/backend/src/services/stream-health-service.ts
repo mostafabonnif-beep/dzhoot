@@ -2,7 +2,7 @@ import Channel from '../models/Channel';
 import { probeStream } from './stream-prober';
 import { channelCache } from './cache';
 import { redactSensitiveText } from './audit-log';
-import type { IChannelDocument } from '@firevision/shared';
+import type { IChannelDocument } from '@dzhoof/shared';
 
 const BATCH_SIZE = 200;
 const CONCURRENCY = parseInt(process.env.STREAM_HEALTH_CONCURRENCY || '10', 10);

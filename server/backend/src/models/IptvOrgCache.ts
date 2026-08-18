@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IIptvOrgCacheMetaDocument, IIptvOrgChannelDocument } from '@firevision/shared';
+import { IIptvOrgCacheMetaDocument, IIptvOrgChannelDocument } from '@dzhoof/shared';
 
 // ─── Cache Metadata (singleton) ───────────────────────────
 const iptvOrgCacheMetaSchema = new Schema<IIptvOrgCacheMetaDocument>(

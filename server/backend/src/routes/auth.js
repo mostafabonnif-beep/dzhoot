@@ -640,6 +640,8 @@ router.post('/regenerate-channel-code', requireAuth, async (req, res) => {
     // Generate new channel list code
     const newCode = await User.generateChannelListCode();
     user.channelListCode = newCode;
+    user.playbackCredentialVersion = Number(user.playbackCredentialVersion || 1) + 1;
+    user.codeRevokedAt = null;
     await user.save();
     audit({
       userId: req.user.id,
@@ -907,6 +909,17 @@ router.post('/profile-picture', requireAuth, upload.single('profilePicture'), as
         success: false,
         error: 'No file uploaded',
       });
+    }
+
+    // Verify the actual file signature instead of trusting client-controlled
+    // extension/mimetype metadata. Images are re-validated before persistence.
+    const header = await fs.readFile(req.file.path);
+    const isJpeg = header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff;
+    const isPng = header.length >= 8 && header.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]));
+    const isGif = header.length >= 6 && (header.subarray(0, 6).toString('ascii') === 'GIF87a' || header.subarray(0, 6).toString('ascii') === 'GIF89a');
+    if (!isJpeg && !isPng && !isGif) {
+      await fs.unlink(req.file.path).catch(() => {});
+      return res.status(400).json({ success: false, error: 'Invalid image file' });
     }
 
     // Find user

@@ -50,9 +50,9 @@ docker compose logs -f --tail=200 api frontend
 
 ```bash
 npm ci
-npm run build -w @firevision/shared
-npm run dev -w @firevision/backend
-npm run dev -w @firevision/frontend
+npm run build -w @dzhoof/shared
+npm run dev -w @dzhoof/backend
+npm run dev -w @dzhoof/frontend
 ```
 
 عند التشغيل المحلي المباشر، استخدم `MONGODB_URI=mongodb://localhost:27017/dzhoof-iptv` و`REDIS_URL=redis://localhost:6379`، ولا تستخدم `localhost` داخل حاوية Docker؛ داخل Compose يجب استخدام أسماء الخدمات `mongodb` و`redis`.
@@ -88,7 +88,7 @@ npm run lint
 npm run test:backend
 npm run test:frontend
 npm run build:backend
-npm run build -w @firevision/frontend
+npm run build -w @dzhoof/frontend
 npm audit --omit=dev --audit-level=high
 ```
 

@@ -1,7 +1,7 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
-import { IUserDocument, IUserModel } from '@firevision/shared';
+import { IUserDocument, IUserModel } from '@dzhoof/shared';
 import { issuePlaybackToken } from '../services/playback-token';
 
 const userSchema = new Schema<IUserDocument>(
@@ -114,6 +114,13 @@ const userSchema = new Schema<IUserDocument>(
     codeRevokedAt: {
       type: Date,
       default: null,
+    },
+    // Incremented whenever a playlist/playback credential is revoked or rotated.
+    // Short-lived playback tokens carry this value so revocation is immediate.
+    playbackCredentialVersion: {
+      type: Number,
+      default: 1,
+      min: 1,
     },
     totpEnabled: {
       type: Boolean,
@@ -252,6 +259,7 @@ userSchema.methods.generateUserPlaylist = async function (
     const { token } = issuePlaybackToken({
       userId: String(this._id),
       channelListCode: this.channelListCode,
+      credentialVersion: Number(this.playbackCredentialVersion || 1),
       streamUrl: sourceUrl,
     });
     const playbackUrl = `${baseUrl || ''}/api/v1/tv/playback/${token}`;

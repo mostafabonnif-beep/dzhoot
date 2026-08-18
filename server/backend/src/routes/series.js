@@ -4,6 +4,7 @@ const Series = require('../models/Series');
 const Season = require('../models/Season');
 const Episode = require('../models/Episode');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
+const { ensureSeriesSeasons, ensureSeasonEpisodes } = require('../services/xtream-service');
 const {
   addSearchFilter,
   isValidObjectId,
@@ -65,7 +66,24 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Series not found' });
     }
 
-    const seasons = await Season.find({ seriesId: series._id }).sort({ seasonNumber: 1 }).lean();
+    let seasons = await Season.find({ seriesId: series._id }).sort({ seasonNumber: 1 }).lean();
+
+    // Lazy seasons: if none are stored yet, fetch them (and episodes) from the
+    // Xtream panel on demand for admins. Best-effort.
+    if (seasons.length === 0 && req.user?.role === 'Admin') {
+      try {
+        const fetched = await ensureSeriesSeasons(String(series._id));
+        if (fetched.length > 0) {
+          seasons = fetched;
+        } else {
+          return res.json({ success: true, data: { ...series, seasons: [], lazyError: 'لا توجد مواسم متاحة من المصدر.' } });
+        }
+      } catch (err) {
+        console.warn(`[series] lazy seasons fetch failed for series ${series._id}:`, err.message);
+        return res.json({ success: true, data: { ...series, seasons: [], lazyError: 'تعذر جلب المواسم من المصدر الآن. تحقق من حالة المصدر.' } });
+      }
+    }
+
     return res.json({ success: true, data: { ...series, seasons } });
   } catch (error) {
     console.error('Error fetching series detail:', error);
@@ -87,10 +105,34 @@ router.get('/seasons/:seasonId/episodes', requireTvOrSessionAuth, async (req, re
     if (!series) {
       return res.status(404).json({ success: false, error: 'Series not found' });
     }
-    const episodes = await Episode.find({ seasonId: season._id, seriesId: season.seriesId })
+    let episodes = await Episode.find({ seasonId: season._id, seriesId: season.seriesId })
       .select('-streamUrl')
       .sort({ episodeNumber: 1 })
       .lean();
+
+    // Lazy episodes: if this season has none stored yet and the requester is an
+    // admin, fetch them from the panel on demand (fast for a single series),
+    // persist, and re-query. Best-effort — a blocked source returns an empty
+    // list with an explanatory flag instead of failing the request.
+    if (episodes.length === 0 && req.user?.role === 'Admin') {
+      try {
+        const stored = await ensureSeasonEpisodes(String(season._id));
+        if (stored > 0) {
+          episodes = await Episode.find({ seasonId: season._id, seriesId: season.seriesId })
+            .select('-streamUrl')
+            .sort({ episodeNumber: 1 })
+            .lean();
+        }
+      } catch (err) {
+        console.warn(`[series] lazy episodes fetch failed for season ${season._id}:`, err.message);
+        return res.json({
+          success: true,
+          data: [],
+          lazyError: 'تعذر جلب الحلقات من المصدر الآن. تحقق من حالة المصدر.',
+        });
+      }
+    }
+
     return res.json({ success: true, data: episodes });
   } catch (error) {
     console.error('Error fetching episodes:', error);

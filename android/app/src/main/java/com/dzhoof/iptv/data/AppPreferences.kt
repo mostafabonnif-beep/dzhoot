@@ -12,6 +12,7 @@ object AppPreferences {
     const val PREFS_NAME = "DzhoofSettings"
     private const val SERVER_URL_KEY = "server_url"
     private const val TV_CODE_KEY = "tv_code"
+    private const val DEVICE_TOKEN_KEY = "device_token"
     private const val SESSION_ID_KEY = "session_id"
     private const val DEMO_MODE_KEY = "is_demo_mode"
     private const val EPG_XMLTV_URL_KEY = "epg_xmltv_url"
@@ -44,8 +45,36 @@ object AppPreferences {
     }
 
     fun getTvCode(context: Context): String {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(TV_CODE_KEY, "") ?: ""
+        return runCatching {
+            val secure = SecurePreferences(context)
+            val stored = secure.getString(TV_CODE_KEY, null)?.trim().orEmpty()
+            if (stored.isNotBlank()) return@runCatching stored
+
+            // One-time migration from the legacy plaintext preference.
+            // Do not keep the TV credential in ordinary SharedPreferences.
+            val legacyPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val legacy = legacyPrefs.getString(TV_CODE_KEY, "")?.trim().orEmpty()
+            if (legacy.isNotBlank()) {
+                secure.putString(TV_CODE_KEY, legacy)
+                legacyPrefs.edit().remove(TV_CODE_KEY).apply()
+            }
+            legacy
+        }.getOrElse {
+            android.util.Log.e("AppPreferences", "Unable to access encrypted TV credential", it)
+            ""
+        }
+    }
+
+    fun getDeviceToken(context: Context): String = runCatching {
+        SecurePreferences(context).getString(DEVICE_TOKEN_KEY, "") ?: ""
+    }.getOrDefault("")
+
+    fun setDeviceToken(context: Context, token: String) {
+        SecurePreferences(context).putString(DEVICE_TOKEN_KEY, token.trim())
+    }
+
+    fun clearDeviceToken(context: Context) {
+        runCatching { SecurePreferences(context).remove(DEVICE_TOKEN_KEY) }
     }
 
     fun getSessionId(context: Context): String {
@@ -65,8 +94,7 @@ object AppPreferences {
     }
 
     fun hasChannelSelection(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.contains(TV_CODE_KEY)
+        return getTvCode(context).isNotBlank()
     }
 
     fun isDemoMode(context: Context): Boolean {
@@ -88,8 +116,10 @@ object AppPreferences {
         // so refreshChannels() hits the server instead of a stale M3U/Xtream source.
         // Also clear the demo flag: a manually-set code is a real pairing, not demo,
         // so isPaired resolves true instead of the source reading as "Demo".
+        SecurePreferences(context).putString(TV_CODE_KEY, sanitized)
+        clearDeviceToken(context)
         prefs.edit()
-            .putString(TV_CODE_KEY, sanitized)
+            .remove(TV_CODE_KEY)
             .putString(PLAYLIST_SOURCE_TYPE_KEY, SOURCE_PAIRED)
             .remove(DEMO_MODE_KEY)
             .apply()
@@ -98,8 +128,10 @@ object AppPreferences {
     fun setDemoMode(context: Context, code: String) {
         val sanitized = code.trim().replace(Regex("[^A-Za-z0-9]"), "")
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        SecurePreferences(context).putString(TV_CODE_KEY, sanitized)
+        clearDeviceToken(context)
         prefs.edit()
-            .putString(TV_CODE_KEY, sanitized)
+            .remove(TV_CODE_KEY)
             .putBoolean(DEMO_MODE_KEY, true)
             .putString(PLAYLIST_SOURCE_TYPE_KEY, SOURCE_PAIRED)
             .apply()
@@ -213,6 +245,8 @@ object AppPreferences {
             .remove(TV_CODE_KEY)
             .remove(DEMO_MODE_KEY)
             .apply()
+        runCatching { SecurePreferences(context).remove(TV_CODE_KEY) }
+        clearDeviceToken(context)
         clearSessionId(context)
     }
 

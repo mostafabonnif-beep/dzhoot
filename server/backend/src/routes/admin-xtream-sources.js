@@ -36,6 +36,8 @@ function publicShape(src) {
     playbackFormat: src.playbackFormat || null,
     syncStatus: src.syncStatus,
     lastSyncAt: src.lastSyncAt,
+    catalogOnlyImportedAt: src.catalogOnlyImportedAt || null,
+    customerVisible: src.customerVisible === true,
     lastError: src.lastError,
     lastDiagnosticsAt: src.lastDiagnosticsAt,
     verifiedAt: src.verifiedAt,
@@ -256,6 +258,60 @@ router.post('/:id/sync', async (req, res) => {
   }
 });
 
+// POST /:id/import-catalog — import catalog metadata (channels/movies/series) even when
+// live playback verification could not pass (e.g. panel blocks the server IP with 456/401).
+// The catalog is imported so the admin can manage/preview it, but the source is NOT
+// activated: playback stays unverified and the normal sync gate still applies.
+router.post('/:id/import-catalog', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const source = await XtreamSource.findById(id).exec();
+    if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+    if (source.verificationStatus === 'blocked') {
+      return res.status(409).json({
+        success: false,
+        error: 'Source API is blocked; catalog import cannot proceed',
+        code: 'SOURCE_BLOCKED',
+      });
+    }
+    if (source.syncStatus === 'syncing') {
+      return res.status(409).json({ success: false, error: 'Sync already in progress' });
+    }
+
+    // Runs in background; the request returns immediately (long operation).
+    syncXtreamSource(String(id), { allowCatalogOnly: true })
+      .then((result) => {
+        audit({
+          ...reqCtx(req),
+          action: 'XTREAM_SOURCE_CATALOG_IMPORT',
+          resource: 'XtreamSource',
+          resourceId: String(id),
+          changes: { after: result.stats, note: 'catalog-only import; playback not verified' },
+        });
+      })
+      .catch((err) => {
+        audit({
+          ...reqCtx(req),
+          action: 'XTREAM_SOURCE_CATALOG_IMPORT',
+          resource: 'XtreamSource',
+          resourceId: String(id),
+          status: 'failure',
+          errorMessage: err.message,
+        });
+        console.error(`[xtream] catalog-only import failed for ${id}:`, redactSensitiveText(err));
+      });
+
+    return res.json({
+      success: true,
+      data: { syncing: true, message: 'Catalog-only import started (playback not verified)' },
+    });
+  } catch (err) {
+    console.error('[xtream] catalog import error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
 // PATCH /:id — update name/status (credentials optional)
 router.patch('/:id', async (req, res) => {
   try {
@@ -264,8 +320,19 @@ router.patch('/:id', async (req, res) => {
     const source = await XtreamSource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    const { name, status, username, password } = req.body || {};
+    const { name, status, username, password, customerVisible } = req.body || {};
     if (name !== undefined) source.name = String(name).trim();
+    if (customerVisible !== undefined) {
+      source.customerVisible = customerVisible === true;
+      // Explicit operator decision — audit it so the choice is traceable.
+      audit({
+        ...reqCtx(req),
+        action: 'XTREAM_SOURCE_VISIBILITY',
+        resource: 'XtreamSource',
+        resourceId: String(id),
+        changes: { after: { customerVisible: source.customerVisible } },
+      });
+    }
     const credentialsChanged = username !== undefined || password !== undefined;
     if (credentialsChanged) {
       source.usernameEncrypted = encryptSecret(String(username ?? decryptSecret(source.usernameEncrypted)));

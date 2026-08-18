@@ -205,7 +205,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
-  const { playStream } = useStreamPlayer();
+  const { playChannel } = useStreamPlayer();
 
   // Favorites
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
@@ -1490,17 +1490,14 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         getActions={(c) => ({
           onDetail: () => setDetailChannel(c),
           onPlay: () =>
-            playStream(
-              {
-                name: getName(c),
-                url: getUrl(c),
-                channelId: c._id,
-                alternateUrls: c.alternateStreams
-                  ?.filter((a) => !a.flaggedBad?.isFlagged)
-                  .map((a) => a.streamUrl),
-              },
-              { mode: 'direct-fallback' },
-            ),
+            playChannel({
+              name: getName(c),
+              url: getUrl(c),
+              channelId: c._id,
+              alternateUrls: c.alternateStreams
+                ?.filter((a) => !a.flaggedBad?.isFlagged)
+                .map((a) => a.streamUrl),
+            }),
           onEdit: isAdmin ? () => openEdit(c) : undefined,
           onDelete: () => handleDelete(c._id),
         })}
@@ -1784,17 +1781,14 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         onPlay={
           detailChannel
             ? () => {
-                playStream(
-                  {
-                    name: getName(detailChannel),
-                    url: getUrl(detailChannel),
-                    channelId: detailChannel._id,
-                    alternateUrls: detailChannel.alternateStreams
-                      ?.filter((a) => !a.flaggedBad?.isFlagged)
-                      .map((a) => a.streamUrl),
-                  },
-                  { mode: 'direct-fallback' },
-                );
+                playChannel({
+                  name: getName(detailChannel),
+                  url: getUrl(detailChannel),
+                  channelId: detailChannel._id,
+                  alternateUrls: detailChannel.alternateStreams
+                    ?.filter((a) => !a.flaggedBad?.isFlagged)
+                    .map((a) => a.streamUrl),
+                });
                 setDetailChannel(null);
               }
             : undefined

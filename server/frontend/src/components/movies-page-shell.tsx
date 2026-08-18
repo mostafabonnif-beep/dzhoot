@@ -8,8 +8,10 @@ import {
   LayoutGrid,
   List,
   RefreshCw,
+  Play,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { useStreamPlayer } from '@/components/stream-player-context';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import Pagination from '@/components/ui/pagination';
 import SearchInput from '@/components/ui/search-input';
@@ -30,6 +32,7 @@ interface Movie {
 const PAGE_SIZE = 24;
 
 export default function MoviesPageShell() {
+  const { playStream } = useStreamPlayer();
   const [movies, setMovies] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +45,22 @@ export default function MoviesPageShell() {
   const [status, setStatus] = useState<'active' | 'inactive' | 'all'>('active');
   const { search: searchTerm, debouncedSearch, handleSearchChange: setSearchTerm } = useDebouncedSearch('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [playingId, setPlayingId] = useState<string | null>(null);
+
+  const playMovie = useCallback(async (movie: Movie) => {
+    setPlayingId(movie._id);
+    try {
+      const res = await api.post('/tv/playback-token', { movieId: movie._id });
+      const { playbackUrl, mimeType } = res.data.data;
+      void mimeType;
+      playStream({ name: movie.title, url: playbackUrl, direct: true });
+    } catch (err) {
+      console.error('Error playing movie:', err);
+      alert('تعذر تشغيل الفيلم حاليًا. تحقق من حالة المصدر ثم حاول مجددًا.');
+    } finally {
+      setPlayingId(null);
+    }
+  }, [playStream]);
 
   const fetchMovies = useCallback(async () => {
     setLoading(true);
@@ -221,6 +240,23 @@ export default function MoviesPageShell() {
                 <div className="absolute top-2 right-2 bg-black/70 text-white text-[10px] px-2 py-0.5 rounded">
                   {movie.category}
                 </div>
+                {/* Play overlay */}
+                <button
+                  type="button"
+                  onClick={() => playMovie(movie)}
+                  disabled={playingId === movie._id}
+                  aria-label={`تشغيل ${movie.title}`}
+                  title={`تشغيل ${movie.title}`}
+                  className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 group-hover:bg-black/40 group-hover:opacity-100 transition-all"
+                >
+                  {playingId === movie._id ? (
+                    <Loader2 className="h-10 w-10 text-white animate-spin" />
+                  ) : (
+                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transform transition-transform group-hover:scale-110">
+                      <Play className="h-5 w-5 mr-0.5" fill="currentColor" />
+                    </span>
+                  )}
+                </button>
               </div>
               <div className="p-2">
                 <h3 className="font-semibold text-sm truncate" title={movie.title}>
@@ -244,6 +280,7 @@ export default function MoviesPageShell() {
                 <th className="p-3 font-medium text-center">السنة</th>
                 <th className="p-3 font-medium text-center">المدة</th>
                 <th className="p-3 font-medium text-center">التقييم</th>
+                <th className="p-3 font-medium text-center">تشغيل</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -266,6 +303,22 @@ export default function MoviesPageShell() {
                   <td className="p-3 text-center">{movie.year || '-'}</td>
                   <td className="p-3 text-center">{movie.duration ? `${Math.floor(movie.duration / 60)}د` : '-'}</td>
                   <td className="p-3 text-center text-yellow-500 font-bold">{movie.rating || '-'}</td>
+                  <td className="p-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => playMovie(movie)}
+                      disabled={playingId === movie._id}
+                      className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-60 transition-colors"
+                      aria-label={`تشغيل ${movie.title}`}
+                    >
+                      {playingId === movie._id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Play className="h-3.5 w-3.5" fill="currentColor" />
+                      )}
+                      تشغيل
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

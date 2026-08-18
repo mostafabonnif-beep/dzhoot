@@ -8,6 +8,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const { randomUUID } = require('crypto');
 const rateLimit = require('express-rate-limit');
+const { RedisRateLimitStore } = require('./services/redis-rate-limit-store');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const { redactSensitiveText } = require('./services/audit-log');
 
@@ -156,6 +157,14 @@ app.use(
 );
 app.use(compression());
 
+// Public APK downloads for customers (optional). Drop APK files into
+// backend/downloads/ and they become available at /downloads/<file>.
+// Disabled by default; enable with PUBLIC_DOWNLOADS_DIR=<absolute path>.
+if (process.env.PUBLIC_DOWNLOADS_DIR) {
+  const downloadsDir = path.resolve(process.env.PUBLIC_DOWNLOADS_DIR);
+  app.use('/downloads', express.static(downloadsDir, { fallthrough: false, maxAge: '1h' }));
+}
+
 // Attach a bounded correlation ID to every request so logs and support reports
 // can be joined without trusting arbitrary header content.
 app.use((req, res, next) => {
@@ -266,7 +275,10 @@ function resolveRateLimitIdentity(req) {
   return null;
 }
 
+const distributedRateLimitStore = process.env.REDIS_URL ? new RedisRateLimitStore() : undefined;
+
 const apiLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 1000,
   standardHeaders: true,
@@ -301,6 +313,7 @@ const apiLimiter = rateLimit({
 app.use('/api/', apiLimiter);
 
 const authLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 15 * 60 * 1000,
   max: 20,
   standardHeaders: true,
@@ -316,6 +329,7 @@ app.use('/api/v1/jwt/login', authLimiter);
 // Stricter rate limit for forgot-password and resend-verification
 // Per-IP limit: 3 requests per hour
 const emailActionLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3,
   standardHeaders: true,
@@ -324,6 +338,7 @@ const emailActionLimiter = rateLimit({
 });
 // Per-account limit: key by email in request body (prevents abuse of a single account)
 const emailAccountLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 60 * 60 * 1000, // 1 hour
   max: 3,
   standardHeaders: true,
@@ -338,6 +353,7 @@ app.use('/api/v1/auth/resend-verification', emailActionLimiter, emailAccountLimi
 
 // OAuth rate limiting — prevent abuse of OAuth initiation endpoints
 const oauthLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 15 * 60 * 1000,
   max: 15,
   standardHeaders: true,
@@ -351,6 +367,7 @@ app.use('/api/v1/oauth/github/start', oauthLimiter);
 // separate, less aggressive limiter so normal playlist/EPG refreshes work while
 // distributed guessing from one client is throttled.
 const tvCodeReadLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 10 * 60 * 1000,
   max: 60,
   standardHeaders: true,
@@ -363,6 +380,7 @@ app.use('/api/v1/tv/epg', tvCodeReadLimiter);
 
 // Strict rate limiting for TV pairing mutation endpoints (prevent PIN brute-force)
 const pairingLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 5 * 60 * 1000, // 5 minutes
   max: 10, // 10 attempts per 5 minutes per IP
   standardHeaders: true,
@@ -377,6 +395,7 @@ app.use('/api/v1/tv/verify', pairingLimiter);
 // Permissive rate limiting for pairing status polling (TV polls this endpoint repeatedly)
 // PIN expires in 10 minutes; allow up to 120 polls per 10-minute window (~1 every 5 seconds)
 const pairingStatusLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 10 * 60 * 1000, // 10 minutes
   max: 120,
   standardHeaders: true,
@@ -389,6 +408,7 @@ app.use('/api/v1/tv/pairing/status', pairingStatusLimiter);
 // Strict activation-code redemption limiter: 5 attempts per 10 minutes per user/IP.
 // This protects hashed codes from online guessing without changing redemption semantics.
 const activationRedeemLimiter = rateLimit({
+  ...(distributedRateLimitStore ? { store: distributedRateLimitStore } : {}),
   windowMs: 10 * 60 * 1000,
   max: 5,
   standardHeaders: true,

@@ -11,6 +11,10 @@ interface StreamPlayerChannel {
   logo?: string;
   channelId?: string;
   alternateUrls?: string[];
+  /** true = url is already a ready-to-play token URL; skip the stream-proxy wrapper, alternates and play reports */
+  direct?: boolean;
+  /** Number of alternates available (for on-demand slot tokens when direct=true) */
+  maxSlot?: number;
 }
 
 interface StreamPlayerProps {
@@ -28,9 +32,13 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
   const [playerError, setPlayerError] = useState('');
   const [activeSource, setActiveSource] = useState<'direct' | 'proxy'>('direct');
   const [mini, setMini] = useState(false);
+  const [levels, setLevels] = useState<Array<{ index: number; height?: number; bitrate?: number }>>([]);
+  const [currentLevel, setCurrentLevel] = useState(-1);
+  const [pipActive, setPipActive] = useState(false);
   const wasActiveRef = useRef(false); // tracks if player was already open (for swap vs fresh open)
   const playReportedRef = useRef<{ channelId: string; at: number } | null>(null);
   const currentSourceRef = useRef<'direct' | 'proxy'>('proxy');
+  const nextSlotRef = useRef(0); // next alternate slot to try in token (direct) mode
 
   // Drag position for mini player
   const [position, setPosition] = useState({ right: 16, bottom: 16 });
@@ -61,6 +69,79 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
     return () => document.removeEventListener('keydown', onKey);
   }, [channel, mini, onClose]);
 
+  // Keyboard shortcuts (full mode only): Space = play/pause, M = mute, F = fullscreen,
+  // P = picture-in-picture, arrows = volume/seek
+  useEffect(() => {
+    if (!channel || mini) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          if (video.paused) video.play().catch(() => {}); else video.pause();
+          break;
+        case 'm':
+        case 'M':
+          video.muted = !video.muted;
+          break;
+        case 'f':
+        case 'F':
+          if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+          else video.requestFullscreen?.().catch(() => {});
+          break;
+        case 'p':
+        case 'P':
+          togglePip();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          video.volume = Math.min(1, video.volume + 0.1);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          video.volume = Math.max(0, video.volume - 0.1);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          if (Number.isFinite(video.duration)) video.currentTime = Math.max(0, video.currentTime - 10);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          if (Number.isFinite(video.duration)) video.currentTime = Math.min(video.duration, video.currentTime + 10);
+          break;
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [channel, mini]);
+
+  function togglePip() {
+    const video = videoRef.current;
+    if (!video) return;
+    if (document.pictureInPictureElement) {
+      document.exitPictureInPicture().catch(() => {});
+    } else if ((video as HTMLVideoElement & { requestPictureInPicture?: () => Promise<void> }).requestPictureInPicture) {
+      (video as HTMLVideoElement & { requestPictureInPicture: () => Promise<void> }).requestPictureInPicture().catch(() => {});
+    }
+  }
+
+  // Track PiP state
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onEnter = () => setPipActive(true);
+    const onLeave = () => setPipActive(false);
+    video.addEventListener('enterpictureinpicture', onEnter);
+    video.addEventListener('leavepictureinpicture', onLeave);
+    return () => {
+      video.removeEventListener('enterpictureinpicture', onEnter);
+      video.removeEventListener('leavepictureinpicture', onLeave);
+    };
+  }, [channel]);
+
   // Player setup
   useEffect(() => {
     if (!channel) {
@@ -68,15 +149,19 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       return;
     }
     const url = channel.url;
+    const directMode = channel.direct === true;
+    const ch = channel;
     const directUrl = url;
-    const proxyUrl = `/api/v1/stream-proxy?url=${encodeURIComponent(url)}`;
-    const alternateUrls = channel.alternateUrls || [];
+    const proxyUrl = directMode ? url : `/api/v1/stream-proxy?url=${encodeURIComponent(url)}`;
+    const alternateUrls = directMode ? [] : (channel.alternateUrls || []);
     let alternateIndex = 0;
     const sessionId = typeof window !== 'undefined' ? useAuthStore.getState().sessionId : null;
     let destroyed = false;
     let activeHls: { destroy: () => void } | null = null;
-    let currentSource: 'direct' | 'proxy' = mode === 'proxy' ? 'proxy' : 'direct';
+    // Token (direct) mode plays through the platform proxy, so badge it as proxy.
+    let currentSource: 'direct' | 'proxy' = directMode || mode === 'proxy' ? 'proxy' : 'direct';
     currentSourceRef.current = currentSource;
+    nextSlotRef.current = 0;
     // Native-HLS (Safari) listeners — hoisted so cleanup can remove them.
     let nativeLoadedMeta: (() => void) | null = null;
     let nativeError: (() => void) | null = null;
@@ -95,6 +180,9 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
     setStatus('Loading...');
     setPlayerError('');
     setActiveSource(currentSource);
+    setLevels([]);
+    setCurrentLevel(-1);
+    setPipActive(false);
 
     // If player was already active (swapping streams), keep mini mode & position.
     // Only reset to full modal on fresh open.
@@ -148,9 +236,18 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             hls.attachMedia(video!);
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
               if (!destroyed) {
+                setLevels(
+                  (hls as unknown as { levels: Array<{ height?: number; bitrate?: number }> }).levels.map(
+                    (l, i) => ({ index: i, height: l.height, bitrate: l.bitrate }),
+                  ),
+                );
+                setCurrentLevel((hls as { currentLevel: number }).currentLevel);
                 setStatus('Playing');
                 video!.play().catch(() => {});
               }
+            });
+            hls.on(Hls.Events.LEVEL_SWITCHED, (_: string, data: { level: number }) => {
+              if (!destroyed) setCurrentLevel(data.level);
             });
             hls.on(
               Hls.Events.ERROR,
@@ -166,6 +263,19 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
                   } else if (data.type === 'networkError' && mode === 'proxy') {
                     setStatus('Network error — retrying...');
                     hls.startLoad();
+                  } else if (directMode && ch.channelId && nextSlotRef.current < (ch.maxSlot || 0)) {
+                    // Token mode: fetch the next alternate slot's token on demand.
+                    const slot = nextSlotRef.current + 1;
+                    nextSlotRef.current = slot;
+                    setStatus(`Trying alternate ${slot}...`);
+                    api
+                      .post('/tv/playback-token', { channelId: ch.channelId, slot })
+                      .then((res) => {
+                        if (destroyed) return;
+                        safeDestroyHls(activeHls);
+                        tryHlsSource(res.data.data.playbackUrl, true);
+                      })
+                      .catch(() => setPlayerError('All sources failed'));
                   } else if (alternateIndex < alternateUrls.length) {
                     const altUrl = alternateUrls[alternateIndex++];
                     const altProxy = `/api/v1/stream-proxy?url=${encodeURIComponent(altUrl)}`;
@@ -197,7 +307,19 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
           };
           nativeError = () => {
             if (destroyed) return;
-            if (!nativeFallback && mode === 'direct-fallback') {
+            if (directMode && ch.channelId && nextSlotRef.current < (ch.maxSlot || 0)) {
+              const slot = nextSlotRef.current + 1;
+              nextSlotRef.current = slot;
+              setStatus(`Trying alternate ${slot}...`);
+              api
+                .post('/tv/playback-token', { channelId: ch.channelId, slot })
+                .then((res) => {
+                  if (destroyed) return;
+                  video!.src = res.data.data.playbackUrl;
+                  video!.load();
+                })
+                .catch(() => setPlayerError('All sources failed'));
+            } else if (!nativeFallback && mode === 'direct-fallback') {
               nativeFallback = true;
               currentSource = 'proxy';
               currentSourceRef.current = currentSource;
@@ -400,6 +522,37 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
               {channel.name}
             </h2>
             <div className={`flex items-center shrink-0 ${mini ? 'gap-1' : 'gap-2'}`}>
+              {!mini && levels.length > 1 && (
+                <select
+                  value={currentLevel}
+                  onChange={(e) => {
+                    const idx = Number(e.target.value);
+                    const hls = hlsRef.current as unknown as { currentLevel: number } | null;
+                    if (hls) hls.currentLevel = idx;
+                    setCurrentLevel(idx);
+                  }}
+                  aria-label="جودة البث"
+                  title="جودة البث"
+                  className="h-8 rounded border border-border bg-background px-1.5 text-xs text-muted-foreground focus-visible:outline-none"
+                >
+                  <option value={-1}>تلقائي</option>
+                  {levels.map((l) => (
+                    <option key={l.index} value={l.index}>
+                      {l.height ? `${l.height}p` : Math.round((l.bitrate || 0) / 1000) ? `${Math.round((l.bitrate || 0) / 1000)} kbps` : `الجودة ${l.index + 1}`}
+                    </option>
+                  ))}
+                </select>
+              )}
+              {!mini && typeof document !== 'undefined' && document.pictureInPictureEnabled && (
+                <button
+                  onClick={togglePip}
+                  className={`flex items-center justify-center h-8 w-8 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ${pipActive ? 'text-primary border-primary/50' : ''}`}
+                  aria-label={pipActive ? 'إنهاء الصورة داخل الصورة' : 'صورة داخل صورة'}
+                  title={pipActive ? 'إنهاء الصورة داخل الصورة (P)' : 'صورة داخل صورة (P)'}
+                >
+                  {pipActive ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                </button>
+              )}
               <button
                 onClick={() => setMini(!mini)}
                 className={
@@ -431,13 +584,20 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
           </div>
 
           {/* Media */}
-          <div className="bg-black">
+          <div className="bg-black relative">
             <video
               ref={videoRef}
               controls
               className={mini ? 'w-full aspect-video' : 'w-full max-h-[80vh]'}
               playsInline
             />
+            {/* Buffering overlay */}
+            {!mini && (status === 'Loading...' || status === 'Buffering...') && !playerError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 pointer-events-none">
+                <div className="h-12 w-12 rounded-full border-4 border-primary/30 border-t-primary animate-spin" />
+                <span className="mt-3 text-xs text-white/90">{status === 'Buffering...' ? 'جارٍ التخزين المؤقت...' : 'جارٍ التحميل...'}</span>
+              </div>
+            )}
           </div>
 
           {/* Status bar */}
@@ -451,7 +611,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             <div
               className={`flex items-center gap-2 truncate ${mini ? 'max-w-[55%]' : 'max-w-[60%]'}`}
             >
-              {!mini && (
+              {!mini && !channel.direct && (
                 <span
                   className={`truncate ${mini ? 'text-xs' : 'text-xs'} text-muted-foreground`}
                   title={channel.url}

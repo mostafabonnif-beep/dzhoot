@@ -1,5 +1,5 @@
 {
-  "name": "@firevision/backend",
+  "name": "@dzhoof/backend",
   "version": "0.0.0",
   "private": true,
   "license": "MIT",
@@ -20,10 +20,14 @@
     "migrate:prune-orphan-refs": "tsx src/scripts/migrations/0007-prune-orphan-refs.ts",
     "migrate:categorize-patterns": "tsx src/scripts/migrations/0008-categorize-patterns.ts",
     "migrate:fix-names": "tsx src/scripts/migrations/0009-fix-channel-names.ts",
-    "migrate:catchup-backfill": "tsx src/scripts/migrations/0010-catchup-backfill.ts"
+    "migrate:catchup-backfill": "tsx src/scripts/migrations/0010-catchup-backfill.ts",
+    "migrate:playback-credential-version": "tsx src/scripts/migrations/0011-backfill-playback-credential-version.ts",
+    "migrate:device-credentials": "tsx src/scripts/migrations/0012-device-credentials.ts",
+    "smoke:device-security": "tsx scripts/smoke-device-security.ts",
+    "smoke:golden-e2e": "tsx scripts/smoke-golden-e2e.ts"
   },
   "dependencies": {
-    "@firevision/shared": "*",
+    "@dzhoof/shared": "*",
     "@sentry/node": "^10.46.0",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",

@@ -311,7 +311,6 @@ export class EpgService {
 
   async fetchAndParseXmltv(url: string, coveredChannelIds: string[]): Promise<ParsedProgram[]> {
     const coveredSet = new Set(coveredChannelIds.map((id) => id.toLowerCase()));
-    const isGzip = url.endsWith('.gz');
 
     // Stream the response to avoid holding compressed + decompressed buffers simultaneously
     const validation = await validateUrlForSSRF(url);
@@ -319,22 +318,47 @@ export class EpgService {
       throw new Error(`EPG URL rejected: ${validation.reason || 'unsafe URL'}`);
     }
 
-    const parsedUrl = new URL(url);
-    const lookup = createPinnedLookup(validation.resolvedAddresses);
-    const agent = parsedUrl.protocol === 'https:'
-      ? new https.Agent({ lookup: lookup as any })
-      : new http.Agent({ lookup: lookup as any });
+    let currentUrl = url;
+    let response;
 
-    const response = await axios.get(url, {
-      timeout: 120000,
-      responseType: 'stream',
-      maxContentLength: 100 * 1024 * 1024,
-      maxBodyLength: 100 * 1024 * 1024,
-      maxRedirects: 0,
-      httpAgent: parsedUrl.protocol === 'http:' ? agent : undefined,
-      httpsAgent: parsedUrl.protocol === 'https:' ? agent : undefined,
-      headers: { 'User-Agent': 'DZ-HOOF/1.0' },
-    });
+    // Follow redirects manually (max 4 hops), re-validating every hop against
+    // the SSRF guard so a redirect can never escape to a private/internal host.
+    for (let hop = 0; hop < 4; hop += 1) {
+      const hopValidation = hop === 0 ? validation : await validateUrlForSSRF(currentUrl);
+      if (!hopValidation.safe || !hopValidation.resolvedAddresses?.length) {
+        throw new Error(`EPG URL rejected: ${hopValidation.reason || 'unsafe URL'}`);
+      }
+
+      const parsedUrl = new URL(currentUrl);
+      const lookup = createPinnedLookup(hopValidation.resolvedAddresses);
+      const agent = parsedUrl.protocol === 'https:'
+        ? new https.Agent({ lookup: lookup as any })
+        : new http.Agent({ lookup: lookup as any });
+
+      const hopResponse = await axios.get(currentUrl, {
+        timeout: 120000,
+        responseType: 'stream',
+        maxContentLength: 100 * 1024 * 1024,
+        maxBodyLength: 100 * 1024 * 1024,
+        maxRedirects: 0,
+        validateStatus: (status: number) => status < 400,
+        httpAgent: parsedUrl.protocol === 'http:' ? agent : undefined,
+        httpsAgent: parsedUrl.protocol === 'https:' ? agent : undefined,
+        headers: { 'User-Agent': 'DZ-HOOF/1.0' },
+      });
+
+      const location = hopResponse.headers?.location;
+      if ([301, 302, 303, 307, 308].includes(hopResponse.status) && location) {
+        currentUrl = new URL(String(location), currentUrl).toString();
+        if (hop === 3) throw new Error('EPG URL redirect limit exceeded');
+        continue;
+      }
+      response = hopResponse;
+      break;
+    }
+
+    if (!response) throw new Error('EPG URL fetch failed');
+    const isGzip = currentUrl.endsWith('.gz') || url.endsWith('.gz');
 
     const xmlData = await new Promise<string>((resolve, reject) => {
       const chunks: Buffer[] = [];

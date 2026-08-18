@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -13,7 +13,7 @@ RUN npm ci --ignore-scripts && npm cache clean --force
 # Build shared package (frontend imports from it)
 COPY packages/shared/tsconfig.json ./packages/shared/
 COPY packages/shared/src ./packages/shared/src
-RUN npx -w @firevision/shared tsc
+RUN npx -w @dzhoof/shared tsc
 
 # Copy frontend config files (source is mounted as volume for hot reload)
 COPY frontend/tsconfig.json ./frontend/
@@ -25,4 +25,4 @@ COPY frontend/components.json ./frontend/
 EXPOSE 3001
 
 # Next.js dev server with hot reload
-CMD ["npm", "run", "dev", "-w", "@firevision/frontend"]
+CMD ["npm", "run", "dev", "-w", "@dzhoof/frontend"]
