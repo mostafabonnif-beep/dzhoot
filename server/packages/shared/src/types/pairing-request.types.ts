@@ -6,6 +6,8 @@ export interface IPairingRequest {
   pin: string;
   deviceName: string;
   deviceModel: string;
+  deviceId?: string;
+  deviceCredentialEncrypted?: string;
   status: PairingStatus;
   userId: Types.ObjectId | null;
   expiresAt: Date;

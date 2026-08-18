@@ -152,6 +152,7 @@ class PairingActivity : ComponentActivity() {
                 val requestData = JSONObject().apply {
                     put("deviceName", Build.MODEL)
                     put("deviceModel", "${Build.MANUFACTURER} ${Build.MODEL}")
+                    put("deviceId", android.provider.Settings.Secure.getString(contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "dzhoof-device")
                 }
 
                 val response = PinnedHttpClient.post(
@@ -231,8 +232,9 @@ class PairingActivity : ComponentActivity() {
 
                         if (paired && status == "completed") {
                             val channelListCode = jsonResponse.getString("channelListCode")
+                            val deviceCredential = jsonResponse.optString("deviceCredential", "")
                             val username = jsonResponse.optString("username", "User")
-                            onPairingSuccess(channelListCode, username)
+                            onPairingSuccess(channelListCode, username, deviceCredential)
                         } else if (status == "expired") {
                             showError("PIN expired. Please generate a new one.")
                         }
@@ -244,12 +246,13 @@ class PairingActivity : ComponentActivity() {
         }
     }
 
-    private fun onPairingSuccess(channelListCode: String, username: String) {
+    private fun onPairingSuccess(channelListCode: String, username: String, deviceCredential: String = "") {
         isPairing = false
         pollRunnable?.let { pollHandler?.removeCallbacks(it) }
 
         runOnUiThread {
             AppPreferences.setTvCode(this, channelListCode)
+            if (deviceCredential.isNotBlank()) AppPreferences.setDeviceToken(this, deviceCredential)
             pairedUsername = username
             isPaired = true
             showCountdown = false

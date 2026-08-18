@@ -1,6 +1,6 @@
 # API Documentation
 
-**Base URL:** `http://localhost:3000/api/v1` (dev) | `https://tv.cadnative.com/api/v1` (prod)
+**Base URL:** `http://localhost:8009/api/v1` (dev) | `https://ld-11.net/api/v1` (prod)
 
 ## Conventions
 
@@ -1573,7 +1573,7 @@ Web dashboard confirms the pairing by submitting the PIN.
   "currentVersion": 100,
   "isMandatory": false,
   "releaseNotes": "Bug fixes and improvements",
-  "downloadUrl": "https://github.com/akshaynikhare/FireVisionIPTV/releases/download/v1.5/app-release.apk",
+  "downloadUrl": "https://github.com/merci1994dz/dzhoot/releases/download/v1.5/app-release.apk",
   "minCompatibleVersion": 1
 }
 ```
@@ -1631,7 +1631,7 @@ Returns the download URL as JSON instead of redirecting.
 ```json
 {
   "success": true,
-  "downloadUrl": "https://github.com/akshaynikhare/FireVisionIPTV/releases/download/v1.5/app-release.apk"
+  "downloadUrl": "https://github.com/merci1994dz/dzhoot/releases/download/v1.5/app-release.apk"
 }
 ```
 
@@ -1677,9 +1677,9 @@ Returns default configuration values for client applications.
   "success": true,
   "data": {
     "defaultTvCode": "5T6FEP",
-    "defaultServerUrl": "https://tv.cadnative.com",
+    "defaultServerUrl": "https://ld-11.net",
     "pairingPinExpiryMinutes": 10,
-    "appName": "FireVision IPTV",
+    "appName": "DZ HOOF",
     "version": "1.0.0",
     "recaptchaSiteKey": "6Lc..."
   }
@@ -1704,7 +1704,7 @@ Returns server name, version, and available features.
 {
   "success": true,
   "data": {
-    "name": "FireVision IPTV Server",
+    "name": "DZ HOOF Server",
     "version": "1.0.0",
     "status": "online",
     "features": {

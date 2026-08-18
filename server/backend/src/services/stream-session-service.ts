@@ -65,12 +65,14 @@ export async function registerStreamSession(opts: {
   sessionId: string;
   /** Seconds until the playback token expires (grace is added internally). */
   ttlSec: number;
+  maxStreams?: number;
   now?: number;
   store?: StreamSessionStore | null;
 }): Promise<StreamSessionResult> {
   const { userId, sessionId, ttlSec, now = Date.now() } = opts;
   const store = opts.store !== undefined ? opts.store : defaultStore();
-  const max = MAX_CONCURRENT_STREAMS;
+  const configuredMax = Number(opts.maxStreams);
+  const max = Number.isFinite(configuredMax) && configuredMax > 0 ? Math.floor(configuredMax) : MAX_CONCURRENT_STREAMS;
   if (!store) return { max, active: 0, evictedSessionId: null };
 
   const userKey = userKeyFor(userId);

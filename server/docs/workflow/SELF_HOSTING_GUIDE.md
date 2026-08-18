@@ -29,8 +29,8 @@ chmod 600 .env
 ```env
 NODE_ENV=production
 APP_VERSION=0.0.0
-DOCKER_IMAGE=ghcr.io/merci1994dz/dzhoot-server:latest
-DOCKER_FRONTEND_IMAGE=ghcr.io/merci1994dz/dzhoot-frontend:latest
+DOCKER_IMAGE=ghcr.io/merci1994dz/dzhoof-iptv-server:latest
+DOCKER_FRONTEND_IMAGE=ghcr.io/merci1994dz/dzhoof-iptv-server-frontend:latest
 
 SUPER_ADMIN_USERNAME=admin
 SUPER_ADMIN_PASSWORD=<strong-password-at-least-16-characters>
@@ -121,3 +121,17 @@ gzip -t "backups/mongodb-$STAMP.archive.gz"
 | Redis غير متاح | استخدم `redis://redis:6379` داخل self-host compose؛ Redis اختياري لبعض الميزات |
 | القنوات لا تعمل على التلفاز | استخدم عنوان IP أو HTTPS قابلًا للوصول، لا `localhost` |
 | APK لا يظهر له تحديث | راجع GitHub Release و`GH_APP_OWNER` و`GH_APP_REPO` وpattern asset |
+
+## فحص ما قبل الإنتاج
+
+قبل تشغيل المكدس الإنتاجي، انسخ `.env.production.example` إلى `.env.production`، اضبط القيم الحقيقية، ثم قيّد صلاحيات الملف إلى `600`. شغّل فحص الإعدادات من دون طباعة الأسرار:
+
+```bash
+cp .env.production.example .env.production
+chmod 600 .env.production
+./scripts/preflight-production.sh
+```
+
+يتحقق الفحص من وجود Docker وCompose، وصحة متغيرات HTTPS والأسرار، وعدم استخدام wildcard في `ALLOWED_ORIGINS`، وقدرة Compose على تحليل الملف. لا يبدأ الفحص أي خدمة. إذا فشل، أصلح الرسائل أولاً ثم أعد تشغيله. لا تُشغّل `docker compose up` قبل نجاحه.
+
+للتشغيل على الخطة self-host المحلية استخدم `docker-compose.selfhost.yml` و`.env` المعتاد. أما `docker-compose.production.yml` فيتطلب أيضاً `DOMAIN` و`ACME_EMAIL` وشبكة Docker الخارجية `dzhoof-shared-network` إذا كان النشر يعتمد على المكدس المشترك.

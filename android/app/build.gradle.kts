@@ -31,7 +31,7 @@ android {
         applicationId = "com.dzhoof.iptv"
         minSdk = 28
         targetSdk = 34
-        versionCode = 5
+        versionCode = (project.findProperty("versionCode") as String? ?: "5").toInt()
         versionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
@@ -79,8 +79,8 @@ android {
     }
 
     lint {
-        abortOnError = false
-        checkReleaseBuilds = false
+        abortOnError = true
+        checkReleaseBuilds = true
     }
 
     // Room schema export configuration
@@ -93,8 +93,18 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            val requireSignedRelease = (project.findProperty("requireSignedRelease") as String? ?: "false").toBoolean()
+            if (requireSignedRelease) {
+                require(!System.getenv("SIGNING_KEY_STORE").isNullOrBlank()) { "Signed release required: SIGNING_KEY_STORE is missing" }
+                require(!System.getenv("SIGNING_STORE_PASSWORD").isNullOrBlank()) { "Signed release required: SIGNING_STORE_PASSWORD is missing" }
+                require(!System.getenv("SIGNING_KEY_ALIAS").isNullOrBlank()) { "Signed release required: SIGNING_KEY_ALIAS is missing" }
+                require(!System.getenv("SIGNING_KEY_PASSWORD").isNullOrBlank()) { "Signed release required: SIGNING_KEY_PASSWORD is missing" }
+            }
+            // R8 minification is memory-hungry; allow disabling via -Pminify=false
+            // (e.g. constrained build machines). Defaults to true — same behavior as before.
+            val minify = (project.findProperty("minify") as String? ?: "true").toBoolean()
+            isMinifyEnabled = minify
+            isShrinkResources = minify
             manifestPlaceholders["sentryEnvironment"] = "production"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

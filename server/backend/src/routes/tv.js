@@ -3,8 +3,13 @@ const router = express.Router();
 const User = require('../models/User');
 const Channel = require('../models/Channel');
 const XtreamSource = require('../models/XtreamSource');
+const Movie = require('../models/Movie');
+const Episode = require('../models/Episode');
 const EpgProgram = require('../models/EpgProgram');
 const PairingRequest = require('../models/PairingRequest');
+const Device = require('../models/Device');
+const { issueDeviceCredential, encryptDeviceCredential, decryptDeviceCredential } = require('../services/device-credential');
+const { isValidObjectId } = require('./catalog-helpers');
 const { epgService } = require('../services/epg-service');
 const { audit } = require('../services/audit-log');
 const { issuePlaybackToken, verifyPlaybackToken } = require('../services/playback-token');
@@ -21,9 +26,14 @@ const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
 
 async function getVerifiedXtreamSourceIds() {
+  // Sources that passed live playback verification (and are Active), OR that the
+  // operator explicitly marked customer-visible (catalog-only import decision —
+  // visible even while Inactive, since such sources cannot pass verification).
   return new Set((await XtreamSource.find({
-    status: 'Active',
-    verificationStatus: 'verified',
+    $or: [
+      { status: 'Active', verificationStatus: 'verified' },
+      { customerVisible: true },
+    ],
   }).distinct('_id')).map((id) => String(id)));
 }
 
@@ -78,10 +88,14 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
       ? { type: 'timeshift', days: null }
       : null;
   if (!user.channelListCode) return safe;
+  // Skip channels whose URL scheme the playback layer can't proxy (e.g. rtmp://,
+  // udp://) instead of letting one bad channel break the whole customer playlist.
+  if (source.channelUrl && !/^https?:\/\//i.test(String(source.channelUrl))) return safe;
   if (source.channelUrl) {
     const { token } = issuePlaybackToken({
       userId: String(user._id),
       channelListCode: user.channelListCode,
+      credentialVersion: Number(user.playbackCredentialVersion || 1),
       streamUrl: source.channelUrl,
       upstreamHeaders: {
         userAgent: source.activeUserAgent || undefined,
@@ -99,6 +113,7 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
         const { token } = issuePlaybackToken({
           userId: String(user._id),
           channelListCode: user.channelListCode,
+          credentialVersion: Number(user.playbackCredentialVersion || 1),
           streamUrl: alternate.streamUrl,
           upstreamHeaders: {
             userAgent: alternate.userAgent || undefined,
@@ -283,23 +298,102 @@ router.get('/playlist/:code/json', async (req, res) => {
 router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
   try {
     const channelRef = String(req.body?.channelId || '').trim();
+    const movieId = String(req.body?.movieId || '').trim();
+    const episodeId = String(req.body?.episodeId || '').trim();
     const slot = Number(req.body?.slot ?? 0);
     const catchupStartMs = Number(req.body?.catchupStartMs ?? 0);
     const catchupDurationMin = Math.min(Math.max(Number(req.body?.catchupDurationMin ?? 0), 1), 24 * 60);
     if (!Number.isFinite(catchupStartMs) || catchupStartMs < 0 || !Number.isFinite(catchupDurationMin)) {
       return res.status(400).json({ success: false, error: 'Invalid catch-up parameters' });
     }
-    if (!channelRef || channelRef.length > 200 || !Number.isInteger(slot) || slot < 0 || slot > 3) {
+
+    const hasChannelRef = Boolean(channelRef);
+    const hasVodRef = Boolean(movieId || episodeId);
+    if ((hasChannelRef && hasVodRef) || (!hasChannelRef && !hasVodRef)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Provide exactly one of channelId, movieId or episodeId',
+      });
+    }
+    if (!Number.isInteger(slot) || slot < 0 || slot > 3) {
       return res.status(400).json({ success: false, error: 'channelId and a valid slot are required' });
+    }
+    if (hasChannelRef && channelRef.length > 200) {
+      return res.status(400).json({ success: false, error: 'channelId is too long' });
     }
 
     const user = req.user;
-    const { isSubscriptionRequired, getActiveSubscription } = require('../services/subscription-service');
-    if (await isSubscriptionRequired() && user.role !== 'Admin' && !(await getActiveSubscription(user.id))) {
+    const playbackAccess = await checkPlaybackSubscription(String(user?.id || ''), user?.role);
+    if (!playbackAccess.allowed) {
       return res.status(403).json({
         success: false,
         error: 'Your subscription has expired. Activate a new code to continue watching.',
         code: 'SUBSCRIPTION_EXPIRED',
+      });
+    }
+
+    // ── VOD (movie or series episode) — same encrypted-token + proxy pipeline ──
+    if (playbackAccess.required && user.role !== 'Admin' && !playbackAccess.entitlement.allowVod) {
+      return res.status(403).json({
+        success: false,
+        error: 'Your subscription plan does not include VOD playback',
+        code: 'ENTITLEMENT_DENIED',
+      });
+    }
+    if (hasVodRef) {
+      let vodDoc = null;
+      let vodKind = 'movie';
+      if (movieId) {
+        if (!isValidObjectId(movieId)) {
+          return res.status(400).json({ success: false, error: 'Invalid movie id' });
+        }
+        vodDoc = await Movie.findOne({ _id: movieId, isActive: true }).lean();
+        vodKind = 'movie';
+      } else {
+        if (!isValidObjectId(episodeId)) {
+          return res.status(400).json({ success: false, error: 'Invalid episode id' });
+        }
+        vodDoc = await Episode.findOne({ _id: episodeId, isActive: { $ne: false } }).lean();
+        vodKind = 'episode';
+      }
+      if (!vodDoc) {
+        return res.status(404).json({ success: false, error: 'Content not found' });
+      }
+      if (!vodDoc.streamUrl) {
+        return res.status(404).json({ success: false, error: 'Content has no playable stream' });
+      }
+
+      const { token, expiresAt } = issuePlaybackToken({
+        userId: String(user.id),
+        channelListCode: String(user.channelListCode || ''),
+        credentialVersion: Number(user.playbackCredentialVersion || 1),
+        ...(req.device ? { deviceId: req.device.deviceId, deviceCredentialVersion: req.device.credentialVersion } : {}),
+        streamUrl: vodDoc.streamUrl,
+        upstreamHeaders: {},
+      });
+      const session = await registerStreamSession({
+        userId: String(user.id),
+        sessionId: token,
+        ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+      });
+      return res.json({
+        success: true,
+        data: {
+          playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`,
+          mimeType: inferPlaybackMimeType(vodDoc.streamUrl),
+          expiresAt,
+          slot: 0,
+          type: vodKind,
+          streamLimit: { max: session.max, active: session.active },
+        },
+      });
+    }
+
+    if (playbackAccess.required && user.role !== 'Admin' && !playbackAccess.entitlement.allowLive) {
+      return res.status(403).json({
+        success: false,
+        error: 'Your subscription plan does not include live playback',
+        code: 'ENTITLEMENT_DENIED',
       });
     }
 
@@ -377,6 +471,8 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     const { token, expiresAt } = issuePlaybackToken({
       userId: String(user.id),
       channelListCode: String(user.channelListCode || ''),
+      credentialVersion: Number(user.playbackCredentialVersion || 1),
+      ...(req.device ? { deviceId: req.device.deviceId, deviceCredentialVersion: req.device.credentialVersion } : {}),
       streamUrl,
       upstreamHeaders: {
         userAgent: slot === 0 ? channel.activeUserAgent : selectedAlternate?.userAgent,
@@ -453,13 +549,29 @@ router.get('/playback/:token', async (req, res) => {
       _id: payload.userId,
       channelListCode: payload.channelListCode,
       isActive: true,
-    }).select('_id channelListCode role');
+    }).select('_id channelListCode role playbackCredentialVersion codeRevokedAt');
     if (!user) return res.status(401).send('Playback authorization revoked');
+    if (payload.deviceId) {
+      const device = await Device.findOne({ userId: user._id, deviceId: payload.deviceId })
+        .select('_id credentialVersion credentialRevokedAt credentialExpiresAt')
+        .lean();
+      if (!device || device.credentialRevokedAt || (device.credentialExpiresAt && device.credentialExpiresAt.getTime() <= Date.now()) || Number(device.credentialVersion || 1) !== Number(payload.deviceCredentialVersion || 0)) {
+        return res.status(401).send('Device credential has been revoked');
+      }
+    }
+    if (Number(user.playbackCredentialVersion || 1) !== Number(payload.credentialVersion || 0)) {
+      return res.status(401).send('Playback credential has been revoked');
+    }
+    if (user.codeRevokedAt && payload.issuedAt <= new Date(user.codeRevokedAt).getTime()) {
+      return res.status(401).send('Playback credential has been revoked');
+    }
     if (!(await ensurePlaybackSubscription(user, res))) return;
 
     return proxyUpstreamStream(req, res, payload.streamUrl, {
       userId: String(user._id),
       channelListCode: user.channelListCode,
+      credentialVersion: Number(user.playbackCredentialVersion || 1),
+      ...(payload.deviceId ? { deviceId: payload.deviceId, deviceCredentialVersion: payload.deviceCredentialVersion } : {}),
     }, undefined, payload.upstreamHeaders);
   } catch (error) {
     console.error('Tokenized TV proxy error:', error);
@@ -483,7 +595,7 @@ router.get('/stream/:code', async (req, res) => {
       req,
       res,
       String(url),
-      { userId: String(user._id), channelListCode: user.channelListCode },
+      { userId: String(user._id), channelListCode: user.channelListCode, credentialVersion: Number(user.playbackCredentialVersion || 1) },
       req.params.code,
     );
   } catch (error) {
@@ -602,12 +714,14 @@ router.get('/epg/:code', async (req, res) => {
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
 
-    // Rendered XMLTV is stable for the cache window (matches Cache-Control below).
+    // Cache the generated XML internally, but never allow shared/proxy caching because
+    // the request URL contains a bearer-like channel credential.
     const cacheKey = `xml:${user.channelListCode}:${hours}`;
     const cachedXml = await epgCache.get(cacheKey);
     if (cachedXml) {
       res.setHeader('Content-Type', 'application/xml');
-      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('Pragma', 'no-cache');
       return res.send(cachedXml);
     }
 
@@ -654,7 +768,8 @@ router.get('/epg/:code/json', async (req, res) => {
     const cacheKey = `json:${user.channelListCode}:${hours}`;
     const cachedPayload = await epgCache.get(cacheKey);
     if (cachedPayload) {
-      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('Pragma', 'no-cache');
       return res.json(cachedPayload);
     }
 
@@ -694,7 +809,8 @@ router.get('/epg/:code/json', async (req, res) => {
     };
     await epgCache.set(cacheKey, payload);
 
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Pragma', 'no-cache');
     res.json(payload);
   } catch (error) {
     console.error('Error fetching EPG JSON:', error);
@@ -712,7 +828,7 @@ router.get('/epg/:code/json', async (req, res) => {
 // Request new pairing (TV generates PIN)
 router.post('/pairing/request', async (req, res) => {
   try {
-    const { deviceName, deviceModel } = req.body;
+    const { deviceName, deviceModel, deviceId } = req.body;
 
     // Get pairing expiry from environment (default 10 minutes)
     const expiryMinutes = parseInt(process.env.PAIRING_PIN_EXPIRY_MINUTES || '10', 10);
@@ -726,6 +842,7 @@ router.post('/pairing/request', async (req, res) => {
       pin,
       deviceName: deviceName || 'Android TV',
       deviceModel: deviceModel || 'Unknown Model',
+      deviceId: typeof deviceId === 'string' ? deviceId.trim().slice(0, 200) : '',
       status: 'pending',
       expiresAt,
       ipAddress: req.ip || req.socket?.remoteAddress,
@@ -844,6 +961,28 @@ router.post('/pairing/confirm', async (req, res) => {
     pairingRequest.status = 'completed';
     await pairingRequest.save();
 
+    // Register a device-bound credential. The pairing PIN remains the one-time
+    // bootstrap secret; the returned device credential is the long-lived bearer
+    // credential used by the app after pairing. Store only its SHA-256 hash.
+    let deviceCredential = null;
+    const normalizedDeviceId = String(pairingRequest.deviceId || '').trim();
+    if (normalizedDeviceId) {
+      const issued = issueDeviceCredential({ userId: String(user._id), deviceId: normalizedDeviceId });
+      const existing = await Device.findOne({ userId: user._id, deviceId: normalizedDeviceId }).exec();
+      const target = existing || new Device({ userId: user._id, deviceId: normalizedDeviceId });
+      target.name = pairingRequest.deviceName || target.name;
+      target.platform = 'android';
+      target.credentialHash = issued.tokenHash;
+      target.credentialExpiresAt = issued.expiresAt;
+      target.credentialRevokedAt = null;
+      target.credentialVersion = Number(target.credentialVersion || 1) + (existing ? 1 : 0);
+      target.lastSeenAt = new Date();
+      await target.save();
+      pairingRequest.deviceCredentialEncrypted = encryptDeviceCredential(issued.token);
+      await pairingRequest.save();
+      deviceCredential = issued.token;
+    }
+
     // Update user metadata
     user.metadata = user.metadata || {};
     user.metadata.lastPairedDevice = pairingRequest.deviceName;
@@ -874,6 +1013,7 @@ router.post('/pairing/confirm', async (req, res) => {
       user: {
         username: user.username,
         channelListCode: user.channelListCode,
+        deviceCredential,
         role: user.role,
       },
     });
@@ -933,11 +1073,18 @@ router.get('/pairing/status/:pin', async (req, res) => {
     // pairingStatusLimiter rate limit in server.js.
     if (pairingRequest.status === 'completed' && pairingRequest.userId) {
       const user = pairingRequest.userId;
+      const deviceCredential = decryptDeviceCredential(pairingRequest.deviceCredentialEncrypted || '');
+      // Device credential is a one-time delivery secret. Clear it immediately
+      // after reading so a repeated PIN poll cannot replay it. Keep channelListCode
+      // during the compatibility window for older APKs.
+      pairingRequest.deviceCredentialEncrypted = '';
+      await pairingRequest.save();
       return res.json({
         success: true,
         paired: true,
         status: 'completed',
         channelListCode: user.channelListCode,
+        deviceCredential: deviceCredential || undefined,
         message: 'Device paired successfully!',
       });
     }

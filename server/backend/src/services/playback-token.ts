@@ -8,6 +8,9 @@ export interface PlaybackTokenPayload {
   v: 1;
   userId: string;
   channelListCode: string;
+  credentialVersion: number;
+  deviceId?: string;
+  deviceCredentialVersion?: number;
   streamUrl: string;
   upstreamHeaders?: {
     userAgent?: string;
@@ -34,11 +37,19 @@ function sanitizeUpstreamHeaders(headers?: { userAgent?: string; referrer?: stri
 }
 
 function getKey(): Buffer {
-  const secret =
-    process.env.PLAYBACK_TOKEN_SECRET ||
-    process.env.JWT_ACCESS_SECRET ||
-    process.env.XTREAM_SECRET_KEY ||
-    'dzhoof-development-playback-secret';
+  // Playback tokens are bearer credentials. Never silently fall back to another
+  // application secret: rotating JWT/Xtream secrets must not accidentally rotate
+  // or expose the playback capability, and production must fail closed.
+  const secret = process.env.PLAYBACK_TOKEN_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('PLAYBACK_TOKEN_SECRET is required in production');
+    }
+    return crypto.createHash('sha256').update('dzhoof-development-playback-secret').digest();
+  }
+  if (secret.length < 32) {
+    throw new Error('PLAYBACK_TOKEN_SECRET must be at least 32 characters');
+  }
   return crypto.createHash('sha256').update(secret).digest();
 }
 
@@ -65,6 +76,9 @@ function validateStreamUrl(streamUrl: string): string {
 export function issuePlaybackToken(input: {
   userId: string;
   channelListCode: string;
+  credentialVersion?: number;
+  deviceId?: string;
+  deviceCredentialVersion?: number;
   streamUrl: string;
   upstreamHeaders?: {
     userAgent?: string;
@@ -79,6 +93,9 @@ export function issuePlaybackToken(input: {
     v: 1,
     userId: String(input.userId),
     channelListCode: String(input.channelListCode).trim().toUpperCase(),
+    credentialVersion: Math.max(1, Number(input.credentialVersion) || 1),
+    ...(input.deviceId ? { deviceId: String(input.deviceId).trim().slice(0, 200) } : {}),
+    ...(input.deviceCredentialVersion ? { deviceCredentialVersion: Math.max(1, Number(input.deviceCredentialVersion)) } : {}),
     streamUrl: validateStreamUrl(input.streamUrl),
     upstreamHeaders: sanitizeUpstreamHeaders(input.upstreamHeaders),
     issuedAt: now,
@@ -112,6 +129,11 @@ export function verifyPlaybackToken(token: string): PlaybackTokenPayload | null 
       payload.v !== 1 ||
       typeof payload.userId !== 'string' ||
       typeof payload.channelListCode !== 'string' ||
+      !Number.isInteger(payload.credentialVersion) ||
+      payload.credentialVersion < 1 ||
+      (payload.deviceId !== undefined && typeof payload.deviceId !== 'string') ||
+      (payload.deviceCredentialVersion !== undefined && (!Number.isInteger(payload.deviceCredentialVersion) || payload.deviceCredentialVersion < 1)) ||
+      (payload.deviceId !== undefined && payload.deviceCredentialVersion === undefined) ||
       typeof payload.streamUrl !== 'string' ||
       typeof payload.expiresAt !== 'number' ||
       payload.expiresAt <= Date.now()

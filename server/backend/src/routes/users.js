@@ -475,6 +475,7 @@ router.put('/:id/revoke-code', requireAuth, async (req, res) => {
     }
 
     user.codeRevokedAt = new Date();
+    user.playbackCredentialVersion = Number(user.playbackCredentialVersion || 1) + 1;
     await user.save();
 
     audit({
@@ -523,6 +524,7 @@ router.put('/:id/regenerate-code', requireAuth, async (req, res) => {
 
     // Revoke old code and generate new one
     user.channelListCode = await User.generateChannelListCode();
+    user.playbackCredentialVersion = Number(user.playbackCredentialVersion || 1) + 1;
     user.codeRevokedAt = null; // Clear revocation on the new code
     await user.save();
     audit({

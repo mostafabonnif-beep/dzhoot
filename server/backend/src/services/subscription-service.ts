@@ -186,7 +186,7 @@ export async function redeemCode(
 
   await recordRedemption(code, userId, deviceInfo?.deviceId, subscription._id, ip, 'SUCCESS');
 
-  const devicesUsed = await Device.countDocuments({ userId }).exec();
+  const devicesUsed = await Device.countDocuments({ userId, $or: [{ credentialRevokedAt: null }, { credentialRevokedAt: { $exists: false } }] }).exec();
   return {
     success: true,
     subscription,
@@ -206,7 +206,7 @@ export async function getUserSubscription(userId: string) {
     .lean()
     .exec();
   if (!subscription) {
-    const devicesUsed = await Device.countDocuments({ userId }).exec();
+    const devicesUsed = await Device.countDocuments({ userId, $or: [{ credentialRevokedAt: null }, { credentialRevokedAt: { $exists: false } }] }).exec();
     return { subscription: null, plan: null, devicesUsed, maxDevices: 0, devices: [] };
   }
 
@@ -258,7 +258,13 @@ export async function registerDevice(userId: string, info: DeviceInfo, maxDevice
       limit = plan?.maxDevices ?? 0;
     }
 
-    const devicesUsed = await Device.countDocuments({ userId }).exec();
+    const devicesUsed = await Device.countDocuments({
+      userId,
+      $or: [
+        { credentialRevokedAt: null },
+        { credentialRevokedAt: { $exists: false } },
+      ],
+    }).exec();
     if (limit > 0 && devicesUsed >= limit) {
       return {
         ok: false as const,
@@ -289,6 +295,17 @@ export async function registerDevice(userId: string, info: DeviceInfo, maxDevice
       throw error;
     }
   });
+}
+
+
+/** Revoke a registered device without deleting its audit/history record. */
+export async function revokeDevice(userId: string, deviceId: string) {
+  const device = await Device.findOne({ userId, deviceId: String(deviceId).trim() }).exec();
+  if (!device) return { ok: false as const, error: 'DEVICE_NOT_FOUND' };
+  device.credentialRevokedAt = new Date();
+  device.credentialVersion = Math.max(1, Number(device.credentialVersion || 1)) + 1;
+  await device.save();
+  return { ok: true as const, device };
 }
 
 /** Generate a batch of codes. Plaintext codes are returned exactly once. */
@@ -374,6 +391,8 @@ export async function isSubscriptionRequired(): Promise<boolean> {
 
   const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
   const doc = await AppSetting.findOne({ key: 'subscription_required' }).lean().exec();
+  // Production must fail closed if the gate was not explicitly configured.
+  if (process.env.NODE_ENV === 'production') return true;
   return doc ? !!doc.value : false;
 }
 
@@ -384,6 +403,7 @@ export async function getActiveSubscription(userId: string) {
     status: 'ACTIVE',
     expiresAt: { $gt: new Date() },
   })
+    .populate('planId', 'name durationDays maxDevices features status')
     .lean()
     .exec();
 }

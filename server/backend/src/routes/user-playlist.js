@@ -15,6 +15,7 @@ function tokenizeUserChannel(channel, user, baseUrl) {
     const { token } = issuePlaybackToken({
       userId: String(user._id),
       channelListCode: user.channelListCode,
+      credentialVersion: Number(user.playbackCredentialVersion || 1),
       streamUrl: source.channelUrl,
     });
     safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}`;
@@ -27,6 +28,7 @@ function tokenizeUserChannel(channel, user, baseUrl) {
       const { token } = issuePlaybackToken({
         userId: String(user._id),
         channelListCode: user.channelListCode,
+        credentialVersion: Number(user.playbackCredentialVersion || 1),
         streamUrl: alternate.streamUrl,
       });
       return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}` };

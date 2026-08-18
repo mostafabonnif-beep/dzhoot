@@ -1,13 +1,12 @@
 #!/bin/bash
 
-# FireVision IPTV - Deployment Test Script
-# Tests server endpoints after deployment
+# DZ HOOF - Deployment Test Script
+# Tests public server endpoints after deployment
 
 set -e
 
 # Configuration
-SERVER_URL="${SERVER_URL:-https://tv.cadnative.com}"
-API_KEY="${API_KEY:-}"
+SERVER_URL="${SERVER_URL:-}"
 
 # Colors
 RED='\033[0;31m'
@@ -32,12 +31,12 @@ print_test() {
 
 print_success() {
     echo -e "${GREEN}✓ $1${NC}"
-    ((TESTS_PASSED++))
+    TESTS_PASSED=$((TESTS_PASSED + 1))
 }
 
 print_error() {
     echo -e "${RED}✗ $1${NC}"
-    ((TESTS_FAILED++))
+    TESTS_FAILED=$((TESTS_FAILED + 1))
 }
 
 test_endpoint() {
@@ -113,9 +112,13 @@ print_summary() {
 
 # Main test execution
 main() {
-    clear
+    if [ -z "$SERVER_URL" ]; then
+        echo "Set SERVER_URL to the deployed HTTPS origin before running this script." >&2
+        echo "Example: SERVER_URL=https://ld-11.net ./scripts/test-deployment.sh" >&2
+        exit 2
+    fi
 
-    print_header "FireVision IPTV Deployment Test"
+    print_header "DZ HOOF Deployment Test"
     echo ""
     echo "Server URL: $SERVER_URL"
     echo ""
@@ -147,19 +150,13 @@ main() {
     test_json_response "MongoDB Connection" "$SERVER_URL/health" "mongodb"
     test_json_response "Channel Count" "$SERVER_URL/api/v1/channels" "count"
 
-    # Test 4: Admin Endpoints (if API key provided)
-    if [ -n "$API_KEY" ]; then
-        print_header "4. Admin API Tests (with API Key)"
-        test_endpoint "Admin Stats" "$SERVER_URL/api/v1/admin/stats" "200" "-H \"X-API-Key: $API_KEY\""
-        test_endpoint "Admin Channels List" "$SERVER_URL/api/v1/admin/channels" "200" "-H \"X-API-Key: $API_KEY\""
-    else
-        print_header "4. Admin API Tests"
-        echo -e "${YELLOW}Skipping admin tests (no API key provided)${NC}"
-        echo "Set API_KEY environment variable to test admin endpoints:"
-        echo "  export API_KEY=your-api-key"
-        echo "  ./scripts/test-deployment.sh"
-        echo ""
-    fi
+    # Test 4: Admin endpoints require the current session/JWT flow and are not
+    # probed with the removed X-API-Key convention. Verify them after login via
+    # the admin UI or an explicitly generated Bearer token.
+    print_header "4. Admin API Tests"
+    echo -e "${YELLOW}Skipped: admin routes require session/JWT authentication.${NC}"
+    echo "Verify admin login and provider management from the dashboard after deployment."
+    echo ""
 
     # Test 5: Invalid Endpoints (should return 404)
     print_header "5. Error Handling Tests"
@@ -206,24 +203,20 @@ main() {
 
 # Show help
 if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
-    echo "FireVision IPTV Deployment Test Script"
+    echo "DZ HOOF Deployment Test Script"
     echo ""
     echo "Usage:"
     echo "  ./scripts/test-deployment.sh"
     echo ""
     echo "Environment Variables:"
-    echo "  SERVER_URL  - Server URL to test (default: https://tv.cadnative.com)"
-    echo "  API_KEY     - Admin API key for testing admin endpoints (optional)"
+    echo "  SERVER_URL  - Deployed HTTPS origin to test (required)"
     echo ""
     echo "Examples:"
-    echo "  # Test default server"
-    echo "  ./scripts/test-deployment.sh"
+    echo "  # Test the deployed domain"
+    echo "  SERVER_URL=https://ld-11.net ./scripts/test-deployment.sh"
     echo ""
-    echo "  # Test local server"
-    echo "  SERVER_URL=http://localhost:8009 ./scripts/test-deployment.sh"
-    echo ""
-    echo "  # Test with admin API key"
-    echo "  API_KEY=your-key ./scripts/test-deployment.sh"
+    echo "  # Test a local instance"
+    echo "  SERVER_URL=http://localhost:3000 ./scripts/test-deployment.sh"
     echo ""
     exit 0
 fi

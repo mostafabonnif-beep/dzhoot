@@ -83,7 +83,7 @@
 
 #### 2.8 بقايا هوية FireVision وخلط أسماء الحزم
 
-ما زالت أسماء مثل `@firevision/backend` و`@firevision/frontend` و`firevision-iptv` موجودة في ملفات الحزم، وتظهر بقايا FireVision في README وMakefile وAndroid README وملفات التغيير وبعض أسماء الأصناف. هذا لا يوقف التشغيل، لكنه يخلق التباسًا في الدعم، ويجعل المستخدم يصل إلى روابط upstream أو يرى اسم منتج مختلف.[1] [20] [21]
+ما زالت أسماء مثل `@dzhoof/backend` و`@dzhoof/frontend` و`firevision-iptv` موجودة في ملفات الحزم، وتظهر بقايا FireVision في README وMakefile وAndroid README وملفات التغيير وبعض أسماء الأصناف. هذا لا يوقف التشغيل، لكنه يخلق التباسًا في الدعم، ويجعل المستخدم يصل إلى روابط upstream أو يرى اسم منتج مختلف.[1] [20] [21]
 
 **الإجراء المطلوب:** اعتماد قاموس رسمي للأسماء، ثم تنفيذ rename على مراحل: أسماء الحزم الداخلية، عنوان التطبيق، روابط GitHub، Sentry project، Makefile، changelog، Android navigation، ثم الوثائق. يجب عدم تغيير package ID أو مسارات البيانات بلا خطة migration، لأن ذلك قد يكسر التحديثات أو التخزين المحلي.
 
@@ -116,7 +116,7 @@
 | الفحص | النتيجة | الملاحظة |
 |---|---|---|
 | `npm ci --ignore-scripts` | نجح | 1493 حزمة، مع تحذيرات deprecated |
-| `npm run typecheck` | نجح | بعد بناء `@firevision/shared` |
+| `npm run typecheck` | نجح | بعد بناء `@dzhoof/shared` |
 | `npm run lint` | نجح مع 237 تحذيرًا | لا توجد أخطاء، لكن كثرة `no-explicit-any` تستحق خطة تنظيف |
 | `npm run build` | نجح | Backend وFrontend؛ ظهرت تحذيرات Sentry و`<img>` و`punycode` |
 | Backend tests | 147/152 ناجحة | مجموعة stream-session فشلت بسبب setup/Mongo timeout |

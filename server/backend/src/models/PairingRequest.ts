@@ -1,6 +1,6 @@
 import { randomInt } from 'crypto';
 import mongoose, { Schema, Model } from 'mongoose';
-import { IPairingRequestDocument, IPairingRequestModel } from '@firevision/shared';
+import { IPairingRequestDocument, IPairingRequestModel } from '@dzhoof/shared';
 
 const pairingRequestSchema = new Schema<IPairingRequestDocument>(
   {
@@ -16,6 +16,8 @@ const pairingRequestSchema = new Schema<IPairingRequestDocument>(
       type: String,
       default: 'Unknown Model',
     },
+    deviceId: { type: String, trim: true, maxlength: 200, default: '' },
+    deviceCredentialEncrypted: { type: String, maxlength: 4096, default: '' },
     status: {
       type: String,
       enum: ['pending', 'completed', 'expired'],

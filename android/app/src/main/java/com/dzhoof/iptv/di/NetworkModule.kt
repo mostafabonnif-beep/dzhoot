@@ -65,12 +65,16 @@ object NetworkModule {
                         HttpLoggingInterceptor.Level.NONE
                     }
                     redactHeader("X-TV-Code")
+                    redactHeader("X-Device-Token")
                 }
             )
 
             .addInterceptor { chain ->
                 val original = chain.request()
-                val apiHost = Uri.parse(BuildConfig.API_BASE_URL).host
+                // Use the runtime server URL (user-settable in Settings/pairing,
+                // falls back to the build-time default) so the app keeps working
+                // when the server endpoint changes without an APK rebuild.
+                val apiHost = Uri.parse(AppPreferences.getServerUrl(context)).host
                 val isManagedApiRequest = apiHost != null && original.url.host == apiHost
                 val isPlaybackRequest = original.url.encodedPath.contains("/api/v1/tv/playback/")
                 val builder = original.newBuilder()
@@ -84,8 +88,10 @@ object NetworkModule {
                 // the server-side token/auth contract.
                 if (isManagedApiRequest) {
                     val tvCode = AppPreferences.getTvCode(context)
+                    val deviceToken = AppPreferences.getDeviceToken(context)
                     val sessionId = AppPreferences.getSessionId(context)
                     builder.addHeader("X-TV-Code", tvCode)
+                    if (deviceToken.isNotBlank()) builder.addHeader("X-Device-Token", deviceToken)
                     if (sessionId.isNotBlank()) builder.addHeader("X-Session-Id", sessionId)
                     if (original.body != null) builder.addHeader("Content-Type", "application/json")
                 }
@@ -108,9 +114,13 @@ object NetworkModule {
      */
     @Provides
     @Singleton
-    fun provideRetrofit(okHttpClient: OkHttpClient): Retrofit {
+    fun provideRetrofit(
+        okHttpClient: OkHttpClient,
+        @ApplicationContext context: Context,
+    ): Retrofit {
+        // Runtime server URL (user-settable, defaults to the build-time API URL).
         return Retrofit.Builder()
-            .baseUrl(BuildConfig.API_BASE_URL)
+            .baseUrl(AppPreferences.getServerUrl(context))
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()

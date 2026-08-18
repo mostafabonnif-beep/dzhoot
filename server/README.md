@@ -79,7 +79,7 @@ cd dzhoot/server
 cp .env.example .env
 ```
 
-Edit `.env` — at minimum set your admin credentials and JWT secrets:
+Edit `.env` — for development set admin credentials and JWT secrets. For production, use `scripts/manage.sh setup` or set all encryption and playback secrets described in `.env.production.example`:
 
 ```env
 SUPER_ADMIN_USERNAME=admin
@@ -96,21 +96,20 @@ JWT_REFRESH_SECRET=<different-random-32-char-string>
 docker compose up -d
 
 # Admin panel → http://localhost:3001
-# API         → http://localhost:3000
+# API         → http://localhost:8009
 ```
 
 For production deployment, see [Self-Hosting Guide](docs/workflow/SELF_HOSTING_GUIDE.md).
 
 ---
 
-x
 
 ## Architecture
 
 ```
 ┌──────────────┐     ┌──────────────┐
 │  Android App │     │  Next.js     │
-│  (Fire TV)   │     │  Frontend    │
+│ (Android TV) │     │  Frontend    │
 └──────┬───────┘     └──────┬───────┘
        │                    │
        └────────┬───────────┘
@@ -131,7 +130,7 @@ x
 |              |                                              |
 | ------------ | -------------------------------------------- |
 | **Backend**  | Express.js, TypeScript, Mongoose             |
-| **Frontend** | Next.js 14, Tailwind CSS, shadcn/ui          |
+| **Frontend** | Next.js 16, Tailwind CSS, shadcn/ui          |
 | **State**    | TanStack Query + Zustand                     |
 | **Database** | MongoDB 7                                    |
 | **Cache**    | Redis 7 (optional — graceful fallback)       |

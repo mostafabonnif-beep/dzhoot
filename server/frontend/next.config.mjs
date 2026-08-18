@@ -5,6 +5,7 @@ const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8009';
 
 const nextConfig = {
   output: 'standalone',
+  allowedDevOrigins: ['127.0.0.1', 'localhost', '169.254.0.21'],
   experimental: {
     webpackMemoryOptimizations: true,
   },

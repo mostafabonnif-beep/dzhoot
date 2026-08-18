@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import Session from '../models/Session';
 import User from '../models/User';
+import { verifyDeviceCredential } from '../services/device-credential';
 
 /**
  * Middleware that authenticates via session OR TV channel list code.
@@ -12,6 +13,26 @@ import User from '../models/User';
  */
 const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // 0. Prefer a device-bound credential issued by the pairing flow.
+    // It is long, random, hashed at rest, and can be revoked independently.
+    const deviceToken = req.headers['x-device-token'] as string | undefined;
+    if (deviceToken) {
+      const device = await verifyDeviceCredential(deviceToken);
+      if (!device) return res.status(401).json({ success: false, error: 'Invalid or expired device credential' });
+      const user = await User.findOne({ _id: device.userId, isActive: true }).select(
+        'username email role channels channelListCode playbackCredentialVersion isActive emailVerified allCatalog',
+      ) as any;
+      if (!user) return res.status(401).json({ success: false, error: 'User account is inactive' });
+      req.user = {
+        id: user._id, username: user.username, email: user.email, role: user.role,
+        channels: user.channels || [], channelListCode: user.channelListCode, isActive: user.isActive,
+        emailVerified: user.emailVerified ?? false, allCatalog: user.allCatalog === true,
+        playbackCredentialVersion: Number(user.playbackCredentialVersion || 1),
+      };
+      req.device = { id: String(device._id), deviceId: device.deviceId, credentialVersion: Number(device.credentialVersion || 1) };
+      return next();
+    }
+
     // 1. Try TV code auth first
     const tvCode = req.headers['x-tv-code'] as string | undefined;
     if (tvCode) {
@@ -19,7 +40,7 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
         channelListCode: tvCode.toUpperCase(),
         isActive: true,
       }).select(
-        'username email role channels channelListCode isActive emailVerified allCatalog',
+        'username email role channels channelListCode playbackCredentialVersion isActive emailVerified allCatalog',
       )) as any;
 
       if (user) {
@@ -33,6 +54,7 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
           isActive: user.isActive,
           emailVerified: user.emailVerified ?? false,
           allCatalog: user.allCatalog === true,
+          playbackCredentialVersion: Number(user.playbackCredentialVersion || 1),
         };
         return next();
       }
@@ -54,7 +76,7 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
 
     const session = await Session.findOne({ sessionId }).populate(
       'userId',
-      'username email role channels channelListCode isActive emailVerified allCatalog',
+      'username email role channels channelListCode playbackCredentialVersion isActive emailVerified allCatalog',
     );
 
     if (!session) {
@@ -93,6 +115,7 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
       isActive: user.isActive,
       emailVerified: user.emailVerified,
       allCatalog: user.allCatalog === true,
+      playbackCredentialVersion: Number(user.playbackCredentialVersion || 1),
     };
     req.sessionId = sessionId;
 

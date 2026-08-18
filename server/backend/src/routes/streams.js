@@ -48,6 +48,11 @@ router.post('/authorize', async (req, res) => {
     const isAdmin = req.user?.role === 'Admin';
     const subscriptionRequired = playbackAccess.required;
     const subscription = playbackAccess.subscription;
+    const entitlement = playbackAccess.entitlement;
+    const contentEntitlementAllowed = contentType === 'LIVE' ? entitlement.allowLive : entitlement.allowVod;
+    if (playbackAccess.required && !isAdmin && !contentEntitlementAllowed) {
+      return res.status(403).json({ success: false, error: 'Your subscription plan does not include this content type', code: 'ENTITLEMENT_DENIED' });
+    }
     if (!playbackAccess.allowed) {
       return res.status(req.user ? 403 : 401).json({
         success: false,
@@ -113,6 +118,8 @@ router.post('/authorize', async (req, res) => {
     const { token, expiresAt } = issuePlaybackToken({
       userId: String(req.user.id),
       channelListCode,
+      credentialVersion: Number(req.user.playbackCredentialVersion || 1),
+      ...(req.device ? { deviceId: req.device.deviceId, deviceCredentialVersion: req.device.credentialVersion } : {}),
       streamUrl: url,
     });
     const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`;
@@ -122,6 +129,7 @@ router.post('/authorize', async (req, res) => {
       userId: String(req.user.id),
       sessionId: token,
       ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+      maxStreams: isAdmin ? undefined : entitlement.maxConcurrentStreams || undefined,
     });
 
     return res.json({
@@ -135,7 +143,7 @@ router.post('/authorize', async (req, res) => {
         subscriptionRequired,
         streamLimit: { max: session.max, active: session.active },
         subscription: subscription
-          ? { status: subscription.status, expiresAt: subscription.expiresAt }
+          ? { status: subscription.status, expiresAt: subscription.expiresAt, plan: playbackAccess.plan ? { id: String(playbackAccess.plan._id || playbackAccess.plan.id || ''), name: playbackAccess.plan.name } : null }
           : null,
       },
     });

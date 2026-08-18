@@ -98,7 +98,8 @@ class PairingViewModel @Inject constructor(
                 val baseUrl = AppPreferences.getServerUrl(context)
                 val model = Build.MODEL?.takeIf { it.isNotBlank() } ?: "Android device"
                 val manufacturer = Build.MANUFACTURER?.takeIf { it.isNotBlank() } ?: "Android"
-                val requestBody = """{"deviceName":"${model.toJsonStringValue()}","deviceModel":"${"$manufacturer $model".toJsonStringValue()}"}"""
+                val deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "dzhoof-device"
+                val requestBody = """{"deviceName":"${model.toJsonStringValue()}","deviceModel":"${"$manufacturer $model".toJsonStringValue()}","deviceId":"${deviceId.toJsonStringValue()}"}"""
 
                 val response = PinnedHttpClient.post(
                     "$baseUrl/api/v1/tv/pairing/request",
@@ -208,8 +209,9 @@ class PairingViewModel @Inject constructor(
 
                             if (paired && status == "completed") {
                                 val channelListCode = json.getString("channelListCode")
+                                val deviceCredential = json.optString("deviceCredential", "")
                                 val username = json.optString("username", "User")
-                                onPairingSuccess(channelListCode, username)
+                                onPairingSuccess(channelListCode, username, deviceCredential)
                                 return@launch
                             } else if (status == "expired") {
                                 showError("انتهت صلاحية PIN. أنشئ رمزًا جديدًا.")
@@ -249,11 +251,12 @@ class PairingViewModel @Inject constructor(
         }
     }
 
-    private fun onPairingSuccess(channelListCode: String, username: String) {
+    private fun onPairingSuccess(channelListCode: String, username: String, deviceCredential: String = "") {
         pollingJob?.cancel()
         countdownJob?.cancel()
 
         AppPreferences.setTvCode(context, channelListCode)
+        if (deviceCredential.isNotBlank()) AppPreferences.setDeviceToken(context, deviceCredential)
 
         _uiState.update {
             it.copy(

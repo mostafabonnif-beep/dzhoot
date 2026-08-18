@@ -10,6 +10,10 @@ export interface IDeviceDocument extends Document {
   lastSeenAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  credentialHash?: string;
+  credentialExpiresAt?: Date;
+  credentialRevokedAt?: Date | null;
+  credentialVersion: number;
 }
 
 
@@ -52,6 +56,10 @@ const deviceSchema = new Schema<IDeviceDocument>(
       type: Date,
       default: Date.now,
     },
+    credentialHash: { type: String, unique: true, sparse: true, select: false },
+    credentialExpiresAt: { type: Date, default: null },
+    credentialRevokedAt: { type: Date, default: null },
+    credentialVersion: { type: Number, default: 1, min: 1 },
   },
   {
     timestamps: true,

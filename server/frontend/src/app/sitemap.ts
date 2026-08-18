@@ -1,21 +1,27 @@
-import { MetadataRoute } from 'next';
+import type { MetadataRoute } from 'next';
+
+const siteUrl = (
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  process.env.PUBLIC_BASE_URL ||
+  'https://ld-11.net'
+).replace(/\/+$/, '');
 
 export default function sitemap(): MetadataRoute.Sitemap {
   return [
     {
-      url: 'https://tv.cadnative.com',
+      url: siteUrl,
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 1,
     },
     {
-      url: 'https://tv.cadnative.com/terms',
+      url: `${siteUrl}/terms`,
       lastModified: new Date(),
       changeFrequency: 'yearly',
       priority: 0.3,
     },
     {
-      url: 'https://tv.cadnative.com/privacy',
+      url: `${siteUrl}/privacy`,
       lastModified: new Date(),
       changeFrequency: 'yearly',
       priority: 0.3,

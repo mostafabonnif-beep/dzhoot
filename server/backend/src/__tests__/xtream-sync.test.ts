@@ -6,7 +6,7 @@ import Movie from '../models/Movie';
 import Series from '../models/Series';
 import Season from '../models/Season';
 import Episode from '../models/Episode';
-import { diagnoseXtreamSource, verifyXtreamSource, syncXtreamSource, buildXtreamApiUrl } from '../services/xtream-service';
+import { diagnoseXtreamSource, verifyXtreamSource, syncXtreamSource, buildXtreamApiUrl, ensureSeriesSeasons } from '../services/xtream-service';
 import { probeStream } from '../services/stream-prober';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 
@@ -247,11 +247,18 @@ describe('xtream-service', () => {
     expect(movies[0].title).toBe('Inception');
     expect(movies[0].rating).toBe(8.8);
 
-    // Series + seasons + episodes
+    // Series are imported WITHOUT seasons/episodes (lazy loading by design —
+    // episodes are fetched on demand when a season is opened).
     const seriesList = await Series.find({ sourceId: source._id }).lean();
     expect(seriesList).toHaveLength(1);
-    const seasons = await Season.find({ seriesId: seriesList[0]._id }).lean();
-    expect(seasons).toHaveLength(1);
+    const seasonsBefore = await Season.find({ seriesId: seriesList[0]._id }).lean();
+    expect(seasonsBefore).toHaveLength(0);
+    const episodesBefore = await Episode.find({ seriesId: seriesList[0]._id }).lean();
+    expect(episodesBefore).toHaveLength(0);
+
+    // Lazy fetch on demand populates seasons + episodes from the panel.
+    const fetchedSeasons = await ensureSeriesSeasons(String(seriesList[0]._id));
+    expect(fetchedSeasons).toHaveLength(1);
     const episodes = await Episode.find({ seriesId: seriesList[0]._id }).sort({ episodeNumber: 1 }).lean();
     expect(episodes).toHaveLength(2);
     expect(episodes[0].streamUrl).toBe(`${SERVER}/series/${USER}/${PASS}/30101.mp4`);

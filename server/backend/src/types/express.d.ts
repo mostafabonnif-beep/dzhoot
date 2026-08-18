@@ -10,8 +10,10 @@ declare namespace Express {
       isActive: boolean;
       emailVerified: boolean;
       allCatalog?: boolean;
+      playbackCredentialVersion?: number;
     };
     sessionId?: string;
+    device?: { id: string; deviceId: string; credentialVersion: number };
     jwt?: {
       sub: string;
       role: string;
