@@ -546,21 +546,26 @@ app.get('/health/ready', (req, res) => {
   });
 });
 
-// Health check. Add ?details=true for non-sensitive source, EPG and scheduler metrics.
+// Health check. The public payload is intentionally minimal (audit-remediation-v1):
+// connectivity/uptime details are operational data and are only exposed with
+// ?details=true (for internal monitoring); the anonymous endpoint shows just
+// enough to confirm the service is alive and which build is running.
 app.get('/health', async (req, res) => {
   const healthy = mongoose.connection.readyState === 1;
   const response = {
     status: healthy ? 'ok' : 'degraded',
-    uptime: process.uptime(),
     version: process.env.APP_VERSION || '0.0.0',
-    mongodb: healthy ? 'connected' : 'disconnected',
-    redis: isRedisReady() ? 'connected' : 'disconnected',
-    alertingConfigured: Boolean(String(process.env.ALERT_WEBHOOK_URL || '').trim()),
     requestId: req.requestId,
   };
   if (req.query.details === 'true') {
     try {
-      response.details = await collectHealthDetails();
+      response.details = {
+        uptime: process.uptime(),
+        mongodb: healthy ? 'connected' : 'disconnected',
+        redis: isRedisReady() ? 'connected' : 'disconnected',
+        alertingConfigured: Boolean(String(process.env.ALERT_WEBHOOK_URL || '').trim()),
+        ...(await collectHealthDetails()),
+      };
     } catch (error) {
       response.details = { error: redactSensitiveText(error) };
       response.status = 'degraded';

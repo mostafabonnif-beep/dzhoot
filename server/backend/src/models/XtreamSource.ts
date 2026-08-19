@@ -10,6 +10,9 @@ export interface IXtreamSourceDocument extends Document {
   playbackFormat?: 'm3u8' | 'ts' | null;
   syncStatus: 'idle' | 'syncing' | 'error';
   lastSyncAt?: Date | null;
+  catalogOnlyImportedAt?: Date | null;
+  customerVisible?: boolean;
+  directPlayback?: boolean;
   lastError?: string | null;
   lastDiagnosticsAt?: Date | null;
   verifiedAt?: Date | null;
@@ -39,6 +42,9 @@ const xtreamSourceSchema = new Schema<IXtreamSourceDocument>(
     },
     syncStatus: { type: String, enum: ['idle', 'syncing', 'error'], default: 'idle' },
     lastSyncAt: { type: Date, default: null },
+    catalogOnlyImportedAt: { type: Date, default: null },
+    customerVisible: { type: Boolean, default: false },
+    directPlayback: { type: Boolean, default: false },
     lastError: { type: String, default: null },
     lastDiagnosticsAt: { type: Date, default: null },
     verifiedAt: { type: Date, default: null },

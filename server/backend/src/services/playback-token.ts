@@ -13,6 +13,9 @@ export interface PlaybackTokenPayload {
     userAgent?: string;
     referrer?: string;
   };
+  /** When true, the playback endpoint responds with a 302 redirect to the raw
+   *  upstream URL instead of proxying the bytes (operator opt-in per source). */
+  direct?: boolean;
   issuedAt: number;
   expiresAt: number;
   nonce: string;
@@ -70,6 +73,7 @@ export function issuePlaybackToken(input: {
     userAgent?: string;
     referrer?: string;
   };
+  direct?: boolean;
   ttlMs?: number;
 }): { token: string; expiresAt: number } {
   const now = Date.now();
@@ -81,6 +85,7 @@ export function issuePlaybackToken(input: {
     channelListCode: String(input.channelListCode).trim().toUpperCase(),
     streamUrl: validateStreamUrl(input.streamUrl),
     upstreamHeaders: sanitizeUpstreamHeaders(input.upstreamHeaders),
+    direct: input.direct === true || undefined,
     issuedAt: now,
     expiresAt: now + ttlMs,
     nonce: crypto.randomBytes(16).toString('hex'),

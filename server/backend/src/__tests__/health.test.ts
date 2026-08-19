@@ -27,12 +27,15 @@ describe('health endpoints', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('ok');
-    expect(typeof response.body.uptime).toBe('number');
-    expect(response.body.mongodb).toBe('connected');
     expect(response.body).toHaveProperty('version');
+    expect(response.body).toHaveProperty('requestId');
+    // Operational details are not part of the public payload (audit-remediation-v1).
+    expect(response.body).not.toHaveProperty('mongodb');
+    expect(response.body).not.toHaveProperty('redis');
+    expect(response.body).not.toHaveProperty('uptime');
   });
 
-  it('GET /health?details=true includes non-sensitive operational details', async () => {
+  it('GET /health?details=true includes operational details', async () => {
     const response = await request(app).get('/health?details=true');
 
     expect(response.status).toBe(200);
@@ -45,5 +48,8 @@ describe('health endpoints', () => {
         alerting: expect.any(Object),
       }),
     );
+    expect(response.body.details).toHaveProperty('mongodb');
+    expect(response.body.details).toHaveProperty('redis');
+    expect(response.body.details).toHaveProperty('uptime');
   });
 });

@@ -1,6 +1,6 @@
 import { randomInt } from 'crypto';
 import mongoose, { Schema, Model } from 'mongoose';
-import { IPairingRequestDocument, IPairingRequestModel } from '@firevision/shared';
+import { IPairingRequestDocument, IPairingRequestModel } from '@dzhoof/shared';
 
 const pairingRequestSchema = new Schema<IPairingRequestDocument>(
   {
