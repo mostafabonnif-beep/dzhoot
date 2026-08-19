@@ -4,7 +4,7 @@ const axios = require('axios');
 
 // GitHub APK update routes
 
-const GITHUB_OWNER = process.env.GH_APP_OWNER || 'merci1994dz';
+const GITHUB_OWNER = process.env.GH_APP_OWNER || 'mostafabonnif-beep';
 const GITHUB_REPO = process.env.GH_APP_REPO || 'dzhoot';
 const GITHUB_APK_PATTERN = process.env.GH_APP_APK_PATTERN || '.apk';
 const GITHUB_TOKEN = process.env.GH_APP_TOKEN;
@@ -25,6 +25,15 @@ function compareVersions(left, right) {
     if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) - (b[index] || 0);
   }
   return 0;
+}
+
+// Android uses versionCode = major * 10000 + minor * 100 + patch (for example,
+// 1.0.5 becomes 10005). GitHub release tags carry the semantic version, so map
+// them to the same scale before deciding whether an update is available.
+function versionNameToCode(version) {
+  const parts = normalizeVersion(version).split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const [major = 0, minor = 0, patch = 0] = parts;
+  return major * 10000 + minor * 100 + patch;
 }
 
 async function fetchLatestRelease() {
@@ -80,8 +89,8 @@ router.get('/version', async (req, res) => {
     }
 
     const latestVersionName = normalizeVersion(release.tag_name || release.name || APP_VERSION);
-    const latestVersionCode = Number.parseInt(latestVersionName.split('.')[0], 10) || currentVersionCode;
-    const updateAvailable = latestVersionCode > currentVersionCode || compareVersions(latestVersionName, APP_VERSION) > 0;
+    const latestVersionCode = versionNameToCode(latestVersionName);
+    const updateAvailable = latestVersionCode > currentVersionCode;
 
     return res.json({
       success: true,
@@ -243,3 +252,4 @@ router.get('/demo-code', (req, res) => {
 });
 
 module.exports = router;
+module.exports._private = { normalizeVersion, compareVersions, versionNameToCode };
