@@ -106,7 +106,7 @@ fun EmptyState(
                         .onFocusChanged { isFocused = it.isFocused }
                 ) {
                     Text(
-                        text = "Try Again",
+                        text = "إعادة المحاولة",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary

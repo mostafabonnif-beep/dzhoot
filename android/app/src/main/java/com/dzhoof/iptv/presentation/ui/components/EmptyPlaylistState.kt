@@ -58,12 +58,12 @@ fun EmptyPlaylistState(
         ) {
             Icon(
                 imageVector = Icons.Default.LiveTv,
-                contentDescription = "Empty playlist",
+                contentDescription = "قائمة القنوات فارغة",
                 tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f),
                 modifier = Modifier.size(48.dp)
             )
             Text(
-                text = "Your channel list is empty",
+                text = "لا توجد قنوات متاحة لهذا الحساب",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onBackground,
                 textAlign = TextAlign.Center
@@ -72,7 +72,7 @@ fun EmptyPlaylistState(
             if (isMobile && channelManagerUrl.isNotEmpty()) {
                 // Mobile: show button to open channel manager in browser
                 Text(
-                    text = "Add channels to your playlist to start watching",
+                    text = "فعّل خطة تتضمن الكتالوج أو أضف قنواتك المصرّح بها للبدء بالمشاهدة",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -114,7 +114,7 @@ fun EmptyPlaylistState(
             } else {
                 // TV: show QR code
                 Text(
-                    text = "Scan the QR code to learn how to add channels",
+                    text = "امسح رمز QR لمعرفة طريقة إضافة القنوات",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -124,14 +124,14 @@ fun EmptyPlaylistState(
                     Spacer(modifier = Modifier.height(8.dp))
                     ThemeAwareQrCode(
                         bitmap = qrCodeBitmap,
-                        contentDescription = "QR code — how to add channels"
+                        contentDescription = "رمز QR — طريقة إضافة القنوات"
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                 }
             }
 
             Text(
-                text = "Add channels on the web, then press Refresh",
+                text = "أضف القنوات من الويب، ثم اضغط تحديث",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
@@ -160,7 +160,7 @@ fun EmptyPlaylistState(
                     .onFocusChanged { isFocused = it.isFocused }
             ) {
                 Text(
-                    text = "Refresh",
+                    text = "تحديث",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary

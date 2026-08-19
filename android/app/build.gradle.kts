@@ -33,11 +33,11 @@ android {
         targetSdk = 34
         // Official release line. Keep the code greater than legacy builds so
         // tested production updates can install cleanly on existing devices.
-        versionCode = 10002
+        versionCode = 10003
         versionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
-            "1.0.2"
+            "1.0.3"
         }
         
         // API Base URL configuration — overridable at build time via the
@@ -250,7 +250,9 @@ tasks.withType<Test> {
 }
 
 tasks.register<JacocoReport>("jacocoTestReport") {
-    dependsOn(tasks.named("testDebugUnitTest"))
+    // Product flavors create tasks such as testStagingDevUnitTest; a plain
+    // testDebugUnitTest task does not exist in this project.
+    dependsOn(tasks.matching { it.name.startsWith("test") && it.name.endsWith("UnitTest") })
 
     reports {
         xml.required.set(true)
