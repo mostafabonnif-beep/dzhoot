@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.domain.service.ScanProgress
 import com.dzhoof.iptv.presentation.model.SettingsUiState
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
@@ -317,7 +318,7 @@ private fun SectionContent(
             modifier = modifier
         )
         SettingsSection.About -> AboutSection(
-            appVersion = uiState.appVersion,
+            appVersion = "${uiState.appVersion} · ${BuildConfig.RELEASE_CHANNEL}",
             isChecking = uiState.isCheckingForUpdate,
             updateInfo = uiState.updateInfo,
             updateChecked = uiState.updateChecked,
