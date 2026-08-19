@@ -66,10 +66,10 @@ BUILD_TAG="v$(grep -E '^APP_VERSION=' "$ENV_FILE" | cut -d= -f2- || echo 1.0.1)-
 OLD_API="$(grep -E '^DOCKER_IMAGE=' "$ENV_FILE" | cut -d= -f2-)"
 OLD_FE="$(grep -E '^DOCKER_FRONTEND_IMAGE=' "$ENV_FILE" | cut -d= -f2-)"
 say "previous images: ${OLD_API:-<unset>} / ${OLD_FE:-<unset>} (kept for rollback)"
-run "build api" docker build -t "dzhoof-api:${BUILD_TAG}" .
-run "tag api current" docker tag "dzhoof-api:${BUILD_TAG}" "dzhoof-api:current"
-run "build frontend" docker build -f Dockerfile.frontend -t "dzhoof-frontend:${BUILD_TAG}" .
-run "tag frontend current" docker tag "dzhoof-frontend:${BUILD_TAG}" "dzhoof-frontend:current"
+run "build api" docker build -t "dzhoof-api:${BUILD_TAG}" . || die "api build failed"
+run "tag api current" docker tag "dzhoof-api:${BUILD_TAG}" "dzhoof-api:current" || die "api tag failed"
+run "build frontend" docker build -f Dockerfile.frontend -t "dzhoof-frontend:${BUILD_TAG}" . || die "frontend build failed"
+run "tag frontend current" docker tag "dzhoof-frontend:${BUILD_TAG}" "dzhoof-frontend:current" || die "frontend tag failed"
 
 step "3b/7  Point compose at :current (old refs recorded above for rollback)"
 if [ "$APPLY" -eq 1 ]; then
