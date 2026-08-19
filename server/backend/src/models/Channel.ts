@@ -1,5 +1,5 @@
 import mongoose, { Schema, Model } from 'mongoose';
-import { IAlternateStream, IChannelDocument, IChannelModel } from '@firevision/shared';
+import { IAlternateStream, IChannelDocument, IChannelModel } from '@dzhoof/shared';
 
 const channelSchema = new Schema<IChannelDocument>(
   {

@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 import {
   IExternalSourceCacheMetaDocument,
   IExternalSourceChannelDocument,
-} from '@firevision/shared';
+} from '@dzhoof/shared';
 
 // ─── Cache Metadata (one doc per source+region) ────────────
 const externalSourceCacheMetaSchema = new Schema<IExternalSourceCacheMetaDocument>(
