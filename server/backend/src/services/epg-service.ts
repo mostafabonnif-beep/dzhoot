@@ -10,10 +10,21 @@ import { decryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 const Channel = require('../models/Channel');
 
-
 const EPG_REFRESH_INTERVAL = parseInt(process.env.EPG_REFRESH_INTERVAL_MS || '21600000', 10); // 6 hours
-const EPG_FETCH_CONCURRENCY = 5;
+// XMLTV feeds can be large after decompression and parsing. Keep production
+// concurrency deliberately low; operators may set EPG_FETCH_CONCURRENCY=2 only
+// after observing sufficient memory headroom.
+const EPG_FETCH_CONCURRENCY = Math.max(
+  1,
+  Math.min(Number.parseInt(process.env.EPG_FETCH_CONCURRENCY || '1', 10) || 1, 2),
+);
 const BATCH_SIZE = 500;
+// Parsing XML into an object graph expands memory far beyond the compressed file.
+// Keep the default conservative; operators may raise it only after capacity tests.
+const EPG_MAX_XML_BYTES = Math.max(
+  10 * 1024 * 1024,
+  Math.min(Number.parseInt(process.env.EPG_MAX_XML_MB || '50', 10) || 50, 100) * 1024 * 1024,
+);
 const IPTV_EPG_BASE = 'https://iptv-epg.org/files';
 
 interface EpgSourceInfo {
@@ -321,9 +332,10 @@ export class EpgService {
 
     const parsedUrl = new URL(url);
     const lookup = createPinnedLookup(validation.resolvedAddresses);
-    const agent = parsedUrl.protocol === 'https:'
-      ? new https.Agent({ lookup: lookup as any })
-      : new http.Agent({ lookup: lookup as any });
+    const agent =
+      parsedUrl.protocol === 'https:'
+        ? new https.Agent({ lookup: lookup as any })
+        : new http.Agent({ lookup: lookup as any });
 
     const response = await axios.get(url, {
       timeout: 120000,
@@ -339,7 +351,7 @@ export class EpgService {
     const xmlData = await new Promise<string>((resolve, reject) => {
       const chunks: Buffer[] = [];
       let totalSize = 0;
-      const maxSize = 200 * 1024 * 1024; // 200MB decompressed limit
+      const maxSize = EPG_MAX_XML_BYTES;
 
       let stream = response.data;
       if (isGzip) {
@@ -351,7 +363,11 @@ export class EpgService {
       stream.on('data', (chunk: Buffer) => {
         totalSize += chunk.length;
         if (totalSize > maxSize) {
-          stream.destroy(new Error('EPG XML exceeds maximum decompressed size (200MB)'));
+          stream.destroy(
+            new Error(
+              `EPG XML exceeds maximum decompressed size (${Math.round(maxSize / 1024 / 1024)}MB)`,
+            ),
+          );
           return;
         }
         chunks.push(chunk);
@@ -541,7 +557,9 @@ export class EpgService {
     }
 
     const coverageSources = sources.map((source) => {
-      const identifiers = [...new Set(source.coveredChannelIds.map((id) => String(id).toLowerCase()))];
+      const identifiers = [
+        ...new Set(source.coveredChannelIds.map((id) => String(id).toLowerCase())),
+      ];
       const matchedIdentifiers = identifiers.filter((id) => programIdSet.has(id));
       const unmatchedChannels = identifiers
         .filter((id) => !programIdSet.has(id))
@@ -557,20 +575,26 @@ export class EpgService {
         source: source.source,
         coveredChannelCount: identifiers.length,
         matchedChannelCount: matchedIdentifiers.length,
-        coveragePercent: identifiers.length === 0 ? 0 : Math.round((matchedIdentifiers.length / identifiers.length) * 100),
+        coveragePercent:
+          identifiers.length === 0
+            ? 0
+            : Math.round((matchedIdentifiers.length / identifiers.length) * 100),
         unmatchedChannels,
       };
     });
 
     const matchedSystemChannels = channels.filter((channel: any) =>
-      [channel.tvgId, channel.channelId].filter(Boolean).some((id: any) => programIdSet.has(String(id).toLowerCase())),
+      [channel.tvgId, channel.channelId]
+        .filter(Boolean)
+        .some((id: any) => programIdSet.has(String(id).toLowerCase())),
     ).length;
     const unmatchedChannelCount = Math.max(0, channels.length - matchedSystemChannels);
 
     return {
       totalSystemChannels: channels.length,
       matchedSystemChannels,
-      overallCoveragePercent: channels.length === 0 ? 0 : Math.round((matchedSystemChannels / channels.length) * 100),
+      overallCoveragePercent:
+        channels.length === 0 ? 0 : Math.round((matchedSystemChannels / channels.length) * 100),
       unmatchedChannelCount,
       sources: coverageSources,
     };
