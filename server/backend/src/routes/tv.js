@@ -77,7 +77,7 @@ async function ensurePlaybackSubscription(user, res) {
 }
 
 // Same cap as the /channels sync — the EPG only needs to cover what the TV can list.
-const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 2000;
+const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 20000;
 
 async function tokenizeChannelForClient(channel, user, baseUrl) {
   const source = channel.toObject ? channel.toObject() : channel;
