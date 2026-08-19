@@ -118,18 +118,23 @@ class PlayerViewModel @Inject constructor(
             if (response.isSuccessful && body?.success == true) {
                 body.data?.let { PlaybackTarget(url = it.playbackUrl, mimeType = it.mimeType) }
             } else {
-                _uiState.update {
-                    it.copy(error = when (body?.error) {
-                        "SUBSCRIPTION_EXPIRED" -> "انتهى اشتراكك. فعّل كودًا جديدًا لمتابعة المشاهدة."
-                        "PLAYBACK_DEVICE_REQUIRED" -> "سجّل هذا الجهاز قبل بدء التشغيل."
-                        "DEVICE_LIMIT_REACHED" -> "تم بلوغ الحد الأقصى للأجهزة في خطتك."
-                        else -> body?.error ?: "تعذر تفويض تشغيل القناة (HTTP ${response.code()})"
-                    })
+                // Alternate slots are optional. A channel with no alternates correctly
+                // returns 404 for slots 1..3; that must not replace a working primary
+                // stream with an error banner while the player is preparing it.
+                if (slot == 0) {
+                    _uiState.update {
+                        it.copy(error = when (body?.error) {
+                            "SUBSCRIPTION_EXPIRED" -> "انتهى اشتراكك. فعّل كودًا جديدًا لمتابعة المشاهدة."
+                            "PLAYBACK_DEVICE_REQUIRED" -> "سجّل هذا الجهاز قبل بدء التشغيل."
+                            "DEVICE_LIMIT_REACHED" -> "تم بلوغ الحد الأقصى للأجهزة في خطتك."
+                            else -> body?.error ?: "تعذر تفويض تشغيل القناة (HTTP ${response.code()})"
+                        })
+                    }
                 }
                 null
             }
         } catch (_: Exception) {
-            _uiState.update { it.copy(error = "تعذر الاتصال بخادم البث") }
+            if (slot == 0) _uiState.update { it.copy(error = "تعذر الاتصال بخادم البث") }
             null
         }
     }

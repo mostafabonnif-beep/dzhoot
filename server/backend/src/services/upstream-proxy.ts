@@ -21,12 +21,14 @@ function nestedPlaybackUrl(
   absoluteUrl: string,
   tokenContext?: ProxyTokenContext,
   legacyCode?: string,
+  upstreamHeaders?: UpstreamHeaders,
 ): string {
   if (tokenContext) {
     const { token } = issuePlaybackToken({
       userId: tokenContext.userId,
       channelListCode: tokenContext.channelListCode,
       streamUrl: absoluteUrl,
+      upstreamHeaders,
     });
     return `/api/v1/tv/playback/${token}`;
   }
@@ -60,6 +62,7 @@ export async function proxyUpstreamStream(
     const pinnedLookup = createPinnedLookup(ssrfCheck.resolvedAddresses);
     const httpAgent = new http.Agent({ lookup: pinnedLookup });
     const httpsAgent = new https.Agent({ lookup: pinnedLookup });
+    const requestedRange = typeof req.headers?.range === 'string' ? req.headers.range : undefined;
     const response = await axios.get(url, {
       responseType: 'stream',
       timeout: 30_000,
@@ -70,6 +73,7 @@ export async function proxyUpstreamStream(
         ...(upstreamHeaders?.referrer ? { Referer: upstreamHeaders.referrer } : {}),
         Accept: '*/*',
         'Accept-Encoding': 'gzip, deflate',
+        ...(requestedRange ? { Range: requestedRange } : {}),
         Connection: 'keep-alive',
       },
       maxRedirects: 5,
@@ -89,7 +93,10 @@ export async function proxyUpstreamStream(
       contentType.includes('mpegurl') ||
       contentType.includes('apple.mpegurl');
 
-    res.set({
+    // Preserve HTTP range semantics and response metadata. Media3 may use byte-range
+    // requests for MPEG-TS/HLS segments; discarding 206 or Content-Range makes a healthy
+    // upstream appear as an unplayable source on Android.
+    res.status(response.status).set({
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Range',
@@ -98,6 +105,10 @@ export async function proxyUpstreamStream(
         : response.headers['content-type'] || 'application/octet-stream',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
     });
+    for (const header of ['content-length', 'content-range', 'accept-ranges']) {
+      const value = response.headers[header];
+      if (value !== undefined) res.setHeader(header, value);
+    }
 
     if (isManifest) {
       let data = '';
@@ -137,7 +148,7 @@ export async function proxyUpstreamStream(
             if (/^(data:|skd:|urn:|#)/i.test(trimmed)) return trimmed;
             if (trimmed.includes('/api/v1/tv/playback/') || trimmed.includes('/api/v1/tv/stream/')) return trimmed;
             const absolute = resolveAgainstFinalUrl(trimmed);
-            return nestedPlaybackUrl(absolute, tokenContext, legacyCode);
+            return nestedPlaybackUrl(absolute, tokenContext, legacyCode, upstreamHeaders);
           };
           if (trimmedLine.startsWith('#')) {
             return line.replace(/URI="([^"]+)"/gi, (match: string, uri: string) => {

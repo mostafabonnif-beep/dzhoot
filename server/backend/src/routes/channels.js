@@ -61,6 +61,17 @@ const qoeReportLimits = new Map();
 const healthSyncLimits = new Map();
 const flagLimits = new Map();
 
+// Android and M3U clients use the external channelId (for example, m3u:source:hash),
+// while legacy clients may still send MongoDB _id values. Resolve both safely so a text
+// identifier never reaches a findById() cast path.
+function channelRouteQuery(channelRef) {
+  const value = String(channelRef || '').trim();
+  if (!value) return { channelId: '__missing_channel__' };
+  return mongoose.isValidObjectId(value)
+    ? { $or: [{ _id: value }, { channelId: value }] }
+    : { channelId: value };
+}
+
 // Cleanup stale rate-limit entries every 10 minutes
 // .unref() ensures this timer doesn't prevent graceful process exit
 setInterval(
@@ -977,7 +988,7 @@ router.post('/:id/report-status', requireTvOrSessionAuth, async (req, res) => {
       update.$set = { 'metrics.lastUnresponsiveAt': now };
     }
 
-    const channel = await Channel.findByIdAndUpdate(req.params.id, update, { new: true });
+    const channel = await Channel.findOneAndUpdate(channelRouteQuery(req.params.id), update, { new: true });
     if (!channel) {
       return res.status(404).json({ success: false, error: 'Channel not found' });
     }
@@ -1026,7 +1037,7 @@ router.post('/:id/report-playback-event', requireTvOrSessionAuth, async (req, re
       return res.status(400).json({ success: false, error: 'fallbackSucceeded must be boolean or null' });
     }
 
-    const channel = await Channel.findById(req.params.id).select('_id').lean();
+    const channel = await Channel.findOne(channelRouteQuery(req.params.id)).select('_id').lean();
     if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
 
     // The principal is used only as an in-memory throttle key and never reaches MongoDB.
@@ -1039,7 +1050,7 @@ router.post('/:id/report-playback-event', requireTvOrSessionAuth, async (req, re
     }
 
     await recordPlaybackEvent({
-      channelId: req.params.id,
+      channelId: String(channel._id),
       eventType,
       startupMs: startupMs === undefined || startupMs === null ? null : Math.min(Number(startupMs), 10 * 60 * 1000),
       rebufferCount: rebufferCount === undefined ? 0 : Math.min(Math.floor(Number(rebufferCount)), 1000),
@@ -1086,8 +1097,8 @@ router.post('/:id/report-play', requireTvOrSessionAuth, async (req, res) => {
       updateInc['metrics.proxyPlayCount'] = 1;
     }
 
-    const channel = await Channel.findByIdAndUpdate(
-      req.params.id,
+    const channel = await Channel.findOneAndUpdate(
+      channelRouteQuery(req.params.id),
       {
         $inc: updateInc,
         $set: { 'metrics.lastPlayedAt': new Date() },
