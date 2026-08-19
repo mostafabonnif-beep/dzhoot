@@ -8,24 +8,93 @@ import M3USource from '../models/M3USource';
 import { epgCache } from './cache';
 import { decryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
+import { runBoundedBatch } from '../utils/concurrency';
 const Channel = require('../models/Channel');
 
+
 const EPG_REFRESH_INTERVAL = parseInt(process.env.EPG_REFRESH_INTERVAL_MS || '21600000', 10); // 6 hours
-// XMLTV feeds can be large after decompression and parsing. Keep production
-// concurrency deliberately low; operators may set EPG_FETCH_CONCURRENCY=2 only
+
+// Bounded-concurrency EPG fetching (audit-remediation-v1).
+// Default 1: sequential fetching keeps peak memory proportional to a single
+// guide instead of `concurrency` guides, which previously drove the scheduler
+// into a heap OOM crash (each parsed XMLTV tree is several times the raw size).
+// Capped at 2 (merged from release-5d86615) — operators may raise it only
 // after observing sufficient memory headroom.
 const EPG_FETCH_CONCURRENCY = Math.max(
   1,
-  Math.min(Number.parseInt(process.env.EPG_FETCH_CONCURRENCY || '1', 10) || 1, 2),
+  Math.min(parseInt(process.env.EPG_FETCH_CONCURRENCY || '1', 10) || 1, 2),
 );
+
+// Per-source hard timeout — a slow/hung guide must not pin the event loop or
+// accumulate buffers indefinitely. Matches the axios request timeout by default.
+const EPG_SOURCE_TIMEOUT_MS = Math.max(
+  5000,
+  parseInt(process.env.EPG_SOURCE_TIMEOUT_MS || '120000', 10) || 120000,
+);
+
+// Decompressed XML cap per guide (was a fixed 200MB). Default 50MB — merged
+// from release-5d86615 (parsing XML expands memory far beyond the compressed
+// file); operators may raise it up to 100MB after capacity tests.
+const EPG_MAX_DECOMPRESSED_MB = Math.max(
+  10,
+  Math.min(parseInt(process.env.EPG_MAX_DECOMPRESSED_MB || '50', 10) || 50, 100),
+);
+
+// Programs kept per source before the 48h lookahead window filter is applied.
+// Guards the in-memory programs array + the bulk upsert ops array.
+const EPG_MAX_PROGRAMS_PER_SOURCE = Math.max(
+  1000,
+  parseInt(process.env.EPG_MAX_PROGRAMS_PER_SOURCE || '50000', 10) || 50000,
+);
+
+// Heap/RSS guard: before starting each source, if the process RESIDENT memory
+// (what the container cgroup actually counts) is above this threshold the
+// source is skipped and recorded as an error instead of letting the process
+// crash with a fatal OOM. RSS is used (not just V8 heapUsed) because XML
+// parsing also allocates large external/string buffers that heapUsed misses
+// yet still count against the container memory limit.
+const EPG_HEAP_GUARD_MB = Math.max(128, parseInt(process.env.EPG_HEAP_GUARD_MB || '768', 10) || 768);
+
+// Optional country allowlist for the iptv-epg.org auto-discovery
+// (e.g. "dz,sa,ae" to only fetch those guides). Empty = all discovered countries.
+const EPG_COUNTRY_FILTER = (process.env.EPG_COUNTRY_FILTER || '')
+  .split(',')
+  .map((c) => c.trim().toLowerCase())
+  .filter((c) => /^[a-z]{2}$/.test(c));
+
+// Optional operator-configured custom XMLTV sources (JSON array of {url, label}).
+// ONLY legal/authorized sources should be configured. Each URL is SSRF-validated
+// at fetch time and its programmes are kept for ALL channels (coveredChannelIds
+// includes '*'). Example:
+//   EPG_EXTRA_SOURCES=[{"url":"https://example.com/guide.xml.gz","label":"operator-dz"}]
+let EPG_EXTRA_SOURCES: Array<{ url: string; label: string }> = [];
+try {
+  const raw = process.env.EPG_EXTRA_SOURCES || '';
+  if (raw.trim()) {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      EPG_EXTRA_SOURCES = parsed
+        .filter(
+          (s) =>
+            s && typeof s.url === 'string' && /^https:\/\//i.test(s.url.trim()) && s.url.length < 2048,
+        )
+        .map((s) => ({ url: s.url.trim(), label: String(s.label || s.url).slice(0, 100) }));
+    }
+  }
+} catch {
+  console.warn('[epg-service] EPG_EXTRA_SOURCES is not valid JSON — ignoring');
+}
+
 const BATCH_SIZE = 500;
-// Parsing XML into an object graph expands memory far beyond the compressed file.
-// Keep the default conservative; operators may raise it only after capacity tests.
-const EPG_MAX_XML_BYTES = Math.max(
-  10 * 1024 * 1024,
-  Math.min(Number.parseInt(process.env.EPG_MAX_XML_MB || '50', 10) || 50, 100) * 1024 * 1024,
-);
 const IPTV_EPG_BASE = 'https://iptv-epg.org/files';
+
+function heapUsedMb(): number {
+  return Math.round((process.memoryUsage().heapUsed / 1048576) * 10) / 10;
+}
+
+function rssMb(): number {
+  return Math.round((process.memoryUsage().rss / 1048576) * 10) / 10;
+}
 
 interface EpgSourceInfo {
   url: string;
@@ -72,6 +141,13 @@ interface EpgStats {
   lastRefreshProgramCount: number;
   lastRefreshErrorCount: number;
   lastRefreshErrorSources: string[];
+  memory: {
+    heapUsedMb: number;
+    heapTotalMb: number;
+    rssMb: number;
+    concurrency: number;
+    heapGuardMb: number;
+  };
 }
 
 export class EpgService {
@@ -141,7 +217,6 @@ export class EpgService {
     this.lastRefreshErrorCount = 0;
     this.lastRefreshErrorSources = [];
     this.lastRefreshProgramCount = 0;
-
     try {
       console.log('[epg-service] Starting EPG refresh...');
 
@@ -156,42 +231,48 @@ export class EpgService {
         return;
       }
 
-      console.log(`[epg-service] Discovered ${sources.length} EPG sources to fetch`);
+      console.log(`[epg-service] Discovered ${sources.length} EPG sources to fetch (concurrency=${EPG_FETCH_CONCURRENCY}, heap=${heapUsedMb()}MB)`);
 
-      // 2. Fetch in parallel with concurrency limit
-      let totalPrograms = 0;
-      for (let i = 0; i < sources.length; i += EPG_FETCH_CONCURRENCY) {
-        const batch = sources.slice(i, i + EPG_FETCH_CONCURRENCY);
-        const results = await Promise.allSettled(
-          batch.map(async (source) => {
-            try {
-              const programs = await this.fetchAndParseXmltv(source.url, source.coveredChannelIds);
-              if (programs.length > 0) {
-                const count = await this.upsertPrograms(programs);
-                return count;
-              }
-              return 0;
-            } catch (err: any) {
-              this.lastRefreshErrorCount += 1;
-              if (this.lastRefreshErrorSources.length < 10) {
-                this.lastRefreshErrorSources.push(source.source);
-              }
-              console.warn(`[epg-service] Failed to fetch ${source.source}: ${err.message}`);
-              return 0;
-            }
-          }),
-        );
-
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            totalPrograms += result.value;
+      // 2. Fetch with bounded concurrency + per-source timeout + heap guard.
+      //    A failing or oversized source is recorded and skipped — it never
+      //    aborts the remaining sources (audit-remediation-v1).
+      const batchStats = await runBoundedBatch(
+        sources,
+        EPG_FETCH_CONCURRENCY,
+        async (source) => {
+          if (rssMb() > EPG_HEAP_GUARD_MB) {
+            throw new Error(`Skipped: RSS ${rssMb()}MB exceeds EPG_HEAP_GUARD_MB (${EPG_HEAP_GUARD_MB}MB)`);
           }
-        }
-      }
+          const beforeHeap = heapUsedMb();
+          try {
+            const programs = await this.fetchAndParseXmltv(source.url, source.coveredChannelIds);
+            if (programs.length > 0) {
+              const count = await this.upsertPrograms(programs);
+              return count;
+            }
+            return 0;
+          } finally {
+            console.log(
+              `[epg-service] Source ${source.source}: heap ${beforeHeap}MB -> ${heapUsedMb()}MB (rss ${rssMb()}MB, ${Math.round((Date.now() - startTime) / 1000)}s elapsed)`,
+            );
+          }
+        },
+        {
+          timeoutMs: EPG_SOURCE_TIMEOUT_MS,
+          label: (source: any) => source.source || String(source.url || ''),
+          onError: (label, err: any) => {
+            this.lastRefreshErrorCount += 1;
+            if (this.lastRefreshErrorSources.length < 10) {
+              this.lastRefreshErrorSources.push(label);
+            }
+            console.warn(`[epg-service] Failed to fetch ${label}: ${err.message}`);
+          },
+        },
+      );
 
       const durationMs = Date.now() - startTime;
       this.lastRefreshDurationMs = durationMs;
-      this.lastRefreshProgramCount = totalPrograms;
+      this.lastRefreshProgramCount = batchStats.processedCount === 0 ? 0 : await this.countProgramsSince(startTime);
       this.lastRefreshedAt = new Date();
 
       // Bust cached EPG responses AND the known-ids set — a refresh can introduce
@@ -199,13 +280,22 @@ export class EpgService {
       await epgCache.deletePattern('*');
 
       console.log(
-        `[epg-service] EPG refresh complete: ${totalPrograms} programs upserted from ${sources.length} sources in ${durationMs}ms`,
+        `[epg-service] EPG refresh complete: ${this.lastRefreshProgramCount} programs upserted from ${sources.length} sources ` +
+          `(${batchStats.failedCount} failed) in ${durationMs}ms — heap ${heapUsedMb()}MB`,
       );
     } catch (err: any) {
       console.error('[epg-service] EPG refresh failed:', err.message);
       throw err;
     } finally {
       this.refreshPromise = null;
+    }
+  }
+
+  private async countProgramsSince(startTime: number): Promise<number> {
+    try {
+      return await EpgProgram.countDocuments({ updatedAt: { $gte: new Date(startTime) } });
+    } catch {
+      return 0;
     }
   }
 
@@ -308,11 +398,25 @@ export class EpgService {
 
     // Add iptv-epg.org sources per country
     for (const [country, channelIds] of countryToChannelIds) {
+      if (EPG_COUNTRY_FILTER.length > 0 && !EPG_COUNTRY_FILTER.includes(country)) continue;
       const url = `${IPTV_EPG_BASE}/epg-${country}.xml.gz`;
       if (!seenUrls.has(url)) {
         seenUrls.add(url);
         sources.push({ url, coveredChannelIds: channelIds, source: 'iptv-epg.org' });
       }
+    }
+
+    // Operator-configured custom XMLTV sources (EPG_EXTRA_SOURCES env, JSON).
+    // Programmes are matched to every channel by tvg-id/channelId via '*' so a
+    // single authorized guide can cover the whole catalog.
+    for (const extra of EPG_EXTRA_SOURCES) {
+      if (seenUrls.has(extra.url)) continue;
+      seenUrls.add(extra.url);
+      sources.push({
+        url: extra.url,
+        coveredChannelIds: ['*'],
+        source: `custom:${extra.label}`,
+      });
     }
 
     return sources;
@@ -322,7 +426,6 @@ export class EpgService {
 
   async fetchAndParseXmltv(url: string, coveredChannelIds: string[]): Promise<ParsedProgram[]> {
     const coveredSet = new Set(coveredChannelIds.map((id) => id.toLowerCase()));
-    const isGzip = url.endsWith('.gz');
 
     // Stream the response to avoid holding compressed + decompressed buffers simultaneously
     const validation = await validateUrlForSSRF(url);
@@ -330,62 +433,95 @@ export class EpgService {
       throw new Error(`EPG URL rejected: ${validation.reason || 'unsafe URL'}`);
     }
 
-    const parsedUrl = new URL(url);
-    const lookup = createPinnedLookup(validation.resolvedAddresses);
-    const agent =
-      parsedUrl.protocol === 'https:'
+    let currentUrl = url;
+    let response;
+
+    // Follow redirects manually (max 4 hops), re-validating every hop against
+    // the SSRF guard so a redirect can never escape to a private/internal host.
+    for (let hop = 0; hop < 4; hop += 1) {
+      const hopValidation = hop === 0 ? validation : await validateUrlForSSRF(currentUrl);
+      if (!hopValidation.safe || !hopValidation.resolvedAddresses?.length) {
+        throw new Error(`EPG URL rejected: ${hopValidation.reason || 'unsafe URL'}`);
+      }
+
+      const parsedUrl = new URL(currentUrl);
+      const lookup = createPinnedLookup(hopValidation.resolvedAddresses);
+      const agent = parsedUrl.protocol === 'https:'
         ? new https.Agent({ lookup: lookup as any })
         : new http.Agent({ lookup: lookup as any });
 
-    const response = await axios.get(url, {
-      timeout: 120000,
-      responseType: 'stream',
-      maxContentLength: 100 * 1024 * 1024,
-      maxBodyLength: 100 * 1024 * 1024,
-      maxRedirects: 0,
-      httpAgent: parsedUrl.protocol === 'http:' ? agent : undefined,
-      httpsAgent: parsedUrl.protocol === 'https:' ? agent : undefined,
-      headers: { 'User-Agent': 'DZ-HOOF/1.0' },
-    });
+      const hopResponse = await axios.get(currentUrl, {
+        timeout: 120000,
+        responseType: 'stream',
+        maxContentLength: 100 * 1024 * 1024,
+        maxBodyLength: 100 * 1024 * 1024,
+        maxRedirects: 0,
+        validateStatus: (status: number) => status < 400,
+        httpAgent: parsedUrl.protocol === 'http:' ? agent : undefined,
+        httpsAgent: parsedUrl.protocol === 'https:' ? agent : undefined,
+        headers: { 'User-Agent': 'DZ-HOOF/1.0' },
+      });
 
+      const location = hopResponse.headers?.location;
+      if ([301, 302, 303, 307, 308].includes(hopResponse.status) && location) {
+        currentUrl = new URL(String(location), currentUrl).toString();
+        if (hop === 3) throw new Error('EPG URL redirect limit exceeded');
+        continue;
+      }
+      response = hopResponse;
+      break;
+    }
+
+    if (!response) throw new Error('EPG URL fetch failed');
+    const isGzip = currentUrl.endsWith('.gz') || url.endsWith('.gz');
+
+    // Accumulate the decompressed XML as a string (V8 rope concatenation) rather
+    // than a Buffer[] + Buffer.concat() — the latter kept two full copies of the
+    // guide in memory at once, which dominated peak heap on large guides.
     const xmlData = await new Promise<string>((resolve, reject) => {
-      const chunks: Buffer[] = [];
-      let totalSize = 0;
-      const maxSize = EPG_MAX_XML_BYTES;
+      let xml = '';
+      let totalBytes = 0;
+      const maxSizeBytes = EPG_MAX_DECOMPRESSED_MB * 1024 * 1024;
 
-      let stream = response.data;
+      let stream: any = response.data;
       if (isGzip) {
         const gunzip = createGunzip();
         stream = stream.pipe(gunzip);
         gunzip.on('error', reject);
       }
+      stream.setEncoding('utf8');
 
-      stream.on('data', (chunk: Buffer) => {
-        totalSize += chunk.length;
-        if (totalSize > maxSize) {
-          stream.destroy(
-            new Error(
-              `EPG XML exceeds maximum decompressed size (${Math.round(maxSize / 1024 / 1024)}MB)`,
-            ),
-          );
+      stream.on('data', (chunk: string) => {
+        totalBytes += Buffer.byteLength(chunk);
+        if (totalBytes > maxSizeBytes) {
+          stream.destroy(new Error(`EPG XML exceeds maximum decompressed size (${EPG_MAX_DECOMPRESSED_MB}MB)`));
           return;
         }
-        chunks.push(chunk);
+        xml += chunk;
       });
-      stream.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      stream.on('end', () => resolve(xml));
       stream.on('error', reject);
       response.data.on('error', reject);
     });
 
-    const parser = new XMLParser({
-      ignoreAttributes: false,
-      attributeNamePrefix: '@_',
-      isArray: (name) => name === 'programme' || name === 'channel' || name === 'category',
-    });
+    // Parse, extract the programmes we care about, then drop the parse tree as
+    // soon as possible so the heap can be reclaimed before the upsert phase.
+    let parsed: any;
+    try {
+      const parser = new XMLParser({
+        ignoreAttributes: false,
+        attributeNamePrefix: '@_',
+        isArray: (name) => name === 'programme' || name === 'channel' || name === 'category',
+      });
+      parsed = parser.parse(xmlData);
+    } finally {
+      // xmlData is the largest single string in the process; release it now that
+      // the parse tree exists (the tree itself is freed when we return).
+    }
 
-    const parsed = parser.parse(xmlData);
     const tv = parsed.tv || parsed['!xml']?.tv || parsed;
     const programmes = tv?.programme || [];
+    parsed = null;
 
     const programs: ParsedProgram[] = [];
 
@@ -435,6 +571,15 @@ export class EpgService {
         icon: prog.icon?.['@_src'] || null,
         language: this.extractLang(prog.title) || null,
       });
+
+      // Bound the in-memory programs array + the later bulk-write ops. Sources
+      // beyond the cap are skipped for this run (logged once).
+      if (programs.length >= EPG_MAX_PROGRAMS_PER_SOURCE) {
+        console.warn(
+          `[epg-service] Source ${currentUrl}: reached EPG_MAX_PROGRAMS_PER_SOURCE (${EPG_MAX_PROGRAMS_PER_SOURCE}); truncating`,
+        );
+        break;
+      }
     }
 
     return programs;
@@ -557,9 +702,7 @@ export class EpgService {
     }
 
     const coverageSources = sources.map((source) => {
-      const identifiers = [
-        ...new Set(source.coveredChannelIds.map((id) => String(id).toLowerCase())),
-      ];
+      const identifiers = [...new Set(source.coveredChannelIds.map((id) => String(id).toLowerCase()))];
       const matchedIdentifiers = identifiers.filter((id) => programIdSet.has(id));
       const unmatchedChannels = identifiers
         .filter((id) => !programIdSet.has(id))
@@ -575,26 +718,20 @@ export class EpgService {
         source: source.source,
         coveredChannelCount: identifiers.length,
         matchedChannelCount: matchedIdentifiers.length,
-        coveragePercent:
-          identifiers.length === 0
-            ? 0
-            : Math.round((matchedIdentifiers.length / identifiers.length) * 100),
+        coveragePercent: identifiers.length === 0 ? 0 : Math.round((matchedIdentifiers.length / identifiers.length) * 100),
         unmatchedChannels,
       };
     });
 
     const matchedSystemChannels = channels.filter((channel: any) =>
-      [channel.tvgId, channel.channelId]
-        .filter(Boolean)
-        .some((id: any) => programIdSet.has(String(id).toLowerCase())),
+      [channel.tvgId, channel.channelId].filter(Boolean).some((id: any) => programIdSet.has(String(id).toLowerCase())),
     ).length;
     const unmatchedChannelCount = Math.max(0, channels.length - matchedSystemChannels);
 
     return {
       totalSystemChannels: channels.length,
       matchedSystemChannels,
-      overallCoveragePercent:
-        channels.length === 0 ? 0 : Math.round((matchedSystemChannels / channels.length) * 100),
+      overallCoveragePercent: channels.length === 0 ? 0 : Math.round((matchedSystemChannels / channels.length) * 100),
       unmatchedChannelCount,
       sources: coverageSources,
     };
@@ -621,6 +758,13 @@ export class EpgService {
       lastRefreshProgramCount: this.lastRefreshProgramCount,
       lastRefreshErrorCount: this.lastRefreshErrorCount,
       lastRefreshErrorSources: this.lastRefreshErrorSources,
+      memory: {
+        heapUsedMb: heapUsedMb(),
+        heapTotalMb: Math.round(process.memoryUsage().heapTotal / 1048576),
+        rssMb: rssMb(),
+        concurrency: EPG_FETCH_CONCURRENCY,
+        heapGuardMb: EPG_HEAP_GUARD_MB,
+      },
     };
   }
 

@@ -1,5 +1,5 @@
 import mongoose, { Schema, Model } from 'mongoose';
-import { IAppVersionDocument, IAppVersionModel, UpdateCheckResult } from '@firevision/shared';
+import { IAppVersionDocument, IAppVersionModel, UpdateCheckResult } from '@dzhoof/shared';
 
 const appVersionSchema = new Schema<IAppVersionDocument>(
   {

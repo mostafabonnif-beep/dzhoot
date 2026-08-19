@@ -30,7 +30,12 @@ async function main() {
   const { schedulerService } = require('./services/scheduler-service');
   await schedulerService.start();
 
-  console.log('[scheduler-entrypoint] Scheduler service running');
+  const heapMb = () => Math.round(process.memoryUsage().heapUsed / 1048576);
+  console.log(
+    `[scheduler-entrypoint] Scheduler service running — heap ${heapMb()}MB, ` +
+      `NODE_OPTIONS=${process.env.NODE_OPTIONS || '(unset)'}, ` +
+      `EPG concurrency=${process.env.EPG_FETCH_CONCURRENCY || 1}`,
+  );
 }
 
 // Graceful shutdown

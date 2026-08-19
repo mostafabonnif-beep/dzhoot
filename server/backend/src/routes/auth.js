@@ -1023,6 +1023,17 @@ router.delete('/profile-picture', requireAuth, async (req, res) => {
  */
 router.post('/register', async (req, res) => {
   try {
+    // Public self-service registration is disabled by default in production
+    // (audit-remediation-v1): it only opens when PUBLIC_REGISTRATION_ENABLED=true
+    // AND both an effective mail provider and reCAPTCHA are configured.
+    const { publicRegistrationEnabled } = require('../utils/registration-config');
+    if (!publicRegistrationEnabled()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Registration is currently disabled. Please contact the administrator.',
+      });
+    }
+
     const { username, email, password, recaptchaToken } = req.body;
 
     // Validate input

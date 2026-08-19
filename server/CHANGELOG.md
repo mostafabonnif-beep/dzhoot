@@ -10,6 +10,52 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Security (audit-remediation-v1)
+
+- Public self-service registration is now **disabled by default** (`PUBLIC_REGISTRATION_ENABLED=false`).
+  It only opens when the flag is `true` **and** an effective mail provider (Brevo) **and**
+  reCAPTCHA keys are configured. Both `/api/v1/auth/register` and `/api/v1/public/signup` return 403 otherwise.
+- Frontend hides (instead of showing broken) OAuth buttons, the signup link/form, and the demo-code
+  entry when the operator has not configured them (`/api/v1/config/defaults` now reports capability flags).
+- `/health` public payload reduced to `{status, version, requestId}`; operational details
+  (Mongo/Redis/uptime/sources/EPG/scheduler) only with `?details=true`.
+- Conservative Caddy security headers: Content-Security-Policy, Permissions-Policy,
+  X-Permitted-Cross-Domain-Policies (in addition to existing HSTS/X-Content-Type-Options/X-Frame-Options).
+
+### Fixed
+
+- Scheduler EPG refresh no longer crashes the container with a heap OOM:
+  bounded-concurrency fetching (default sequential), per-source hard timeout, decompressed-size cap,
+  per-source program cap, and a heap guard that skips (and records) oversized sources instead of dying.
+  One failing/oversized source is isolated — the rest of the refresh completes (regression tests added).
+- Production preflight extended: committed-secret scan, env placeholder detection, compose/image tag validation.
+
+### Changed
+
+- Docker base images pinned by fixed tag: `caddy:2.8.4-alpine`, `mongo:7.0.19`, `redis:7.2.5-alpine`.
+- Unified app version: workspace/backend/frontend/shared packages and Dockerfile `APP_VERSION` default → `1.0.1`.
+- Scheduler container memory limit raised 512MB → 1536MB with `NODE_OPTIONS=--max-old-space-size=1024`
+  (conservative for a 5.8GB host); new tunable EPG env vars documented in `.env.example`.
+
+### Added
+
+- `scripts/deploy/preflight.sh` — read-only deploy gate (secrets, env, compose, image tags).
+- `scripts/backup/verify-backup.sh` — gzip + SHA256 + `mongorestore --dryRun` backup verification.
+- `scripts/security/secure-ssh-setup.sh` — **optional, non-destructive** SSH hardening plan
+  (sudo user, Ed25519 keys, fail2ban; does not touch sshd_config until the operator approves).
+- `docs/ops/ROLLBACK_GUIDE.md`, `docs/ops/STAGING_GUIDE.md`, `docs/ops/SSH_HARDENING_GUIDE.md`.
+- `utils/concurrency.ts` — bounded-concurrency batch runner with per-item timeout and failure isolation.
+- `epg-refresh-resilience`, `concurrency-util`, `registration-lockdown` backend test suites.
+- `scripts/deploy/deploy-production.sh` — the exact, reviewable production deploy plan
+  (dry-run by default; `--apply` only after operator approval; preflight + verified
+  backup + tagged builds + compose up + health/scheduler smoke + deploy log).
+- `scripts/ops/health-check.sh` — cron-able health probe with optional webhook alerts.
+- Scheduler logs heap usage and effective EPG concurrency at startup.
+
+---
+
+## [Unreleased]
+
 ### Added
 
 - Production deployment guide for the current DZ HOOF Docker Compose stack, health endpoints, backups, rollback, and release operations.

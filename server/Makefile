@@ -1,8 +1,8 @@
-# FireVision IPTV Server — Local Docker Makefile
+# DZ HOOF Server — Local Docker Makefile
 # Usage: make help
 
-APP_NAME    := firevision-iptv
-IMAGE       := ghcr.io/akshaynikhare/firevisioniptvserver
+APP_NAME    := dzhoof-iptv
+IMAGE       := ghcr.io/merci1994dz/dzhoof-iptv-server
 TAG         := latest
 COMPOSE     := docker compose
 COMPOSE_PROD:= docker compose -f docker-compose.production.yml
@@ -29,7 +29,7 @@ up: ## Start all services in background
 	$(COMPOSE) up -d
 	@echo ""
 	@echo "\033[1;32m══════════════════════════════════════════════════\033[0m"
-	@echo "\033[1;32m  FireVision IPTV — Services Started\033[0m"
+	@echo "\033[1;32m  DZ HOOF — Services Started\033[0m"
 	@echo "\033[1;32m══════════════════════════════════════════════════\033[0m"
 	@echo ""
 	@echo "\033[1;36m  URLs:\033[0m"
@@ -44,7 +44,7 @@ up: ## Start all services in background
 	@echo "\033[1;36m  Super Admin Login:\033[0m"
 	@echo "  Username         $${SUPER_ADMIN_USERNAME:-superadmin}"
 	@echo "  Password         (see SUPER_ADMIN_PASSWORD in .env)"
-	@echo "  Email            $${SUPER_ADMIN_EMAIL:-admin@firevision.local}"
+	@echo "  Email            $${SUPER_ADMIN_EMAIL:-admin@dzhoof.local}"
 	@echo "  Channel Code     $${SUPER_ADMIN_CHANNEL_LIST_CODE:-5T6FEP}"
 	@echo ""
 	@echo "\033[1;32m══════════════════════════════════════════════════\033[0m"
@@ -106,16 +106,16 @@ clean-all: ## Full cleanup (containers, volumes, images)
 
 # ─── Database ───────────────────────────────────────────────
 db-reset: ## Drop database and restart API (re-creates super admin)
-	$(COMPOSE) exec mongodb mongosh --quiet --eval 'db.getSiblingDB("firevision-iptv").dropDatabase()' && \
+	$(COMPOSE) exec mongodb mongosh --quiet --eval 'db.getSiblingDB("dzhoof-iptv").dropDatabase()' && \
 	$(COMPOSE) restart api
 	@echo "Database reset. Super admin will be re-created on startup."
 
 db-drop: ## Drop database only (no restart)
-	$(COMPOSE) exec mongodb mongosh --quiet --eval 'db.getSiblingDB("firevision-iptv").dropDatabase()'
+	$(COMPOSE) exec mongodb mongosh --quiet --eval 'db.getSiblingDB("dzhoof-iptv").dropDatabase()'
 	@echo "Database dropped."
 
 db-shell: ## Open MongoDB shell
-	$(COMPOSE) exec mongodb mongosh firevision-iptv
+	$(COMPOSE) exec mongodb mongosh dzhoof-iptv
 
 # ─── Local Development (no Docker) ──────────────────────────
 dev: ## Start backend + frontend locally (no Docker)
@@ -161,3 +161,13 @@ tag: ## Create & push a release tag (usage: make tag v=v1.0.3)
 
 tags: ## List recent release tags
 	@git tag --sort=-creatordate | head -10
+
+# ─── Audit-remediation-v1 helpers ─────────────────────────────
+preflight: ## Deploy preflight (read-only): ENV_FILE=/path/.env.production make preflight
+	./scripts/deploy/preflight.sh
+
+verify-backup: ## Verify a backup archive: make verify-backup ARCHIVE=/path/archive.gz
+	./scripts/backup/verify-backup.sh $(ARCHIVE)
+
+secure-ssh: ## Print the optional SSH hardening plan (does NOT apply changes)
+	bash scripts/security/secure-ssh-setup.sh

@@ -1,7 +1,7 @@
 services:
   # MongoDB Database
   mongodb:
-    image: mongo:7.0
+    image: mongo:7.0.19.0
     container_name: dzhoof-mongodb
     restart: unless-stopped
     environment:
@@ -22,7 +22,7 @@ services:
 
   # Redis Cache
   redis:
-    image: redis:7-alpine
+    image: redis:7.2.5-alpine
     container_name: dzhoof-redis
     restart: unless-stopped
     ports:

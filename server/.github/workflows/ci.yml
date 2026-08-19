@@ -27,7 +27,7 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm run lint -w @firevision/frontend
+      - run: npm run lint -w @dzhoof/frontend
       - run: npm audit --omit=dev --audit-level=high
 
   test-backend:
@@ -82,7 +82,7 @@ jobs:
           cache-dependency-path: server/package-lock.json
       - run: npm ci --ignore-scripts
       - run: npm run test:frontend
-      - run: npm run build -w @firevision/frontend
+      - run: npm run build -w @dzhoof/frontend
 
   docker-build:
     runs-on: ubuntu-latest

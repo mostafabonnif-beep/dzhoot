@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IEpgProgramDocument } from '@firevision/shared';
+import { IEpgProgramDocument } from '@dzhoof/shared';
 
 const epgProgramSchema = new Schema<IEpgProgramDocument>(
   {
