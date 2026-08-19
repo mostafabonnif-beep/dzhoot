@@ -109,6 +109,17 @@ describe('POST /channels/:id/report-status', () => {
     expect(updated.metrics.unresponsiveCount).toBe(1);
   });
 
+  it('updates an M3U channel reported by its external text identifier', async () => {
+    const externalId = `m3u:status:${Date.now()}`;
+    const ch = await createChannel({ channelId: externalId });
+    const res = await request(app)
+      .post(`/channels/${encodeURIComponent(externalId)}/report-status`)
+      .send({ status: 'alive', deviceId: 'dev-status-m3u' });
+    expect(res.status).toBe(200);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.aliveCount).toBe(1);
+  });
+
   it('returns 429 on second report within 5 minutes from same device', async () => {
     const ch = await createChannel();
     await request(app)
@@ -185,6 +196,17 @@ describe('POST /channels/:id/report-play', () => {
     expect(updated.metrics.playCount).toBe(1);
   });
 
+  it('increments playCount when an M3U external text identifier is reported', async () => {
+    const externalId = `m3u:play:${Date.now()}`;
+    const ch = await createChannel({ channelId: externalId });
+    const res = await request(app)
+      .post(`/channels/${encodeURIComponent(externalId)}/report-play`)
+      .send({ deviceId: 'dev-play-m3u' });
+    expect(res.status).toBe(200);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.playCount).toBe(1);
+  });
+
   it('returns 429 on second play report within 1 minute from same device', async () => {
     const ch = await createChannel();
     await request(app).post(`/channels/${ch._id}/report-play`).send({ deviceId: 'dev-rate-play' });
@@ -240,6 +262,17 @@ describe('POST /channels/:id/report-playback-event', () => {
     }));
     expect(event.deviceId).toBeUndefined();
     expect(event.streamUrl).toBeUndefined();
+  });
+
+  it('stores QoE for an M3U channel reported by its external text identifier', async () => {
+    const externalId = `m3u:qoe:${Date.now()}`;
+    const ch = await createChannel({ channelId: externalId });
+    const res = await request(app)
+      .post(`/channels/${encodeURIComponent(externalId)}/report-playback-event`)
+      .send({ eventType: 'startup_success', startupMs: 200 });
+    expect(res.status).toBe(202);
+    const event: any = await PlaybackEvent.findOne({ channelId: ch._id }).lean();
+    expect(event).toEqual(expect.objectContaining({ eventType: 'startup_success', startupMs: 200 }));
   });
 
   it('returns 404 for an unknown channel', async () => {
