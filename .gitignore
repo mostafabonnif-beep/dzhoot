@@ -35,3 +35,7 @@ coverage/
 **/node_modules/
 **/.gradle/
 **/build/
+
+# Upstream home-relay files — require explicit owner confirmation (audit item)
+/relay.py
+/upstream-relay-manage.sh

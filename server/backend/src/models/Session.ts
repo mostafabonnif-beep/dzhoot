@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { ISessionDocument } from '@firevision/shared';
+import { ISessionDocument } from '@dzhoof/shared';
 
 const sessionSchema = new Schema<ISessionDocument>(
   {

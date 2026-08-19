@@ -1,14 +1,14 @@
 services:
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.8.4-alpine
     container_name: dzhoof-caddy
     restart: unless-stopped
     environment:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
     ports:
-      - '80:80'
-      - '443:443'
+      - "80:80"
+      - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -23,12 +23,6 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-        reservations:
-          memory: 64m
 
   api:
     image: ${DOCKER_IMAGE}
@@ -37,7 +31,17 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      APP_VERSION: ${APP_VERSION}
+      APP_VERSION: ${APP_VERSION:-1.0.1}
+      # Audit-remediation-v1: manual EPG triggers execute in the API container,
+      # so it needs the same memory hardening as the scheduler service.
+      NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first
+      EPG_FETCH_CONCURRENCY: ${EPG_FETCH_CONCURRENCY:-1}
+      EPG_SOURCE_TIMEOUT_MS: ${EPG_SOURCE_TIMEOUT_MS:-120000}
+      EPG_MAX_DECOMPRESSED_MB: ${EPG_MAX_DECOMPRESSED_MB:-100}
+      EPG_MAX_PROGRAMS_PER_SOURCE: ${EPG_MAX_PROGRAMS_PER_SOURCE:-50000}
+      EPG_HEAP_GUARD_MB: ${EPG_HEAP_GUARD_MB:-768}
+      EPG_COUNTRY_FILTER: ${EPG_COUNTRY_FILTER:-}
+      EPG_EXTRA_SOURCES: ${EPG_EXTRA_SOURCES:-}
       MONGODB_URI: mongodb://mongodb:27017/dzhoof-iptv
       # container_name, not the service name: the api/frontend also sit on the shared
       # gkz-network where another stack's redis carries the alias "redis" (and requires
@@ -92,17 +96,17 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
+        reservations:
+          memory: 256m
     logging:
       driver: 'json-file'
       options:
         max-size: '10m'
         max-file: '3'
-    deploy:
-      resources:
-        limits:
-          memory: 1g
-        reservations:
-          memory: 256m
 
   frontend:
     image: ${DOCKER_FRONTEND_IMAGE}
@@ -121,65 +125,47 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-        reservations:
-          memory: 128m
 
   mongodb:
-    image: mongo:7
+    image: mongo:7.0.19
     container_name: dzhoof-mongodb
     restart: unless-stopped
     volumes:
       - mongodb_data:/data/db
+    networks:
+      - dzhoof-network
     healthcheck:
-      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 20s
-    networks:
-      - dzhoof-network
     logging:
       driver: 'json-file'
       options:
         max-size: '10m'
         max-file: '3'
-    deploy:
-      resources:
-        limits:
-          memory: 1g
-        reservations:
-          memory: 256m
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2.5-alpine
     container_name: dzhoof-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    networks:
+      - dzhoof-network
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-    networks:
-      - dzhoof-network
     logging:
       driver: 'json-file'
       options:
         max-size: '10m'
         max-file: '3'
-    deploy:
-      resources:
-        limits:
-          memory: 256m
-        reservations:
-          memory: 64m
 
   scheduler:
     image: ${DOCKER_IMAGE}
@@ -187,10 +173,6 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      # Bound V8 below the container limit so a large XMLTV parse has headroom
-      # while avoiding host-wide memory pressure.
-      NODE_OPTIONS: --max-old-space-size=1024
-      EPG_FETCH_CONCURRENCY: ${EPG_FETCH_CONCURRENCY:-1}
       MONGODB_URI: mongodb://mongodb:27017/dzhoof-iptv
       # container_name, not the service name: the api/frontend also sit on the shared
       # gkz-network where another stack's redis carries the alias "redis" (and requires
@@ -199,6 +181,16 @@ services:
       LIVENESS_CHECK_INTERVAL_MS: ${LIVENESS_CHECK_INTERVAL_MS}
       EPG_REFRESH_INTERVAL_MS: ${EPG_REFRESH_INTERVAL_MS}
       CACHE_REFRESH_INTERVAL_MS: ${CACHE_REFRESH_INTERVAL_MS}
+      # Audit-remediation-v1: bounded EPG fetching — sequential by default so peak
+      # memory stays proportional to a single guide; per-source timeout; heap guard.
+      NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first
+      EPG_FETCH_CONCURRENCY: ${EPG_FETCH_CONCURRENCY:-1}
+      EPG_SOURCE_TIMEOUT_MS: ${EPG_SOURCE_TIMEOUT_MS:-120000}
+      EPG_MAX_DECOMPRESSED_MB: ${EPG_MAX_DECOMPRESSED_MB:-100}
+      EPG_MAX_PROGRAMS_PER_SOURCE: ${EPG_MAX_PROGRAMS_PER_SOURCE:-50000}
+      EPG_HEAP_GUARD_MB: ${EPG_HEAP_GUARD_MB:-768}
+      EPG_COUNTRY_FILTER: ${EPG_COUNTRY_FILTER:-}
+      EPG_EXTRA_SOURCES: ${EPG_EXTRA_SOURCES:-}
       BACKEND_SENTRY_DSN: ${BACKEND_SENTRY_DSN}
     command:
       [
@@ -215,6 +207,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
     networks:
       - dzhoof-network
     logging:
@@ -222,12 +218,6 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
-    deploy:
-      resources:
-        limits:
-          memory: 1280m
-        reservations:
-          memory: 128m
 
 networks:
   dzhoof-network:

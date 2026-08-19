@@ -31,6 +31,16 @@ function validatePassword(pw) {
 // POST /api/v1/public/signup
 router.post('/signup', signupLimiter, async (req, res) => {
   try {
+    // Public self-service registration is disabled by default in production
+    // (audit-remediation-v1) — same rule as /api/v1/auth/register.
+    const { publicRegistrationEnabled } = require('../utils/registration-config');
+    if (!publicRegistrationEnabled()) {
+      return res.status(403).json({
+        success: false,
+        error: 'Registration is currently disabled. Please contact the administrator.',
+      });
+    }
+
     const { username, email, password } = req.body;
     if (!username || !email || !password) {
       return res.status(400).json({ success: false, error: 'username, email, password required' });

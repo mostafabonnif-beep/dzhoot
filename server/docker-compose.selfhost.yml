@@ -3,8 +3,9 @@ services:
     image: ${DOCKER_IMAGE}
     container_name: dzhoof-api
     restart: unless-stopped
-    ports:
-      - '3000:3000'
+    # Keep the API internal; put Caddy/Nginx/Traefik in front for HTTPS.
+    expose:
+      - '3000'
     environment:
       NODE_ENV: production
       PORT: 3000
@@ -23,6 +24,11 @@ services:
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
       SUPER_ADMIN_CHANNEL_LIST_CODE: ${SUPER_ADMIN_CHANNEL_LIST_CODE}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET}
+      XTREAM_SECRET_KEY: ${XTREAM_SECRET_KEY}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
+      SUBSCRIPTION_REQUIRED: 'true'
       GH_APP_OWNER: ${GH_APP_OWNER}
       GH_APP_REPO: ${GH_APP_REPO}
       GH_APP_APK_PATTERN: ${GH_APP_APK_PATTERN}
@@ -34,13 +40,15 @@ services:
       BREVO_PASSWORD: ${BREVO_PASSWORD}
       MAIL_FROM: ${MAIL_FROM}
       APP_URL: ${APP_URL}
-      ALLOWED_ORIGINS: '*'
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       DISABLE_SCHEDULER: 'true'
     networks:
       - dzhoof-network
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     logging:
       driver: 'json-file'
       options:
@@ -51,12 +59,13 @@ services:
     image: ${DOCKER_FRONTEND_IMAGE}
     container_name: dzhoof-frontend
     restart: unless-stopped
-    ports:
-      - '3001:3000'
+    expose:
+      - '3000'
     networks:
       - dzhoof-network
     depends_on:
-      - api
+      api:
+        condition: service_started
     logging:
       driver: 'json-file'
       options:
@@ -64,13 +73,18 @@ services:
         max-file: '3'
 
   mongodb:
-    image: mongo:7
+    image: mongo:7.0.19
     container_name: dzhoof-mongodb
     restart: unless-stopped
     volumes:
       - mongodb_data:/data/db
     networks:
       - dzhoof-network
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', 'db.adminCommand({ ping: 1 }).ok']
+      interval: 10s
+      timeout: 5s
+      retries: 10
     logging:
       driver: 'json-file'
       options:
@@ -78,10 +92,15 @@ services:
         max-file: '3'
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.2.5-alpine
     container_name: dzhoof-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
     volumes:
       - redis_data:/data
     networks:
