@@ -187,6 +187,10 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      # Bound V8 below the container limit so a large XMLTV parse has headroom
+      # while avoiding host-wide memory pressure.
+      NODE_OPTIONS: --max-old-space-size=1024
+      EPG_FETCH_CONCURRENCY: ${EPG_FETCH_CONCURRENCY:-1}
       MONGODB_URI: mongodb://mongodb:27017/dzhoof-iptv
       # container_name, not the service name: the api/frontend also sit on the shared
       # gkz-network where another stack's redis carries the alias "redis" (and requires
@@ -221,9 +225,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512m
+          memory: 1280m
         reservations:
-          memory: 64m
+          memory: 128m
 
 networks:
   dzhoof-network:
