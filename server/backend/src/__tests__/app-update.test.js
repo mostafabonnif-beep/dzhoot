@@ -1,3 +1,5 @@
+/* global describe, it, expect */
+
 const router = require('../routes/app-update');
 
 const { normalizeVersion, compareVersions, versionNameToCode } = router._private;
