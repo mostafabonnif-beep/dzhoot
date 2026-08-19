@@ -69,15 +69,15 @@ jobs:
         run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
       - name: Run Android lint and unit tests
         working-directory: android
-        run: ./gradlew lintDebug testDebugUnitTest --stacktrace -PdzhoofApiUrl=https://example.invalid/
+        run: ./gradlew lintStagingDebug testStagingDebugUnitTest --stacktrace -PdzhoofApiUrl=https://example.invalid/
       - name: Assemble Android debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --stacktrace -PdzhoofApiUrl=https://example.invalid/
+        run: ./gradlew assembleStagingDebug --stacktrace -PdzhoofApiUrl=https://example.invalid/
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v4
         with:
           name: dzhoof-debug-apk
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/staging/debug/*.apk
           if-no-files-found: error
 
   frontend:

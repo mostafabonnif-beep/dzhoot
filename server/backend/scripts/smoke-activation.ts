@@ -1,8 +1,9 @@
 /* eslint-disable no-console */
 /**
  * End-to-end smoke test for the subscription & activation system.
- * Boots the REAL server (Express + MongoMemoryServer), then walks the full
- * commercial loop: admin login → create plan → generate codes → register a
+ * Boots the REAL server against the CI MongoDB service when TEST_MONGO_URI is
+ * available (or MongoMemoryServer for local runs), then walks the full commercial
+ * loop: admin login → create plan → generate codes → register a
  * user → redeem a code → check subscription → negative cases.
  *
  * Run: npx tsx scripts/smoke-activation.js
@@ -38,9 +39,15 @@ async function jfetch(path: string, options: RequestInit = {}, headers: Record<s
 }
 
 async function main() {
-  // Boot an in-memory MongoDB and point the server at it.
-  const mongo = await MongoMemoryServer.create();
-  process.env.MONGODB_URI = mongo.getUri();
+  // CI supplies a managed MongoDB service so this smoke test must not download
+  // a second MongoDB binary. Local runs retain the self-contained in-memory mode.
+  const ciMongoUri = String(process.env.TEST_MONGO_URI || '').trim();
+  if (ciMongoUri) {
+    process.env.MONGODB_URI = ciMongoUri;
+  } else {
+    const mongo = await MongoMemoryServer.create();
+    process.env.MONGODB_URI = mongo.getUri();
+  }
   process.env.PORT = String(PORT);
   process.env.NODE_ENV = 'test';
   process.env.JWT_ACCESS_SECRET = 'smoke-access-secret-0123456789';
@@ -50,9 +57,11 @@ async function main() {
   process.env.SUPER_ADMIN_PASSWORD = 'SmokeAdmin123!';
   process.env.REDIS_URL = '';
 
-  // Import AFTER env is set — server.js reads env at require time.
+  // Import AFTER env is set — server.js reads env at require time. The module
+  // intentionally does not listen when imported, so the smoke test starts it explicitly.
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  require('../src/server');
+  const { startServer } = require('../src/server');
+  void startServer();
 
   // Wait for the API to come up.
   let ready = false;
