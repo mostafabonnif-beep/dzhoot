@@ -19,6 +19,12 @@ const EPG_FETCH_CONCURRENCY = Math.max(
   Math.min(Number.parseInt(process.env.EPG_FETCH_CONCURRENCY || '1', 10) || 1, 2),
 );
 const BATCH_SIZE = 500;
+// Parsing XML into an object graph expands memory far beyond the compressed file.
+// Keep the default conservative; operators may raise it only after capacity tests.
+const EPG_MAX_XML_BYTES = Math.max(
+  10 * 1024 * 1024,
+  Math.min(Number.parseInt(process.env.EPG_MAX_XML_MB || '50', 10) || 50, 100) * 1024 * 1024,
+);
 const IPTV_EPG_BASE = 'https://iptv-epg.org/files';
 
 interface EpgSourceInfo {
@@ -345,7 +351,7 @@ export class EpgService {
     const xmlData = await new Promise<string>((resolve, reject) => {
       const chunks: Buffer[] = [];
       let totalSize = 0;
-      const maxSize = 200 * 1024 * 1024; // 200MB decompressed limit
+      const maxSize = EPG_MAX_XML_BYTES;
 
       let stream = response.data;
       if (isGzip) {
@@ -357,7 +363,11 @@ export class EpgService {
       stream.on('data', (chunk: Buffer) => {
         totalSize += chunk.length;
         if (totalSize > maxSize) {
-          stream.destroy(new Error('EPG XML exceeds maximum decompressed size (200MB)'));
+          stream.destroy(
+            new Error(
+              `EPG XML exceeds maximum decompressed size (${Math.round(maxSize / 1024 / 1024)}MB)`,
+            ),
+          );
           return;
         }
         chunks.push(chunk);
