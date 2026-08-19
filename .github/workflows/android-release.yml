@@ -1,0 +1,67 @@
+name: DZ HOOF Android Release
+
+on:
+  push:
+    tags:
+      - 'android-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      - name: Restore signing keystore
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.DZHOOF_ANDROID_KEYSTORE_B64 }}
+        run: |
+          set -euo pipefail
+          test -n "$SIGNING_KEYSTORE_B64"
+          echo "$SIGNING_KEYSTORE_B64" | base64 --decode > android/release.keystore
+      - name: Build signed release APK
+        working-directory: android
+        env:
+          SIGNING_KEY_STORE: release.keystore
+          SIGNING_STORE_PASSWORD: ${{ secrets.DZHOOF_ANDROID_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.DZHOOF_ANDROID_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.DZHOOF_ANDROID_KEY_PASSWORD }}
+          DZHOOF_API_URL: ${{ secrets.DZHOOF_ANDROID_API_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$SIGNING_STORE_PASSWORD"
+          test -n "$SIGNING_KEY_ALIAS"
+          test -n "$SIGNING_KEY_PASSWORD"
+          test -n "$DZHOOF_API_URL"
+          ./gradlew clean assembleRelease --stacktrace \
+            -PdzhoofApiUrl="$DZHOOF_API_URL" \
+            -PrequireSignedRelease=true
+      - name: Verify APK signature
+        working-directory: android
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/release -name '*.apk' -print -quit)
+          test -n "$APK"
+          apksigner verify --verbose "$APK"
+          sha256sum "$APK" | tee "$APK.sha256"
+      - name: Upload signed release
+        uses: actions/upload-artifact@v4
+        with:
+          name: dzhoof-android-release
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/release/*.sha256
+          if-no-files-found: error
+      - name: Cleanup signing material
+        if: always()
+        run: rm -f android/release.keystore

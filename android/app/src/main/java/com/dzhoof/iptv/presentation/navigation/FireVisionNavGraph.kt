@@ -1,0 +1,385 @@
+package com.dzhoof.iptv.presentation.navigation
+
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInVertically
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
+import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
+import com.dzhoof.iptv.presentation.ui.animation.DURATION_ENTRANCE
+import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
+import com.dzhoof.iptv.presentation.ui.animation.screenEnterTransition
+import com.dzhoof.iptv.presentation.ui.animation.screenExitTransition
+import com.dzhoof.iptv.presentation.ui.animation.screenPopEnterTransition
+import com.dzhoof.iptv.presentation.ui.animation.screenPopExitTransition
+import com.dzhoof.iptv.presentation.ui.screens.CategoriesScreen
+import com.dzhoof.iptv.presentation.ui.screens.CatalogScreen
+import com.dzhoof.iptv.presentation.ui.screens.ChannelsScreen
+import com.dzhoof.iptv.presentation.ui.screens.FavoritesScreen
+import com.dzhoof.iptv.presentation.ui.screens.HomeScreen
+import com.dzhoof.iptv.presentation.ui.screens.MultiviewScreen
+import com.dzhoof.iptv.presentation.ui.screens.guide.GuideScreen
+import com.dzhoof.iptv.presentation.ui.screens.ActivationScreen
+import com.dzhoof.iptv.presentation.ui.screens.PlayerScreen
+import com.dzhoof.iptv.presentation.ui.screens.VodPlayerScreen
+import com.dzhoof.iptv.presentation.ui.screens.SearchScreen
+import com.dzhoof.iptv.presentation.ui.screens.AddSourceScreen
+import com.dzhoof.iptv.presentation.ui.screens.SettingsScreen
+
+/**
+ * Navigation graph for FireVision IPTV app.
+ *
+ * Defines all navigation routes and handles navigation between screens.
+ * The sidebar-based navigation for top-level screens is handled by the
+ * parent composable in ComposeMainActivity; this graph only defines destinations.
+ *
+ * @param startDestination The initial route — either Pairing or Home.
+ */
+@Composable
+fun FireVisionNavGraph(
+    navController: NavHostController,
+    startDestination: String = Screen.Home.route,
+    modifier: Modifier = Modifier
+) {
+    val reduceMotion = LocalPerfProfile.current.reduceMotion
+    val enterSlideOffsetPx = with(LocalDensity.current) { 16.dp.roundToPx() }
+
+    NavHost(
+        navController = navController,
+        startDestination = startDestination,
+        modifier = modifier,
+        enterTransition = {
+            if (reduceMotion) screenEnterTransition()
+            else screenEnterTransition() +
+                    slideInVertically(tween(DURATION_ENTRANCE, easing = EaseOutQuart)) { enterSlideOffsetPx }
+        },
+        exitTransition = { screenExitTransition() },
+        popEnterTransition = { screenPopEnterTransition() },
+        popExitTransition = { screenPopExitTransition() }
+    ) {
+        // ── Pairing (onboarding) ────────────────────────────────────────
+        composable(route = Screen.Pairing.route) {
+            ActivationScreen(
+                onActivated = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Pairing.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+
+        // ── Home ────────────────────────────────────────────────────────
+        composable(route = Screen.Home.route) {
+            HomeScreen(
+                onNavigateToChannels = { category ->
+                    navController.navigate(Screen.ChannelsByCategory.createRoute(category))
+                },
+                onNavigateToSearch = {
+                    navController.navigate(Screen.Search.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToFavorites = {
+                    navController.navigate(Screen.Favorites.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onNavigateToSettings = {
+                    navController.navigate(Screen.Settings.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                onChannelClick = { channelId ->
+                    navController.navigate(Screen.Player.createRoute(channelId))
+                },
+                onPairDevice = {
+                    navController.navigate(Screen.Pairing.route)
+                },
+                onMultiviewClick = { channelId ->
+                    navController.navigate(Screen.Multiview.createRoute(channelId))
+                }
+            )
+        }
+
+        // ── Categories ─────────────────────────────────────────────────
+        composable(route = Screen.Categories.route) {
+            CategoriesScreen(
+                onCategoryClick = { category ->
+                    navController.navigate(Screen.ChannelsByCategory.createRoute(category))
+                }
+            )
+        }
+
+        // ── VOD catalog ──────────────────────────────────────────────────
+        composable(route = Screen.Catalog.route) {
+            CatalogScreen(
+                onPlayMovie = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("MOVIE", id, title))
+                },
+                onPlayEpisode = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("EPISODE", id, title))
+                },
+            )
+        }
+
+        // ── Movie details (opened directly from unified search) ────────
+        composable(
+            route = Screen.MovieDetails.route,
+            arguments = listOf(navArgument("movieId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            CatalogScreen(
+                initialMovieId = backStackEntry.arguments?.getString("movieId"),
+                onPlayMovie = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("MOVIE", id, title))
+                },
+                onPlayEpisode = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("EPISODE", id, title))
+                },
+            )
+        }
+
+        // ── Series details (opened directly from unified search) ────────
+        composable(
+            route = Screen.SeriesDetails.route,
+            arguments = listOf(navArgument("seriesId") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            CatalogScreen(
+                initialSeriesId = backStackEntry.arguments?.getString("seriesId"),
+                onPlayMovie = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("MOVIE", id, title))
+                },
+                onPlayEpisode = { id, title ->
+                    navController.navigate(Screen.VodPlayer.createRoute("EPISODE", id, title))
+                },
+            )
+        }
+
+        // ── Channels ────────────────────────────────────────────────────
+        composable(route = Screen.Channels.route) {
+            ChannelsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onChannelClick = { channelId ->
+                    navController.navigate(Screen.Player.createRoute(channelId))
+                },
+                onPairDevice = {
+                    navController.navigate(Screen.Pairing.route)
+                },
+                onMultiviewClick = { channelId ->
+                    navController.navigate(Screen.Multiview.createRoute(channelId))
+                }
+            )
+        }
+
+        // ── Channels by Category ────────────────────────────────────────
+        composable(
+            route = Screen.ChannelsByCategory.route,
+            arguments = listOf(
+                navArgument("categoryId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val categoryId = backStackEntry.arguments?.getString("categoryId")
+                ?.let { Screen.ChannelsByCategory.decodeCategory(it) }
+            ChannelsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onChannelClick = { channelId ->
+                    navController.navigate(Screen.Player.createRoute(channelId))
+                },
+                onPairDevice = {
+                    navController.navigate(Screen.Pairing.route)
+                },
+                onMultiviewClick = { channelId ->
+                    navController.navigate(Screen.Multiview.createRoute(channelId))
+                },
+                initialCategory = categoryId
+            )
+        }
+
+        // ── Guide (EPG program grid) ────────────────────────────────────
+        composable(route = Screen.Guide.route) {
+            GuideScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onChannelClick = { channelId ->
+                    navController.navigate(Screen.Player.createRoute(channelId))
+                },
+                onCatchup = { channelId, startMillis, durationMinutes ->
+                    navController.navigate(
+                        Screen.Player.createCatchupRoute(channelId, startMillis, durationMinutes)
+                    )
+                },
+                onPairDevice = {
+                    navController.navigate(Screen.Pairing.route)
+                }
+            )
+        }
+
+        // ── Multiview (watch several channels at once) ──────────────────
+        composable(
+            route = Screen.Multiview.route,
+            arguments = listOf(
+                navArgument("channelId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }
+            )
+        ) { backStackEntry ->
+            MultiviewScreen(
+                onNavigateBack = { navController.popBackStack() },
+                initialChannelId = backStackEntry.arguments?.getString("channelId")
+            )
+        }
+
+        // ── Search ──────────────────────────────────────────────────────
+        composable(route = Screen.Search.route) {
+            SearchScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onChannelClick = { channelId ->
+                    navController.navigate(Screen.Player.createRoute(channelId))
+                },
+                onMultiviewClick = { channelId ->
+                    navController.navigate(Screen.Multiview.createRoute(channelId))
+                },
+                onMovieClick = { movieId ->
+                    navController.navigate(Screen.MovieDetails.createRoute(movieId))
+                },
+                onSeriesClick = { seriesId ->
+                    navController.navigate(Screen.SeriesDetails.createRoute(seriesId))
+                },
+                onProgramClick = {
+                    navController.navigate(Screen.Guide.route)
+                },
+            )
+        }
+
+        // ── Favorites ───────────────────────────────────────────────────
+        composable(route = Screen.Favorites.route) {
+            FavoritesScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onChannelClick = { channelId ->
+                    navController.navigate(Screen.Player.createRoute(channelId))
+                },
+                onCategoryClick = { categoryName ->
+                    navController.navigate(Screen.ChannelsByCategory.createRoute(categoryName))
+                },
+                onMultiviewClick = { channelId ->
+                    navController.navigate(Screen.Multiview.createRoute(channelId))
+                }
+            )
+        }
+
+        // ── Settings ────────────────────────────────────────────────────
+        composable(route = Screen.Settings.route) {
+            SettingsScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onPairDevice = {
+                    navController.navigate(Screen.Pairing.route)
+                },
+                onResetPairing = {
+                    navController.navigate(Screen.Pairing.route) {
+                        popUpTo(Screen.Home.route) { inclusive = false }
+                    }
+                },
+                onNavigateToSelfHost = {
+                    navController.navigate(Screen.AddSource.route)
+                }
+            )
+        }
+
+        // ── Add a different source (self-hosted / M3U / Xtream) ────────
+        composable(route = Screen.AddSource.route) {
+            AddSourceScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onPairDevice = {
+                    navController.navigate(Screen.Pairing.route)
+                },
+                onPlaylistLoaded = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Pairing.route) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                }
+            )
+        }
+
+        // ── VOD player ───────────────────────────────────────────────────
+        composable(
+            route = Screen.VodPlayer.route,
+            arguments = listOf(
+                navArgument("contentType") { type = NavType.StringType },
+                navArgument("contentId") { type = NavType.StringType },
+                navArgument("title") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { backStackEntry ->
+            val contentType = backStackEntry.arguments?.getString("contentType")
+            val contentId = backStackEntry.arguments?.getString("contentId")
+            val title = backStackEntry.arguments?.getString("title").orEmpty()
+            if (contentType.isNullOrBlank() || contentId.isNullOrBlank()) {
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            } else {
+                VodPlayerScreen(
+                    contentType = contentType,
+                    contentId = contentId,
+                    title = title,
+                    onNavigateBack = { navController.popBackStack() },
+                )
+            }
+        }
+
+        // ── Player ──────────────────────────────────────────────────────
+        composable(
+            route = Screen.Player.route,
+            arguments = listOf(
+                navArgument("channelId") { type = NavType.StringType },
+                navArgument("catchupStart") { type = NavType.LongType; defaultValue = 0L },
+                navArgument("catchupDur") { type = NavType.IntType; defaultValue = 0 }
+            )
+        ) { backStackEntry ->
+            val channelId = backStackEntry.arguments?.getString("channelId")
+            val catchupStart = backStackEntry.arguments?.getLong("catchupStart") ?: 0L
+            val catchupDur = backStackEntry.arguments?.getInt("catchupDur") ?: 0
+            if (channelId.isNullOrEmpty()) {
+                // Guard: pop back if channelId is missing
+                LaunchedEffect(Unit) { navController.popBackStack() }
+            } else {
+                PlayerScreen(
+                    channelId = channelId,
+                    catchupStartMs = catchupStart,
+                    catchupDurationMin = catchupDur,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToSettings = {
+                        navController.navigate(Screen.Settings.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToSearch = {
+                        navController.navigate(Screen.Search.route) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onNavigateToGuide = {
+                        navController.navigate(Screen.Guide.route) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+        }
+    }
+}

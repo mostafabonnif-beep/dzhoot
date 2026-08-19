@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Light Mode — Parchment + Flame500 ───────────────────────────── */
+    /* Parchment-50  #FAF8F4 */ --background: 40 33% 97%;
+    /* Parchment-200 #EDE8DE */ --card: 38 22% 89%;
+    /* Parchment-200 #EDE8DE */ --popover: 38 22% 89%;
+    /* text-primary  #1C1A24 */ --foreground: 252 15% 12%;
+    /* text-primary  #1C1A24 */ --card-foreground: 252 15% 12%;
+    /* text-primary  #1C1A24 */ --popover-foreground: 252 15% 12%;
+    /* Flame-500     #B85E10 */ --primary: 30 84% 38%;
+    /* Parchment-50  #FAF8F4 */ --primary-foreground: 40 33% 97%;
+    /* Parchment-100 #F4F0E8 */ --secondary: 40 29% 93%;
+    /* text-primary  #1C1A24 */ --secondary-foreground: 252 15% 12%;
+    /* Parchment-100 #F4F0E8 */ --muted: 40 29% 93%;
+    /* text-secondary #5A5470*/ --muted-foreground: 260 13% 39%;
+    /* Flame-100     #FFD080 */ --accent: 38 100% 75%;
+    /* Flame-700     #7A3A06 */ --accent-foreground: 26 90% 25%;
+    /* Error light   #C02020 */ --destructive: 0 71% 44%;
+    /* Parchment-50  #FAF8F4 */ --destructive-foreground: 40 33% 97%;
+    /* Parchment-300 #E2DCD0 */ --border: 36 18% 85%;
+    /* Parchment-200 #EDE8DE */ --input: 38 22% 89%;
+    /* Flame-500     #B85E10 */ --ring: 30 84% 38%;
+                                --radius: 2px;
+    /* Signal — light mode */
+    /* #1A8A40 */ --signal-green: 142 67% 32%;
+    /* #C02020 */ --signal-red: 0 71% 44%;
+    /* #1A60D0 */ --signal-blue: 217 78% 45%;
+    /* #D07808 */ --signal-amber: 35 90% 42%;
+    /* Sidebar */
+    /* Parchment-100 #F4F0E8 */ --sidebar-background: 40 29% 93%;
+    /* text-primary  #1C1A24 */ --sidebar-foreground: 252 15% 12%;
+    /* Flame-500     #B85E10 */ --sidebar-primary: 30 84% 38%;
+    /* Parchment-50  #FAF8F4 */ --sidebar-primary-foreground: 40 33% 97%;
+    /* Parchment-200 #EDE8DE */ --sidebar-accent: 38 22% 89%;
+    /* text-primary  #1C1A24 */ --sidebar-accent-foreground: 252 15% 12%;
+    /* Parchment-300 #E2DCD0 */ --sidebar-border: 36 18% 85%;
+    /* Flame-500     #B85E10 */ --sidebar-ring: 30 84% 38%;
+  }
+
+  .dark {
+    /* ── Dark Mode — Void + Flame300 ─────────────────────────────────── */
+    /* Void-950   #0A0A12 */ --background: 240 30% 6%;
+    /* Void-800   #191921 */ --card: 240 15% 11%;
+    /* Void-800   #191921 */ --popover: 240 15% 11%;
+    /* text-primary #F2EDE3*/ --foreground: 38 29% 92%;
+    /* text-primary #F2EDE3*/ --card-foreground: 38 29% 92%;
+    /* text-primary #F2EDE3*/ --popover-foreground: 38 29% 92%;
+    /* Flame-300  #F7A93A  */ --primary: 38 92% 60%;
+    /* Flame-700  #7A3A06  */ --primary-foreground: 26 90% 25%;
+    /* Void-700   #21212C  */ --secondary: 240 14% 16%;
+    /* text-secondary #A8A0B2 */ --secondary-foreground: 270 8% 66%;
+    /* Void-700   #21212C  */ --muted: 240 14% 16%;
+    /* text-secondary #A8A0B2 */ --muted-foreground: 270 8% 66%;
+    /* Flame-300  #F7A93A  */ --accent: 38 92% 60%;
+    /* Flame-700  #7A3A06  */ --accent-foreground: 26 90% 25%;
+    /* Error dark  #E83838 */ --destructive: 0 78% 56%;
+    /* Parchment-50 #FAF8F4*/ --destructive-foreground: 40 33% 97%;
+    /* Void-600   #2A2B37  */ --border: 236 13% 19%;
+    /* Void-700   #21212C  */ --input: 240 14% 16%;
+    /* Flame-300  #F7A93A  */ --ring: 38 92% 60%;
+    /* Signal — dark mode */
+    /* #28B560 */ --signal-green: 142 62% 43%;
+    /* #E83838 */ --signal-red: 0 78% 56%;
+    /* #3D88F5 */ --signal-blue: 217 89% 60%;
+    /* #F5A624 */ --signal-amber: 38 91% 55%;
+    /* Sidebar */
+    /* Void-900   #11111A  */ --sidebar-background: 240 22% 8%;
+    /* text-primary #F2EDE3*/ --sidebar-foreground: 38 29% 92%;
+    /* Flame-300  #F7A93A  */ --sidebar-primary: 38 92% 60%;
+    /* Flame-700  #7A3A06  */ --sidebar-primary-foreground: 26 90% 25%;
+    /* Void-700   #21212C  */ --sidebar-accent: 240 14% 16%;
+    /* text-primary #F2EDE3*/ --sidebar-accent-foreground: 38 29% 92%;
+    /* Void-600   #2A2B37  */ --sidebar-border: 236 13% 19%;
+    /* Flame-300  #F7A93A  */ --sidebar-ring: 38 92% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    @apply h-full overflow-hidden;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+    font-family: var(--font-arabic), var(--font-body), Arial, sans-serif;
+  }
+  html[dir='rtl'] {
+    text-align: right;
+  }
+  input,
+  textarea,
+  select {
+    text-align: right;
+  }
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .brand-gradient {
+    background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.82) 52%, hsl(var(--signal-amber)) 100%);
+  }
+
+  .brand-glow {
+    box-shadow: 0 24px 70px hsl(var(--primary) / 0.18), inset 0 1px 0 hsl(var(--foreground) / 0.08);
+  }
+
+  .brand-surface {
+    background: linear-gradient(145deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.62));
+    box-shadow: 0 18px 45px hsl(var(--foreground) / 0.06), inset 0 1px 0 hsl(var(--foreground) / 0.05);
+    backdrop-filter: blur(18px);
+  }
+
+  .dashboard-shell {
+    background-image: radial-gradient(circle at 15% 0%, hsl(var(--primary) / 0.08), transparent 28rem), radial-gradient(circle at 90% 100%, hsl(var(--signal-blue) / 0.05), transparent 24rem);
+  }
+
+  .interactive-lift {
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  }
+
+  .interactive-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 32px hsl(var(--foreground) / 0.08);
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

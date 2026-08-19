@@ -1,0 +1,86 @@
+name: Restore Drill (scheduled)
+
+# Runs the full backup -> restore -> integrity-check loop against a disposable
+# MongoDB container. This does NOT touch production; MONGODB_URI here always
+# points at the throwaway service container defined below.
+#
+# Closes RELEASE_RISK_REGISTER_AR.md P0 item: "عدم وجود اختبار استعادة إنتاجي دوري".
+
+on:
+  schedule:
+    # Every Monday 03:00 UTC
+    - cron: '0 3 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      mongodb-source:
+        image: mongo:7
+        ports: ['27017:27017']
+      mongodb-restore-target:
+        image: mongo:7
+        ports: ['27018:27017']
+    defaults:
+      run:
+        working-directory: server
+    env:
+      MONGODB_URI: mongodb://localhost:27017/dzhoof_drill_source
+      MONGODB_RESTORE_URI: mongodb://localhost:27018/dzhoof_drill_target
+      ALLOW_RESTORE_DRILL: 'true'
+      RESTORE_DROP: 'true'
+      ALERT_WEBHOOK_URL: ${{ secrets.ALERT_WEBHOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install MongoDB Database Tools
+        run: |
+          curl -fsSL https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.9.4.deb -o mdt.deb
+          sudo apt-get install -y ./mdt.deb
+
+      - run: npm ci --ignore-scripts
+      - run: npm install --no-save mongodb
+
+      - name: Seed source database with synthetic data
+        run: node scripts/seed-drill-data.mjs
+
+      - name: Write baseline counts
+        run: node scripts/verify-restore-integrity.mjs --write-baseline restore-baseline.json
+
+      - name: Take backup
+        env:
+          BACKUP_DIR: /tmp/dzhoof-drill-backups
+        run: ./scripts/backup.sh
+
+      - name: Locate backup archive
+        id: locate
+        run: |
+          FILE=$(ls -t /tmp/dzhoof-drill-backups/dzhoof-mongodb-*.archive.gz | head -n1)
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+
+      - name: Restore into scratch target database
+        env:
+          BACKUP_FILE: ${{ steps.locate.outputs.file }}
+        run: ./scripts/restore-drill.sh
+
+      - name: Verify restored data integrity
+        run: node scripts/verify-restore-integrity.mjs --baseline restore-baseline.json
+
+      - name: Notify on failure
+        if: failure() && env.ALERT_WEBHOOK_URL != ''
+        run: |
+          curl --silent --show-error --fail --max-time 5 \
+            -H 'Content-Type: application/json' \
+            --data-binary '{"event":"restore-drill:ci-failure","severity":"critical","message":"Scheduled restore drill failed in CI","service":"dzhoof-restore-drill"}' \
+            "$ALERT_WEBHOOK_URL"
