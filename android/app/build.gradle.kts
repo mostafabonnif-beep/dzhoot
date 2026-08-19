@@ -31,11 +31,13 @@ android {
         applicationId = "com.dzhoof.iptv"
         minSdk = 28
         targetSdk = 34
-        versionCode = 5
+        // Official release line. Keep the code greater than legacy builds so
+        // tested production updates can install cleanly on existing devices.
+        versionCode = 10000
         versionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
-            "1.5"
+            "1.0.0"
         }
         
         // API Base URL configuration — overridable at build time via the
@@ -56,6 +58,20 @@ android {
         buildConfigField("Boolean", "FIREBASE_ENABLED", googleServicesAvailable.toString())
         manifestPlaceholders["sentryDsn"] = System.getenv("SENTRY_DSN") ?: ""
         manifestPlaceholders["sentryEnvironment"] = "debug"
+    }
+
+    flavorDimensions += "environment"
+    productFlavors {
+        create("official") {
+            dimension = "environment"
+            buildConfigField("String", "RELEASE_CHANNEL", "\"official\"")
+        }
+        create("staging") {
+            dimension = "environment"
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-staging"
+            buildConfigField("String", "RELEASE_CHANNEL", "\"staging\"")
+        }
     }
 
     signingConfigs {
