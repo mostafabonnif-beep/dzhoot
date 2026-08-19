@@ -7,8 +7,8 @@ services:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
     ports:
-      - "80:80"
-      - "443:443"
+      - '80:80'
+      - '443:443'
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -23,6 +23,12 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 64m
 
   api:
     image: ${DOCKER_IMAGE}
@@ -77,18 +83,26 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       DISABLE_SCHEDULER: 'true'
-      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED:-true}
+      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED}
     networks:
       - dzhoof-network
       - gkz-network
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     logging:
       driver: 'json-file'
       options:
         max-size: '10m'
         max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+        reservations:
+          memory: 256m
 
   frontend:
     image: ${DOCKER_FRONTEND_IMAGE}
@@ -107,6 +121,12 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
 
   mongodb:
     image: mongo:7
@@ -114,6 +134,12 @@ services:
     restart: unless-stopped
     volumes:
       - mongodb_data:/data/db
+    healthcheck:
+      test: ['CMD', 'mongosh', '--quiet', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     networks:
       - dzhoof-network
     logging:
@@ -121,6 +147,12 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+        reservations:
+          memory: 256m
 
   redis:
     image: redis:7-alpine
@@ -129,6 +161,12 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - dzhoof-network
     logging:
@@ -136,6 +174,12 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 64m
 
   scheduler:
     image: ${DOCKER_IMAGE}
@@ -163,8 +207,10 @@ services:
     healthcheck:
       disable: true
     depends_on:
-      - mongodb
-      - redis
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - dzhoof-network
     logging:
@@ -172,6 +218,12 @@ services:
       options:
         max-size: '10m'
         max-file: '3'
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 64m
 
 networks:
   dzhoof-network:

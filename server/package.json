@@ -1,6 +1,6 @@
 {
   "name": "firevision-iptv",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Server for FireVisionIPTV - Manages channel lists and app updates",
   "workspaces": [
@@ -21,6 +21,8 @@
     "test:frontend": "npm run test -w @firevision/frontend",
     "test:e2e": "npx playwright test",
     "typecheck": "npm run build -w @firevision/shared && npm run typecheck -w @firevision/shared && npm run typecheck -w @firevision/backend",
+    "release:check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "validate:production": "bash scripts/preflight-production.sh",
     "start": "npm run start -w @firevision/backend",
     "prepare": "husky || true"
   },
