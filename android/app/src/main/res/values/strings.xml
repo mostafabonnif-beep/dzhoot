@@ -98,5 +98,5 @@
     <string name="guide_all">الكل</string>
     <string name="guide_favorites">★ المفضلة</string>
     <string name="guide_loading">جارٍ تحميل دليل البرامج…</string>
-    <string name="guide_empty">لا توجد قنوات متاحة في الدليل</string>
+    <string name="guide_empty">لا تتوافر بيانات دليل البرامج للقنوات الحالية</string>
 </resources>

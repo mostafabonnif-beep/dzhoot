@@ -11,6 +11,20 @@ const { hashActivationCode, normalizeActivationCode } = require('../utils/code-g
 
 const REDEEM_WINDOW_MS = 10 * 60 * 1000;
 const REDEEM_MAX_ATTEMPTS = 10;
+
+// Catalog access is an explicit plan entitlement. Plans that omit the setting
+// retain the safe, backwards-compatible default of full catalog access.
+function planGrantsFullCatalog(plan) {
+  return plan?.features?.allCatalog !== false;
+}
+
+async function syncCatalogEntitlement(user, plan) {
+  if (!user || !plan) return;
+  const allCatalog = planGrantsFullCatalog(plan);
+  if (user.allCatalog === allCatalog) return;
+  user.allCatalog = allCatalog;
+  await user.save();
+}
 const redeemAttempts = new Map();
 const redeemCleanupTimer = setInterval(() => {
   const cutoff = Date.now() - REDEEM_WINDOW_MS;
@@ -52,6 +66,7 @@ router.post('/client-redeem', async (req, res) => {
       user = await User.findById(activation.activatedBy).exec();
       if (!user || !user.isActive) return res.status(401).json({ success: false, error: 'Customer account is inactive', code: 'ACCOUNT_INACTIVE' });
       const plan = await Plan.findById(activation.planId).lean().exec();
+      await syncCatalogEntitlement(user, plan);
       const registered = await registerDevice(user._id.toString(), {
         deviceId: normalizedDeviceId,
         name: deviceName,
@@ -70,7 +85,7 @@ router.post('/client-redeem', async (req, res) => {
         password: crypto.randomBytes(32).toString('hex'),
         role: 'User',
         channelListCode,
-        allCatalog: plan.features?.allCatalog !== false,
+        allCatalog: planGrantsFullCatalog(plan),
         isActive: true,
         emailVerified: true,
       });
@@ -153,6 +168,8 @@ router.post('/redeem', async (req, res) => {
       });
     }
 
+    const currentUser = await User.findById(req.user.id).exec();
+    await syncCatalogEntitlement(currentUser, result.plan);
     redeemAttempts.delete(rateLimitKey);
     return res.json({
       success: true,

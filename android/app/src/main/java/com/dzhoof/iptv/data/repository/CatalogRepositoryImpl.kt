@@ -1,6 +1,8 @@
 package com.dzhoof.iptv.data.repository
 
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationResponse
+import com.google.gson.Gson
 import com.dzhoof.iptv.data.source.remote.FireVisionApiService
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.model.CatalogPage
@@ -24,6 +26,21 @@ class CatalogRepositoryImpl @Inject constructor(
     private val apiService: FireVisionApiService,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
+
+    private val gson = Gson()
+
+    private fun playbackAuthorizationError(response: retrofit2.Response<PlaybackAuthorizationResponse>): String {
+        val payload = response.errorBody()?.charStream()?.use { reader ->
+            runCatching { gson.fromJson(reader, PlaybackAuthorizationResponse::class.java) }.getOrNull()
+        }
+        return when (payload?.code) {
+            "CONTENT_NOT_FOUND" -> "هذه القناة غير متاحة ضمن صلاحيات الحساب الحالي"
+            "SUBSCRIPTION_EXPIRED" -> "انتهت صلاحية الاشتراك. فعّل رمزاً جديداً للمتابعة"
+            "PLAYBACK_DEVICE_REQUIRED" -> "يلزم ربط جهاز مفعّل قبل تشغيل البث"
+            "AUTHENTICATION_REQUIRED" -> "انتهت جلسة التطبيق. أعد ربط التطبيق برمز التفعيل"
+            else -> payload?.error ?: response.message().ifBlank { "تعذر تفويض تشغيل البث" }
+        }
+    }
 
     override suspend fun searchCatalog(query: String): Result<UnifiedSearchResults> = withContext(dispatcher) {
         try {
@@ -242,7 +259,7 @@ class CatalogRepositoryImpl @Inject constructor(
                 if (response.isSuccessful && body?.success == true && body.data != null) {
                     Result.Success(PlaybackAuthorization(body.data.url, body.data.expiresAt))
                 } else {
-                    Result.Error(Exception(body?.error ?: response.message().ifBlank { "Playback authorization failed" }))
+                    Result.Error(Exception(body?.error ?: playbackAuthorizationError(response)))
                 }
             } catch (error: Exception) {
                 Result.Error(error)
