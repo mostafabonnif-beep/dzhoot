@@ -67,16 +67,22 @@ jobs:
       - uses: android-actions/setup-android@v3
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+      # The uploaded APK is a distributable staging build. It must point at the
+      # managed production API; a placeholder hostname makes device activation fail.
       - name: Run Android lint and unit tests
         working-directory: android
-        run: ./gradlew lintStagingDebug testStagingDebugUnitTest --stacktrace -PdzhoofApiUrl=https://example.invalid/
+        env:
+          DZHOOF_API_URL: https://iptv.ld-11.net/
+        run: ./gradlew lintStagingDebug testStagingDebugUnitTest --stacktrace
       - name: Assemble Android debug APK
         working-directory: android
-        run: ./gradlew assembleStagingDebug --stacktrace -PdzhoofApiUrl=https://example.invalid/
+        env:
+          DZHOOF_API_URL: https://iptv.ld-11.net/
+        run: ./gradlew assembleStagingDebug --stacktrace
       - name: Upload Android debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: dzhoof-debug-apk
+          name: dzhoof-staging-production-apk
           path: android/app/build/outputs/apk/staging/debug/*.apk
           if-no-files-found: error
 
