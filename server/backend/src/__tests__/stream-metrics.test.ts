@@ -318,6 +318,20 @@ describe('POST /channels/health-sync', () => {
     expect(updated.metrics.aliveCount).toBe(1);
   });
 
+  it('updates an M3U channel reported by its external text identifier', async () => {
+    const externalId = `m3u:source:${Date.now()}`;
+    const ch = await createChannel({ channelId: externalId });
+    const res = await request(app)
+      .post('/channels/health-sync')
+      .send({ deviceId: 'dev-sync-m3u', reports: [{ channelId: externalId, status: 'alive' }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.updated).toBe(1);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.aliveCount).toBe(1);
+  });
+
   it('returns 429 on second sync within 5 minutes from same device', async () => {
     const ch = await createChannel();
     const reports = [{ channelId: ch._id.toString(), status: 'dead' }];
