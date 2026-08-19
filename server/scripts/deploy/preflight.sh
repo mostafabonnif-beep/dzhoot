@@ -67,8 +67,8 @@ if command -v docker >/dev/null 2>&1; then
   # Images must be explicitly tagged (no floating 'latest' for the stack).
   for img in $(docker compose -f "$COMPOSE_FILE" config 2>/dev/null | grep -E '^\s+image:' | sed -E 's/.*image: //'); do
     case "$img" in
-      *':latest'|*'@sha256'*) : ;; # sha256 digests are fine; latest is not
       *':latest') fail "floating image tag latest: $img" ;;
+      *'@sha256:'*) : ;; # Immutable digests are allowed.
       *':') fail "image has no tag: $img" ;;
     esac
   done
