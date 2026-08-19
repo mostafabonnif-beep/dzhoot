@@ -1,0 +1,51 @@
+{
+  "name": "dzhoof-iptv",
+  "version": "1.0.1",
+  "private": true,
+  "description": "DZ HOOF server for managing channel lists, subscriptions, devices, and app updates",
+  "workspaces": [
+    "backend",
+    "frontend",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w @dzhoof/backend\" \"npm run dev -w @dzhoof/frontend\"",
+    "dev:backend": "npm run dev -w @dzhoof/backend",
+    "dev:frontend": "npm run dev -w @dzhoof/frontend",
+    "build": "npm run build -w @dzhoof/shared && npm run build -w @dzhoof/backend && npm run build -w @dzhoof/frontend",
+    "build:backend": "npm run build -w @dzhoof/shared && npm run build -w @dzhoof/backend",
+    "lint": "npm run lint -w @dzhoof/backend",
+    "lint:fix": "npm run lint:fix -w @dzhoof/backend && npm run lint:fix -w @dzhoof/frontend",
+    "test": "npm run test -w @dzhoof/backend && npm run test -w @dzhoof/frontend",
+    "test:backend": "npm run test -w @dzhoof/backend",
+    "test:frontend": "npm run test -w @dzhoof/frontend",
+    "test:e2e": "npx playwright test",
+    "typecheck": "npm run build -w @dzhoof/shared && npm run typecheck -w @dzhoof/shared && npm run typecheck -w @dzhoof/backend",
+    "start": "npm run start -w @dzhoof/backend",
+    "prepare": "husky || true"
+  },
+  "keywords": [
+    "iptv",
+    "streaming",
+    "channel-management"
+  ],
+  "author": "merci1994dz",
+  "license": "MIT",
+  "dependencies": {
+    "hls.js": "^1.6.15"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
+    "concurrently": "^8.2.2",
+    "eslint": "^9.39.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1"
+  },
+  "engines": {
+    "node": ">=20.9.0",
+    "npm": ">=10.0.0"
+  }
+}
