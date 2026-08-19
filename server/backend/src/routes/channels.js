@@ -23,24 +23,39 @@ function invalidateCatalogCache() {
 
 // Xtream channels are customer-visible only when their source has passed a live
 // playback probe. Missing verification is intentionally treated as unavailable.
+// Direct-playback / customer-visible sources are exempt: their isWorking flag
+// reflects the server's datacenter IP (blocked upstream), not the customer's
+// network — the same policy as the playlist routes (tv.js / User.ts).
 async function verifiedXtreamChannelQuery(baseQuery) {
   const verifiedSourceIds = (await XtreamSource.find({
-    status: 'Active',
-    verificationStatus: 'verified',
+    $or: [
+      { status: 'Active', verificationStatus: 'verified' },
+      { customerVisible: true },
+      { directPlayback: true },
+    ],
+  }).distinct('_id')).map((id) => String(id));
+  const directPlaybackSourceIds = (await XtreamSource.find({
+    directPlayback: true,
   }).distinct('_id')).map((id) => String(id));
   return {
     $and: [
       baseQuery,
       {
         isActive: { $ne: false },
-        'metadata.isWorking': { $ne: false },
         'flaggedBad.isFlagged': { $ne: true },
       },
       {
         $nor: [
+          // Sources that are neither verified nor operator-visible are hidden.
           {
             'metadata.source': 'xtream',
             'metadata.xtreamSourceId': { $nin: verifiedSourceIds },
+          },
+          // isWorking is measured from the server datacenter IP — exempt
+          // direct-playback sources so their whole catalog stays visible.
+          {
+            'metadata.isWorking': false,
+            'metadata.xtreamSourceId': { $nin: directPlaybackSourceIds },
           },
         ],
       },
@@ -48,11 +63,10 @@ async function verifiedXtreamChannelQuery(baseQuery) {
   };
 }
 
-// Max channels the TV app receives in one sync. An Admin's "channel list" is the
-// entire global catalog (can be tens of thousands) — no TV client can browse that,
-// and large payloads crash low-end sticks. Non-admin users are already scoped to
-// their own selection, so this cap only bounds the admin/demo firehose.
-const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 2000;
+// Max channels the TV app receives in one sync. DZ HOOF serves the full catalog
+// (~16.6k channels) to subscribers — the cap is a safety valve against pathological
+// payloads, not a browse limit. Override via TV_CHANNELS_MAX if the catalog grows.
+const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 20000;
 
 // In-memory rate-limit maps for stream metrics reporting
 const reportStatusLimits = new Map();

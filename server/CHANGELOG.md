@@ -10,6 +10,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Fixed (catalog access)
+
+- `GET /api/v1/channels` and `/channels/grouped` (the TV app channel list) now apply the
+  **direct-playback exemption** for `metadata.isWorking`: sources marked `directPlayback`
+  keep their full catalog visible even when the server-side probe (from the datacenter IP,
+  blocked upstream) reports `isWorking:false`. Previously the app listed only the handful
+  of channels that passed the datacenter probe.
+- `TV_CHANNELS_MAX` default raised **2000 → 20000** so subscribers receive the full
+  ~16.6k-channel catalog in one sync (still overridable via env).
+
 ### Security (audit-remediation-v1)
 
 - Public self-service registration is now **disabled by default** (`PUBLIC_REGISTRATION_ENABLED=false`).
