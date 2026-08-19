@@ -41,6 +41,7 @@ fun ActivationScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var code by remember { mutableStateOf("") }
+    var activationAttempted by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.redeemSuccess) {
         if (uiState.redeemSuccess != null) {
@@ -99,7 +100,10 @@ fun ActivationScreen(
             )
             Spacer(modifier = Modifier.width(1.dp))
             Button(
-                onClick = { viewModel.clientRedeem(code) },
+                onClick = {
+                    activationAttempted = true
+                    viewModel.clientRedeem(code)
+                },
                 enabled = code.isNotBlank() && !uiState.isRedeeming,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -112,7 +116,10 @@ fun ActivationScreen(
                     Text("تفعيل الجهاز", fontWeight = FontWeight.SemiBold)
                 }
             }
-            uiState.error?.let { message ->
+            // SubscriptionViewModel also refreshes saved sessions for the
+            // account settings page. A stale session must not alarm a new user
+            // before they make a real activation attempt.
+            uiState.error?.takeIf { activationAttempted }?.let { message ->
                 Text(
                     text = message,
                     color = MaterialTheme.colorScheme.error,
