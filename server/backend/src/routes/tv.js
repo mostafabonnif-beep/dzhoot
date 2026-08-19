@@ -3,8 +3,11 @@ const router = express.Router();
 const User = require('../models/User');
 const Channel = require('../models/Channel');
 const XtreamSource = require('../models/XtreamSource');
+const Movie = require('../models/Movie');
+const Episode = require('../models/Episode');
 const EpgProgram = require('../models/EpgProgram');
 const PairingRequest = require('../models/PairingRequest');
+const { isValidObjectId } = require('./catalog-helpers');
 const { epgService } = require('../services/epg-service');
 const { audit } = require('../services/audit-log');
 const { issuePlaybackToken, verifyPlaybackToken } = require('../services/playback-token');
@@ -21,17 +24,31 @@ const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
 
 async function getVerifiedXtreamSourceIds() {
+  // Sources that passed live playback verification (and are Active), OR that the
+  // operator explicitly marked customer-visible (catalog-only import decision —
+  // visible even while Inactive, since such sources cannot pass verification),
+  // OR that opted into direct playback (clients fetch from their own network).
   return new Set((await XtreamSource.find({
-    status: 'Active',
-    verificationStatus: 'verified',
+    $or: [
+      { status: 'Active', verificationStatus: 'verified' },
+      { customerVisible: true },
+      { directPlayback: true },
+    ],
   }).distinct('_id')).map((id) => String(id)));
 }
 
-function isCustomerVisibleChannel(channel, verifiedSourceIds) {
+async function getDirectPlaybackSourceIds() {
+  return new Set((await XtreamSource.find({ directPlayback: true }).distinct('_id')).map((id) => String(id)));
+}
+
+function isCustomerVisibleChannel(channel, verifiedSourceIds, directPlaybackSourceIds) {
+  const isDirectSource = directPlaybackSourceIds.has(String(channel.metadata?.xtreamSourceId || ''));
   // A known-dead stream must never be offered to a customer, regardless of
   // whether it came from IPTV-org, Xtream, or another managed source.
+  // Direct-playback sources are exempt: their isWorking flag reflects the
+  // server's datacenter IP, not the customer's network.
   if (channel.isActive === false || channel.flaggedBad?.isFlagged === true) return false;
-  if (channel.metadata?.isWorking === false) return false;
+  if (channel.metadata?.isWorking === false && !isDirectSource) return false;
   if (channel.metadata?.source !== 'xtream') return true;
   return verifiedSourceIds.has(String(channel.metadata?.xtreamSourceId || ''));
 }
@@ -78,6 +95,9 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
       ? { type: 'timeshift', days: null }
       : null;
   if (!user.channelListCode) return safe;
+  // Skip channels whose URL scheme the playback layer can't proxy (e.g. rtmp://,
+  // udp://) instead of letting one bad channel break the whole customer playlist.
+  if (source.channelUrl && !/^https?:\/\//i.test(String(source.channelUrl))) return safe;
   if (source.channelUrl) {
     const { token } = issuePlaybackToken({
       userId: String(user._id),
@@ -254,7 +274,8 @@ router.get('/playlist/:code/json', async (req, res) => {
     }
 
     const verifiedSourceIds = await getVerifiedXtreamSourceIds();
-    const visibleChannels = channels.filter((channel) => isCustomerVisibleChannel(channel, verifiedSourceIds));
+    const directSourceIds = await getDirectPlaybackSourceIds();
+    const visibleChannels = channels.filter((channel) => isCustomerVisibleChannel(channel, verifiedSourceIds, directSourceIds));
     const baseUrl = getPublicBaseUrl(req);
     const tokenizedChannels = await Promise.all(
       visibleChannels.map((channel) => tokenizeChannelForClient(channel, user, baseUrl)),
@@ -283,14 +304,28 @@ router.get('/playlist/:code/json', async (req, res) => {
 router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
   try {
     const channelRef = String(req.body?.channelId || '').trim();
+    const movieId = String(req.body?.movieId || '').trim();
+    const episodeId = String(req.body?.episodeId || '').trim();
     const slot = Number(req.body?.slot ?? 0);
     const catchupStartMs = Number(req.body?.catchupStartMs ?? 0);
     const catchupDurationMin = Math.min(Math.max(Number(req.body?.catchupDurationMin ?? 0), 1), 24 * 60);
     if (!Number.isFinite(catchupStartMs) || catchupStartMs < 0 || !Number.isFinite(catchupDurationMin)) {
       return res.status(400).json({ success: false, error: 'Invalid catch-up parameters' });
     }
-    if (!channelRef || channelRef.length > 200 || !Number.isInteger(slot) || slot < 0 || slot > 3) {
+
+    const hasChannelRef = Boolean(channelRef);
+    const hasVodRef = Boolean(movieId || episodeId);
+    if ((hasChannelRef && hasVodRef) || (!hasChannelRef && !hasVodRef)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Provide exactly one of channelId, movieId or episodeId',
+      });
+    }
+    if (!Number.isInteger(slot) || slot < 0 || slot > 3) {
       return res.status(400).json({ success: false, error: 'channelId and a valid slot are required' });
+    }
+    if (hasChannelRef && channelRef.length > 200) {
+      return res.status(400).json({ success: false, error: 'channelId is too long' });
     }
 
     const user = req.user;
@@ -303,16 +338,68 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       });
     }
 
+    // ── VOD (movie or series episode) — same encrypted-token + proxy pipeline ──
+    if (hasVodRef) {
+      let vodDoc = null;
+      let vodKind = 'movie';
+      if (movieId) {
+        if (!isValidObjectId(movieId)) {
+          return res.status(400).json({ success: false, error: 'Invalid movie id' });
+        }
+        vodDoc = await Movie.findOne({ _id: movieId, isActive: true }).lean();
+        vodKind = 'movie';
+      } else {
+        if (!isValidObjectId(episodeId)) {
+          return res.status(400).json({ success: false, error: 'Invalid episode id' });
+        }
+        vodDoc = await Episode.findOne({ _id: episodeId, isActive: { $ne: false } }).lean();
+        vodKind = 'episode';
+      }
+      if (!vodDoc) {
+        return res.status(404).json({ success: false, error: 'Content not found' });
+      }
+      if (!vodDoc.streamUrl) {
+        return res.status(404).json({ success: false, error: 'Content has no playable stream' });
+      }
+
+      const { token, expiresAt } = issuePlaybackToken({
+        userId: String(user.id),
+        channelListCode: String(user.channelListCode || ''),
+        streamUrl: vodDoc.streamUrl,
+        upstreamHeaders: {},
+      });
+      const session = await registerStreamSession({
+        userId: String(user.id),
+        sessionId: token,
+        ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+      });
+      return res.json({
+        success: true,
+        data: {
+          playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`,
+          mimeType: inferPlaybackMimeType(vodDoc.streamUrl),
+          expiresAt,
+          slot: 0,
+          type: vodKind,
+          streamLimit: { max: session.max, active: session.active },
+        },
+      });
+    }
+
     const channel = await Channel.findOne({ channelId: channelRef, isActive: { $ne: false } }).lean();
     if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
 
+    let xtreamDirectPlayback = false;
     if (channel.metadata?.source === 'xtream') {
       const source = await XtreamSource.findOne({
         _id: channel.metadata.xtreamSourceId,
-        status: 'Active',
-        verificationStatus: 'verified',
+        $or: [
+          { status: 'Active', verificationStatus: 'verified' },
+          { directPlayback: true },
+        ],
       }).lean();
       if (!source) return res.status(404).json({ success: false, error: 'Channel source is not verified', code: 'SOURCE_NOT_VERIFIED' });
+      xtreamDirectPlayback = source.directPlayback === true;
     }
 
     const isCatalogUser = user.role === 'Admin' || user.allCatalog === true;
@@ -378,6 +465,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       userId: String(user.id),
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
+      direct: xtreamDirectPlayback || undefined,
       upstreamHeaders: {
         userAgent: slot === 0 ? channel.activeUserAgent : selectedAlternate?.userAgent,
         referrer: slot === 0 ? channel.activeReferrer : selectedAlternate?.referrer,
@@ -456,6 +544,13 @@ router.get('/playback/:token', async (req, res) => {
     }).select('_id channelListCode role');
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
+
+    if (payload.direct === true) {
+      // Operator opted this source into direct playback: the client fetches the
+      // upstream URL from its own network (e.g. residential IP) instead of the
+      // server proxying the bytes. Token is still validated above.
+      return res.redirect(302, payload.streamUrl);
+    }
 
     return proxyUpstreamStream(req, res, payload.streamUrl, {
       userId: String(user._id),

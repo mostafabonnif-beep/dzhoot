@@ -347,8 +347,21 @@ router.post('/channels/import-m3u', async (req, res) => {
       }
     }
 
-    // Validate channel URLs against SSRF before inserting
-    const ssrfResults = await Promise.all(channels.map((ch) => validateUrlForSSRF(ch.channelUrl)));
+    // Validate channel URLs against SSRF before inserting — bounded concurrency:
+    // an unbounded Promise.all over thousands of URLs serializes on DNS and hangs.
+    const SSRF_VALIDATION_CONCURRENCY = 20;
+    const ssrfResults = new Array(channels.length);
+    let ssrfCursor = 0;
+    const ssrfWorker = async () => {
+      while (ssrfCursor < channels.length) {
+        const index = ssrfCursor;
+        ssrfCursor += 1;
+        ssrfResults[index] = await validateUrlForSSRF(channels[index].channelUrl);
+      }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(SSRF_VALIDATION_CONCURRENCY, Math.max(channels.length, 1)) }, () => ssrfWorker()),
+    );
     const blockedCount = ssrfResults.filter((r) => !r.safe).length;
     const safeChannels = channels.filter((_, i) => ssrfResults[i].safe);
 
