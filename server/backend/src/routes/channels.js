@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Channel = require('../models/Channel');
 const XtreamSource = require('../models/XtreamSource');
@@ -344,12 +345,26 @@ router.post('/health-sync', requireTvOrSessionAuth, async (req, res) => {
       });
     }
 
-    // Pre-validate that reported channel IDs exist in the database
+    // A client may report either MongoDB _id or the external M3U channelId.
+    // Never pass compound IDs such as "m3u:source:hash" into an ObjectId query.
     const reportedIds = [
       ...new Set(reports.map((r) => r.channelId).filter((id) => id && typeof id === 'string')),
     ];
-    const existingChannels = await Channel.find({ _id: { $in: reportedIds } }, { _id: 1 }).lean();
-    const validChannelIds = new Set(existingChannels.map((c) => c._id.toString()));
+    const mongoIds = reportedIds.filter((id) => mongoose.isValidObjectId(id));
+    const lookupClauses = [{ channelId: { $in: reportedIds } }];
+    if (mongoIds.length > 0) lookupClauses.push({ _id: { $in: mongoIds } });
+
+    const existingChannels = await Channel.find(
+      { $or: lookupClauses },
+      { _id: 1, channelId: 1 },
+    ).lean();
+    const databaseIdsByReportedId = new Map();
+    for (const channel of existingChannels) {
+      databaseIdsByReportedId.set(channel._id.toString(), channel._id);
+      if (typeof channel.channelId === 'string' && channel.channelId.length > 0) {
+        databaseIdsByReportedId.set(channel.channelId, channel._id);
+      }
+    }
 
     const validStatuses = ['dead', 'alive', 'unresponsive', 'played'];
     const results = { updated: 0, failed: 0, skipped: 0 };
@@ -359,7 +374,8 @@ router.post('/health-sync', requireTvOrSessionAuth, async (req, res) => {
         results.skipped++;
         continue;
       }
-      if (!validChannelIds.has(report.channelId.toString())) {
+      const databaseId = databaseIdsByReportedId.get(report.channelId.toString());
+      if (!databaseId) {
         results.skipped++;
         continue;
       }
@@ -382,7 +398,7 @@ router.post('/health-sync', requireTvOrSessionAuth, async (req, res) => {
       }
 
       try {
-        const result = await Channel.findByIdAndUpdate(report.channelId, update);
+        const result = await Channel.findByIdAndUpdate(databaseId, update);
         if (result) {
           results.updated++;
         } else {
