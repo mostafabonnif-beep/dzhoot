@@ -1,0 +1,73 @@
+<resources>
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+    <!-- FireVision Unified Palette — Light Mode Defaults               -->
+    <!-- Dark mode overrides are in res/values-night/colors.xml         -->
+    <!-- Token reference: docs/COLOR_PALETTE.md                         -->
+    <!-- ═══════════════════════════════════════════════════════════════ -->
+
+    <!-- Flame — brand primary -->
+    <color name="flame_300">#FFF7A93A</color>   <!-- dark mode primary  -->
+    <color name="flame_400">#FFE07818</color>   <!-- button fills       -->
+    <color name="flame_500">#FFB85E10</color>   <!-- light mode primary -->
+    <color name="flame_50">#FFFEECC8</color>    <!-- hover tints        -->
+    <color name="flame_100">#FFFFD080</color>   <!-- glow overlays      -->
+    <color name="flame_700">#FF7A3A06</color>   <!-- text on flame bg   -->
+
+    <!-- Light Mode Backgrounds — Parchment -->
+    <color name="background">#FFFAF8F4</color>
+    <color name="background_dark">#FFFAF8F4</color>
+    <color name="default_background">#FFFAF8F4</color>
+    <color name="background_gradient_start">#FFFAF8F4</color>
+    <color name="background_gradient_end">#FFF4F0E8</color>
+    <color name="fastlane_background">#FFFAF8F4</color>
+    <color name="sidebar_background">#FFF4F0E8</color>
+    <color name="sidebar_item_selected">#FFEDE8DE</color>
+
+    <!-- Light Mode Cards — Parchment -->
+    <color name="card_background">#FFEDE8DE</color>
+    <color name="card_background_startColor">#FFEDE8DE</color>
+    <color name="card_background_endColor">#FFF4F0E8</color>
+    <color name="card_background_focused">#FFE2DCD0</color>
+    <color name="card_border_focused">#FFB85E10</color>  <!-- flame_500 -->
+    <color name="card_text_primary">#FF1C1A24</color>
+    <color name="card_text_secondary">#FF5A5470</color>
+
+    <!-- Light Mode Selection — Flame -->
+    <color name="selected_background">#FFB85E10</color>   <!-- flame_500 -->
+    <color name="selected_background_light">#FFE07818</color>
+    <color name="selected_border">#FFB85E10</color>
+
+    <!-- Search — Flame -->
+    <color name="search_opaque">#FFB85E10</color>
+    <color name="search_focused">#FFB85E10</color>
+    <color name="search_result_background">#FFFAF8F4</color>
+    <color name="search_orb_color">#FFB85E10</color>
+    <color name="search_color">#FFB85E10</color>
+    <color name="search_bright_color">#FFE07818</color>
+
+    <!-- Accent — Flame (light mode) -->
+    <color name="accent_primary">#FFB85E10</color>
+    <color name="accent_secondary">#FFE07818</color>
+    <color name="accent_tertiary">#FFF7A93A</color>
+
+    <!-- Light Mode Overlays -->
+    <color name="overlay_background">#E6FAF8F4</color>
+    <color name="overlay_card_background">#FFEDE8DE</color>
+    <color name="overlay_scrim">#80000000</color>
+
+    <!-- Light Mode Text -->
+    <color name="text_primary">#FF1C1A24</color>
+    <color name="text_secondary">#FF5A5470</color>
+    <color name="text_hint">#FF8C8898</color>
+    <color name="divider">#FFE2DCD0</color>
+
+    <!-- Light Mode Gradient -->
+    <color name="gradient_start">#FFEDE8DE</color>
+    <color name="gradient_middle">#FFF4F0E8</color>
+    <color name="gradient_end">#FFFAF8F4</color>
+
+    <!-- Focus Animation — Flame -->
+    <color name="focus_glow_outer">#40F7A93A</color>   <!-- 25% Flame300 -->
+    <color name="focus_glow_inner">#60F7A93A</color>   <!-- 37% Flame300 -->
+    <color name="focus_border_bright">#FFB85E10</color>
+</resources>
