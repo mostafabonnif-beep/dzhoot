@@ -2,7 +2,7 @@
     encode gzip zstd
     tls {$ACME_EMAIL}
 
-    @api path /api/* /health /ready
+    @api path /api/* /health /health/* /ready /ready/*
     handle @api {
         reverse_proxy api:3000
     }
@@ -11,10 +11,16 @@
         reverse_proxy frontend:3000
     }
 
+    # Defense-in-depth headers. CSP remains application-owned because Next.js
+    # emits framework scripts whose nonces/hashes must stay aligned with builds.
     header {
         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
         X-Content-Type-Options "nosniff"
         X-Frame-Options "SAMEORIGIN"
         Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "accelerometer=(), autoplay=(self), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()"
+        X-Robots-Tag "noindex, nofollow, noarchive"
+        -Server
+        -X-Powered-By
     }
 }
