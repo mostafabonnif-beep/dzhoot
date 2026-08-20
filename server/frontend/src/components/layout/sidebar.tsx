@@ -61,12 +61,22 @@ const userLinks = [
   { href: '/user/profile', labelKey: 'nav.profile', icon: UserCircle },
 ];
 
+const adminNavigationGroups = [
+  { labelKey: 'nav.section.overview', links: adminLinks.slice(0, 1) },
+  { labelKey: 'nav.section.content', links: adminLinks.slice(1, 5) },
+  { labelKey: 'nav.section.customers', links: adminLinks.slice(5, 9) },
+  { labelKey: 'nav.section.sources', links: adminLinks.slice(9, 14) },
+  { labelKey: 'nav.section.operations', links: adminLinks.slice(14) },
+];
+
 export function Sidebar({ role }: { role: 'admin' | 'user' }) {
   const pathname = usePathname();
   const { t } = useLocale();
   const { sidebarCollapsed, toggleSidebar, mobileSidebarOpen, setMobileSidebarOpen } = useUIStore();
 
-  const links = role === 'admin' ? adminLinks : userLinks;
+  const navigationGroups = role === 'admin'
+    ? adminNavigationGroups
+    : [{ labelKey: 'nav.section.overview', links: userLinks }];
 
   return (
     <>
@@ -100,28 +110,39 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
         </div>
 
         {/* Navigation Links */}
-        <div className="flex-1 overflow-y-auto px-3 py-5 space-y-1.5">
-          {links.map((link) => {
-            const Icon = link.icon;
-            const isActive = pathname === link.href || (link.href !== '/admin' && link.href !== '/user' && pathname.startsWith(link.href));
+        <nav aria-label={role === 'admin' ? 'تنقل الإدارة' : 'تنقل الحساب'} className="flex-1 overflow-y-auto px-3 py-5">
+          {navigationGroups.map((group, groupIndex) => (
+            <div key={group.labelKey} className={groupIndex === 0 ? '' : 'mt-5'}>
+              {!sidebarCollapsed && role === 'admin' && (
+                <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground/80">
+                  {t(group.labelKey)}
+                </p>
+              )}
+              <div className="space-y-1.5">
+                {group.links.map((link) => {
+                  const Icon = link.icon;
+                  const isActive = pathname === link.href || (link.href !== '/admin' && link.href !== '/user' && pathname.startsWith(link.href));
 
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                title={sidebarCollapsed ? t(link.labelKey) : undefined}
-                className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
-                    : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground'
-                }`}
-              >
-                <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
-                {!sidebarCollapsed && <span className="truncate">{t(link.labelKey)}</span>}
-              </Link>
-            );
-          })}
-        </div>
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      title={sidebarCollapsed ? t(link.labelKey) : undefined}
+                      className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20'
+                          : 'text-muted-foreground hover:bg-primary/[0.06] hover:text-foreground'
+                      }`}
+                    >
+                      <Icon className={`h-5 w-5 shrink-0 ${isActive ? 'text-primary-foreground' : 'text-muted-foreground'}`} />
+                      {!sidebarCollapsed && <span className="truncate">{t(link.labelKey)}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
 
         {/* Sidebar Footer / Collapse Toggle */}
         <div className="border-t border-border/70 p-3 hidden lg:flex items-center justify-between">
