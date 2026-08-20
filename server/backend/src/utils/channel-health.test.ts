@@ -79,6 +79,20 @@ describe('buildChannelHealth', () => {
     expect(result.fallbackCount).toBe(0);
   });
 
+  it('keeps a direct-playback channel unknown even when the datacenter probe fails', () => {
+    const result = buildChannelHealth({
+      metadata: { isWorking: false, lastTested: '2026-08-15T11:00:00.000Z' },
+      alternateStreams: [],
+      directPlayback: true,
+    }, now);
+
+    // The server's datacenter probe cannot judge direct-playback sources (clients
+    // fetch from their own networks) — it must never surface as "unavailable".
+    expect(result.primaryStatus).toBe('unknown');
+    expect(result.status).toBe('unknown');
+    expect(result.recommendation).toBe('probe');
+  });
+
   it('keeps an untested channel explicitly unknown', () => {
     const result = buildChannelHealth({});
 

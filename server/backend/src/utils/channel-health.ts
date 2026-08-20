@@ -20,6 +20,10 @@ export interface ChannelHealthInput {
       responseTimeMs?: number | null;
     } | null;
   }> | null;
+  // Direct-playback sources (clients fetch from their own network) cannot be
+  // probed from the server's datacenter IP — a failed server-side probe must
+  // not mark them dead. Kept in the input so callers can attach it cheaply.
+  directPlayback?: boolean | null;
 }
 
 export interface ChannelHealthSummary {
@@ -55,7 +59,9 @@ export function buildChannelHealth(
     channel.metadata?.isWorking === true
       ? 'alive'
       : channel.metadata?.isWorking === false
-        ? 'dead'
+        ? channel.directPlayback === true
+          ? 'unknown'
+          : 'dead'
         : 'unknown';
 
   const viableAlternates = (channel.alternateStreams || []).filter(
