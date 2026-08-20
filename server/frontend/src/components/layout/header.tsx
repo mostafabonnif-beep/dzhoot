@@ -67,7 +67,7 @@ export function Header() {
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
 
-          className="relative flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+          className="relative flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
           aria-label={theme === 'dark' ? t('header.lightMode') : t('header.darkMode')}
           aria-pressed={theme === 'dark'}
         >
@@ -97,7 +97,7 @@ export function Header() {
 
         <button
           onClick={handleLogout}
-          className="flex h-10 w-10 items-center justify-center text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+          className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
           aria-label={t('header.logout')}
         >
           <LogOut className="h-4 w-4" />
