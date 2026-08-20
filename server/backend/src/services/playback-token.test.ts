@@ -1,6 +1,20 @@
 import { issuePlaybackToken, verifyPlaybackToken } from './playback-token';
 
 describe('playback tokens', () => {
+  const originalPlaybackTokenSecret = process.env.PLAYBACK_TOKEN_SECRET;
+
+  beforeEach(() => {
+    process.env.PLAYBACK_TOKEN_SECRET = 'test-playback-token-secret-for-ci-only-32bytes';
+  });
+
+  afterEach(() => {
+    if (originalPlaybackTokenSecret === undefined) {
+      delete process.env.PLAYBACK_TOKEN_SECRET;
+    } else {
+      process.env.PLAYBACK_TOKEN_SECRET = originalPlaybackTokenSecret;
+    }
+  });
+
   const input = {
     userId: 'user-123',
     channelListCode: 'ABC123',
