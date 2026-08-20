@@ -29,7 +29,7 @@
         android:required="false" />
 
     <application
-        android:name=".FireVisionApplication"
+        android:name=".DzhoofApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -96,7 +96,7 @@
         </provider>
 
         <!-- Disable WorkManager's default initializer so it uses the on-demand
-             Configuration.Provider in FireVisionApplication (Hilt worker factory). -->
+             Configuration.Provider in DzhoofApplication (Hilt worker factory). -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -119,7 +119,7 @@
 
         <!-- Fire TV TIF Integration Service -->
         <service
-            android:name=".FireVisionTvInputService"
+            android:name=".DzhoofTvInputService"
             android:label="@string/tv_input_label"
             android:permission="android.permission.BIND_TV_INPUT"
             android:exported="true">
@@ -128,7 +128,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.media.tv.input"
-                android:resource="@xml/firevisiontvinputservice" />
+                android:resource="@xml/dzhooftvinputservice" />
         </service>
 
         <!-- TIF Setup Activity -->

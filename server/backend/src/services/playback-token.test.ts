@@ -1,6 +1,20 @@
 import { issuePlaybackToken, verifyPlaybackToken } from './playback-token';
 
 describe('playback tokens', () => {
+  const originalPlaybackTokenSecret = process.env.PLAYBACK_TOKEN_SECRET;
+
+  beforeEach(() => {
+    process.env.PLAYBACK_TOKEN_SECRET = 'test-playback-token-secret-for-ci-only-32bytes';
+  });
+
+  afterEach(() => {
+    if (originalPlaybackTokenSecret === undefined) {
+      delete process.env.PLAYBACK_TOKEN_SECRET;
+    } else {
+      process.env.PLAYBACK_TOKEN_SECRET = originalPlaybackTokenSecret;
+    }
+  });
+
   const input = {
     userId: 'user-123',
     channelListCode: 'ABC123',
@@ -45,6 +59,11 @@ describe('playback tokens', () => {
     expect(verifyPlaybackToken(issued.token)?.upstreamHeaders).toEqual({
       referrer: 'https://provider.example/guide',
     });
+  });
+
+  it('preserves explicit direct-playback intent inside the encrypted token', () => {
+    const issued = issuePlaybackToken({ ...input, direct: true });
+    expect(verifyPlaybackToken(issued.token)?.direct).toBe(true);
   });
 
   it('rejects tampered and expired tokens', () => {

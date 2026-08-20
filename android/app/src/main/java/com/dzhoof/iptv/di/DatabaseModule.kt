@@ -2,7 +2,7 @@ package com.dzhoof.iptv.di
 
 import android.content.Context
 import androidx.room.Room
-import com.dzhoof.iptv.data.source.local.FireVisionDatabase
+import com.dzhoof.iptv.data.source.local.DzhoofDatabase
 import com.dzhoof.iptv.data.source.local.dao.CategoryDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
@@ -24,7 +24,7 @@ import javax.inject.Singleton
  * Installed in SingletonComponent for app-wide availability.
  * 
  * This module provides:
- * - FireVisionDatabase singleton instance
+ * - DzhoofDatabase singleton instance
  * - All DAO instances (ChannelDao, CategoryDao, FavoriteDao, SearchHistoryDao, PlaybackPositionDao)
  * 
  * Requirements: TR-003 (Architecture Modernization), TR-007 (Database Performance)
@@ -35,21 +35,21 @@ object DatabaseModule {
 
     @Provides
     @Singleton
-    fun provideDatabase(@ApplicationContext context: Context): FireVisionDatabase {
+    fun provideDatabase(@ApplicationContext context: Context): DzhoofDatabase {
         return Room.databaseBuilder(
             context,
-            FireVisionDatabase::class.java,
-            "firevision_db"
+            DzhoofDatabase::class.java,
+            "firevision_db" // keep name for existing installs — do not rename
         )
             .addMigrations(
-                FireVisionDatabase.MIGRATION_1_2,
-                FireVisionDatabase.MIGRATION_2_3,
-                FireVisionDatabase.MIGRATION_3_4,
-                FireVisionDatabase.MIGRATION_4_5,
-                FireVisionDatabase.MIGRATION_5_6,
-                FireVisionDatabase.MIGRATION_6_7,
-                FireVisionDatabase.MIGRATION_7_8,
-                FireVisionDatabase.MIGRATION_8_9
+                DzhoofDatabase.MIGRATION_1_2,
+                DzhoofDatabase.MIGRATION_2_3,
+                DzhoofDatabase.MIGRATION_3_4,
+                DzhoofDatabase.MIGRATION_4_5,
+                DzhoofDatabase.MIGRATION_5_6,
+                DzhoofDatabase.MIGRATION_6_7,
+                DzhoofDatabase.MIGRATION_7_8,
+                DzhoofDatabase.MIGRATION_8_9
             )
             .build()
     }
@@ -57,75 +57,75 @@ object DatabaseModule {
     /**
      * Provides ChannelDao for channel data operations.
      * 
-     * @param database FireVisionDatabase instance
+     * @param database DzhoofDatabase instance
      * @return ChannelDao instance
      */
     @Provides
-    fun provideChannelDao(database: FireVisionDatabase): ChannelDao {
+    fun provideChannelDao(database: DzhoofDatabase): ChannelDao {
         return database.channelDao()
     }
 
     /**
      * Provides CategoryDao for category data operations.
      * 
-     * @param database FireVisionDatabase instance
+     * @param database DzhoofDatabase instance
      * @return CategoryDao instance
      */
     @Provides
-    fun provideCategoryDao(database: FireVisionDatabase): CategoryDao {
+    fun provideCategoryDao(database: DzhoofDatabase): CategoryDao {
         return database.categoryDao()
     }
 
     /**
      * Provides FavoriteDao for favorite data operations.
      * 
-     * @param database FireVisionDatabase instance
+     * @param database DzhoofDatabase instance
      * @return FavoriteDao instance
      */
     @Provides
-    fun provideFavoriteDao(database: FireVisionDatabase): FavoriteDao {
+    fun provideFavoriteDao(database: DzhoofDatabase): FavoriteDao {
         return database.favoriteDao()
     }
 
     /**
      * Provides SearchHistoryDao for search history data operations.
      * 
-     * @param database FireVisionDatabase instance
+     * @param database DzhoofDatabase instance
      * @return SearchHistoryDao instance
      */
     @Provides
-    fun provideSearchHistoryDao(database: FireVisionDatabase): SearchHistoryDao {
+    fun provideSearchHistoryDao(database: DzhoofDatabase): SearchHistoryDao {
         return database.searchHistoryDao()
     }
 
     /**
      * Provides PlaybackPositionDao for playback position data operations.
      * 
-     * @param database FireVisionDatabase instance
+     * @param database DzhoofDatabase instance
      * @return PlaybackPositionDao instance
      */
     @Provides
-    fun providePlaybackPositionDao(database: FireVisionDatabase): PlaybackPositionDao {
+    fun providePlaybackPositionDao(database: DzhoofDatabase): PlaybackPositionDao {
         return database.playbackPositionDao()
     }
 
     @Provides
-    fun provideChannelHealthDao(database: FireVisionDatabase): ChannelHealthDao {
+    fun provideChannelHealthDao(database: DzhoofDatabase): ChannelHealthDao {
         return database.channelHealthDao()
     }
 
     @Provides
-    fun provideFavoriteCategoryDao(database: FireVisionDatabase): FavoriteCategoryDao {
+    fun provideFavoriteCategoryDao(database: DzhoofDatabase): FavoriteCategoryDao {
         return database.favoriteCategoryDao()
     }
 
     @Provides
-    fun provideStreamMetricsDao(database: FireVisionDatabase): StreamMetricsDao {
+    fun provideStreamMetricsDao(database: DzhoofDatabase): StreamMetricsDao {
         return database.streamMetricsDao()
     }
 
     @Provides
-    fun provideEpgDao(database: FireVisionDatabase): EpgDao {
+    fun provideEpgDao(database: DzhoofDatabase): EpgDao {
         return database.epgDao()
     }
 }

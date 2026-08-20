@@ -16,7 +16,7 @@ const {
   isCatchupSupported,
   buildCatchupUrlForChannel,
 } = require('../services/catchup-service');
-const { registerStreamSession } = require('../services/stream-session-service');
+const { registerStreamSession, isStreamSessionActive } = require('../services/stream-session-service');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { epgCache } = require('../services/cache');
 const { decryptSecret } = require('../utils/crypto');
@@ -474,11 +474,21 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
 
     // Enforce the per-user concurrent stream limit (oldest session is evicted
     // when exceeded; no-op when Redis is not configured).
+    const playbackAccess = await checkPlaybackSubscription(String(user.id), user.role);
     const session = await registerStreamSession({
       userId: String(user.id),
       sessionId: token,
       ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+      maxConcurrentStreams: playbackAccess.plan?.maxConcurrentStreams,
     });
+    if (!session.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: 'Concurrent playback limit reached for this subscription',
+        code: 'CONCURRENT_STREAM_LIMIT',
+        streamLimit: { max: session.max, active: session.active },
+      });
+    }
 
     return res.json({
       success: true,
@@ -545,16 +555,37 @@ router.get('/playback/:token', async (req, res) => {
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
 
+    // A valid token is not sufficient by itself: the concurrency session must
+    // still be active. This also makes administrative revocation effective.
+    if (!(await isStreamSessionActive(String(user._id), req.params.token))) {
+      return res.status(429).send('Playback session is no longer active');
+    }
+
     if (payload.direct === true) {
-      // NOTE: direct-playback used to 302 to the upstream URL so the client
-      // fetched from its own network. Most client networks cannot reach NEO
-      // directly (ISP/geo blocking) — that is exactly why the operator runs a
-      // residential relay. Proxy everything through the server so the client
-      // only ever talks to this host; the server egresses via the relay.
-      return proxyUpstreamStream(req, res, payload.streamUrl, {
-        userId: String(user._id),
-        channelListCode: user.channelListCode,
-      }, undefined, payload.upstreamHeaders);
+      // Direct mode is deliberately gated by deployment configuration. The
+      // authorization token remains opaque in the initial API response, but
+      // the final HTTP redirect necessarily exposes the provider URL to the
+      // client. Operators should enable this only when their provider contract
+      // permits direct client playback and source-URL exposure is acceptable.
+      if (process.env.ALLOW_DIRECT_PLAYBACK !== 'true') {
+        return proxyUpstreamStream(req, res, payload.streamUrl, {
+          userId: String(user._id),
+          channelListCode: user.channelListCode,
+        }, undefined, payload.upstreamHeaders);
+      }
+
+      const parsed = new URL(payload.streamUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return res.status(400).send('Unsupported upstream protocol');
+      }
+
+      res.set({
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        Pragma: 'no-cache',
+        Expires: '0',
+        'Referrer-Policy': 'no-referrer',
+      });
+      return res.redirect(302, payload.streamUrl);
     }
 
     return proxyUpstreamStream(req, res, payload.streamUrl, {

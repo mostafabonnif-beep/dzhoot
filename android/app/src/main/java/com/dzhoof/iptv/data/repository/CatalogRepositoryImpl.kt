@@ -3,7 +3,7 @@ package com.dzhoof.iptv.data.repository
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationResponse
 import com.google.gson.Gson
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.model.CatalogPage
 import com.dzhoof.iptv.domain.model.Episode
@@ -23,7 +23,7 @@ import javax.inject.Singleton
 
 @Singleton
 class CatalogRepositoryImpl @Inject constructor(
-    private val apiService: FireVisionApiService,
+    private val apiService: DzhoofApiService,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : CatalogRepository {
 

@@ -5,7 +5,7 @@ import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.model.dto.EpgProgramDto
 import com.dzhoof.iptv.data.source.local.dao.EpgDao
 import com.dzhoof.iptv.data.source.local.entity.EpgProgramEntity
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.data.source.remote.epg.XmltvEpgDataSource
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.model.EpgProgram
@@ -35,7 +35,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class EpgRepositoryImpl @Inject constructor(
-    private val apiService: FireVisionApiService,
+    private val apiService: DzhoofApiService,
     private val xmltvDataSource: XmltvEpgDataSource,
     private val epgDao: EpgDao,
     @ApplicationContext private val context: Context,

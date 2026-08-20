@@ -19,6 +19,7 @@ export interface PlaybackTokenPayload {
   issuedAt: number;
   expiresAt: number;
   nonce: string;
+  sessionId?: string;
 }
 
 function sanitizeHeader(value: unknown, maxLength = 512): string | undefined {
@@ -40,8 +41,18 @@ function getKey(): Buffer {
   const secret =
     process.env.PLAYBACK_TOKEN_SECRET ||
     process.env.JWT_ACCESS_SECRET ||
-    process.env.XTREAM_SECRET_KEY ||
-    'dzhoof-development-playback-secret';
+    process.env.XTREAM_SECRET_KEY;
+
+  // Never silently fall back to a known development secret in production.
+  // A predictable playback-token key would let an attacker forge authorization
+  // tokens if the application were deployed with incomplete configuration.
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('PLAYBACK_TOKEN_SECRET is required in production');
+    }
+    throw new Error('Playback token secret is not configured');
+  }
+
   return crypto.createHash('sha256').update(secret).digest();
 }
 
@@ -75,6 +86,7 @@ export function issuePlaybackToken(input: {
   };
   direct?: boolean;
   ttlMs?: number;
+  sessionId?: string;
 }): { token: string; expiresAt: number } {
   const now = Date.now();
   const configuredTtl = Number.parseInt(process.env.PLAYBACK_TOKEN_TTL_MS || '', 10) || DEFAULT_TTL_MS;
@@ -89,6 +101,7 @@ export function issuePlaybackToken(input: {
     issuedAt: now,
     expiresAt: now + ttlMs,
     nonce: crypto.randomBytes(16).toString('hex'),
+    sessionId: input.sessionId ? String(input.sessionId).slice(0, 256) : undefined,
   };
 
   const iv = crypto.randomBytes(12);

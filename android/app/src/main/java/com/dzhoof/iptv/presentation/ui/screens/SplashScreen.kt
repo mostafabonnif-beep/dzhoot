@@ -31,7 +31,7 @@ import kotlinx.coroutines.delay
  *
  * The splash uses the same supplied DZ HOOF artwork as the launcher icon so the
  * application has one unmistakable identity across installation, startup and
- * the main experience. It deliberately does not load legacy FireVision assets.
+ * the main experience. It deliberately does not load legacy assets.
  */
 @Composable
 fun SplashScreen(onSplashFinished: () -> Unit) {

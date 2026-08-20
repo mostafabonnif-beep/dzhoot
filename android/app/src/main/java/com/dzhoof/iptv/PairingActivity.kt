@@ -17,7 +17,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
 import com.dzhoof.iptv.presentation.ui.screens.PairingScreen
-import com.dzhoof.iptv.presentation.ui.theme.FireVisionTheme
+import com.dzhoof.iptv.presentation.ui.theme.DzHoofTheme
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
@@ -80,7 +80,7 @@ class PairingActivity : ComponentActivity() {
         isTv = isTvDevice(this)
 
         setContent {
-            FireVisionTheme {
+            DzHoofTheme {
                 PairingScreen(
                     pin = pin,
                     statusMessage = statusMessage,

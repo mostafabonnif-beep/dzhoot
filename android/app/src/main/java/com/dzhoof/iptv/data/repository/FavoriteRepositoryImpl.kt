@@ -10,7 +10,7 @@ import com.dzhoof.iptv.data.model.dto.FavoritesRequest
 import com.dzhoof.iptv.data.source.local.FavoriteLocalDataSource
 import com.dzhoof.iptv.data.source.local.dao.ChannelDao
 import com.dzhoof.iptv.data.source.local.entity.FavoriteEntity
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.repository.FavoriteRepository
@@ -47,7 +47,7 @@ import javax.inject.Singleton
 @Singleton
 class FavoriteRepositoryImpl @Inject constructor(
     private val localDataSource: FavoriteLocalDataSource,
-    private val apiService: FireVisionApiService,
+    private val apiService: DzhoofApiService,
     private val channelMapper: ChannelMapper,
     private val channelDao: ChannelDao,
     private val application: Application,

@@ -15,6 +15,7 @@ interface PlanData {
   description?: string;
   durationDays: number;
   maxDevices: number;
+  maxConcurrentStreams: number;
   price?: number;
   currency?: string;
   status: 'Active' | 'Inactive';
@@ -29,6 +30,7 @@ interface PlanForm {
   description: string;
   durationDays: string;
   maxDevices: string;
+  maxConcurrentStreams: string;
   price: string;
   currency: string;
   status: 'Active' | 'Inactive';
@@ -39,6 +41,7 @@ const emptyForm: PlanForm = {
   description: '',
   durationDays: '30',
   maxDevices: '1',
+  maxConcurrentStreams: '1',
   price: '0',
   currency: 'DZD',
   status: 'Active',
@@ -97,6 +100,7 @@ export default function PlansPage() {
       description: plan.description || '',
       durationDays: String(plan.durationDays),
       maxDevices: String(plan.maxDevices),
+      maxConcurrentStreams: String(plan.maxConcurrentStreams ?? 1),
       price: String(plan.price ?? 0),
       currency: plan.currency || 'DZD',
       status: plan.status,
@@ -114,6 +118,7 @@ export default function PlansPage() {
         description: form.description,
         durationDays: Number(form.durationDays),
         maxDevices: Number(form.maxDevices) || 1,
+        maxConcurrentStreams: Number(form.maxConcurrentStreams) || 1,
         price: Number(form.price) || 0,
         currency: form.currency.toUpperCase(),
         status: form.status,
@@ -186,6 +191,11 @@ export default function PlansPage() {
       key: 'devices',
       header: 'Devices',
       cell: (p) => <span>{p.maxDevices}</span>,
+    },
+    {
+      key: 'concurrent',
+      header: 'Concurrent',
+      cell: (p) => <span>{p.maxConcurrentStreams ?? 1}</span>,
     },
     {
       key: 'price',
@@ -297,7 +307,7 @@ export default function PlansPage() {
       <DataTable
         columns={columns}
         data={plans}
-        gridTemplate="minmax(180px,1.6fr) 100px 80px 110px 110px 100px 120px"
+        gridTemplate="minmax(180px,1.6fr) 100px 80px 90px 110px 110px 100px 120px"
         ariaLabel="الباقات"
         emptyMessage={t('common.noData')}
         rowKey={(p) => p._id}
@@ -361,6 +371,18 @@ export default function PlansPage() {
                 min={1}
                 value={form.maxDevices}
                 onChange={(e) => setForm({ ...form, maxDevices: e.target.value })}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                المشاهدة المتزامنة *
+              </label>
+              <input
+                className={inputClass}
+                type="number"
+                min={1}
+                value={form.maxConcurrentStreams}
+                onChange={(e) => setForm({ ...form, maxConcurrentStreams: e.target.value })}
               />
             </div>
           </div>

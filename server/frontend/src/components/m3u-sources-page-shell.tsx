@@ -35,6 +35,7 @@ interface M3USource {
   syncStatus: 'idle' | 'syncing' | 'error';
   lastSyncAt?: string | null;
   lastError?: string | null;
+  directPlayback?: boolean;
   stats?: { channels: number; blocked: number; duplicates: number };
 }
 
@@ -148,6 +149,18 @@ export default function M3USourcesPageShell() {
     }
   }
 
+  async function toggleDirectPlayback(source: M3USource) {
+    try {
+      await api.patch(`/admin/m3u-sources/${source._id}`, {
+        directPlayback: !source.directPlayback,
+      });
+      toast(source.directPlayback ? 'تم تعطيل Direct Playback للمصدر' : 'تم تفعيل Direct Playback للمصدر', 'success');
+      await loadSources();
+    } catch {
+      toast('تعذر تغيير وضع Direct Playback', 'error');
+    }
+  }
+
   async function toggleSource(source: M3USource) {
     try {
       await api.patch(`/admin/m3u-sources/${source._id}`, {
@@ -250,6 +263,13 @@ export default function M3USourcesPageShell() {
               <p className="mt-3 text-xs text-muted-foreground">
                 الحالة: {source.syncStatus === 'syncing' ? 'جارٍ التحديث…' : source.syncStatus === 'error' ? `خطأ: ${source.lastError || 'غير معروف'}` : source.lastSyncAt ? `آخر تحديث: ${new Date(source.lastSyncAt).toLocaleString('ar-DZ')}` : 'لم تتم المزامنة بعد'}
               </p>
+
+              <div className="mt-4 flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs">
+                <span><strong>Direct Playback</strong><span className="mr-2 text-muted-foreground">{source.directPlayback ? 'مفعل' : 'متوقف'}</span></span>
+                <button onClick={() => toggleDirectPlayback(source)} className="rounded-md border px-3 py-1.5 font-medium hover:bg-muted">
+                  {source.directPlayback ? 'تعطيل' : 'تفعيل'}
+                </button>
+              </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 <button onClick={() => testSource(source)} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted"><Play className="h-3.5 w-3.5" /> اختبار</button>
