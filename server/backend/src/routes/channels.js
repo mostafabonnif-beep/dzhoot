@@ -167,7 +167,7 @@ const CHANNEL_LIST_FIELDS = [
   'channelDrmType order isActive',
   'metadata.country metadata.language metadata.quality',
   'metadata.isWorking metadata.lastTested metadata.responseTime',
-  'metadata.source metadata.xtreamStreamId',
+  'metadata.source metadata.xtreamStreamId metadata.xtreamSourceId',
   'identityKey identityConfidence identityMatch',
   'catchup.type catchup.days',
   'flaggedBad.isFlagged flaggedBad.reason',
