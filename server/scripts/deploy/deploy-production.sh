@@ -19,6 +19,7 @@ set -uo pipefail
 
 ENV_FILE="${ENV_FILE:-/etc/dzhoot/.env.production}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.production.yml}"
+export ENV_FILE COMPOSE_FILE
 APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1
 
@@ -49,7 +50,7 @@ fi
 [ "$(stat -c '%a' "$ENV_FILE")" = "600" ] || die "ENV_FILE must be chmod 600: $ENV_FILE"
 
 step "1/7  Preflight"
-run "preflight" ./scripts/deploy/preflight.sh || die "preflight failed — fix before deploying"
+run "preflight" env ENV_FILE="$ENV_FILE" COMPOSE_FILE="$COMPOSE_FILE" ./scripts/deploy/preflight.sh || die "preflight failed — fix before deploying"
 
 step "2/7  Verifiable backup (mongodump + checksum)"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
