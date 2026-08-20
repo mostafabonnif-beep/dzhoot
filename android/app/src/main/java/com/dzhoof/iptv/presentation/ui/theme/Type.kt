@@ -50,7 +50,7 @@ val BodyFontFamily = FontFamily(
     bodyFont(FontWeight.Bold),
 )
 
-val FireVisionTypography = Typography(
+val DzHoofTypography = Typography(
     // Display — hero text, big numbers
     displayLarge = TextStyle(
         fontFamily = DisplayFontFamily,
@@ -168,13 +168,13 @@ val FireVisionTypography = Typography(
 )
 
 /**
- * Mobile typography scale — ~15-20% smaller than the TV [FireVisionTypography]
- * for phone (compact/portrait) surfaces. FireVisionTheme selects this when the
+ * Mobile typography scale — ~15-20% smaller than the TV [DzHoofTypography]
+ * for phone (compact/portrait) surfaces. DzHoofTheme selects this when the
  * device is compact/portrait; large screens keep the TV scale unchanged.
  * Font families, weights and letter-spacing are kept identical to the TV scale;
  * only fontSize / lineHeight are reduced.
  */
-val FireVisionTypographyMobile = Typography(
+val DzHoofTypographyMobile = Typography(
     // Display — hero text, big numbers
     displayLarge = TextStyle(
         fontFamily = DisplayFontFamily,

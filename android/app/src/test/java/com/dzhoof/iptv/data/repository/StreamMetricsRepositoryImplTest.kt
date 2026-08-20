@@ -4,7 +4,7 @@ import android.app.Application
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.source.local.dao.StreamMetricsDao
 import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.domain.repository.HealthSyncEntry
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -20,7 +20,7 @@ import org.junit.Test
 class StreamMetricsRepositoryImplTest {
 
     private val streamMetricsDao: StreamMetricsDao = mockk(relaxed = true)
-    private val apiService: FireVisionApiService = mockk(relaxed = true)
+    private val apiService: DzhoofApiService = mockk(relaxed = true)
     private val application: Application = mockk(relaxed = true)
     private val testDispatcher = UnconfinedTestDispatcher()
 

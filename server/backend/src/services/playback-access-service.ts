@@ -2,11 +2,13 @@ import {
   getActiveSubscription,
   isSubscriptionRequired,
 } from './subscription-service';
+import Plan from '../models/Plan';
 
 export interface PlaybackAccessResult {
   allowed: boolean;
   required: boolean;
   subscription: any | null;
+  plan: any | null;
 }
 
 /**
@@ -20,13 +22,14 @@ export async function checkPlaybackSubscription(
 ): Promise<PlaybackAccessResult> {
   const required = await isSubscriptionRequired();
   if (!required || role === 'Admin') {
-    return { allowed: true, required, subscription: null };
+    return { allowed: true, required, subscription: null, plan: null };
   }
   if (!userId) {
-    return { allowed: false, required, subscription: null };
+    return { allowed: false, required, subscription: null, plan: null };
   }
   const subscription = await getActiveSubscription(String(userId));
-  return { allowed: Boolean(subscription), required, subscription };
+  const plan = subscription?.planId ? await Plan.findById(subscription.planId).lean().exec() : null;
+  return { allowed: Boolean(subscription && plan), required, subscription, plan };
 }
 
 module.exports = { checkPlaybackSubscription };

@@ -28,7 +28,7 @@ import java.io.IOException
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChannelRemoteDataSourceTest {
     
-    private lateinit var apiService: FireVisionApiService
+    private lateinit var apiService: DzhoofApiService
     private lateinit var dataSource: ChannelRemoteDataSource
     
     @Before

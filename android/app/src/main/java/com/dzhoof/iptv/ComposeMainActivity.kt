@@ -64,7 +64,7 @@ import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
 import com.dzhoof.iptv.drm.AmazonDrmManager
 import com.dzhoof.iptv.domain.service.ChannelHealthScanner
-import com.dzhoof.iptv.presentation.navigation.FireVisionNavGraph
+import com.dzhoof.iptv.presentation.navigation.DzhoofNavGraph
 import com.dzhoof.iptv.presentation.navigation.Screen
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_ENTRANCE
@@ -78,7 +78,7 @@ import com.dzhoof.iptv.presentation.ui.screens.SplashScreen
 import com.dzhoof.iptv.presentation.ui.screens.UpdateAvailableScreen
 import com.dzhoof.iptv.presentation.viewmodel.AppUpdateViewModel
 import com.dzhoof.iptv.presentation.ui.theme.DiagonalGradientBackground
-import com.dzhoof.iptv.presentation.ui.theme.FireVisionTheme
+import com.dzhoof.iptv.presentation.ui.theme.DzHoofTheme
 import com.google.firebase.FirebaseApp
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.delay
@@ -87,7 +87,7 @@ import javax.inject.Inject
 private const val EXIT_CONFIRM_WINDOW_MS = 2000L
 
 /**
- * Main entry point for the modernized FireVision IPTV app.
+ * Main entry point for the DZ HOOF IPTV app.
  *
  * Hosts the Compose navigation graph with orientation-adaptive navigation:
  * landscape uses a left rail sidebar, portrait uses a bottom navigation bar.
@@ -136,7 +136,7 @@ class ComposeMainActivity : ComponentActivity() {
         // Non-blocking DRM check — log result for Amazon Appstore compliance
         AmazonDrmManager(this).verifyLicense { licensed ->
             if (!licensed) {
-                android.util.Log.w("FireVision", "DRM: App not licensed (non-blocking)")
+                android.util.Log.w("DzHoof", "DRM: App not licensed (non-blocking)")
             }
         }
 
@@ -172,7 +172,7 @@ class ComposeMainActivity : ComponentActivity() {
             }
             val perfProfile = remember { detectPerfProfile(this) }
             CompositionLocalProvider(LocalPerfProfile provides perfProfile) {
-                FireVisionTheme(darkTheme = darkTheme) {
+                DzHoofTheme(darkTheme = darkTheme) {
                     var showSplash by rememberSaveable { mutableStateOf(showSplashOnStart) }
                     val navController = rememberNavController()
                     val startDestination = if (needsPairing) Screen.Pairing.route else Screen.Home.route
@@ -196,7 +196,7 @@ class ComposeMainActivity : ComponentActivity() {
                     }
 
                     Box(modifier = Modifier.fillMaxSize()) {
-                        FireVisionAppShell(
+                        DzhoofAppShell(
                             navController = navController,
                             startDestination = startDestination
                         )
@@ -299,7 +299,7 @@ class ComposeMainActivity : ComponentActivity() {
  * Favorites, Settings). It is hidden during Pairing and Player screens.
  */
 @Composable
-private fun FireVisionAppShell(
+private fun DzhoofAppShell(
     navController: NavHostController,
     startDestination: String
 ) {
@@ -319,7 +319,7 @@ private fun FireVisionAppShell(
         }
     }
 
-    // Single FireVisionNavGraph call site: an if/else per orientation would give
+    // Single DzhoofNavGraph call site: an if/else per orientation would give
     // the NavHost two composition identities, so rotating disposes every screen
     // (the player loses its ExoPlayer and orientation request mid-rotation).
     DiagonalGradientBackground {
@@ -339,7 +339,7 @@ private fun FireVisionAppShell(
                     )
                 }
                 Box(modifier = Modifier.weight(1f)) {
-                    FireVisionNavGraph(
+                    DzhoofNavGraph(
                         navController = navController,
                         startDestination = startDestination,
                         modifier = Modifier.fillMaxSize()

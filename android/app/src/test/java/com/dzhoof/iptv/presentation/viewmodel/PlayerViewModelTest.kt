@@ -2,7 +2,7 @@ package com.dzhoof.iptv.presentation.viewmodel
 
 import com.dzhoof.iptv.MainDispatcherRule
 import com.dzhoof.iptv.data.model.Result
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.model.EpgProgram
@@ -63,7 +63,7 @@ class PlayerViewModelTest {
     private val epgRepository: EpgRepository = mockk(relaxed = true)
     private val getGuideProgramsUseCase: GetGuideProgramsUseCase = mockk()
     private val playerFactory: com.dzhoof.iptv.presentation.ui.player.PlayerFactory = mockk(relaxed = true)
-    private val apiService: FireVisionApiService = mockk(relaxed = true)
+    private val apiService: DzhoofApiService = mockk(relaxed = true)
     private val analyticsHelper: AnalyticsHelper = mockk(relaxed = true)
     private val userPreferencesRepository: UserPreferencesRepository = mockk {
         every { getBackExitProtection() } returns flowOf(true)

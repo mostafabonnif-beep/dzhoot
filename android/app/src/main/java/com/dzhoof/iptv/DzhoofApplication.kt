@@ -12,7 +12,7 @@ import io.sentry.android.core.SentryAndroid
 import javax.inject.Inject
 
 @HiltAndroidApp
-class FireVisionApplication : Application(), Configuration.Provider {
+class DzhoofApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
 
@@ -47,7 +47,7 @@ class FireVisionApplication : Application(), Configuration.Provider {
     }
 
     companion object {
-        private lateinit var instance: FireVisionApplication
+        private lateinit var instance: DzhoofApplication
 
         @JvmStatic
         fun getAppContext() = instance.applicationContext
