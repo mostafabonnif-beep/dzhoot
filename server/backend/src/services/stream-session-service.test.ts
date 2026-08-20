@@ -3,6 +3,7 @@ import {
   registerStreamSession,
   sessionKeyFor,
   userKeyFor,
+  isStreamSessionActive,
   StreamSessionStore,
 } from './stream-session-service';
 
@@ -55,6 +56,15 @@ class FakeStore implements StreamSessionStore {
   }
 }
 
+class AtomicFakeStore extends FakeStore {
+  evalCalls: Array<Array<string | number>> = [];
+
+  async eval(_script: string, _numKeys: number, ...args: Array<string | number>) {
+    this.evalCalls.push(args);
+    return 1;
+  }
+}
+
 describe('registerStreamSession', () => {
   const now = Date.parse('2026-08-12T12:00:00Z');
 
@@ -66,7 +76,22 @@ describe('registerStreamSession', () => {
       now,
       store: null,
     });
-    expect(result).toEqual({ max: getMaxConcurrentStreams(), active: 0, evictedSessionId: null });
+    expect(result).toMatchObject({ allowed: true, max: getMaxConcurrentStreams(), active: 0, evictedSessionId: null });
+  });
+
+  it('passes the session ID to the atomic Redis script in the ARGV[3] position', async () => {
+    const store = new AtomicFakeStore();
+    await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, now, store });
+
+    expect(store.evalCalls).toEqual([[
+      userKeyFor('u1'),
+      sessionKeyFor('s1'),
+      2,
+      now,
+      's1',
+      600,
+      86_400,
+    ]]);
   });
 
   it('registers a session and reports the active count', async () => {
@@ -78,30 +103,27 @@ describe('registerStreamSession', () => {
     expect(await store.exists(sessionKeyFor('s1'))).toBe(1);
   });
 
-  it('evicts the OLDEST session when the user exceeds the limit', async () => {
+  it('rejects a new session when the concurrent limit is reached', async () => {
     const store = new FakeStore();
-    const max = getMaxConcurrentStreams();
-    const sessions = Array.from({ length: max + 2 }, (_, i) => `s${i + 1}`);
-
-    let active = 0;
-    for (let i = 0; i < sessions.length; i += 1) {
-      const result = await registerStreamSession({
-        userId: 'u1',
-        sessionId: sessions[i],
-        ttlSec: 300,
-        now: now + i * 60_000,
-        store,
-      });
-      active = result.active;
-    }
-
-    // Two extras were registered — the two oldest (s1, s2) must have been evicted.
-    expect(active).toBe(max);
-    expect(await store.exists(sessionKeyFor('s1'))).toBe(0);
-    expect(await store.exists(sessionKeyFor('s2'))).toBe(0);
-    expect(await store.exists(sessionKeyFor(sessions[max]))).toBe(1);
-    expect(await store.exists(sessionKeyFor(sessions[max + 1]))).toBe(1);
+    const max = 2;
+    await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, maxConcurrentStreams: max, now, store });
+    await registerStreamSession({ userId: 'u1', sessionId: 's2', ttlSec: 300, maxConcurrentStreams: max, now: now + 60_000, store });
+    const result = await registerStreamSession({
+      userId: 'u1',
+      sessionId: 's3',
+      ttlSec: 300,
+      maxConcurrentStreams: max,
+      now: now + 120_000,
+      store,
+    });
+    expect(result.allowed).toBe(false);
+    expect(result.reason).toBe('LIMIT_REACHED');
+    expect(result.active).toBe(max);
+    expect(await store.exists(sessionKeyFor('s1'))).toBe(1);
+    expect(await store.exists(sessionKeyFor('s2'))).toBe(1);
+    expect(await store.exists(sessionKeyFor('s3'))).toBe(0);
   });
+
 
   it('prunes sessions whose keys have expired (crashed streams free their slot)', async () => {
     const store = new FakeStore();
@@ -129,4 +151,12 @@ describe('registerStreamSession', () => {
     expect(await store.zcard(userKeyFor('u1'))).toBe(max);
     expect(await store.zcard(userKeyFor('u2'))).toBe(1);
   });
+  it('requires the registered session to remain active', async () => {
+    const store = new FakeStore();
+    await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, now, store });
+    expect(await isStreamSessionActive('u1', 's1', store)).toBe(true);
+    await store.del(sessionKeyFor('s1'));
+    expect(await isStreamSessionActive('u1', 's1', store)).toBe(false);
+  });
+
 });

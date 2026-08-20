@@ -5,6 +5,7 @@ export interface IM3USourceDocument extends Document {
   playlistUrlEncrypted: string;
   epgUrlEncrypted?: string | null;
   status: 'Active' | 'Inactive';
+  directPlayback?: boolean;
   healthStatus: 'ONLINE' | 'DEGRADED' | 'BLOCKED' | 'OFFLINE' | 'AUTH_ERROR' | 'TIMEOUT' | 'INVALID_STREAM';
   lastHttpStatus?: number | null;
   lastLatencyMs?: number | null;
@@ -31,6 +32,7 @@ const m3uSourceSchema = new Schema<IM3USourceDocument>(
     playlistUrlEncrypted: { type: String, required: true },
     epgUrlEncrypted: { type: String, default: null },
     status: { type: String, enum: ['Active', 'Inactive'], default: 'Inactive', index: true },
+    directPlayback: { type: Boolean, default: false },
     healthStatus: {
       type: String,
       enum: ['ONLINE', 'DEGRADED', 'BLOCKED', 'OFFLINE', 'AUTH_ERROR', 'TIMEOUT', 'INVALID_STREAM'],

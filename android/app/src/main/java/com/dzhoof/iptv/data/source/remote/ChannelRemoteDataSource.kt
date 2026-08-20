@@ -15,7 +15,7 @@ import javax.inject.Singleton
 /**
  * Remote data source for channel-related API operations.
  * 
- * This class wraps the FireVisionApiService and provides error handling
+ * This class wraps the DzhoofApiService and provides error handling
  * for all channel-related network operations. It converts API responses
  * into Result<T> objects for consistent error handling throughout the app.
  * 
@@ -23,7 +23,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class ChannelRemoteDataSource @Inject constructor(
-    private val apiService: FireVisionApiService,
+    private val apiService: DzhoofApiService,
     @IoDispatcher private val dispatcher: CoroutineDispatcher
 ) {
     

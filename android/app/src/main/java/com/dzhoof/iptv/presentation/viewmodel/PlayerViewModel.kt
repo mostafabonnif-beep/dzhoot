@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.model.EpgProgram
@@ -83,7 +83,7 @@ class PlayerViewModel @Inject constructor(
     private val analyticsHelper: AnalyticsHelper,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val playerFactory: PlayerFactory,
-    private val apiService: FireVisionApiService
+    private val apiService: DzhoofApiService
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())

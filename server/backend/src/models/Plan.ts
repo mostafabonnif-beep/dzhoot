@@ -5,6 +5,7 @@ export interface IPlanDocument extends Document {
   description?: string;
   durationDays: number;
   maxDevices: number;
+  maxConcurrentStreams: number;
   price?: number;
   currency?: string;
   status: 'Active' | 'Inactive';
@@ -31,6 +32,12 @@ const planSchema = new Schema<IPlanDocument>(
       type: Number,
       required: true,
       min: 1,
+    },
+    maxConcurrentStreams: {
+      type: Number,
+      required: true,
+      min: 1,
+      default: 1,
     },
     maxDevices: {
       type: Number,

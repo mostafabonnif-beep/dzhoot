@@ -4,7 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.data.AppPreferences
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -117,17 +117,17 @@ object NetworkModule {
     }
 
     /**
-     * Provides FireVisionApiService implementation.
+     * Provides DzhoofApiService implementation.
      * 
-     * This service interface defines all API endpoints for the FireVision IPTV application.
+     * This service interface defines all API endpoints for the DZ HOOF IPTV application.
      * Retrofit will generate the implementation at runtime.
      * 
      * @param retrofit Configured Retrofit instance
-     * @return FireVisionApiService implementation
+     * @return DzhoofApiService implementation
      */
     @Provides
     @Singleton
-    fun provideFireVisionApiService(retrofit: Retrofit): FireVisionApiService {
-        return retrofit.create(FireVisionApiService::class.java)
+    fun provideDzhoofApiService(retrofit: Retrofit): DzhoofApiService {
+        return retrofit.create(DzhoofApiService::class.java)
     }
 }

@@ -15,7 +15,7 @@ import com.dzhoof.iptv.data.model.dto.RedeemResponseDto
 import com.dzhoof.iptv.data.model.dto.RegisterDeviceRequest
 import com.dzhoof.iptv.data.model.dto.SubscriptionViewDataDto
 import com.dzhoof.iptv.data.model.dto.SubscriptionViewResponse
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.repository.SubscriptionRepository
 import kotlinx.coroutines.CoroutineDispatcher
@@ -32,7 +32,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class SubscriptionRepositoryImpl @Inject constructor(
-    private val apiService: FireVisionApiService,
+    private val apiService: DzhoofApiService,
     private val appContext: Context,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : SubscriptionRepository {

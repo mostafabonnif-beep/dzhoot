@@ -35,7 +35,7 @@ class ChannelManager private constructor(
     }
 
     private val inputId: String = TvContract.buildInputId(
-        ComponentName(context, FireVisionTvInputService::class.java)
+        ComponentName(context, DzhoofTvInputService::class.java)
     )
 
     /**
@@ -169,7 +169,7 @@ class ChannelManager private constructor(
             val internalData = JSONObject().apply {
                 put("channelId", channel.id)
                 put("channelUrl", channel.streamUrl)
-                put("playbackDeepLinkUri", "firevisioniptv://play/channel/${channel.id}")
+                put("playbackDeepLinkUri", "dzhoof://play/channel/${channel.id}")
             }
 
             val values = ContentValues().apply {
@@ -201,7 +201,7 @@ class ChannelManager private constructor(
             val internalData = JSONObject().apply {
                 put("channelId", channel.id)
                 put("channelUrl", channel.streamUrl)
-                put("playbackDeepLinkUri", "firevisioniptv://play/channel/${channel.id}")
+                put("playbackDeepLinkUri", "dzhoof://play/channel/${channel.id}")
             }
 
             val values = ContentValues().apply {

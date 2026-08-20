@@ -43,6 +43,7 @@ function publicShape(src) {
     name: src.name,
     hasEpgUrl: Boolean(src.epgUrlEncrypted),
     status: src.status,
+    directPlayback: src.directPlayback === true,
     healthStatus: src.healthStatus || 'OFFLINE',
     lastHttpStatus: src.lastHttpStatus ?? null,
     lastLatencyMs: src.lastLatencyMs ?? null,
@@ -71,7 +72,7 @@ router.get('/', async (_req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, playlistUrl, epgUrl } = req.body || {};
+    const { name, playlistUrl, epgUrl, directPlayback } = req.body || {};
     if (!name || !playlistUrl) {
       return res.status(400).json({ success: false, error: 'name and playlistUrl are required' });
     }
@@ -83,6 +84,7 @@ router.post('/', async (req, res) => {
       name: String(name).trim(),
       ...secrets,
       status: 'Inactive',
+      directPlayback: directPlayback === true,
     });
 
     audit({
@@ -240,9 +242,19 @@ router.patch('/:id', async (req, res) => {
     const source = await M3USource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    const { name, status, playlistUrl, epgUrl } = req.body || {};
+    const { name, status, playlistUrl, epgUrl, directPlayback } = req.body || {};
     if (name !== undefined) source.name = String(name).trim();
     if (status !== undefined) source.status = status === 'Inactive' ? 'Inactive' : 'Active';
+    if (directPlayback !== undefined) {
+      source.directPlayback = directPlayback === true;
+      audit({
+        ...reqCtx(req),
+        action: 'M3U_SOURCE_DIRECT_PLAYBACK',
+        resource: 'M3USource',
+        resourceId: String(id),
+        changes: { after: { directPlayback: source.directPlayback } },
+      });
+    }
     if (playlistUrl !== undefined) {
       const normalized = validateHttpUrl(playlistUrl, 'playlistUrl');
       source.playlistUrlEncrypted = encryptSecret(normalized);

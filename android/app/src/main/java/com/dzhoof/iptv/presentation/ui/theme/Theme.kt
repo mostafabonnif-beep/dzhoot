@@ -11,7 +11,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 
-/** Composition local to expose whether FireVisionTheme is in dark mode. */
+/** Composition local to expose whether DzHoofTheme is in dark mode. */
 val LocalIsDarkTheme = compositionLocalOf { true }
 
 /** Theme-aware subtle border color: light white on dark, dark on light. */
@@ -121,7 +121,7 @@ private val LightColorScheme = lightColorScheme(
 )
 
 @Composable
-fun FireVisionTheme(
+fun DzHoofTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
@@ -130,13 +130,13 @@ fun FireVisionTheme(
     val configuration = LocalConfiguration.current
     val isCompact = configuration.screenWidthDp < 600
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-    val typography = if (isCompact || isPortrait) FireVisionTypographyMobile else FireVisionTypography
+    val typography = if (isCompact || isPortrait) DzHoofTypographyMobile else DzHoofTypography
 
     CompositionLocalProvider(LocalIsDarkTheme provides darkTheme) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
             typography = typography,
-            shapes = FireVisionShapes,
+            shapes = DzHoofShapes,
             content = content
         )
     }

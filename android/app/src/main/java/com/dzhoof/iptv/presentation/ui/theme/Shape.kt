@@ -12,7 +12,7 @@ val ShapeLarge  = RoundedCornerShape(12.dp)   // toasts, dialogs
 val ShapePill   = RoundedCornerShape(28.dp)   // fully-rounded action pills / hero chips
 
 // ── Material 3 shape mapping ─────────────────────────────────────────
-val FireVisionShapes = Shapes(
+val DzHoofShapes = Shapes(
     extraSmall = RoundedCornerShape(2.dp),
     small = ShapeSmall,
     medium = ShapeMedium,
