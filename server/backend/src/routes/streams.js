@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const mongoose = require('mongoose');
 const AppSetting = require('../models/AppSetting');
@@ -157,18 +158,20 @@ router.post('/authorize', async (req, res) => {
     // The initial API response never contains the upstream URL. In proxy mode
     // the token is resolved server-side. In direct mode the token endpoint
     // returns a redirect only after all authorization checks have succeeded.
+    const rootSessionId = crypto.randomBytes(16).toString('hex');
     const { token, expiresAt } = issuePlaybackToken({
       userId: String(req.user.id),
       channelListCode,
       streamUrl: url,
       direct: directPlayback,
+      sessionId: rootSessionId,
     });
     const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`;
 
     // Per-user concurrent stream limit. A new session is rejected when the limit is reached; existing sessions are preserved.
     const session = await registerStreamSession({
       userId: String(req.user.id),
-      sessionId: token,
+      sessionId: rootSessionId,
       ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
       maxConcurrentStreams: playbackAccess.plan?.maxConcurrentStreams,
     });
