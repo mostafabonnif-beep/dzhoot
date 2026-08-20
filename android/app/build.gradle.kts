@@ -235,11 +235,22 @@ dependencies {
     testImplementation(libs.turbine)
 }
 
+val sentryAuthToken = System.getenv("SENTRY_AUTH_TOKEN")?.trim().orEmpty()
+
 sentry {
     includeSourceContext = true
     org = "dzhoof"
     projectName = "dzhoof"
-    authToken = System.getenv("SENTRY_AUTH_TOKEN")
+    authToken = sentryAuthToken
+}
+
+// Source-map upload is optional. Release APK packaging must remain reproducible
+// when a deployment environment has no Sentry token; CI/production still uploads
+// the files automatically whenever SENTRY_AUTH_TOKEN is configured.
+tasks.configureEach {
+    if (name.startsWith("uploadSentry") || name.startsWith("sentryBundleSources")) {
+        onlyIf { sentryAuthToken.isNotBlank() }
+    }
 }
 
 tasks.withType<Test> {
