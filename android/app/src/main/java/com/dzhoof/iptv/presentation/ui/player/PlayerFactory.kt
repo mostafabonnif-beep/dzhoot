@@ -53,9 +53,12 @@ class PlayerFactory @Inject constructor(
 
         // Reuse the app's OkHttp (cert pinning, interceptors) but with stream-appropriate
         // timeouts so a dead segment fails in seconds rather than 30s.
+        // 25s (not 8s): Upstream's stream nodes can take ~10s to allocate a session for a
+        // channel that hasn't been played recently — an 8s timeout aborts the FIRST
+        // request of every cold session and the player reports a source-provider error.
         val streamingClient = okHttpClient.newBuilder()
-            .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(8, TimeUnit.SECONDS)
+            .connectTimeout(25, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
             .build()
 
         val dataSourceFactory = DefaultDataSource.Factory(
