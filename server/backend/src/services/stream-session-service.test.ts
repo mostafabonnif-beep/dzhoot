@@ -79,7 +79,7 @@ describe('registerStreamSession', () => {
     expect(result).toMatchObject({ allowed: true, max: getMaxConcurrentStreams(), active: 0, evictedSessionId: null });
   });
 
-  it('passes the session ID to the atomic Redis script in the ARGV[3] position', async () => {
+  it('passes the session ID and session-key prefix to the atomic Redis script', async () => {
     const store = new AtomicFakeStore();
     await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, now, store });
 
@@ -91,6 +91,7 @@ describe('registerStreamSession', () => {
       's1',
       600,
       86_400,
+      'dz:stream:sess:',
     ]]);
   });
 
@@ -103,7 +104,7 @@ describe('registerStreamSession', () => {
     expect(await store.exists(sessionKeyFor('s1'))).toBe(1);
   });
 
-  it('rejects a new session when the concurrent limit is reached', async () => {
+  it('replaces the oldest session when the concurrent limit is reached', async () => {
     const store = new FakeStore();
     const max = 2;
     await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, maxConcurrentStreams: max, now, store });
@@ -116,12 +117,10 @@ describe('registerStreamSession', () => {
       now: now + 120_000,
       store,
     });
-    expect(result.allowed).toBe(false);
-    expect(result.reason).toBe('LIMIT_REACHED');
-    expect(result.active).toBe(max);
-    expect(await store.exists(sessionKeyFor('s1'))).toBe(1);
+    expect(result).toMatchObject({ allowed: true, active: max, evictedSessionId: 's1' });
+    expect(await store.exists(sessionKeyFor('s1'))).toBe(0);
     expect(await store.exists(sessionKeyFor('s2'))).toBe(1);
-    expect(await store.exists(sessionKeyFor('s3'))).toBe(0);
+    expect(await store.exists(sessionKeyFor('s3'))).toBe(1);
   });
 
 
