@@ -557,9 +557,19 @@ router.get('/playback/:token', async (req, res) => {
 
     // A valid token is not sufficient by itself: the concurrency session must
     // still be active. This also makes administrative revocation effective.
-    if (!(await isStreamSessionActive(String(user._id), req.params.token))) {
+    // Child HLS playlist, key and segment tokens inherit the root playback
+    // session. This keeps concurrency enforcement intact while allowing Media3
+    // to fetch every resource referenced by a tokenized manifest.
+    const rootSessionId = payload.sessionId || req.params.token;
+    if (!(await isStreamSessionActive(String(user._id), rootSessionId))) {
       return res.status(429).send('Playback session is no longer active');
     }
+
+    const proxyContext = {
+      userId: String(user._id),
+      channelListCode: user.channelListCode,
+      sessionId: rootSessionId,
+    };
 
     if (payload.direct === true) {
       // Direct mode is deliberately gated by deployment configuration. The
@@ -568,10 +578,7 @@ router.get('/playback/:token', async (req, res) => {
       // client. Operators should enable this only when their provider contract
       // permits direct client playback and source-URL exposure is acceptable.
       if (process.env.ALLOW_DIRECT_PLAYBACK !== 'true') {
-        return proxyUpstreamStream(req, res, payload.streamUrl, {
-          userId: String(user._id),
-          channelListCode: user.channelListCode,
-        }, undefined, payload.upstreamHeaders);
+        return proxyUpstreamStream(req, res, payload.streamUrl, proxyContext, undefined, payload.upstreamHeaders);
       }
 
       const parsed = new URL(payload.streamUrl);
@@ -588,10 +595,7 @@ router.get('/playback/:token', async (req, res) => {
       return res.redirect(302, payload.streamUrl);
     }
 
-    return proxyUpstreamStream(req, res, payload.streamUrl, {
-      userId: String(user._id),
-      channelListCode: user.channelListCode,
-    }, undefined, payload.upstreamHeaders);
+    return proxyUpstreamStream(req, res, payload.streamUrl, proxyContext, undefined, payload.upstreamHeaders);
   } catch (error) {
     console.error('Tokenized TV proxy error:', error);
     if (!res.headersSent) res.status(502).send('Bad Gateway');
