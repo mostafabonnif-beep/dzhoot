@@ -11,7 +11,7 @@ import com.dzhoof.iptv.data.source.local.dao.ChannelDao
 import com.dzhoof.iptv.data.source.local.entity.ChannelEntity
 import com.dzhoof.iptv.data.source.local.entity.FavoriteEntity
 import com.dzhoof.iptv.data.model.dto.FavoritesResponse
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -45,7 +45,7 @@ class FavoriteRepositoryImplTest {
     
     private lateinit var repository: FavoriteRepositoryImpl
     private lateinit var localDataSource: FavoriteLocalDataSource
-    private lateinit var apiService: FireVisionApiService
+    private lateinit var apiService: DzhoofApiService
     private lateinit var channelMapper: ChannelMapper
     private lateinit var channelDao: ChannelDao
     private lateinit var application: Application

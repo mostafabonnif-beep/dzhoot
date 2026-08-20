@@ -47,6 +47,11 @@ describe('playback tokens', () => {
     });
   });
 
+  it('preserves explicit direct-playback intent inside the encrypted token', () => {
+    const issued = issuePlaybackToken({ ...input, direct: true });
+    expect(verifyPlaybackToken(issued.token)?.direct).toBe(true);
+  });
+
   it('rejects tampered and expired tokens', () => {
     const issued = issuePlaybackToken({ ...input, ttlMs: 30_000 });
     const tokenParts = issued.token.split('.');

@@ -224,7 +224,7 @@ class UserPreferencesRepositoryImpl @Inject constructor(
     }
 
     companion object {
-        private const val PREFS_NAME = "firevision_preferences"
+        private const val PREFS_NAME = "firevision_preferences" // keep for existing installs
         private const val DEFAULT_INFO_BAR_TIMEOUT_SECONDS = 4
         private const val KEY_INFO_BAR_TIMEOUT_SECONDS = "info_bar_timeout_seconds"
         private const val KEY_SLEEP_TIMER_DEFAULT = "sleep_timer_default_minutes"

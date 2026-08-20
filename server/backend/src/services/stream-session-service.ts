@@ -1,46 +1,30 @@
 /**
- * Per-user concurrent stream session tracking (Redis-backed).
+ * Redis-backed concurrent playback session tracking.
  *
- * Enforces MAX_CONCURRENT_STREAMS_PER_USER: when a user starts a new stream
- * beyond the limit, the OLDEST active session is evicted (standard IPTV
- * behavior — the newest playback wins). Sessions carry the playback token's
- * TTL + a grace period, so a crashed app or closed player frees the slot
- * automatically.
- *
- * Fully degraded: without REDIS_URL the service is a no-op (returns the
- * configured max with active=0), so a Redis outage never blocks playback.
+ * Sessions are authorization state, not media transport. The media bytes can
+ * therefore bypass the DZ HOOF VPS when DIRECT delivery is enabled.
  */
 import { getRedisClient } from './redis';
 
-const MAX_CONCURRENT_STREAMS = (() => {
-  const raw = Number(process.env.MAX_CONCURRENT_STREAMS_PER_USER);
-  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 2;
-})();
-
-/** Extra time (s) a session stays registered after its token expires. */
+const DEFAULT_MAX_CONCURRENT = 2;
 const SESSION_GRACE_SEC = 5 * 60;
-
-/** Minimum session TTL (s) — a token issued with a tiny TTL still registers. */
 const MIN_TTL_SEC = 60;
-
-/** Sorted-set members evicted per registration when over the limit. */
 const USER_SET_TTL_SEC = 86_400;
 
+function envMax(): number {
+  const raw = Number(process.env.MAX_CONCURRENT_STREAMS_PER_USER);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_MAX_CONCURRENT;
+}
+
 export function getMaxConcurrentStreams(): number {
-  return MAX_CONCURRENT_STREAMS;
+  return envMax();
 }
+export function sessionKeyFor(sessionId: string): string { return `dz:stream:sess:${sessionId}`; }
+export function userKeyFor(userId: string): string { return `dz:stream:user:${userId}`; }
 
-export function sessionKeyFor(sessionId: string): string {
-  return `dz:stream:sess:${sessionId}`;
-}
-
-export function userKeyFor(userId: string): string {
-  return `dz:stream:user:${userId}`;
-}
-
-/** The ioredis surface the service needs — small so tests can fake it. */
 export interface StreamSessionStore {
   zadd(key: string, score: number, member: string): Promise<unknown>;
+  eval?(script: string, numKeys: number, ...args: Array<string | number>): Promise<unknown>;
   zcard(key: string): Promise<number>;
   zrange(key: string, start: number, stop: number): Promise<string[]>;
   zrem(key: string, member: string): Promise<number>;
@@ -50,56 +34,129 @@ export interface StreamSessionStore {
   expire(key: string, seconds: number): Promise<unknown>;
 }
 
-function defaultStore(): StreamSessionStore | null {
-  return getRedisClient();
+function defaultStore(): StreamSessionStore | null { return getRedisClient(); }
+
+function redisRequired(): boolean {
+  return process.env.REQUIRE_REDIS_FOR_CONCURRENT_LIMITS === 'true' ||
+    process.env.NODE_ENV === 'production';
 }
 
 export interface StreamSessionResult {
+  allowed: boolean;
   max: number;
   active: number;
   evictedSessionId: string | null;
+  reason?: 'LIMIT_REACHED' | 'REDIS_UNAVAILABLE';
 }
 
 export async function registerStreamSession(opts: {
   userId: string;
   sessionId: string;
-  /** Seconds until the playback token expires (grace is added internally). */
   ttlSec: number;
+  maxConcurrentStreams?: number;
   now?: number;
   store?: StreamSessionStore | null;
 }): Promise<StreamSessionResult> {
   const { userId, sessionId, ttlSec, now = Date.now() } = opts;
   const store = opts.store !== undefined ? opts.store : defaultStore();
-  const max = MAX_CONCURRENT_STREAMS;
-  if (!store) return { max, active: 0, evictedSessionId: null };
+  const max = Number.isFinite(opts.maxConcurrentStreams) && Number(opts.maxConcurrentStreams) > 0
+    ? Math.floor(Number(opts.maxConcurrentStreams))
+    : envMax();
+
+  // Redis is required for strict distributed concurrency enforcement.
+  if (!store) {
+    return {
+      allowed: !redisRequired(),
+      max,
+      active: 0,
+      evictedSessionId: null,
+      reason: 'REDIS_UNAVAILABLE',
+    };
+  }
 
   const userKey = userKeyFor(userId);
   const sessionKey = sessionKeyFor(sessionId);
   const effectiveTtl = Math.max(MIN_TTL_SEC, Math.ceil(ttlSec) + SESSION_GRACE_SEC);
 
-  await store.zadd(userKey, now, sessionId);
-  await store.set(sessionKey, '1', 'EX', effectiveTtl);
-
-  // Prune members whose session key already expired (crashed/closed streams).
+  // Remove expired/crashed sessions before deciding.
   const members = await store.zrange(userKey, 0, -1);
   for (const member of members) {
-    const alive = await store.exists(sessionKeyFor(member));
-    if (!alive) await store.zrem(userKey, member);
+    if (!(await store.exists(sessionKeyFor(member)))) await store.zrem(userKey, member);
   }
 
-  let active = await store.zcard(userKey);
-  let evictedSessionId: string | null = null;
-  if (active > max) {
-    // Evict the oldest (lowest score = earliest issue) down to the limit.
-    const victims = await store.zrange(userKey, 0, active - max - 1);
-    for (const victim of victims) {
-      await store.del(sessionKeyFor(victim));
-      await store.zrem(userKey, victim);
+  // The final limit check + registration must be atomic. Without this, two
+  // simultaneous requests can both observe one free slot and create two
+  // sessions, exceeding the plan limit.
+  if (typeof store.eval === 'function') {
+    const result = Number(await store.eval(
+      `local count = redis.call('ZCARD', KEYS[1])
+       if count >= tonumber(ARGV[1]) then
+         redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
+         return 0
+       end
+       redis.call('ZADD', KEYS[1], tonumber(ARGV[2]), ARGV[3])
+       redis.call('SET', KEYS[2], '1', 'EX', tonumber(ARGV[4]))
+       redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
+       return 1`,
+      2,
+      userKey,
+      sessionKey,
+      max,
+      now,
+      sessionId,
+      effectiveTtl,
+      USER_SET_TTL_SEC,
+    ));
+    if (result !== 1) {
+      return {
+        allowed: false,
+        max,
+        active: await store.zcard(userKey),
+        evictedSessionId: null,
+        reason: 'LIMIT_REACHED',
+      };
     }
-    evictedSessionId = victims[victims.length - 1] ?? null;
-    active = await store.zcard(userKey);
+  } else {
+    const activeBefore = await store.zcard(userKey);
+    if (activeBefore >= max) {
+      await store.expire(userKey, USER_SET_TTL_SEC);
+      return { allowed: false, max, active: activeBefore, evictedSessionId: null, reason: 'LIMIT_REACHED' };
+    }
+    await store.zadd(userKey, now, sessionId);
+    await store.set(sessionKey, '1', 'EX', effectiveTtl);
+    await store.expire(userKey, USER_SET_TTL_SEC);
   }
 
-  await store.expire(userKey, USER_SET_TTL_SEC);
-  return { max, active, evictedSessionId };
+  return {
+    allowed: true,
+    max,
+    active: await store.zcard(userKey),
+    evictedSessionId: null,
+  };
+}
+
+export async function isStreamSessionActive(
+  userId: string,
+  sessionId: string,
+  store?: StreamSessionStore | null,
+): Promise<boolean> {
+  const redis = store !== undefined ? store : defaultStore();
+  if (!redis) return !redisRequired();
+  const member = sessionKeyFor(sessionId);
+  const exists = await redis.exists(member);
+  if (!exists) return false;
+  const userMembers = await redis.zrange(userKeyFor(userId), 0, -1);
+  return userMembers.includes(sessionId);
+}
+
+export async function revokeStreamSession(
+  userId: string,
+  sessionId: string,
+  store?: StreamSessionStore | null,
+): Promise<boolean> {
+  const redis = store !== undefined ? store : defaultStore();
+  if (!redis) return false;
+  const removed = await redis.del(sessionKeyFor(sessionId));
+  await redis.zrem(userKeyFor(userId), sessionId);
+  return removed > 0;
 }

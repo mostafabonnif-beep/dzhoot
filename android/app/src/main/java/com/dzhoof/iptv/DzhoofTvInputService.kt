@@ -16,14 +16,14 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.dzhoof.iptv.data.source.remote.playlist.StreamUrlTemplate
 import org.json.JSONObject
 
-class FireVisionTvInputService : TvInputService() {
+class DzhoofTvInputService : TvInputService() {
 
     override fun onCreateSession(inputId: String): Session {
-        return FireVisionSession(this)
+        return DzhoofSession(this)
     }
 
     @OptIn(UnstableApi::class)
-    private inner class FireVisionSession(
+    private inner class DzhoofSession(
         private val ctx: Context
     ) : TvInputService.Session(ctx) {
 
@@ -120,6 +120,6 @@ class FireVisionTvInputService : TvInputService() {
     }
 
     companion object {
-        private const val TAG = "FireVisionTvInput"
+        private const val TAG = "DzhoofTvInput"
     }
 }

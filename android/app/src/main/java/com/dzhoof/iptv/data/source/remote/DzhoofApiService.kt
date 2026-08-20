@@ -38,14 +38,14 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
- * Retrofit API service interface for FireVision IPTV backend.
+ * Retrofit API service interface for DZ HOOF IPTV backend.
  * 
- * This interface defines all API endpoints for the FireVision IPTV application.
+ * This interface defines all API endpoints for the DZ HOOF IPTV application.
  * All methods return Response<T> to enable proper error handling at the repository layer.
  * 
  * Requirements: TR-002 (Update Dependencies - Retrofit 2.11.0)
  */
-interface FireVisionApiService {
+interface DzhoofApiService {
     
     /**
      * Fetches all channels from the server.

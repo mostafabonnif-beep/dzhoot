@@ -11,7 +11,7 @@ import com.dzhoof.iptv.data.model.dto.PlaybackQoeReport
 import com.dzhoof.iptv.data.model.dto.StreamStatusReport
 import com.dzhoof.iptv.data.source.local.dao.StreamMetricsDao
 import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
-import com.dzhoof.iptv.data.source.remote.FireVisionApiService
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.repository.HealthSyncEntry
 import com.dzhoof.iptv.domain.repository.StreamMetricsRepository
@@ -23,7 +23,7 @@ import javax.inject.Singleton
 @Singleton
 class StreamMetricsRepositoryImpl @Inject constructor(
     private val streamMetricsDao: StreamMetricsDao,
-    private val apiService: FireVisionApiService,
+    private val apiService: DzhoofApiService,
     private val application: Application,
     @IoDispatcher private val dispatcher: CoroutineDispatcher
 ) : StreamMetricsRepository {

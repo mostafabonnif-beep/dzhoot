@@ -37,7 +37,7 @@ import com.dzhoof.iptv.presentation.ui.screens.AddSourceScreen
 import com.dzhoof.iptv.presentation.ui.screens.SettingsScreen
 
 /**
- * Navigation graph for FireVision IPTV app.
+ * Navigation graph for DZ HOOF IPTV app.
  *
  * Defines all navigation routes and handles navigation between screens.
  * The sidebar-based navigation for top-level screens is handled by the
@@ -46,7 +46,7 @@ import com.dzhoof.iptv.presentation.ui.screens.SettingsScreen
  * @param startDestination The initial route — either Pairing or Home.
  */
 @Composable
-fun FireVisionNavGraph(
+fun DzhoofNavGraph(
     navController: NavHostController,
     startDestination: String = Screen.Home.route,
     modifier: Modifier = Modifier

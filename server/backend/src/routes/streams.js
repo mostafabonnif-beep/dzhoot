@@ -8,6 +8,7 @@ const Episode = require('../models/Episode');
 const Series = require('../models/Series');
 const Season = require('../models/Season');
 const XtreamSource = require('../models/XtreamSource');
+const M3USource = require('../models/M3USource');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { resolveUser } = require('../middleware/resolveUser');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
@@ -60,6 +61,13 @@ router.post('/authorize', async (req, res) => {
 
     let content = null;
     let url = null;
+    let directPlayback = false;
+
+    // Direct playback is opt-in at deployment and provider level. This keeps
+    // the default architecture server-authorized/proxy playback while allowing
+    // operators with suitable redistribution rights to keep video bytes off
+    // the DZ HOOF VPS.
+    const directPlaybackEnabled = process.env.ALLOW_DIRECT_PLAYBACK === 'true';
 
     if (contentType === 'LIVE') {
       content = await Channel.findOne({ _id: id, isActive: { $ne: false } }).lean();
@@ -70,13 +78,44 @@ router.post('/authorize', async (req, res) => {
           return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
         }
         url = content.channelUrl;
+
+        // Only Xtream sources currently expose an operator-controlled
+        // directPlayback flag. M3U remains proxy-delivered unless it gets the
+        // same explicit policy in a future source-management revision.
+        const xtreamSourceId = content?.metadata?.xtreamSourceId;
+        const m3uSourceId = content?.metadata?.m3uSourceId;
+        if (xtreamSourceId) {
+          const source = await XtreamSource.findOne({
+            _id: xtreamSourceId,
+            status: 'Active',
+            verificationStatus: 'verified',
+          }).select('directPlayback').lean();
+          directPlayback = directPlaybackEnabled && source?.directPlayback === true;
+        } else if (m3uSourceId) {
+          // An M3U source is eligible only when its latest source-level
+          // health state is usable. A stale/broken source must not become
+          // playable merely because it was previously marked Active.
+          const source = await M3USource.findOne({
+            _id: m3uSourceId,
+            status: 'Active',
+            healthStatus: { $in: ['ONLINE', 'DEGRADED'] },
+          }).select('directPlayback healthStatus lastHealthCheckAt').lean();
+          directPlayback = directPlaybackEnabled && source?.directPlayback === true;
+        }
       }
     } else if (contentType === 'MOVIE') {
       content = await Movie.findOne({ _id: id, isActive: true }).lean();
       if (content) {
-        const sourceIsActive = await XtreamSource.exists({ _id: content.sourceId, status: 'Active' });
-        if (!sourceIsActive) content = null;
-        else url = content.streamUrl;
+        const source = await XtreamSource.findOne({
+          _id: content.sourceId,
+          status: 'Active',
+          verificationStatus: 'verified',
+        }).select('directPlayback').lean();
+        if (!source) content = null;
+        else {
+          url = content.streamUrl;
+          directPlayback = directPlaybackEnabled && source.directPlayback === true;
+        }
       }
     } else if (contentType === 'EPISODE') {
       content = await Episode.findById(id).lean();
@@ -85,11 +124,18 @@ router.post('/authorize', async (req, res) => {
           Series.findOne({ _id: content.seriesId, isActive: true }).select('sourceId').lean(),
           Season.findOne({ _id: content.seasonId, seriesId: content.seriesId }).select('_id').lean(),
         ]);
-        const sourceIsActive = series
-          ? await XtreamSource.exists({ _id: series.sourceId, status: 'Active' })
+        const source = series
+          ? await XtreamSource.findOne({
+              _id: series.sourceId,
+              status: 'Active',
+              verificationStatus: 'verified',
+            }).select('directPlayback').lean()
           : null;
-        if (!series || !season || !sourceIsActive) content = null;
-        else url = content.streamUrl;
+        if (!series || !season || !source) content = null;
+        else {
+          url = content.streamUrl;
+          directPlayback = directPlaybackEnabled && source.directPlayback === true;
+        }
       }
     } else {
       return res.status(400).json({ success: false, error: 'Unsupported contentType' });
@@ -108,21 +154,32 @@ router.post('/authorize', async (req, res) => {
       });
     }
 
-    // Never return or place the upstream URL in a client-visible URL. The
-    // encrypted, short-lived token is resolved only by the server-side proxy.
+    // The initial API response never contains the upstream URL. In proxy mode
+    // the token is resolved server-side. In direct mode the token endpoint
+    // returns a redirect only after all authorization checks have succeeded.
     const { token, expiresAt } = issuePlaybackToken({
       userId: String(req.user.id),
       channelListCode,
       streamUrl: url,
+      direct: directPlayback,
     });
     const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`;
 
-    // Per-user concurrent stream limit (oldest evicted; no-op without Redis).
+    // Per-user concurrent stream limit. A new session is rejected when the limit is reached; existing sessions are preserved.
     const session = await registerStreamSession({
       userId: String(req.user.id),
       sessionId: token,
       ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+      maxConcurrentStreams: playbackAccess.plan?.maxConcurrentStreams,
     });
+    if (!session.allowed) {
+      return res.status(429).json({
+        success: false,
+        error: 'Concurrent playback limit reached for this subscription',
+        code: 'CONCURRENT_STREAM_LIMIT',
+        streamLimit: { max: session.max, active: session.active },
+      });
+    }
 
     return res.json({
       success: true,
@@ -132,6 +189,7 @@ router.post('/authorize', async (req, res) => {
         url: playbackUrl,
         expiresAt,
         authorized: true,
+        deliveryMode: directPlayback ? 'direct' : 'proxy',
         subscriptionRequired,
         streamLimit: { max: session.max, active: session.active },
         subscription: subscription

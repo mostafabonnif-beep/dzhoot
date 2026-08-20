@@ -1,0 +1,17 @@
+{
+  "delivery": {
+    "default": "proxy",
+    "allowDirectPlayback": false,
+    "directPlaybackRequiresProviderFlag": true
+  },
+  "subscription": {
+    "enforceExpiry": true,
+    "enforceDeviceLimit": true,
+    "enforceConcurrentSessions": true
+  },
+  "security": {
+    "exposeProviderCredentials": false,
+    "logFullPlaybackUrls": false,
+    "shortLivedAuthorization": true
+  }
+}

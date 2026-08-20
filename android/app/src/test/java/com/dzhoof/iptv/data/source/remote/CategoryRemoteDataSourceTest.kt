@@ -27,7 +27,7 @@ import java.io.IOException
 @OptIn(ExperimentalCoroutinesApi::class)
 class CategoryRemoteDataSourceTest {
     
-    private lateinit var apiService: FireVisionApiService
+    private lateinit var apiService: DzhoofApiService
     private lateinit var dataSource: CategoryRemoteDataSource
     
     @Before

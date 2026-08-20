@@ -24,7 +24,7 @@ import com.dzhoof.iptv.data.source.local.entity.SearchHistoryEntity
 import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
 
 /**
- * Room database for FireVision IPTV application.
+ * Room database for DZ HOOF IPTV application.
  * 
  * This database serves as the single source of truth for all local data,
  * implementing an offline-first architecture pattern.
@@ -55,7 +55,7 @@ import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
     version = 9,
     exportSchema = true
 )
-abstract class FireVisionDatabase : RoomDatabase() {
+abstract class DzhoofDatabase : RoomDatabase() {
 
     companion object {
         /** v1→v2: Add channel_health table */
