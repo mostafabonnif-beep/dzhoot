@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   Tv,
@@ -13,6 +13,8 @@ import {
   Zap,
   ExternalLink,
   Radio,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import api, { getChannelOperations, getEpgCoverage, getPlaybackQuality, type ChannelOperationsData, type EpgCoverageData, type PlaybackQualityData } from '@/lib/api';
 
@@ -74,6 +76,8 @@ export default function AdminDashboard() {
   const [playbackQuality, setPlaybackQuality] = useState<PlaybackQualityData | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [error, setError] = useState('');
 
   function copyCode(text: string) {
@@ -82,99 +86,102 @@ export default function AdminDashboard() {
     setTimeout(() => setCodeCopied(false), 2000);
   }
 
-  useEffect(() => {
-    const controller = new AbortController();
+  const loadDashboard = useCallback(async (signal?: AbortSignal) => {
+    const [statsResult, configResult, healthResult, operationsResult, coverageResult, qualityResult] = await Promise.allSettled([
+      api.get('/admin/stats/detailed', { signal }),
+      api.get('/config/defaults', { signal }),
+      api.get('/admin/stats/stream-health', { signal }),
+      getChannelOperations(signal),
+      getEpgCoverage(signal),
+      getPlaybackQuality(signal),
+    ]);
 
-    async function fetchStats() {
-      try {
-        const [statsRes, configRes, healthRes, operationsRes, coverageRes, qualityRes] = await Promise.all([
-          api.get('/admin/stats/detailed', { signal: controller.signal }),
-          api.get('/config/defaults', { signal: controller.signal }),
-          api.get('/admin/stats/stream-health', { signal: controller.signal }).catch(() => null),
-          getChannelOperations(controller.signal).catch(() => null),
-          getEpgCoverage(controller.signal).catch(() => null),
-          getPlaybackQuality(controller.signal).catch(() => null),
-        ]);
-        if (controller.signal.aborted) return;
-        const res = statsRes;
-        if (configRes.data?.data) {
-          setConfig(configRes.data.data);
-        }
-        if (healthRes?.data?.data) {
-          setStreamHealth(healthRes.data.data);
-        }
-        if (operationsRes) {
-          setChannelOperations(operationsRes);
-        }
-        if (coverageRes) {
-          setEpgCoverage(coverageRes);
-        }
-        if (qualityRes) {
-          setPlaybackQuality(qualityRes);
-        }
-        const data = res.data?.data || res.data;
+    if (signal?.aborted) return;
+    if (statsResult.status !== 'fulfilled') throw statsResult.reason;
 
-        const activityFeed: DashboardStats['activityFeed'] = [];
-
-        if (data.activity) {
-          for (const item of data.activity) {
-            activityFeed.push({
-              type: item.type || 'event',
-              message: item.message || item.description || item.event || String(item),
-              timestamp: item.timestamp || item.createdAt || new Date().toISOString(),
-            });
-          }
-        }
-
-        setStats({
-          channels: {
-            total: data.channels?.total ?? 0,
-            active: data.channels?.active ?? 0,
-            inactive: data.channels?.inactive ?? 0,
-          },
-          users: {
-            total: data.users?.total ?? 0,
-            active: data.users?.active ?? 0,
-          },
-          sessions: {
-            total: data.sessions?.total ?? 0,
-            active: data.sessions?.active ?? 0,
-          },
-          pairings: {
-            total: data.pairings?.total ?? 0,
-            pending: data.pairings?.pending ?? 0,
-            completed: data.pairings?.completed ?? 0,
-            today: data.pairings?.todayCount ?? 0,
-          },
-          activityFeed,
-        });
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === 'CanceledError') return;
-        setError('تعذر تحميل بيانات لوحة التحكم');
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
+    const data = statsResult.value.data?.data || statsResult.value.data;
+    const activityFeed: DashboardStats['activityFeed'] = [];
+    for (const item of data.activity || []) {
+      activityFeed.push({
+        type: item.type || 'event',
+        message: item.message || item.description || item.event || String(item),
+        timestamp: item.timestamp || item.createdAt || new Date().toISOString(),
+      });
     }
 
-    fetchStats();
-    return () => controller.abort();
+    if (configResult.status === 'fulfilled' && configResult.value.data?.data) setConfig(configResult.value.data.data);
+    if (healthResult.status === 'fulfilled' && healthResult.value.data?.data) setStreamHealth(healthResult.value.data.data);
+    if (operationsResult.status === 'fulfilled') setChannelOperations(operationsResult.value);
+    if (coverageResult.status === 'fulfilled') setEpgCoverage(coverageResult.value);
+    if (qualityResult.status === 'fulfilled') setPlaybackQuality(qualityResult.value);
+
+    setStats({
+      channels: { total: data.channels?.total ?? 0, active: data.channels?.active ?? 0, inactive: data.channels?.inactive ?? 0 },
+      users: { total: data.users?.total ?? 0, active: data.users?.active ?? 0 },
+      sessions: { total: data.sessions?.total ?? 0, active: data.sessions?.active ?? 0 },
+      pairings: {
+        total: data.pairings?.total ?? 0,
+        pending: data.pairings?.pending ?? 0,
+        completed: data.pairings?.completed ?? 0,
+        today: data.pairings?.todayCount ?? 0,
+      },
+      activityFeed,
+    });
+    setLastUpdated(new Date());
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    void loadDashboard(controller.signal)
+      .catch((err: unknown) => {
+        if (!controller.signal.aborted && !(err instanceof Error && err.name === 'CanceledError')) setError('تعذر تحميل بيانات لوحة التحكم');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [loadDashboard]);
+
+  function refreshDashboard() {
+    setRefreshing(true);
+    setError('');
+    void loadDashboard()
+      .catch(() => setError('تعذر تحديث بيانات لوحة التحكم'))
+      .finally(() => setRefreshing(false));
+  }
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      <div className="brand-surface flex min-h-[18rem] flex-col items-center justify-center gap-3 rounded-3xl border border-border/70 px-6 text-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
+        <div>
+          <p className="font-medium">جارٍ تجهيز مركز العمليات</p>
+          <p className="mt-1 text-sm text-muted-foreground">يتم تحميل مؤشرات القنوات والمصادر والأجهزة.</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div
-        role="alert"
-        className="border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-      >
-        {error}
+      <div role="alert" className="brand-surface flex flex-col gap-4 rounded-3xl border border-destructive/40 bg-destructive/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden="true" />
+          <div>
+            <p className="font-medium text-destructive">{error}</p>
+            <p className="mt-1 text-sm text-muted-foreground">تحقق من اتصال الخادم أو أعد المحاولة. لم تُجرَ أي تغييرات على القنوات أو الاشتراكات.</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={refreshDashboard}
+          disabled={refreshing}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+          إعادة المحاولة
+        </button>
       </div>
     );
   }
@@ -212,10 +219,24 @@ export default function AdminDashboard() {
 
   return (
     <div className="dashboard-shell space-y-8 rounded-[2rem] p-1">
-      <div className="">
-        <div className="mb-3 inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">مركز العمليات</div>
-        <h1 className="text-3xl font-display font-bold tracking-tight">نظرة عامة</h1>
-        <p className="mt-2 text-sm text-muted-foreground">تابع حالة المنصة والنشاط الأخير من مكان واحد.</p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="mb-3 inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">مركز العمليات</div>
+          <h1 className="text-3xl font-display font-bold tracking-tight">نظرة عامة</h1>
+          <p className="mt-2 text-sm text-muted-foreground">تابع حالة المنصة والنشاط الأخير من مكان واحد.</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastUpdated && <span className="text-xs text-muted-foreground">آخر تحديث {lastUpdated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+          <button
+            type="button"
+            onClick={refreshDashboard}
+            disabled={refreshing}
+            className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+            تحديث البيانات
+          </button>
+        </div>
       </div>
 
       <div className="brand-surface interactive-lift overflow-hidden rounded-3xl border border-border/70">
@@ -240,6 +261,42 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
+
+      {channelOperations && (
+        <section className="brand-surface overflow-hidden rounded-3xl border border-border/70">
+          <div className="flex flex-col gap-3 border-b border-border bg-muted/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">حالة مصادر المحتوى</h2>
+              <p className="mt-1 text-xs text-muted-foreground">تابع آخر مزامنة وأي خطأ قبل أن يؤثر في كتالوج القنوات.</p>
+            </div>
+            <div className="flex gap-2 text-xs">
+              <Link href="/admin/m3u-sources" className="rounded-lg border border-border bg-card px-2.5 py-1.5 font-medium hover:bg-muted">مصادر M3U</Link>
+              <Link href="/admin/xtream-sources" className="rounded-lg border border-border bg-card px-2.5 py-1.5 font-medium hover:bg-muted">مصادر Xtream</Link>
+            </div>
+          </div>
+          <div className="grid gap-px bg-border sm:grid-cols-2">
+            {([
+              { label: 'مصادر M3U', href: '/admin/m3u-sources', sources: channelOperations.sources.m3u },
+              { label: 'مصادر Xtream', href: '/admin/xtream-sources', sources: channelOperations.sources.xtream },
+            ]).map((group) => {
+              const syncing = group.sources.filter((source) => source.syncStatus === 'syncing').length;
+              const failed = group.sources.filter((source) => source.syncStatus === 'error').length;
+              const active = group.sources.filter((source) => source.status === 'Active').length;
+              return (
+                <Link key={group.href} href={group.href} className="bg-card p-4 transition-colors hover:bg-primary/[0.03]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{group.label}</span>
+                    <span className={failed > 0 ? 'text-xs font-medium text-signal-red' : syncing > 0 ? 'text-xs font-medium text-primary' : 'text-xs font-medium text-signal-green'}>
+                      {failed > 0 ? `${failed} بحاجة إلى مراجعة` : syncing > 0 ? 'تجري المزامنة' : 'مستقرة'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{active} نشط من {group.sources.length} مصدر</p>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {streamHealth && (
         <Link
