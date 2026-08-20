@@ -88,16 +88,20 @@ export async function registerStreamSession(opts: {
   // simultaneous requests can both observe one free slot and create two
   // sessions, exceeding the plan limit.
   if (typeof store.eval === 'function') {
-    const result = Number(await store.eval(
+    const result = await store.eval(
       `local count = redis.call('ZCARD', KEYS[1])
+       local evicted = ''
        if count >= tonumber(ARGV[1]) then
-         redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
-         return 0
+         evicted = redis.call('ZRANGE', KEYS[1], 0, 0)[1]
+         if evicted then
+           redis.call('ZREM', KEYS[1], evicted)
+           redis.call('DEL', ARGV[6] .. evicted)
+         end
        end
        redis.call('ZADD', KEYS[1], tonumber(ARGV[2]), ARGV[3])
        redis.call('SET', KEYS[2], '1', 'EX', tonumber(ARGV[4]))
        redis.call('EXPIRE', KEYS[1], tonumber(ARGV[5]))
-       return 1`,
+       return evicted`,
       2,
       userKey,
       sessionKey,
@@ -106,32 +110,36 @@ export async function registerStreamSession(opts: {
       sessionId,
       effectiveTtl,
       USER_SET_TTL_SEC,
-    ));
-    if (result !== 1) {
-      return {
-        allowed: false,
-        max,
-        active: await store.zcard(userKey),
-        evictedSessionId: null,
-        reason: 'LIMIT_REACHED',
-      };
-    }
-  } else {
-    const activeBefore = await store.zcard(userKey);
-    if (activeBefore >= max) {
-      await store.expire(userKey, USER_SET_TTL_SEC);
-      return { allowed: false, max, active: activeBefore, evictedSessionId: null, reason: 'LIMIT_REACHED' };
-    }
-    await store.zadd(userKey, now, sessionId);
-    await store.set(sessionKey, '1', 'EX', effectiveTtl);
-    await store.expire(userKey, USER_SET_TTL_SEC);
+      'dz:stream:sess:',
+    );
+    const evictedSessionId = typeof result === 'string' && result ? result : null;
+    return {
+      allowed: true,
+      max,
+      active: await store.zcard(userKey),
+      evictedSessionId,
+    };
   }
+
+  let evictedSessionId: string | null = null;
+  const activeBefore = await store.zcard(userKey);
+  if (activeBefore >= max) {
+    const [oldest] = await store.zrange(userKey, 0, 0);
+    if (oldest) {
+      evictedSessionId = oldest;
+      await store.del(sessionKeyFor(oldest));
+      await store.zrem(userKey, oldest);
+    }
+  }
+  await store.zadd(userKey, now, sessionId);
+  await store.set(sessionKey, '1', 'EX', effectiveTtl);
+  await store.expire(userKey, USER_SET_TTL_SEC);
 
   return {
     allowed: true,
     max,
     active: await store.zcard(userKey),
-    evictedSessionId: null,
+    evictedSessionId,
   };
 }
 
