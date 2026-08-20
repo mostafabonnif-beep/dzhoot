@@ -155,7 +155,7 @@ function LoginContent() {
   }
 
   return (
-    <div className="w-full max-w-md rounded-[2rem] border border-border/70 bg-card/80 p-6 shadow-2xl shadow-slate-900/10 backdrop-blur-xl sm:p-9">
+    <div className="w-full max-w-md rounded-[2rem] border border-border/70 bg-card/85 p-6 shadow-2xl shadow-slate-900/10 backdrop-blur-xl ring-1 ring-black/5 dark:ring-white/5 sm:p-9">
       <div className="mb-8 lg:hidden">
         <Link href="/">
           <span className="text-lg font-display font-bold tracking-tight">
@@ -174,7 +174,7 @@ function LoginContent() {
         {message && !error && (message === 'account_disabled' || message in MESSAGE_STRINGS) && (
           <div
             role="status"
-            className={`border px-3 py-2.5 text-sm ${
+            className={`rounded-xl border px-3 py-2.5 text-sm ${
               message === 'account_disabled'
                 ? 'border-destructive/40 bg-destructive/10 text-destructive'
                 : 'border-primary/40 bg-primary/10 text-primary'
@@ -207,7 +207,7 @@ function LoginContent() {
           <div
             role="alert"
             aria-live="polite"
-            className="border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+            className="rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
           >
             <p>{error}</p>
             {adminEmail && (
@@ -365,14 +365,16 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <div className="h-screen overflow-y-auto flex">
-      <AuthSidePanel footer="وصول آمن إلى إدارة القنوات وربط الأجهزة في منصتك." />
+    <div className="flex h-screen overflow-y-auto login-shell">
+      <AuthSidePanel footer="وصول آمن إلى إدارة القنوات وربط الأجهزة والمحتوى في منصتك الذاتية." />
 
       <div className="relative flex-1 overflow-y-auto bg-gradient-to-br from-background via-background to-primary/5 px-4 py-8 sm:px-8 lg:px-12">
-        <div className="mx-auto flex min-h-full max-w-2xl items-center justify-center py-6"><Suspense fallback={null}>
-          <LoginContent />
-</Suspense></div>
+        <div className="mx-auto flex min-h-full max-w-2xl items-center justify-center py-6">
+          <Suspense fallback={null}>
+            <LoginContent />
+          </Suspense>
         </div>
+      </div>
     </div>
   );
 }
