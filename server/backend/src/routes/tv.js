@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const User = require('../models/User');
 const Channel = require('../models/Channel');
@@ -362,15 +363,17 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         return res.status(404).json({ success: false, error: 'Content has no playable stream' });
       }
 
+      const rootSessionId = crypto.randomBytes(16).toString('hex');
       const { token, expiresAt } = issuePlaybackToken({
         userId: String(user.id),
         channelListCode: String(user.channelListCode || ''),
         streamUrl: vodDoc.streamUrl,
         upstreamHeaders: {},
+        sessionId: rootSessionId,
       });
       const session = await registerStreamSession({
         userId: String(user.id),
-        sessionId: token,
+        sessionId: rootSessionId,
         ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
       });
       return res.json({
@@ -461,11 +464,13 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     if (!streamUrl) return res.status(404).json({ success: false, error: 'Stream slot not found' });
 
     const selectedAlternate = slot > 0 ? viableAlternates[slot - 1] : null;
+    const rootSessionId = crypto.randomBytes(16).toString('hex');
     const { token, expiresAt } = issuePlaybackToken({
       userId: String(user.id),
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
       direct: xtreamDirectPlayback || undefined,
+      sessionId: rootSessionId,
       upstreamHeaders: {
         userAgent: slot === 0 ? channel.activeUserAgent : selectedAlternate?.userAgent,
         referrer: slot === 0 ? channel.activeReferrer : selectedAlternate?.referrer,
@@ -477,7 +482,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     const playbackAccess = await checkPlaybackSubscription(String(user.id), user.role);
     const session = await registerStreamSession({
       userId: String(user.id),
-      sessionId: token,
+      sessionId: rootSessionId,
       ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
       maxConcurrentStreams: playbackAccess.plan?.maxConcurrentStreams,
     });
