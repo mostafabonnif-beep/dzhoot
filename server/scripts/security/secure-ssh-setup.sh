@@ -1,71 +1,87 @@
 #!/usr/bin/env bash
-# DZ HOOF — optional SSH hardening helper (audit-remediation-v1).
+# DZ HOOF — SSH hardening preparation helper.
 #
-# ⚠️  THIS SCRIPT IS A PLAN, NOT AN ACTION. It is intended to be run by the
-#      OPERATOR on the server AFTER explicit approval and AFTER a successful
-#      key-based login test. It is idempotent and refuses to disable
-#      password/root login unless a key is verified first.
+# This script prepares a key-only sudo administrator but never changes
+# sshd_config. It does not generate, print, or store private keys or passwords.
+# Test the new account in a second SSH session before hardening sshd manually.
 #
-# What it does when run:
-#   1. Creates a sudo user (default: dzhoof-admin) with a strong random password
-#      printed once.
-#   2. Generates an Ed25519 key pair locally (on THIS machine) and installs the
-#      public key for the new user AND root.
-#   3. Installs and starts fail2ban with sane sshd jails.
-#   4. Leaves SSH config untouched by default — it only PRINTS the exact
-#      sshd_config lines to apply after the operator has tested key login.
+# Usage:
+#   SSH_ADMIN_PUBKEY="ssh-ed25519 AAAA... operator@device" \
+#     bash scripts/security/secure-ssh-setup.sh --apply
 #
-# Usage (on the server, as root):
-#   bash scripts/security/secure-ssh-setup.sh
-# Env overrides: SSH_ADMIN_USER=dzhoof-admin, SSH_ADMIN_PUBKEY="ssh-ed25519 AAAA..."
-set -uo pipefail
+# Optional override: SSH_ADMIN_USER=dzhoof-admin
+set -Eeuo pipefail
 
 ADMIN_USER="${SSH_ADMIN_USER:-dzhoof-admin}"
 PUBKEY="${SSH_ADMIN_PUBKEY:-}"
-cd "$(dirname "$0")/../.."
+APPLY=0
 
-if [ "$(id -u)" -ne 0 ]; then
-  echo "run as root (the script only prepares changes; nothing is applied without -y)"; exit 1
+if [[ "${1:-}" == "--apply" ]]; then
+  APPLY=1
 fi
 
-# ── 1. sudo user ─────────────────────────────────────────────────────────────
+usage() {
+  cat <<'EOF'
+Usage:
+  SSH_ADMIN_PUBKEY="ssh-ed25519 AAAA... operator@device" \
+    bash scripts/security/secure-ssh-setup.sh --apply
+
+The script creates or updates a locked-password sudo user with the supplied
+public key. It does not alter sshd_config and it does not print secrets.
+EOF
+}
+
+if [[ "$APPLY" -ne 1 ]]; then
+  usage
+  echo "Refusing to modify SSH access without --apply."
+  exit 2
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "Run as root." >&2
+  exit 1
+fi
+
+if [[ ! "$ADMIN_USER" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+  echo "Invalid SSH_ADMIN_USER." >&2
+  exit 1
+fi
+
+if [[ ! "$PUBKEY" =~ ^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521))[[:space:]]+[A-Za-z0-9+/=]+([[:space:]].*)?$ ]]; then
+  echo "SSH_ADMIN_PUBKEY must be a valid public OpenSSH key; private keys are never accepted." >&2
+  exit 1
+fi
+
+if ! command -v sudo >/dev/null 2>&1; then
+  echo "sudo is required before creating the administrator account." >&2
+  exit 1
+fi
+
 if id "$ADMIN_USER" >/dev/null 2>&1; then
   echo "[ssh] sudo user $ADMIN_USER already exists"
 else
-  ADMIN_PASS="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)"
-  useradd -m -s /bin/bash "$ADMIN_USER"
-  echo "$ADMIN_USER:$ADMIN_PASS" | chpasswd
-  usermod -aG sudo "$ADMIN_USER"
-  echo "[ssh] created sudo user: $ADMIN_USER"
-  echo "[ssh] one-time password: $ADMIN_PASS   (change it after first login: passwd $ADMIN_USER)"
+  useradd --create-home --shell /bin/bash --groups sudo "$ADMIN_USER"
+  passwd --lock "$ADMIN_USER" >/dev/null
+  echo "[ssh] created locked-password sudo user: $ADMIN_USER"
 fi
 
-# ── 2. SSH key ───────────────────────────────────────────────────────────────
-mkdir -p "/home/$ADMIN_USER/.ssh" /root/.ssh
-chmod 700 "/home/$ADMIN_USER/.ssh" /root/.ssh
+install -d -m 700 -o "$ADMIN_USER" -g "$ADMIN_USER" "/home/$ADMIN_USER/.ssh"
+touch "/home/$ADMIN_USER/.ssh/authorized_keys"
+chown "$ADMIN_USER:$ADMIN_USER" "/home/$ADMIN_USER/.ssh/authorized_keys"
+chmod 600 "/home/$ADMIN_USER/.ssh/authorized_keys"
+grep -qF -- "$PUBKEY" "/home/$ADMIN_USER/.ssh/authorized_keys" || printf '%s\n' "$PUBKEY" >> "/home/$ADMIN_USER/.ssh/authorized_keys"
 
-if [ -z "$PUBKEY" ]; then
-  if [ -f /root/.ssh/dzhoof_ed25519.pub ]; then
-    PUBKEY="$(cat /root/.ssh/dzhoof_ed25519.pub)"
-    echo "[ssh] reusing existing /root/.ssh/dzhoof_ed25519(.pub)"
-  else
-    ssh-keygen -t ed25519 -N "" -C "dzhoof-$(hostname)-$(date +%Y%m%d)" -f /root/.ssh/dzhoof_ed25519
-    PUBKEY="$(cat /root/.ssh/dzhoof_ed25519.pub)"
-    echo "[ssh] generated Ed25519 key pair at /root/.ssh/dzhoof_ed25519"
-    echo "[ssh] PRIVATE KEY: /root/.ssh/dzhoof_ed25519  — copy it to your local ~/.ssh and KEEP IT PRIVATE"
-  fi
-fi
+# The account has no password; sudo therefore relies on possession of its SSH
+# key. Keep this narrowly scoped to the named administrator account.
+install -d -m 750 /etc/sudoers.d
+printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$ADMIN_USER" > "/etc/sudoers.d/$ADMIN_USER"
+chmod 440 "/etc/sudoers.d/$ADMIN_USER"
+visudo -cf "/etc/sudoers.d/$ADMIN_USER" >/dev/null
 
-grep -qF "$PUBKEY" "/home/$ADMIN_USER/.ssh/authorized_keys" 2>/dev/null || echo "$PUBKEY" >> "/home/$ADMIN_USER/.ssh/authorized_keys"
-grep -qF "$PUBKEY" /root/.ssh/authorized_keys 2>/dev/null || echo "$PUBKEY" >> /root/.ssh/authorized_keys
-chmod 600 "/home/$ADMIN_USER/.ssh/authorized_keys" /root/.ssh/authorized_keys
-chown -R "$ADMIN_USER:$ADMIN_USER" "/home/$ADMIN_USER/.ssh"
-echo "[ssh] public key installed for $ADMIN_USER and root"
+echo "[ssh] key-only sudo access prepared for $ADMIN_USER"
 
-# ── 3. fail2ban ──────────────────────────────────────────────────────────────
 if command -v fail2ban-client >/dev/null 2>&1; then
-  systemctl enable --now fail2ban 2>/dev/null && echo "[ssh] fail2ban enabled"
-  mkdir -p /etc/fail2ban/jail.d
+  install -d -m 755 /etc/fail2ban/jail.d
   cat > /etc/fail2ban/jail.d/sshd.local <<'EOF'
 [sshd]
 enabled = true
@@ -74,28 +90,32 @@ maxretry = 4
 bantime = 1h
 findtime = 10m
 EOF
-  systemctl restart fail2ban 2>/dev/null && echo "[ssh] fail2ban sshd jail configured"
+  systemctl enable --now fail2ban
+  systemctl restart fail2ban
+  echo "[ssh] fail2ban sshd jail enabled"
 else
-  echo "[ssh] fail2ban not installed — run: apt-get install -y fail2ban && systemctl enable --now fail2ban"
+  echo "[ssh] fail2ban is not installed; install it separately before hardening sshd."
 fi
 
-# ── 4. sshd hardening — NOT applied, only printed ────────────────────────────
-cat <<'EOF'
+cat <<EOF
 
-[ssh] NEXT STEP — TEST KEY LOGIN FIRST, then apply these lines to /etc/ssh/sshd_config
-      and run: systemctl restart ssh
---------------------------------------------------------------
-PermitRootLogin prohibit-password
-PasswordAuthentication no
-KbdInteractiveAuthentication no
-ChallengeResponseAuthentication no
-UsePAM yes
-MaxAuthTries 4
-LoginGraceTime 30
---------------------------------------------------------------
-Test first (from your machine):
-  ssh -i ~/.ssh/dzhoof_ed25519 dzhoof-admin@<SERVER_IP>
-Do NOT restart ssh with the new config until that key login succeeds.
+[ssh] NEXT STEPS — DO NOT SKIP THE KEY-LOGIN TEST
+1. From a separate terminal, test the new account and sudo access:
+   ssh -i ~/.ssh/<private-key> ${ADMIN_USER}@<SERVER_IP> 'sudo -n true'
+2. Keep the current root session open while testing.
+3. Only after the test succeeds, back up /etc/ssh/sshd_config and apply:
+
+   PermitRootLogin prohibit-password
+   PasswordAuthentication no
+   KbdInteractiveAuthentication no
+   ChallengeResponseAuthentication no
+   UsePAM yes
+   MaxAuthTries 4
+   LoginGraceTime 30
+
+4. Validate before reload: sshd -t && systemctl reload ssh
+
+Root key authentication remains enabled so the existing NEO reverse tunnel is
+not interrupted. Rotate the exposed root password only after the alternate
+key login has been verified.
 EOF
-
-echo "[ssh] DONE — nothing destructive was applied. Review the printed plan."
