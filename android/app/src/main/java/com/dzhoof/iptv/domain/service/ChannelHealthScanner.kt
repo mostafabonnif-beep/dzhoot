@@ -282,6 +282,13 @@ class ChannelHealthScanner @Inject constructor(
             )
         }
         if (!streamUrl.startsWith("http", ignoreCase = true)) {
+            return ChannelHealthEntity(
+                channelId = channelId,
+                status = ChannelHealthStatus.OFFLINE.name,
+                lastCheckedAt = System.currentTimeMillis(),
+                errorMessage = "Invalid URL"
+            )
+        }
 
         // Android network security policy blocks cleartext HTTP — skip immediately
         if (streamUrl.startsWith("http://", ignoreCase = true)) {
