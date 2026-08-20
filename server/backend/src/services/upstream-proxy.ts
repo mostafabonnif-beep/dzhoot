@@ -10,6 +10,8 @@ const MAX_MANIFEST_SIZE = 10 * 1024 * 1024;
 export interface ProxyTokenContext {
   userId: string;
   channelListCode: string;
+  /** Root playback session that authorizes nested HLS playlists, keys and segments. */
+  sessionId?: string;
 }
 
 export interface UpstreamHeaders {
@@ -29,6 +31,10 @@ function nestedPlaybackUrl(
       channelListCode: tokenContext.channelListCode,
       streamUrl: absoluteUrl,
       upstreamHeaders,
+      // HLS manifests may reference playlists, keys and segments recursively.
+      // All of those child tokens must remain tied to the root concurrent-stream
+      // session instead of being treated as independent, unregistered sessions.
+      sessionId: tokenContext.sessionId,
     });
     return `/api/v1/tv/playback/${token}`;
   }

@@ -66,6 +66,13 @@ describe('playback tokens', () => {
     expect(verifyPlaybackToken(issued.token)?.direct).toBe(true);
   });
 
+  it('binds a nested HLS resource token to its root playback session', () => {
+    const issued = issuePlaybackToken({ ...input, sessionId: 'root-session-token' });
+
+    expect(issued.token).not.toContain('root-session-token');
+    expect(verifyPlaybackToken(issued.token)?.sessionId).toBe('root-session-token');
+  });
+
   it('rejects tampered and expired tokens', () => {
     const issued = issuePlaybackToken({ ...input, ttlMs: 30_000 });
     const tokenParts = issued.token.split('.');
