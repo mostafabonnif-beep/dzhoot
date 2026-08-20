@@ -120,7 +120,7 @@ setInterval(
 
 // Filter alternateStreams to viable entries for client consumption.
 // Keeps full objects (liveness, flaggedBad, etc.) so web frontend can display rich details.
-function slimAlternates(channel) {
+function slimAlternates(channel, directPlaybackSourceIds = new Set()) {
   const safeChannel = { ...channel, channelUrl: '' };
   safeChannel.alternateStreams = (channel.alternateStreams || [])
     .filter((alt) => alt.liveness?.status !== 'dead' && alt.flaggedBad?.isFlagged !== true)
@@ -141,8 +141,21 @@ function slimAlternates(channel) {
       ? { type: 'timeshift', days: null }
       : null;
   // Add an explainable, URL-free availability summary for TV clients and admin UI.
-  safeChannel.health = buildChannelHealth(channel);
+  // Direct-playback sources can't be probed from the datacenter — mark them so
+  // the health summary doesn't report a false "dead/unavailable".
+  safeChannel.health = buildChannelHealth({
+    ...channel,
+    directPlayback: directPlaybackSourceIds.has(String(channel.metadata?.xtreamSourceId || '')),
+  });
   return safeChannel;
+}
+
+// Direct-playback source ids — sources whose streams clients fetch from their
+// own networks; the server's datacenter probe cannot judge their liveness.
+async function getDirectPlaybackSourceIds() {
+  return new Set(
+    (await XtreamSource.find({ directPlayback: true }).distinct('_id')).map((id) => String(id)),
+  );
 }
 
 // Whitelist projection for the list endpoints (/, /grouped, /search) — verified against what
@@ -189,10 +202,11 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       .select(CHANNEL_LIST_FIELDS)
       .lean();
 
+    const directSourceIds = await getDirectPlaybackSourceIds();
     const payload = {
       success: true,
       count: channels.length,
-      data: channels.map(slimAlternates),
+      data: channels.map((channel) => slimAlternates(channel, directSourceIds)),
     };
 
     if (catalogView) await channelCache.set('catalog:list', payload);
@@ -231,12 +245,13 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
       .lean();
 
     // Group by channelGroup (dead/flagged alternates slimmed, same as /)
+    const directSourceIds = await getDirectPlaybackSourceIds();
     const grouped = channels.reduce((acc, channel) => {
       const group = channel.channelGroup || 'Uncategorized';
       if (!acc[group]) {
         acc[group] = [];
       }
-      acc[group].push(slimAlternates(channel));
+      acc[group].push(slimAlternates(channel, directSourceIds));
       return acc;
     }, {});
 

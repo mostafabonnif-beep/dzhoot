@@ -546,10 +546,15 @@ router.get('/playback/:token', async (req, res) => {
     if (!(await ensurePlaybackSubscription(user, res))) return;
 
     if (payload.direct === true) {
-      // Operator opted this source into direct playback: the client fetches the
-      // upstream URL from its own network (e.g. residential IP) instead of the
-      // server proxying the bytes. Token is still validated above.
-      return res.redirect(302, payload.streamUrl);
+      // NOTE: direct-playback used to 302 to the upstream URL so the client
+      // fetched from its own network. Most client networks cannot reach NEO
+      // directly (ISP/geo blocking) — that is exactly why the operator runs a
+      // residential relay. Proxy everything through the server so the client
+      // only ever talks to this host; the server egresses via the relay.
+      return proxyUpstreamStream(req, res, payload.streamUrl, {
+        userId: String(user._id),
+        channelListCode: user.channelListCode,
+      }, undefined, payload.upstreamHeaders);
     }
 
     return proxyUpstreamStream(req, res, payload.streamUrl, {
