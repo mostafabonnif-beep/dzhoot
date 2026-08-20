@@ -20,6 +20,14 @@ ok()   { printf '\033[1;32m[preflight][ok]\033[0m %s\n' "$*"; }
 
 cd "$(dirname "$0")/../.." || exit 1
 
+compose_config() {
+  if [ -n "$ENV_FILE" ]; then
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config
+  else
+    docker compose -f "$COMPOSE_FILE" config
+  fi
+}
+
 # ── 1. Secrets must not be committed ─────────────────────────────────────────
 say "Checking for committed secrets…"
 for bad in '.env' 'local.properties' 'google-services.json' '*.keystore' '*.jks' '*.pem' '*.key'; do
@@ -59,15 +67,15 @@ fi
 # ── 3. Compose sanity ────────────────────────────────────────────────────────
 say "Validating compose file $COMPOSE_FILE…"
 if command -v docker >/dev/null 2>&1; then
-  if docker compose -f "$COMPOSE_FILE" config >/dev/null 2>&1; then
+  if compose_config >/dev/null 2>&1; then
     ok "compose config parses"
   else
-    fail "compose config failed — run: docker compose -f $COMPOSE_FILE config"
+    fail "compose config failed — run: docker compose --env-file ${ENV_FILE:-.env} -f $COMPOSE_FILE config"
   fi
-  # Images must be explicitly tagged (no floating 'latest' for the stack).
-  for img in $(docker compose -f "$COMPOSE_FILE" config 2>/dev/null | grep -E '^\s+image:' | sed -E 's/.*image: //'); do
+  # Images must be explicitly tagged; image digests are also accepted.
+  for img in $(compose_config 2>/dev/null | grep -E '^\s+image:' | sed -E 's/.*image: //'); do
     case "$img" in
-      *':latest'|*'@sha256'*) : ;; # sha256 digests are fine; latest is not
+      *'@sha256'*) : ;;
       *':latest') fail "floating image tag latest: $img" ;;
       *':') fail "image has no tag: $img" ;;
     esac
