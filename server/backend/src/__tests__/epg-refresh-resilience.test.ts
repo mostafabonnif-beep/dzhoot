@@ -16,6 +16,15 @@ describe('epg-service refresh resilience (audit-remediation-v1)', () => {
 
   beforeEach(() => {
     jest.restoreAllMocks();
+    // The RSS guard is a production safety mechanism. Keep this regression test
+    // deterministic even when the Jest worker itself is memory-heavy in CI.
+    jest.spyOn(process, 'memoryUsage').mockReturnValue({
+      rss: 256 * 1024 * 1024,
+      heapTotal: 128 * 1024 * 1024,
+      heapUsed: 64 * 1024 * 1024,
+      external: 0,
+      arrayBuffers: 0,
+    });
   });
 
   afterEach(async () => {

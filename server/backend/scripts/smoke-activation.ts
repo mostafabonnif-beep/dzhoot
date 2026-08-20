@@ -3,8 +3,9 @@
  * End-to-end smoke test for the subscription & activation system.
  * Boots the REAL server against the CI MongoDB service when TEST_MONGO_URI is
  * available (or MongoMemoryServer for local runs), then walks the full commercial
- * loop: admin login → create plan → generate codes → register a
- * user → redeem a code → check subscription → negative cases.
+ * loop: admin login → create plan → generate codes → verify public registration
+ * is locked → provision a user through the admin API → redeem a code → check
+ * subscription → negative cases.
  *
  * Run: npx tsx scripts/smoke-activation.js
  */
@@ -120,13 +121,23 @@ async function main() {
   const stats = await jfetch('/api/v1/admin/activation-codes/stats', {}, adminHeaders);
   check('admin sees code stats (3 unused)', stats.status === 200 && stats.body?.data?.byStatus?.UNUSED === 3, stats.body);
 
-  // 5. Register + login a normal user
-  const reg = await jfetch('/api/v1/auth/register', {
+  // 5. Public registration is intentionally locked; operators provision users.
+  const blockedRegistration = await jfetch('/api/v1/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username: 'smokeuser', email: 'smoke@dzhoof.test', password: 'SmokePass123!' }),
+    body: JSON.stringify({ username: 'blockeduser', email: 'blocked@dzhoof.test', password: 'SmokePass123!' }),
   });
-  check('user registers', reg.status === 201 && reg.body?.success === true, reg.body);
-  const smokeUserId = reg.body?.user?.id;
+  check('public registration remains disabled', blockedRegistration.status === 403, blockedRegistration.body);
+
+  const provisionedUser = await jfetch(
+    '/api/v1/users',
+    {
+      method: 'POST',
+      body: JSON.stringify({ username: 'smokeuser', email: 'smoke@dzhoof.test', password: 'SmokePass123!', role: 'User' }),
+    },
+    adminHeaders,
+  );
+  check('admin provisions a normal user', provisionedUser.status === 201 && provisionedUser.body?.success === true, provisionedUser.body);
+  const smokeUserId = provisionedUser.body?.data?._id || provisionedUser.body?.data?.id;
 
   const userLogin = await jfetch('/api/v1/auth/login', {
     method: 'POST',
@@ -241,12 +252,18 @@ async function main() {
   );
   check('admin enables subscription_required', setFlag.status === 200 && setFlag.body?.data?.subscription_required === true, setFlag.body);
 
-  // Without a subscription → 403 SUBSCRIPTION_EXPIRED (user has an ACTIVE sub now from step 11! create a fresh user)
-  const freshReg = await jfetch('/api/v1/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ username: 'gateguy', email: 'gate@dzhoof.test', password: 'SmokePass123!' }),
-  });
-  const gateUserId = freshReg.body?.user?.id;
+  // Without a subscription → 403 SUBSCRIPTION_EXPIRED. Provision a fresh
+  // account through the same admin workflow used when public registration is locked.
+  const provisionedGateUser = await jfetch(
+    '/api/v1/users',
+    {
+      method: 'POST',
+      body: JSON.stringify({ username: 'gateguy', email: 'gate@dzhoof.test', password: 'SmokePass123!', role: 'User' }),
+    },
+    adminHeaders,
+  );
+  check('admin provisions an unsubscribed gate user', provisionedGateUser.status === 201 && provisionedGateUser.body?.success === true, provisionedGateUser.body);
+  const gateUserId = provisionedGateUser.body?.data?._id || provisionedGateUser.body?.data?.id;
   const gateLogin = await jfetch('/api/v1/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username: 'gateguy', password: 'SmokePass123!' }),
