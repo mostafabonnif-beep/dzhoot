@@ -52,8 +52,8 @@ class ChannelHealthScanner @Inject constructor(
     companion object {
         private const val TAG = "HealthScanner"
         private const val BATCH_SIZE = 4
-        private const val CONNECT_TIMEOUT_SECONDS = 6L
-        private const val READ_TIMEOUT_SECONDS = 6L
+        private const val CONNECT_TIMEOUT_SECONDS = 20L
+        private const val READ_TIMEOUT_SECONDS = 20L
         private const val STARTUP_DELAY_MS = 60L * 1000L             // 1 minute
         private const val THUMBNAIL_DELAY_MS = 5L * 60L * 1000L  // 5 minutes
         private const val COOLDOWN_MS = 30L * 60L * 1000L         // 30 minutes
@@ -268,14 +268,20 @@ class ChannelHealthScanner @Inject constructor(
     }
 
     private suspend fun checkStream(channelId: String, streamUrl: String): ChannelHealthEntity {
-        if (streamUrl.isBlank() || !streamUrl.startsWith("http", ignoreCase = true)) {
+        if (streamUrl.isBlank()) {
+            // Paired-server mode: /channels intentionally strips channelUrl (upstream
+            // URLs stay server-side) and playback goes through short-lived playback
+            // tokens. A blank local streamUrl is NOT evidence the channel is down —
+            // mark it UNKNOWN so the UI never shows a false "offline" / "source
+            // provider problem" from this scanner.
             return ChannelHealthEntity(
                 channelId = channelId,
-                status = ChannelHealthStatus.OFFLINE.name,
+                status = ChannelHealthStatus.UNKNOWN.name,
                 lastCheckedAt = System.currentTimeMillis(),
-                errorMessage = "Invalid URL"
+                errorMessage = null,
             )
         }
+        if (!streamUrl.startsWith("http", ignoreCase = true)) {
 
         // Android network security policy blocks cleartext HTTP — skip immediately
         if (streamUrl.startsWith("http://", ignoreCase = true)) {
