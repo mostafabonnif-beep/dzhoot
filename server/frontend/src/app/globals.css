@@ -141,6 +141,60 @@
   }
 }
 
+
+/* Professional polish utilities */
+.pro-card {
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--card) / 0.82);
+  box-shadow: 0 10px 30px hsl(var(--foreground) / 0.05);
+  backdrop-filter: blur(12px);
+}
+.pro-card-hover {
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--card) / 0.82);
+  box-shadow: 0 10px 30px hsl(var(--foreground) / 0.05);
+  backdrop-filter: blur(12px);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.pro-card-hover:hover {
+  border-color: hsl(var(--primary) / 0.35);
+  box-shadow: 0 14px 40px hsl(var(--foreground) / 0.07);
+  transform: translateY(-1px);
+}
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  padding: 0.15rem 0.65rem;
+  font-size: 11px;
+  font-weight: 600;
+}
+.status-chip-live {
+  border-color: hsl(142 67% 32% / 0.3);
+  background: hsl(142 67% 32% / 0.1);
+  color: hsl(142 67% 32%);
+}
+.dark .status-chip-live { color: hsl(142 70% 55%); }
+.status-chip-warn {
+  border-color: hsl(35 90% 42% / 0.3);
+  background: hsl(35 90% 42% / 0.1);
+  color: hsl(35 90% 35%);
+}
+.status-chip-down {
+  border-color: hsl(var(--destructive) / 0.3);
+  background: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
+}
+.login-shell {
+  background-image:
+    radial-gradient(circle at 10% 10%, hsl(var(--primary) / 0.09), transparent 28rem),
+    radial-gradient(circle at 90% 90%, hsl(var(--signal-blue) / 0.06), transparent 24rem);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
