@@ -23,8 +23,7 @@ export ENV_FILE COMPOSE_FILE
 APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1
 
-cd "$(dirname "$0")/../.."
-HERE="$(pwd)"
+cd "$(dirname "$0")/../.." || exit 1
 
 say() { printf '\033[1;34m[deploy]\033[0m %s\n' "$*"; }
 step() { printf '\033[1;36m[deploy] %s\033[0m\n' "$*"; }
@@ -37,7 +36,7 @@ run() {
   if [ "$APPLY" -eq 1 ]; then
     "$@"
   else
-    say "[dry-run] would run: $*"
+    say "[dry-run] $label: $*"
   fi
 }
 
