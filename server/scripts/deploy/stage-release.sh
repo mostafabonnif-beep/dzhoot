@@ -68,8 +68,9 @@ grep -q '^DOMAIN=' /etc/dzhoot/.env.production 2>/dev/null \
 
 install -d -m 700 -o root -g root "$RELEASES_ROOT"
 rm -rf "$DEST"
-mv "$SRC_DIR" "$DEST"
-chmod -R u+w "$DEST"
+install -d -m 755 -o root -g root "$DEST"
+mv "$SRC_DIR" "$DEST/server"
+chmod -R u+w "$DEST/server"
 
 cat > "$DEST/.staged-ok" <<EOF
 sha=$FULL_SHA
