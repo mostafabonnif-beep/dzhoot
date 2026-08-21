@@ -9,6 +9,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -71,6 +73,9 @@ class ErrorRecoveryManagerTest {
 
     private fun nonNetworkError(): PlaybackException =
         PlaybackException("Decode error", null, PlaybackException.ERROR_CODE_UNSPECIFIED)
+
+    private fun parsingContainerError(): PlaybackException =
+        PlaybackException("Container parse error", null, PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED)
 
     private fun primarySlot(
         directUrl: String = "http://primary.m3u8",
@@ -145,6 +150,26 @@ class ErrorRecoveryManagerTest {
         runCurrent()
 
         assertEquals(1, onStreamDeadMessages.size)
+    }
+
+    @Test
+    fun `parsing container unsupported is retryable and recovers`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(listOf(primarySlot()))
+
+        // A transient container-parse failure must NOT end the session:
+        // it triggers the same backoff retry path as network errors.
+        listenerSlot.captured.onPlayerError(parsingContainerError())
+        // onRecovering fires inside the delayed reconnect coroutine.
+        advanceTimeBy(3000)
+        runCurrent()
+        assertTrue(onRecoveringAttempts.isNotEmpty())
+
+        // Simulate success on the retry.
+        listenerSlot.captured.onPlaybackStateChanged(Player.STATE_READY)
+        runCurrent()
+
+        assertEquals(0, onStreamDeadMessages.size)
     }
 
     // ── Recovery ─────────────────────────────────────────────────
