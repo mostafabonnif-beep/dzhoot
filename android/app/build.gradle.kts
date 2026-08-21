@@ -33,7 +33,7 @@ android {
         targetSdk = 34
         // Official release line. Keep the code greater than legacy builds so
         // tested production updates can install cleanly on existing devices.
-        versionCode = 10006
+        versionCode = 10007
         versionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
