@@ -12,13 +12,13 @@
 
 ## الحالة الحالية
 
-هذه نسخة تأسيسية مبنية على خادم FireVision المعاد تسميته DZ HOOF، مع تطبيق Android TV موجه إلى خادم DZ HOOF. الخادم اجتاز بناء TypeScript واختبارات Backend، لكن إخراج APK لم يُتحقق منه بعد بسبب إعداد Android SDK في بيئة التطوير.
+الإنتاج منصوب ويعمل على `https://iptv.ld-11.net` (HTTPS بشهادة صالحة، لوحة تحكم + API + تطبيق Android). الستاك كامل صحي: Backend API، Scheduler، Frontend، MongoDB وRedis خلف Caddy، مع نسخ احتياطي يومي (mongodump + restic مشفّر) ونشر آلي ذري من إصدارات مثبّتة. الـ CI أخضر على `main` (اختبارات Backend، Android lint/unit tests، وبناء APK بعنوان الإنتاج). تفاصيل الحالة الكاملة في `PROJECT_ROADMAP.md` وقسم "الوضع الراهن المُتحقق" فيه.
 
 ## قبل الاستخدام
 
 1. استخدم مصادر IPTV قانونية ومصرحًا بها فقط.
-2. انسخ `server/.env.example` إلى `server/.env` واضبط القيم المحلية.
-3. ضع عنوان HTTPS الحقيقي للخادم في إعداد Android بدل `https://dzhoof.example/`.
+2. انسخ `server/.env.example` إلى `server/.env` واضبط القيم المحلية (بيئة الإنتاج تستخدم `/etc/dzhoot/.env.production` على الخادم).
+3. عنوان الإنتاج الفعلي للـAPI هو `https://iptv.ld-11.net/` (يُحقن في بناء Android عبر `DZHOOF_API_URL` في CI/Release).
 4. شغّل الخادم مع MongoDB وRedis، ثم اختبر تسجيل الدخول واستيراد M3U والاقتران.
 5. راجع `PROJECT_ROADMAP.md` قبل إضافة ميزات جديدة.
 
