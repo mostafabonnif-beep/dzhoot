@@ -19,7 +19,10 @@ cd "$PROJECT_DIR"
 
 # Load .env if exists
 if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
+    set -a
+    # shellcheck disable=SC1091
+    . ./.env
+    set +a
 fi
 
 print_help() {
