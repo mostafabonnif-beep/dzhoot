@@ -25,7 +25,7 @@ class ErrorRecoveryManager(
     private val onError: (String) -> Unit,
     private val onRecovering: (attempt: Int) -> Unit,
     private val onRecovered: () -> Unit,
-    private val onStreamDead: (errorMessage: String) -> Unit,
+    private val onStreamDead: (errorMessage: String, diagnosticCode: String?) -> Unit,
     private val onStreamUnresponsive: (() -> Unit)? = null,
     private val onProxyFallback: (() -> Unit)? = null,
     private val onAlternateFallback: ((streamUrl: String) -> Unit)? = null
@@ -113,7 +113,7 @@ class ErrorRecoveryManager(
                 if (totalAttempts < maxTotalAttempts) {
                     attemptReconnect()
                 } else {
-                    onStreamDead("البث لا يستجيب (انتهت مهلة التخزين المؤقت)")
+                    onStreamDead("البث لا يستجيب (انتهت مهلة التخزين المؤقت)", "buffer_timeout")
                 }
             }
         }
@@ -152,7 +152,7 @@ class ErrorRecoveryManager(
             onError(errorMessage)
             attemptReconnect()
         } else {
-            onStreamDead(errorMessage)
+            onStreamDead(errorMessage, error.errorCodeName)
         }
     }
 
@@ -177,7 +177,7 @@ class ErrorRecoveryManager(
                 attemptInSlot = 1
 
                 if (currentSlotIndex >= streamSlots.size) {
-                    onStreamDead("استُنفدت جميع مصادر البث")
+                    onStreamDead("استُنفدت جميع مصادر البث", "recovery_exhausted")
                     return@launch
                 }
 
