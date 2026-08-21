@@ -160,9 +160,10 @@ class ErrorRecoveryManagerTest {
         // A transient container-parse failure must NOT end the session:
         // it triggers the same backoff retry path as network errors.
         listenerSlot.captured.onPlayerError(parsingContainerError())
-        assertTrue(onRecoveringAttempts.isNotEmpty())
+        // onRecovering fires inside the delayed reconnect coroutine.
         advanceTimeBy(3000)
         runCurrent()
+        assertTrue(onRecoveringAttempts.isNotEmpty())
 
         // Simulate success on the retry.
         listenerSlot.captured.onPlaybackStateChanged(Player.STATE_READY)
