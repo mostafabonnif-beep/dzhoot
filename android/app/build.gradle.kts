@@ -33,11 +33,11 @@ android {
         targetSdk = 34
         // Official release line. Keep the code greater than legacy builds so
         // tested production updates can install cleanly on existing devices.
-        versionCode = 10005
+        versionCode = 10006
         versionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
-            "1.0.5"
+            "1.0.6"
         }
         
         // API Base URL configuration — overridable at build time via the
