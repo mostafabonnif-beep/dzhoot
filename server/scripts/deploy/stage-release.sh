@@ -61,7 +61,7 @@ SRC_DIR="$TMP/extract/server"
 
 # Verify the release contains everything the deploy depends on.
 for f in docker-compose.production.yml Caddyfile scripts/deploy/deploy-production.sh scripts/deploy/preflight.sh; do
-  [ -f "$SRC_DIR/server/$f" ] || die "release missing required file: server/$f"
+  [ -f "$SRC_DIR/$f" ] || die "release missing required file: $f"
 done
 grep -q '^DOMAIN=' /etc/dzhoot/.env.production 2>/dev/null \
   || say "WARNING: /etc/dzhoot/.env.production has no DOMAIN — public health check will fail at deploy"
