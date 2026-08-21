@@ -52,8 +52,10 @@ tar -tzf "$TMP/release.tar.gz" >/dev/null 2>&1 || die "downloaded file is not a 
 TARBALL_SHA256="$(sha256sum "$TMP/release.tar.gz" | awk '{print $1}')"
 say "tarball sha256: $TARBALL_SHA256"
 
+TOP_DIR="$(tar -tzf "$TMP/release.tar.gz" | head -1 | cut -d/ -f1)"
+[ -n "$TOP_DIR" ] || die "tarball is empty"
 tar -xzf "$TMP/release.tar.gz" -C "$TMP"
-SRC_DIR="$TMP/dzhoot-$FULL_SHA"
+SRC_DIR="$TMP/$TOP_DIR"
 [ -d "$SRC_DIR/server" ] || die "tarball does not contain server/ (wrong repo or SHA?)"
 
 # Verify the release contains everything the deploy depends on.
