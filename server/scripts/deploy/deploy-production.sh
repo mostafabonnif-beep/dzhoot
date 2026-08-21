@@ -51,6 +51,10 @@ fi
 
 step "1/7  Preflight"
 run "preflight" env ENV_FILE="$ENV_FILE" COMPOSE_FILE="$COMPOSE_FILE" ./scripts/deploy/preflight.sh || die "preflight failed — fix before deploying"
+# Caddy-independent pre-deploy gate: the API container itself must be healthy
+# before we touch anything. Local port-80 checks are unreliable because Caddy
+# auto-redirects all :80 traffic to HTTPS (308), so we never depend on them.
+run "docker health api (pre)" sh -c 'docker inspect -f "{{.State.Health.Status}}" dzhoof-api 2>/dev/null | grep -qx healthy' || die "dzhoof-api is not healthy — refusing to deploy over a sick stack"
 
 step "2/7  Verifiable backup (mongodump + checksum)"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
@@ -86,8 +90,15 @@ run "compose up" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d 
 
 step "5/7  Health verification"
 run "sleep" sleep 20
-run "public health" curl -fsS "http://127.0.0.1/health"
-run "details health" sh -c "curl -fsS 'http://127.0.0.1/health?details=true' | head -c 400; echo"
+# Health is verified via the public HTTPS endpoint (through Caddy) and directly
+# via the API container healthcheck. Do NOT use http://127.0.0.1/health here:
+# Caddy's automatic HTTPS redirect answers 308 on :80, which would abort every
+# deploy even when the stack is perfectly healthy.
+DOMAIN="$(sed -n 's/^DOMAIN=//p' "$ENV_FILE" | tr -d '"' | tr -d "'")"
+[ -n "$DOMAIN" ] || die "DOMAIN missing from $ENV_FILE — cannot verify public health"
+run "docker health api" sh -c 'docker inspect -f "{{.State.Health.Status}}" dzhoof-api | grep -qx healthy'
+run "public health" curl -fsS "https://${DOMAIN}/health"
+run "details health" sh -c "curl -fsS 'https://${DOMAIN}/health?details=true' | head -c 400; echo"
 run "compose ps" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
 
 step "6/7  Scheduler smoke (must NOT crash with OOM)"
