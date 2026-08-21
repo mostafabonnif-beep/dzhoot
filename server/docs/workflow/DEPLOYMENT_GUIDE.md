@@ -237,6 +237,42 @@ sudo systemctl enable --now dzhoof
 systemctl status dzhoof
 ```
 
+## 8b. النشر الآلي (staged releases + atomic deploy)
+
+بيئة الإنتاج الحالية تنشر من إصدارات مثبّتة (pinned) بدل `main` المتحرك. النشر يتم على مرحلتين منفصلتين، وكلاهما آمن افتراضيًا:
+
+**1) تجهيز الإصدار (staging)** — `scripts/deploy/stage-release.sh <sha>`:
+- يحل `<sha>` إلى SHA كامل عبر GitHub API (يقبل `main` أو tag أو SHA مختصر).
+- ينزّل tarball الإصدار، يتحقق من صحته، ويستخرجه إلى `/opt/dzhoot-releases/<sha>/server`.
+- **لا يلمس** الستاك الشغال أبدًا (لا `/opt/dzhoot` ولا الحاويات).
+- يطبع `STAGED <sha>` عند النجاح (للاستهلاك الآلي في CI).
+
+**2) النشر الذري** — `scripts/deploy/atomic-deploy.sh <sha>`:
+- `APPLY=0` (افتراضي): عرض خطة فقط — لا تغيير.
+- `APPLY=1`: بوابة صحة قبل النشر (حالة حاوية API + فحص HTTPS عام) ← نسخ احتياطي للكود المصدري ← مبادلة `/opt/dzhoot` → `.previous-<stamp>` ← تشغيل `deploy-production.sh --apply` ← فحص صحة بعد النشر ← **تراجع تلقائي** (إعادة المصدر والصور) عند أي فشل.
+
+مثال على الخادم:
+
+```bash
+# تجهيز main الحالي ثم معاينة الخطة
+/opt/dzhoot/server/scripts/deploy/stage-release.sh main
+APPLY=0 /opt/dzhoot/server/scripts/deploy/atomic-deploy.sh <sha>
+
+# تنفيذ فعلي بعد الموافقة
+APPLY=1 /opt/dzhoot/server/scripts/deploy/atomic-deploy.sh <sha>
+```
+
+**نشر من GitHub Actions** — `.github/workflows/deploy.yml` (تشغيل يدوي):
+1. أنشئ مفتاح نشر مخصصًا ولا تعِد استخدام مفاتيح شخصية:
+   ```bash
+   ssh-keygen -t ed25519 -f prod_deploy_key -C "dzhoof-prod-deploy"
+   ```
+2. أضف المفتاح العام إلى `/root/.ssh/authorized_keys` على الخادم.
+3. أضف أسرار الريبو: `PROD_HOST` (مثال `5.135.79.221`) و`PROD_SSH_KEY` (المفتاح الخاص كاملًا).
+4. من تبويب Actions → **Deploy to Production** → اختر SHA و"Apply for real" (بدونها dry-run).
+
+> **ملاحظة فحص الصحة:** Caddy يعيد توجيه كل حركة بورت 80 إلى HTTPS برمز `308`، لذا لا تستخدم `http://127.0.0.1/health` في الفحوص الآلية إطلاقًا. استخدم فحص حاوية API (`docker inspect -f '{{.State.Health.Status}}' dzhoof-api`) و/أو `https://<DOMAIN>/health`.
+
 ## 9. تحديث APK
 
 مسار الإصدار المعتمد هو workflow الموجود في `.github/workflows/release-candidate.yml` للإصدارات المرشحة. أما إصدار tag النهائي فيجب أن يمرر `DZHOOF_API_URL` ويستخدم اسم APK يبدأ بـ`dzhoof-`. لا ترفع APK يدويًا إلى Git؛ استخدم GitHub Releases أو artifacts الخاصة بـActions.
