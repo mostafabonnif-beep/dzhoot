@@ -47,7 +47,7 @@ import com.dzhoof.iptv.presentation.viewmodel.SettingsViewModel
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
-private const val SERVER_GUIDE_URL = "https://github.com/merci1994dz/dzhoot/blob/main/android/docs/README.md"
+private const val SERVER_GUIDE_URL = "https://github.com/mostafabonnif-beep/dzhoot/blob/main/android/docs/README.md"
 
 private enum class SourceTab(@StringRes val labelRes: Int) {
     SELF_HOST(R.string.source_tab_self_host),
