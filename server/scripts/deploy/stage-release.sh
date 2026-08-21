@@ -52,11 +52,12 @@ tar -tzf "$TMP/release.tar.gz" >/dev/null 2>&1 || die "downloaded file is not a 
 TARBALL_SHA256="$(sha256sum "$TMP/release.tar.gz" | awk '{print $1}')"
 say "tarball sha256: $TARBALL_SHA256"
 
-TOP_DIR="$(tar -tzf "$TMP/release.tar.gz" | head -1 | cut -d/ -f1)"
-[ -n "$TOP_DIR" ] || die "tarball is empty"
-tar -xzf "$TMP/release.tar.gz" -C "$TMP"
-SRC_DIR="$TMP/$TOP_DIR"
-[ -d "$SRC_DIR/server" ] || die "tarball does not contain server/ (wrong repo or SHA?)"
+# Extract only server/ from the tarball. GNU tar wildcards avoid listing the
+# whole archive; `head` on a tar listing would SIGPIPE tar and trip pipefail.
+mkdir -p "$TMP/extract"
+tar -xzf "$TMP/release.tar.gz" -C "$TMP/extract" --strip-components=1 --wildcards 'dzhoot-*/server' 2>/dev/null   || die "tarball does not contain server/ (wrong repo or SHA?)"
+SRC_DIR="$TMP/extract/server"
+[ -d "$SRC_DIR" ] || die "tarball does not contain server/ (wrong repo or SHA?)"
 
 # Verify the release contains everything the deploy depends on.
 for f in docker-compose.production.yml Caddyfile scripts/deploy/deploy-production.sh scripts/deploy/preflight.sh; do
