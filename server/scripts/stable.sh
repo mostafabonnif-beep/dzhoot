@@ -48,8 +48,15 @@ case "${1:-status}" in
     compose logs --tail="${LOG_LINES:-120}" "$2"
     ;;
   health)
-    curl -fsS "${PUBLIC_API_URL:-http://127.0.0.1:3000}/health"
-    echo
+    # Prefer the API container's own healthcheck; fall back to the public HTTPS
+    # endpoint. Local http://127.0.0.1:3000 is never reachable from the host
+    # (ports are not published) and :80 answers 308 (Caddy auto-HTTPS).
+    if docker inspect -f '{{.State.Health.Status}}' dzhoof-api 2>/dev/null | grep -qx healthy; then
+      echo "dzhoof-api: healthy"
+    else
+      curl -fsS "${PUBLIC_API_URL:-https://$(sed -n 's/^DOMAIN=//p' "$ENV_FILE" | tr -d '"' | tr -d "'")}/health"
+      echo
+    fi
     ;;
   backup)
     backup_dir="${BACKUP_DIR:-$ROOT_DIR/backups}"
