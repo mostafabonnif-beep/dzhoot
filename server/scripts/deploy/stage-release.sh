@@ -33,9 +33,9 @@ say "resolving $SHA_OR_REF in $REPO ..."
 FULL_SHA="$(curl -fsS --max-time 20 -H "Accept: application/vnd.github+json" \
   "$API_URL" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)"
 case "$FULL_SHA" in
-  [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
-  *) die "could not resolve '$SHA_OR_REF' to a full commit SHA (API response missing 'sha')" ;;
+  ""|*[!0-9a-f]*) die "could not resolve '$SHA_OR_REF' to a full commit SHA (API response missing 'sha')" ;;
 esac
+[ "${#FULL_SHA}" -eq 40 ] || die "resolved value is not a 40-character SHA (got: $FULL_SHA)"
 
 DEST="$RELEASES_ROOT/$FULL_SHA"
 if [ -f "$DEST/.staged-ok" ]; then
