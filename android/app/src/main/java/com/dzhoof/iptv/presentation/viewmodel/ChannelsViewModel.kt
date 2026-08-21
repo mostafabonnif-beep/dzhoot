@@ -53,7 +53,7 @@ private const val POPULAR_CATEGORIES_LIMIT = 10
 private const val FOR_YOU_LIMIT = 12
 private const val HEALTH_SCAN_DEBOUNCE_MS = 500L
 private const val CATEGORY_UPDATE_DEBOUNCE_MS = 1_000L
-private const val GUIDE_URL = "https://github.com/merci1994dz/dzhoot/blob/main/android/docs/README.md"
+private const val GUIDE_URL = "https://github.com/mostafabonnif-beep/dzhoot/blob/main/android/docs/README.md"
 
 @HiltViewModel
 class ChannelsViewModel @Inject constructor(
