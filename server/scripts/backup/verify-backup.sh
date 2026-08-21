@@ -51,13 +51,37 @@ else
 fi
 
 # 4. mongorestore dry-run (validates the archive structure + BSON)
+#
+# NOTE: `mongorestore --dryRun` in MongoDB 7.x still CONNECTS to a target
+# server to validate the archive (a bare invocation fails with
+# "failed to connect to mongodb://localhost/" even for a perfect archive,
+# and passing a database in the URI silently restores 0 documents).
+# The dry-run therefore needs a reachable mongod:
+#   - on the production server: run from inside the running mongo container
+#     (--dryRun writes nothing, so this is safe against live data);
+#   - otherwise: fall back to docker run / a local mongorestore.
 if command -v docker >/dev/null 2>&1; then
-  MONGO_IMG="${MONGO_IMG:-mongo:7.0.19}"
-  if docker run --rm -v "$(dirname "$ARCHIVE")":/backup:ro "$MONGO_IMG" \
-      mongorestore --archive="/backup/$(basename "$ARCHIVE")" --gzip --dryRun >/dev/null 2>&1; then
-    ok "mongorestore --dryRun parsed the archive"
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx 'dzhoof-mongodb'; then
+    MONGO_CONTAINER=dzhoof-mongodb
+    IN_CONTAINER="/tmp/dzhoof-verify-$$.archive.gz"
+    if docker cp "$ARCHIVE" "$MONGO_CONTAINER:$IN_CONTAINER" >/dev/null 2>&1 \
+       && docker exec "$MONGO_CONTAINER" mongorestore \
+            --uri="mongodb://127.0.0.1:27017" \
+            --archive="$IN_CONTAINER" --gzip --dryRun >/dev/null 2>&1; then
+      ok "mongorestore --dryRun parsed the archive (via $MONGO_CONTAINER)"
+    else
+      fail "mongorestore --dryRun could not parse the archive (via $MONGO_CONTAINER; run with --verbose to see why)"
+    fi
+    docker exec "$MONGO_CONTAINER" rm -f "$IN_CONTAINER" >/dev/null 2>&1 || true
   else
-    fail "mongorestore --dryRun could not parse the archive (run with docker run ... --dryRun --verbose to see why)"
+    MONGO_IMG="${MONGO_IMG:-mongo:7.0.19}"
+    if docker run --rm --network "dzhoof-shared-network" -v "$(dirname "$ARCHIVE")":/backup:ro "$MONGO_IMG" \
+        mongorestore --uri="mongodb://dzhoof-mongodb:27017" \
+        --archive="/backup/$(basename "$ARCHIVE")" --gzip --dryRun >/dev/null 2>&1; then
+      ok "mongorestore --dryRun parsed the archive (docker network)"
+    else
+      fail "mongorestore --dryRun could not parse the archive (docker network)"
+    fi
   fi
 else
   say "docker not available — skipping mongorestore dry-run"
