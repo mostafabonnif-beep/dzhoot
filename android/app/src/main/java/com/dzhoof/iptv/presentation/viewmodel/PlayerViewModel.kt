@@ -983,13 +983,13 @@ class PlayerViewModel @Inject constructor(
         _uiState.update { it.copy(activeStreamUrl = streamUrl, isUsingProxy = false) }
     }
 
-    fun onStreamDead(errorMessage: String) {
+    fun onStreamDead(errorMessage: String, diagnosticCode: String? = null) {
         val channelId = _uiState.value.channel?.id ?: return
         if (!playbackQoeStartupReported || playbackQoeFallbackUsed) {
             reportPlaybackQoe(
                 eventType = "startup_failure",
                 fallbackSucceeded = false,
-                errorCode = "stream_unavailable",
+                errorCode = diagnosticCode?.take(100) ?: "stream_unavailable",
                 forceFallbackSnapshot = playbackQoeFallbackUsed,
             )
         }

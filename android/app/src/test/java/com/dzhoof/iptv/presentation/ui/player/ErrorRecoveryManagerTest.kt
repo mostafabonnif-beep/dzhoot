@@ -59,7 +59,7 @@ class ErrorRecoveryManagerTest {
             onError = { onErrorMessages.add(it) },
             onRecovering = { onRecoveringAttempts.add(it) },
             onRecovered = { onRecoveredCalled = true },
-            onStreamDead = { onStreamDeadMessages.add(it) },
+            onStreamDead = { message, _ -> onStreamDeadMessages.add(message) },
             onStreamUnresponsive = { onStreamUnresponsiveCalled = true },
             onProxyFallback = { onProxyFallbackCalled = true },
             onAlternateFallback = { onAlternateFallbackUrls.add(it) }

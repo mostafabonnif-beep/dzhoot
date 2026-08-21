@@ -152,7 +152,7 @@ fun PlayerScreen(
             onError = { message -> viewModel.onPlaybackError(message) },
             onRecovering = { attempt -> viewModel.onRecovering(attempt) },
             onRecovered = { viewModel.onRecovered() },
-            onStreamDead = { message -> viewModel.onStreamDead(message) },
+            onStreamDead = { message, diagnosticCode -> viewModel.onStreamDead(message, diagnosticCode) },
             onStreamUnresponsive = { viewModel.onStreamUnresponsive() },
             onProxyFallback = { viewModel.onProxyFallback() },
             onAlternateFallback = { streamUrl -> viewModel.onAlternateFallback(streamUrl) }
