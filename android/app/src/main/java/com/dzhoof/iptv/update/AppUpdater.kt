@@ -277,6 +277,6 @@ class AppUpdater @Inject constructor(
         private const val TAG = "AppUpdater"
         private const val APK_FILENAME = "DZHOOF.apk"
         private const val GITHUB_RELEASES_API =
-            "https://api.github.com/repos/merci1994dz/dzhoot/releases/latest"
+            "https://api.github.com/repos/mostafabonnif-beep/dzhoot/releases/latest"
     }
 }
