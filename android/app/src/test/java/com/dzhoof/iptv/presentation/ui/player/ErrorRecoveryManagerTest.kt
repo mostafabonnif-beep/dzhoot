@@ -72,6 +72,9 @@ class ErrorRecoveryManagerTest {
     private fun nonNetworkError(): PlaybackException =
         PlaybackException("Decode error", null, PlaybackException.ERROR_CODE_UNSPECIFIED)
 
+    private fun parsingContainerError(): PlaybackException =
+        PlaybackException("Container parse error", null, PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED)
+
     private fun primarySlot(
         directUrl: String = "http://primary.m3u8",
         proxyUrl: String? = null
@@ -145,6 +148,25 @@ class ErrorRecoveryManagerTest {
         runCurrent()
 
         assertEquals(1, onStreamDeadMessages.size)
+    }
+
+    @Test
+    fun `parsing container unsupported is retryable and recovers`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(listOf(primarySlot()))
+
+        // A transient container-parse failure must NOT end the session:
+        // it triggers the same backoff retry path as network errors.
+        listenerSlot.captured.onPlayerError(parsingContainerError())
+        assertTrue(onRecoveringAttempts.isNotEmpty())
+        advanceTimeBy(3000)
+        runCurrent()
+
+        // Simulate success on the retry.
+        listenerSlot.captured.onPlaybackStateChanged(Player.STATE_READY)
+        runCurrent()
+
+        assertEquals(0, onStreamDeadMessages.size)
     }
 
     // ── Recovery ─────────────────────────────────────────────────

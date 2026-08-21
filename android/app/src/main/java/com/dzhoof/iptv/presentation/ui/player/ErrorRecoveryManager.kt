@@ -140,7 +140,9 @@ class ErrorRecoveryManager(
                 "خطأ في الخادم"
             }
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
-            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED -> {
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED,
+            PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED,
+            PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED -> {
                 "تنسيق البث غير صالح"
             }
             else -> {
@@ -159,7 +161,16 @@ class ErrorRecoveryManager(
     private fun isNetworkError(error: PlaybackException): Boolean {
         return error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
                 error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
+                // Parsing failures are frequently TRANSIENT with flaky upstream
+                // IPTV sources (a bad segment or manifest served once, a hiccup
+                // right after an upstream/proxy redeploy). Retry with backoff and
+                // alternate slots before declaring the stream dead, so a single
+                // bad response does not end the viewing session.
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED
     }
 
     private fun attemptReconnect() {
