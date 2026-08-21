@@ -9,6 +9,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
