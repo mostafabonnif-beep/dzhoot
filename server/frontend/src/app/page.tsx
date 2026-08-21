@@ -36,18 +36,18 @@ export default function Home() {
           'Self-hosted IPTV management console for Android TV and Fire TV. Import M3U playlists, manage channels, pair devices, and monitor streams.',
         applicationCategory: 'MultimediaApplication',
         operatingSystem: 'Android TV, Fire OS',
-        url: 'https://github.com/merci1994dz/dzhoot',
-        downloadUrl: 'https://github.com/merci1994dz/dzhoot/releases/latest',
+        url: 'https://github.com/mostafabonnif-beep/dzhoot',
+        downloadUrl: 'https://github.com/mostafabonnif-beep/dzhoot/releases/latest',
         softwareVersion: '1.0.1',
         author: {
           '@type': 'Person',
-          name: 'merci1994dz',
-          url: 'https://github.com/merci1994dz',
+          name: "mostafabonnif-beep",
+          url: 'https://github.com/mostafabonnif-beep',
         },
         publisher: {
           '@type': 'Organization',
           name: 'DZ HOOF',
-          url: 'https://github.com/merci1994dz/dzhoot',
+          url: 'https://github.com/mostafabonnif-beep/dzhoot',
         },
         offers: {
           '@type': 'Offer',
@@ -63,13 +63,13 @@ export default function Home() {
           'Real-time analytics dashboard',
           'Self-hosted deployment',
         ],
-        screenshot: 'https://github.com/merci1994dz/dzhoot/og-image.png',
-        license: 'https://github.com/merci1994dz/dzhoot/blob/main/LICENSE',
+        screenshot: 'https://github.com/mostafabonnif-beep/dzhoot/og-image.png',
+        license: 'https://github.com/mostafabonnif-beep/dzhoot/blob/main/LICENSE',
       },
       {
         '@type': 'WebSite',
         name: 'DZ HOOF IPTV',
-        url: 'https://github.com/merci1994dz/dzhoot',
+        url: 'https://github.com/mostafabonnif-beep/dzhoot',
         description: 'Self-hosted IPTV management console for Android TV and Fire TV.',
         publisher: {
           '@type': 'Organization',
@@ -177,7 +177,7 @@ export default function Home() {
                 </Link>
               </nav>
               <a
-                href="https://github.com/merci1994dz/dzhoot/releases/latest"
+                href="https://github.com/mostafabonnif-beep/dzhoot/releases/latest"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-3 mt-4 border-2 border-primary/30 bg-primary/5 px-8 py-4 text-sm font-semibold uppercase tracking-widest text-foreground hover:bg-primary/10 hover:border-primary/50 transition-colors"
@@ -249,7 +249,7 @@ export default function Home() {
               &bull;
             </span>
             <a
-              href="https://github.com/merci1994dz/dzhoot"
+              href="https://github.com/mostafabonnif-beep/dzhoot"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
@@ -262,7 +262,7 @@ export default function Home() {
               &bull;
             </span>
             <a
-              href="https://github.com/merci1994dz"
+              href="https://github.com/mostafabonnif-beep"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
