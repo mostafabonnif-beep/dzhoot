@@ -35,7 +35,7 @@ services:
       APP_VERSION: ${APP_VERSION:-1.0.1}
       # Audit-remediation-v1: manual EPG triggers execute in the API container,
       # so it needs the same memory hardening as the scheduler service.
-      NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first
+      NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first --expose-gc
       EPG_FETCH_CONCURRENCY: ${EPG_FETCH_CONCURRENCY:-1}
       EPG_SOURCE_TIMEOUT_MS: ${EPG_SOURCE_TIMEOUT_MS:-120000}
       EPG_MAX_DECOMPRESSED_MB: ${EPG_MAX_DECOMPRESSED_MB:-100}
@@ -184,7 +184,7 @@ services:
       CACHE_REFRESH_INTERVAL_MS: ${CACHE_REFRESH_INTERVAL_MS}
       # Audit-remediation-v1: bounded EPG fetching — sequential by default so peak
       # memory stays proportional to a single guide; per-source timeout; heap guard.
-      NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first
+      NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first --expose-gc
       EPG_FETCH_CONCURRENCY: ${EPG_FETCH_CONCURRENCY:-1}
       EPG_SOURCE_TIMEOUT_MS: ${EPG_SOURCE_TIMEOUT_MS:-120000}
       EPG_MAX_DECOMPRESSED_MB: ${EPG_MAX_DECOMPRESSED_MB:-100}

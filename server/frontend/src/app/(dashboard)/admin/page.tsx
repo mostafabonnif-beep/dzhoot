@@ -217,8 +217,50 @@ export default function AdminDashboard() {
     },
   ];
 
+  // Derive actionable health alerts from the data we already load. These turn
+  // silent background failures (e.g. EPG sources failing) into visible signals.
+  const alerts: Array<{ key: string; severity: 'red' | 'amber'; text: string; href: string }> = [];
+  if (channelOperations && channelOperations.epg.sourcesDiscovered > 0) {
+    const failRate = channelOperations.epg.lastRefreshErrorCount / channelOperations.epg.sourcesDiscovered;
+    if (channelOperations.epg.lastRefreshErrorCount > 0 && failRate >= 0.3) {
+      alerts.push({
+        key: 'epg',
+        severity: 'red',
+        text: `فشل ${channelOperations.epg.lastRefreshErrorCount} من ${channelOperations.epg.sourcesDiscovered} مصدر EPG في آخر تحديث — دليل القنوات لا يتحدث بالكامل.`,
+        href: '/admin/epg',
+      });
+    }
+  }
+  if (channelOperations && channelOperations.channels.failing > 0) {
+    alerts.push({
+      key: 'dead',
+      severity: 'amber',
+      text: `${channelOperations.channels.failing} قناة معطلة في الكتالوج تحتاج تنظيفًا أو بديلًا.`,
+      href: '/admin/channels',
+    });
+  }
+
   return (
     <div className="dashboard-shell space-y-8 rounded-[2rem] p-1">
+      {alerts.length > 0 && (
+        <div className="space-y-2" role="status" aria-live="polite">
+          {alerts.map((alert) => (
+            <Link
+              key={alert.key}
+              href={alert.href}
+              className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors ${
+                alert.severity === 'red'
+                  ? 'border-destructive/40 bg-destructive/5 text-destructive hover:bg-destructive/10'
+                  : 'border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10'
+              }`}
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span className="flex-1">{alert.text}</span>
+              <ChevronRight className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
+            </Link>
+          ))}
+        </div>
+      )}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="mb-3 inline-flex rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary">مركز العمليات</div>
