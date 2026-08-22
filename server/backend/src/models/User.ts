@@ -264,7 +264,7 @@ userSchema.methods.generateUserPlaylist = async function (
       streamUrl: sourceUrl,
       direct: isDirectSource || undefined,
     });
-    const playbackUrl = `${baseUrl || ''}/api/v1/tv/playback/${token}`;
+    const playbackUrl = `${baseUrl || ''}/api/v1/tv/playback/${token}.m3u8`;
     m3uContent += `${channel.toM3U().replace(channel.channelUrl, playbackUrl)}\n\n`;
   }
 

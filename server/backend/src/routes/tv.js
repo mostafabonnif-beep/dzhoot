@@ -109,7 +109,7 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
         referrer: source.activeReferrer || undefined,
       },
     });
-    safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}`;
+    safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}.m3u8`;
   }
   safe.alternateStreams = await Promise.all(
     (source.alternateStreams || [])
@@ -126,7 +126,7 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
             referrer: alternate.referrer || undefined,
           },
         });
-        return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}` };
+        return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}.m3u8` };
       }),
   );
   return safe;
@@ -379,7 +379,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       return res.json({
         success: true,
         data: {
-          playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`,
+          playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}.m3u8`,
           mimeType: inferPlaybackMimeType(vodDoc.streamUrl),
           expiresAt,
           slot: 0,
@@ -498,7 +498,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     return res.json({
       success: true,
       data: {
-        playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`,
+        playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}.m3u8`,
         // The token URL has no file extension. Tell clients whether the first
         // response is an HLS manifest or an MPEG-TS stream so Media3 does not
         // have to guess from an opaque URL.
@@ -549,7 +549,11 @@ router.get('/proxy-url/:code', async (req, res) => {
 // GET /tv/playback/:token
 router.get('/playback/:token', async (req, res) => {
   try {
-    const payload = verifyPlaybackToken(req.params.token);
+    // Token URLs may carry a trailing .m3u8 so media players infer HLS from the
+    // extension alone (the app's mimeType hint can be lost, which makes players
+    // treat the URL as a progressive file and fail with PARSING_CONTAINER_UNSUPPORTED).
+    const token = String(req.params.token).replace(/\.m3u8$/, '');
+    const payload = verifyPlaybackToken(token);
     if (!payload) return res.status(401).send('Playback token expired or invalid');
 
     const user = await User.findOne({

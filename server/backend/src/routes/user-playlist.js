@@ -17,7 +17,7 @@ function tokenizeUserChannel(channel, user, baseUrl) {
       channelListCode: user.channelListCode,
       streamUrl: source.channelUrl,
     });
-    safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}`;
+    safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}.m3u8`;
   }
   safe.alternateStreams = (source.alternateStreams || [])
     .filter((alternate) => alternate.liveness?.status !== 'dead' && alternate.flaggedBad?.isFlagged !== true)
@@ -29,7 +29,7 @@ function tokenizeUserChannel(channel, user, baseUrl) {
         channelListCode: user.channelListCode,
         streamUrl: alternate.streamUrl,
       });
-      return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}` };
+      return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}.m3u8` };
     });
   return safe;
 }
