@@ -166,7 +166,7 @@ router.post('/authorize', async (req, res) => {
       direct: directPlayback,
       sessionId: rootSessionId,
     });
-    const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}`;
+    const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}.m3u8`;
 
     // Per-user concurrent stream limit. A new session is rejected when the limit is reached; existing sessions are preserved.
     const session = await registerStreamSession({
