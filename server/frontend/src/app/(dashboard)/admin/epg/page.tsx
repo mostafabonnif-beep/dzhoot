@@ -12,6 +12,8 @@ interface EpgStats {
   nextRefreshAt: string | null;
   sourcesDiscovered: number;
   refreshInProgress: boolean;
+  lastRefreshErrorCount?: number;
+  lastRefreshErrorSources?: string[];
 }
 
 interface EpgSource {
@@ -193,6 +195,21 @@ export default function EpgPage() {
 
   return (
     <div className="space-y-8">
+      {/* Surface failing sources so an operator sees partial-ingest problems
+          without reading container logs. */}
+      {stats && (stats.lastRefreshErrorCount ?? 0) > 0 && (
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm" role="alert">
+          <p className="font-medium text-destructive">
+            فشل {stats.lastRefreshErrorCount} من {stats.sourcesDiscovered} مصدر في آخر تحديث.
+          </p>
+          {(stats.lastRefreshErrorSources ?? []).length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground" dir="ltr">
+              {(stats.lastRefreshErrorSources ?? []).slice(0, 8).join(' · ')}
+              {(stats.lastRefreshErrorSources ?? []).length > 8 ? ' …' : ''}
+            </p>
+          )}
+        </div>
+      )}
       <div className="flex items-center justify-between ">
         <div>
           <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">دليل البرامج الإلكتروني</h1>

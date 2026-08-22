@@ -655,6 +655,28 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     }
   }
 
+  // Admin: purge only dead or untested catalog channels (keeps working ones).
+  const [purgeStatus, setPurgeStatus] = useState<null | 'dead' | 'untested'>(null);
+  const [purgeLoading, setPurgeLoading] = useState(false);
+  async function handlePurgeByStatus() {
+    if (!purgeStatus) return;
+    setPurgeLoading(true);
+    try {
+      const res = await api.delete('/admin/channels/bulk-by-status', {
+        data: { confirmed: true, status: purgeStatus },
+      });
+      const n = res.data?.deletedCount ?? 0;
+      toast(t('channels.purgeDone').replace('{count}', String(n)), 'success');
+      setPurgeStatus(null);
+      await fetchChannels();
+      refreshFilterOptions();
+    } catch {
+      toast(t('channels.purgeFailed'), 'error');
+    } finally {
+      setPurgeLoading(false);
+    }
+  }
+
   async function handleImport(e: React.FormEvent) {
     e.preventDefault();
     if (!importContent.trim()) return;
@@ -1306,6 +1328,24 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('channels.deleteAll')}
             </button>
           )}
+          {isAdmin && healthStats && healthStats.notWorking > 0 && (
+            <button
+              onClick={() => setPurgeStatus('dead')}
+              title={t('channels.purgeDeadTitle')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-destructive/30 bg-card shadow-sm transition-colors hover:border-destructive/60 text-destructive uppercase tracking-[0.1em]"
+            >
+              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('channels.purgeDead')} ({healthStats.notWorking})
+            </button>
+          )}
+          {isAdmin && healthStats && healthStats.untested > 0 && (
+            <button
+              onClick={() => setPurgeStatus('untested')}
+              title={t('channels.purgeUntestedTitle')}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 uppercase tracking-[0.1em]"
+            >
+              <Trash2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> {t('channels.purgeUntested')} ({healthStats.untested})
+            </button>
+          )}
         </div>
       </div>
 
@@ -1854,6 +1894,24 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           loading={bulkDeleteLoading}
           onConfirm={handleBulkDelete}
           onCancel={() => setShowBulkDelete(false)}
+        />
+      )}
+
+      {/* Admin: Purge dead/untested Confirmation */}
+      {isAdmin && (
+        <ConfirmDialog
+          open={purgeStatus !== null}
+          title={purgeStatus === 'dead' ? t('channels.purgeDeadTitle') : t('channels.purgeUntestedTitle')}
+          message={
+            purgeStatus === 'dead'
+              ? t('channels.purgeDeadConfirm').replace('{count}', String(healthStats?.notWorking ?? 0))
+              : t('channels.purgeUntestedConfirm').replace('{count}', String(healthStats?.untested ?? 0))
+          }
+          confirmLabel={purgeStatus === 'dead' ? t('channels.purgeDead') : t('channels.purgeUntested')}
+          variant="destructive"
+          loading={purgeLoading}
+          onConfirm={handlePurgeByStatus}
+          onCancel={() => setPurgeStatus(null)}
         />
       )}
 

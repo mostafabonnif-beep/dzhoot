@@ -96,6 +96,27 @@ function rssMb(): number {
   return Math.round((process.memoryUsage().rss / 1048576) * 10) / 10;
 }
 
+// Whether the runtime exposes a manual GC (started with --expose-gc).
+const gcAvailable = typeof (globalThis as any).gc === 'function';
+
+// Give V8 a chance to return freed memory to the OS between EPG sources.
+// Each guide allocates a very large XML string + parse tree; those become
+// garbage on return, but V8 does not collect eagerly at this size. Forcing a
+// collection (when available) and yielding the event loop lets RSS drop back
+// under the heap guard so later sources are not all skipped. No-op without
+// --expose-gc, where the natural GC cadence applies.
+async function reclaimMemory(): Promise<void> {
+  if (gcAvailable) {
+    try {
+      (globalThis as any).gc();
+    } catch {
+      // never let GC break the refresh loop
+    }
+  }
+  // Yield so pending finalizers/GC callbacks run before the next allocation.
+  await new Promise((resolve) => setImmediate(resolve));
+}
+
 interface EpgSourceInfo {
   url: string;
   coveredChannelIds: string[];
@@ -240,6 +261,12 @@ export class EpgService {
         sources,
         EPG_FETCH_CONCURRENCY,
         async (source) => {
+          // Reclaim memory from the PREVIOUS source before evaluating the guard.
+          // V8 defers GC while RSS sits below --max-old-space-size, so without an
+          // explicit collection the freed XML/parse trees from prior sources kept
+          // RSS above EPG_HEAP_GUARD_MB and every subsequent source was skipped
+          // (production: 49/52 sources failed with "RSS exceeds EPG_HEAP_GUARD_MB").
+          await reclaimMemory();
           if (rssMb() > EPG_HEAP_GUARD_MB) {
             throw new Error(`Skipped: RSS ${rssMb()}MB exceeds EPG_HEAP_GUARD_MB (${EPG_HEAP_GUARD_MB}MB)`);
           }
