@@ -1,4 +1,5 @@
 import Channel from '../models/Channel';
+import XtreamSource from '../models/XtreamSource';
 import { probeStream } from './stream-prober';
 import { channelCache } from './cache';
 import { redactSensitiveText } from './audit-log';
@@ -36,8 +37,16 @@ export class StreamHealthService {
       return stats;
     }
 
+    // Direct-playback sources cannot be judged from the server's datacenter IP
+    // (the upstream blocks it — clients fetch from their own networks). Probing
+    // them here would mark every such channel "dead" on every run. Load their
+    // ids once and skip them.
+    const directSourceIds = new Set(
+      (await XtreamSource.find({ directPlayback: true }).distinct('_id')).map((id) => String(id)),
+    );
+
     console.log(
-      `[stream-health] Starting health check for ${totalCount} catalog channels (concurrency: ${CONCURRENCY})`,
+      `[stream-health] Starting health check for ${totalCount} catalog channels (concurrency: ${CONCURRENCY}, direct-playback exempt: ${directSourceIds.size})`,
     );
 
     let lastId: unknown = null;
@@ -56,7 +65,7 @@ export class StreamHealthService {
         batch,
         async (channel: IChannelDocument) => {
           try {
-            const result = await this.checkAndPromote(channel);
+            const result = await this.checkAndPromote(channel, directSourceIds);
             stats.checked++;
             if (result === 'promoted') stats.promoted++;
             else if (result === 'all-dead') stats.allDead++;
@@ -90,7 +99,15 @@ export class StreamHealthService {
 
   private async checkAndPromote(
     channel: IChannelDocument,
+    directSourceIds: Set<string> = new Set(),
   ): Promise<'ok' | 'promoted' | 'all-dead' | 'flagged-skipped'> {
+    // Direct-playback sources: the datacenter probe is meaningless (upstream
+    // blocks the server IP) — never mark these channels dead or rewrite their
+    // liveness from a probe that cannot reach them.
+    if (directSourceIds.has(String(channel.metadata?.xtreamSourceId || ''))) {
+      return 'ok';
+    }
+
     // Check if primary is dead or flagged
     const primaryDead = channel.metadata?.isWorking === false;
     const primaryFlagged = channel.flaggedBad?.isFlagged === true;
