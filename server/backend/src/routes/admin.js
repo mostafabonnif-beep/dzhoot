@@ -187,6 +187,68 @@ router.put('/channels/:id', async (req, res) => {
   }
 });
 
+// Bulk-delete catalog channels by health status (requires { confirmed: true }).
+// status: 'dead' (isWorking===false) | 'untested' (isWorking never set) | 'notworking' (dead+untested).
+// Lets an admin purge the thousands of dead/unverified streams a raw M3U import
+// leaves behind, instead of wiping the entire catalog or deleting one-by-one.
+router.delete('/channels/bulk-by-status', async (req, res) => {
+  try {
+    if (!req.body?.confirmed) {
+      return res.status(400).json({
+        success: false,
+        error: 'Destructive operation requires { "confirmed": true } in request body',
+      });
+    }
+    const status = String(req.body?.status || '').toLowerCase();
+    let filter;
+    if (status === 'dead') {
+      filter = { ownerId: null, 'metadata.isWorking': false };
+    } else if (status === 'untested') {
+      filter = { ownerId: null, 'metadata.isWorking': { $exists: false } };
+    } else if (status === 'notworking') {
+      filter = { ownerId: null, 'metadata.isWorking': { $ne: true } };
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: 'status must be one of: dead, untested, notworking',
+      });
+    }
+
+    const catalogIds = await Channel.find(filter).distinct('_id');
+    const deleteResult = await Channel.deleteMany(filter);
+
+    if (catalogIds.length) {
+      await User.updateMany(
+        { channels: { $in: catalogIds } },
+        { $pull: { channels: { $in: catalogIds } } },
+      );
+    }
+
+    await invalidateCatalogCache();
+    audit({
+      userId: req.user.id,
+      action: `bulk_delete_${status}_channels`,
+      resource: 'channel',
+      resourceId: `${deleteResult.deletedCount} channels`,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      status,
+      message: `Deleted ${deleteResult.deletedCount} ${status} channels`,
+      deletedCount: deleteResult.deletedCount,
+    });
+  } catch (error) {
+    console.error('Error bulk-deleting channels by status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to bulk-delete channels',
+    });
+  }
+});
+
 // Delete channel
 router.delete('/channels/:id', async (req, res) => {
   try {
@@ -272,67 +334,6 @@ router.delete('/channels', async (req, res) => {
   }
 });
 
-// Bulk-delete catalog channels by health status (requires { confirmed: true }).
-// status: 'dead' (isWorking===false) | 'untested' (isWorking never set) | 'notworking' (dead+untested).
-// Lets an admin purge the thousands of dead/unverified streams a raw M3U import
-// leaves behind, instead of wiping the entire catalog or deleting one-by-one.
-router.delete('/channels/bulk-by-status', async (req, res) => {
-  try {
-    if (!req.body?.confirmed) {
-      return res.status(400).json({
-        success: false,
-        error: 'Destructive operation requires { "confirmed": true } in request body',
-      });
-    }
-    const status = String(req.body?.status || '').toLowerCase();
-    let filter;
-    if (status === 'dead') {
-      filter = { ownerId: null, 'metadata.isWorking': false };
-    } else if (status === 'untested') {
-      filter = { ownerId: null, 'metadata.isWorking': { $exists: false } };
-    } else if (status === 'notworking') {
-      filter = { ownerId: null, 'metadata.isWorking': { $ne: true } };
-    } else {
-      return res.status(400).json({
-        success: false,
-        error: 'status must be one of: dead, untested, notworking',
-      });
-    }
-
-    const catalogIds = await Channel.find(filter).distinct('_id');
-    const deleteResult = await Channel.deleteMany(filter);
-
-    if (catalogIds.length) {
-      await User.updateMany(
-        { channels: { $in: catalogIds } },
-        { $pull: { channels: { $in: catalogIds } } },
-      );
-    }
-
-    await invalidateCatalogCache();
-    audit({
-      userId: req.user.id,
-      action: `bulk_delete_${status}_channels`,
-      resource: 'channel',
-      resourceId: `${deleteResult.deletedCount} channels`,
-      ipAddress: req.ip,
-      userAgent: req.headers['user-agent'],
-    });
-
-    res.json({
-      success: true,
-      status,
-      message: `Deleted ${deleteResult.deletedCount} ${status} channels`,
-      deletedCount: deleteResult.deletedCount,
-    });
-  } catch (error) {
-    console.error('Error bulk-deleting channels by status:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to bulk-delete channels',
-    });
-  }
-});
 
 // Bulk import channels from M3U
 router.post('/channels/import-m3u', async (req, res) => {
