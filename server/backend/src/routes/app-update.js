@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const AppVersion = require('../models/AppVersion');
 
 // GitHub APK update routes
 
@@ -77,6 +78,33 @@ router.get('/version', async (req, res) => {
       });
     }
 
+    // 1) DB-managed versions (set from the admin dashboard) take precedence —
+    //    this is how the server distributes APKs without needing a GitHub release.
+    const dbLatest = await AppVersion.findOne({ isActive: true })
+      .sort({ versionCode: -1 })
+      .lean();
+    if (dbLatest) {
+      const updateAvailable = dbLatest.versionCode > currentVersionCode;
+      return res.json({
+        success: true,
+        updateAvailable,
+        latestVersion: {
+          versionName: dbLatest.versionName,
+          versionCode: dbLatest.versionCode,
+          releaseNotes: dbLatest.releaseNotes || '',
+          apkFileSize: dbLatest.apkFileSize,
+          downloadUrl: dbLatest.downloadUrl,
+        },
+        currentVersion: currentVersionCode,
+        isMandatory: dbLatest.isMandatory || currentVersionCode < dbLatest.minCompatibleVersion,
+        releaseNotes: dbLatest.releaseNotes || '',
+        downloadUrl: dbLatest.downloadUrl,
+        minCompatibleVersion: dbLatest.minCompatibleVersion || 1,
+        source: 'db',
+      });
+    }
+
+    // 2) Fallback: GitHub releases (legacy path).
     const release = await fetchLatestRelease();
     const apkAsset = pickApkAsset(release);
 
@@ -119,6 +147,27 @@ router.get('/version', async (req, res) => {
 
 router.get('/latest', async (req, res) => {
   try {
+    // DB-managed version takes precedence.
+    const dbLatest = await AppVersion.findOne({ isActive: true })
+      .sort({ versionCode: -1 })
+      .lean();
+    if (dbLatest) {
+      return res.json({
+        success: true,
+        data: {
+          versionName: dbLatest.versionName,
+          versionCode: dbLatest.versionCode,
+          releaseNotes: dbLatest.releaseNotes || '',
+          apkFileName: dbLatest.apkFileName,
+          apkFileSize: dbLatest.apkFileSize,
+          downloadUrl: dbLatest.downloadUrl,
+          isMandatory: dbLatest.isMandatory || false,
+          releasedAt: dbLatest.releasedAt,
+        },
+        source: 'db',
+      });
+    }
+
     const release = await fetchLatestRelease();
     const apkAsset = pickApkAsset(release);
 
@@ -154,6 +203,17 @@ router.get('/latest', async (req, res) => {
 
 router.get('/versions', async (req, res) => {
   try {
+    const versions = await AppVersion.find({})
+      .sort({ versionCode: -1 })
+      .limit(20)
+      .lean();
+    if (versions.length > 0) {
+      return res.json({
+        success: true,
+        data: versions,
+        source: 'db',
+      });
+    }
     return res.json({
       success: true,
       data: [],
