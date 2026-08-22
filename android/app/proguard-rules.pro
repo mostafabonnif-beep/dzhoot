@@ -82,3 +82,24 @@
     java.lang.Object writeReplace();
     java.lang.Object readResolve();
 }
+
+# ===== Media3 (ExoPlayer) module registration =====
+# R8 strips the HLS/DASH/SmoothStreaming modules because nothing references them
+# directly: DefaultMediaSourceFactory discovers them via ServiceLoader using
+# META-INF/services files. Without these rules the release APK loses HLS support
+# entirely and every m3u8 stream fails with ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
+-keep class androidx.media3.exoplayer.hls.** { *; }
+-keep class androidx.media3.exoplayer.dash.** { *; }
+-keep class androidx.media3.exoplayer.smoothstreaming.** { *; }
+-keep class androidx.media3.exoplayer.rtsp.** { *; }
+
+# Keep ServiceLoader-registered MediaSource factories constructible and discoverable.
+-keep,allowobfuscation,allowshrinking,allowoptimization class * implements androidx.media3.exoplayer.source.MediaSourceFactory {
+    <init>(...);
+}
+-keep,allowobfuscation,allowshrinking,allowoptimization class * extends androidx.media3.exoplayer.source.MediaSource$Factory {
+    <init>(...);
+}
+
+# Attributes required by reflection/service lookup at runtime.
+-keepattributes *Annotation*, InnerClasses, EnclosingMethod, Signature
