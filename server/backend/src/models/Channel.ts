@@ -11,10 +11,22 @@ const channelSchema = new Schema<IChannelDocument>(
       default: null,
       index: true,
     },
+    // Compatibility switch retained for existing callers. Customer visibility is
+    // governed by lifecycleStatus, which defaults safely to pending verification.
     isActive: {
       type: Boolean,
       default: true,
       index: true,
+    },
+    lifecycleStatus: {
+      type: String,
+      enum: ['pending_verification', 'active', 'degraded', 'disabled', 'archived'],
+      default: 'pending_verification',
+      index: true,
+    },
+    lifecycleUpdatedAt: {
+      type: Date,
+      default: Date.now,
     },
     channelId: {
       type: String,
@@ -176,6 +188,7 @@ const channelSchema = new Schema<IChannelDocument>(
 
 // Index for faster queries
 channelSchema.index({ channelGroup: 1, order: 1 });
+channelSchema.index({ ownerId: 1, lifecycleStatus: 1, channelGroup: 1, order: 1 });
 channelSchema.index({ channelName: 'text' });
 channelSchema.index({ ownerId: 1, identityKey: 1 });
 // channelId is unique PER OWNER (catalog = ownerId:null), not globally, so different
@@ -223,7 +236,7 @@ channelSchema.methods.toM3U = function (this: IChannelDocument): string {
 // Streams via a lean cursor + field projection so we never hydrate tens of thousands
 // of full Mongoose documents into memory at once.
 channelSchema.statics.generateM3UPlaylist = async function (): Promise<string> {
-  const cursor = this.find({ ownerId: null })
+  const cursor = this.find({ ownerId: null, isActive: { $ne: false }, lifecycleStatus: 'active' })
     .select(
       'channelId channelName channelUrl channelImg tvgLogo tvgName channelGroup ' +
         'catchup.type catchup.source catchup.days ' +

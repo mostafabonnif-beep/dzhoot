@@ -1,113 +1,100 @@
 import User from '../models/User';
 import { IUserDocument } from '@dzhoof/shared';
 
+const BLOCKED_PRODUCTION_PASSWORDS = new Set([
+  'admin123',
+  'changeme',
+  'change-me',
+  'change_me',
+  'password',
+  'password123',
+  '123456',
+  '12345678',
+  'changemenow123!',
+  'superadmin',
+]);
+
+function isStrongProductionPassword(value: string): boolean {
+  const password = String(value || '');
+  const normalized = password.trim().toLowerCase();
+  if (password.length < 16 || password !== password.trim() || BLOCKED_PRODUCTION_PASSWORDS.has(normalized)) {
+    return false;
+  }
+  if (/change[-_]?me|placeholder|example|your[-_]?password/i.test(password)) return false;
+  if (/^(.)\1+$/.test(password) || /(.)\1{5,}/.test(password)) return false;
+
+  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((matcher) => matcher.test(password));
+  return classes.length >= 3;
+}
+
+function assertProductionBootstrapConfiguration(): void {
+  const password = String(process.env.SUPER_ADMIN_PASSWORD || '');
+  const email = String(process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+  const username = String(process.env.SUPER_ADMIN_USERNAME || '').trim();
+  if (!isStrongProductionPassword(password) || !username || !email || email.includes('example.com')) {
+    throw new Error(
+      'Invalid production super-admin bootstrap configuration. Set strong non-placeholder credentials before startup.',
+    );
+  }
+}
+
 /**
- * Initialize Super Admin User
- * Creates a super admin user if it doesn't exist in the database
- * Uses credentials from environment variables
+ * Create the initial super-admin account only when no administrator exists.
+ *
+ * A running production instance must never silently reset an administrator's
+ * password, identity, device code, or active state. Password rotation is an
+ * explicit break-glass operation enabled only with FORCE_UPDATE_ADMIN_PASSWORD.
  */
 async function initializeSuperAdmin(): Promise<IUserDocument> {
   try {
+    const isProduction = process.env.NODE_ENV === 'production';
     const username = process.env.SUPER_ADMIN_USERNAME || 'superadmin';
     const email = process.env.SUPER_ADMIN_EMAIL || 'admin@dzhoof.local';
-
-    if (!process.env.SUPER_ADMIN_PASSWORD && process.env.NODE_ENV === 'production') {
-      throw new Error('SUPER_ADMIN_PASSWORD must be set in production');
-    }
     const password = process.env.SUPER_ADMIN_PASSWORD || 'ChangeMeNow123!';
 
-    if (process.env.NODE_ENV === 'production') {
-      const configuredPassword = String(process.env.SUPER_ADMIN_PASSWORD || '');
-      const normalizedEmail = String(process.env.SUPER_ADMIN_EMAIL || '').toLowerCase();
-      const placeholderPassword = /change[-_]?me|your-|example\.com|changemenow123!/i.test(configuredPassword);
-      const placeholderEmail = !normalizedEmail || normalizedEmail.includes('example.com');
-      if (configuredPassword.length < 16 || placeholderPassword || placeholderEmail) {
-        throw new Error('Production super-admin credentials must be replaced with strong non-placeholder values');
+    if (isProduction) assertProductionBootstrapConfiguration();
+
+    const configuredAdmin = await User.findOne({
+      $or: [{ username }, { email }],
+    });
+    const existingAdmin = configuredAdmin || (await User.findOne({ role: 'Admin' }));
+
+    if (existingAdmin) {
+      if (process.env.FORCE_UPDATE_ADMIN_PASSWORD === 'true') {
+        if (isProduction) assertProductionBootstrapConfiguration();
+        existingAdmin.password = password;
+        await existingAdmin.save();
+        console.log('Super-admin password rotation completed by explicit request');
+      } else {
+        console.log('Existing super-admin preserved; bootstrap did not alter credentials');
       }
+      return existingAdmin;
     }
 
     const channelListCode =
       process.env.SUPER_ADMIN_CHANNEL_LIST_CODE || (await (User as any).generateChannelListCode());
-
-    // Check if super admin already exists (by configured username/email)
-    let existingAdmin = await User.findOne({
-      $or: [{ username: username }, { email: email }],
-    });
-
-    // Fallback: find any existing Admin user (handles credential migration)
-    if (!existingAdmin) {
-      existingAdmin = await User.findOne({ role: 'Admin' });
-      if (existingAdmin) {
-        console.log(`Super Admin found by role (${existingAdmin.username}) — updating credentials`);
-        existingAdmin.username = username;
-        existingAdmin.email = email;
-        existingAdmin.emailVerified = true;
-        existingAdmin.password = password;
-        existingAdmin.isActive = true;
-        existingAdmin.channelListCode = channelListCode;
-        await existingAdmin.save();
-        console.log(`   Username: ${username}`);
-        console.log(`   Email: ${email}`);
-        return existingAdmin;
-      }
-    }
-
-    if (existingAdmin) {
-      console.log('Super Admin user already exists');
-
-      // Sync email from env and ensure the admin is never locked behind email verification
-      if (existingAdmin.email !== email || !existingAdmin.emailVerified) {
-        existingAdmin.email = email;
-        existingAdmin.emailVerified = true;
-        await existingAdmin.save();
-        console.log(`Super Admin email synced to: ${email}`);
-      }
-
-      // Update password, role, and channel list code if needed
-      if (process.env.FORCE_UPDATE_ADMIN_PASSWORD === 'true') {
-        existingAdmin.password = password;
-        existingAdmin.role = 'Admin';
-        existingAdmin.isActive = true;
-        await existingAdmin.save();
-        console.log('Super Admin password updated');
-      }
-
-      // Update channel list code if environment variable is set and different
-      if (
-        process.env.SUPER_ADMIN_CHANNEL_LIST_CODE &&
-        existingAdmin.channelListCode !== channelListCode
-      ) {
-        existingAdmin.channelListCode = channelListCode;
-        await existingAdmin.save();
-        console.log(`Super Admin channel list code updated to: ${channelListCode}`);
-      }
-
-      return existingAdmin;
-    }
-
-    // Create new super admin user
     const superAdmin = new User({
-      username: username,
-      password: password,
-      email: email,
+      username,
+      password,
+      email,
       emailVerified: true,
       role: 'Admin',
       isActive: true,
-      channelListCode: channelListCode,
+      channelListCode,
     });
 
     await superAdmin.save();
-    console.log('Super Admin user created successfully');
-    console.log(`   Username: ${username}`);
-    console.log(`   Email: ${email}`);
-    console.log('   Channel list code generated and withheld from logs');
-
+    console.log('Initial super-admin account created');
     return superAdmin;
   } catch (error) {
-    console.error('Error initializing Super Admin:', (error as Error).message);
+    console.error('Super-admin bootstrap failed:', (error as Error).message);
     throw error;
   }
 }
 
-module.exports = { initializeSuperAdmin };
-export { initializeSuperAdmin };
+module.exports = {
+  initializeSuperAdmin,
+  isStrongProductionPassword,
+  assertProductionBootstrapConfiguration,
+};
+export { initializeSuperAdmin, isStrongProductionPassword, assertProductionBootstrapConfiguration };

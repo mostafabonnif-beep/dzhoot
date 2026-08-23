@@ -65,6 +65,8 @@ object NetworkModule {
                         HttpLoggingInterceptor.Level.NONE
                     }
                     redactHeader("X-TV-Code")
+                    redactHeader("X-Device-Token")
+                    redactHeader("X-Session-Id")
                 }
             )
 
@@ -83,9 +85,12 @@ object NetworkModule {
                 // Managed playback requests still carry the headers required by
                 // the server-side token/auth contract.
                 if (isManagedApiRequest) {
+                    val deviceAccessToken = AppPreferences.getDeviceAccessToken(context)
                     val tvCode = AppPreferences.getTvCode(context)
                     val sessionId = AppPreferences.getSessionId(context)
-                    builder.addHeader("X-TV-Code", tvCode)
+                    if (deviceAccessToken.isNotBlank()) builder.addHeader("X-Device-Token", deviceAccessToken)
+                    // Compatibility only: production servers keep this legacy path opt-in.
+                    if (tvCode.isNotBlank()) builder.addHeader("X-TV-Code", tvCode)
                     if (sessionId.isNotBlank()) builder.addHeader("X-Session-Id", sessionId)
                     if (original.body != null) builder.addHeader("Content-Type", "application/json")
                 }

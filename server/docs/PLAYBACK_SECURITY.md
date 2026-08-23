@@ -1,27 +1,63 @@
-# حماية تشغيل DZ HOOT
+# حماية تشغيل DZ HOOF
 
-## المسار الجديد
+## الغرض ونموذج التهديد
 
-يطلب العميل token تشغيل قصير العمر من `POST /api/v1/tv/playback-token`، ويرسل `channelId` و`slot` فقط. في وضع catch-up يرسل أيضاً `catchupStartMs` و`catchupDurationMin`. لا يرسل العميل رابط Xtream أو M3U إلى الخادم في هذا الطلب.
+يمنع هذا التصميم مشاركة قوائم البث أو إعادة استعمال رابط تشغيل على جهاز آخر، ويمنع استمرار التشغيل بعد انتهاء الاشتراك أو تعطيل الحساب. لا يجوز أن تظهر عناوين مزود البث الخام أو اعتمادات المصدر في استجابة عميل أو سجل تشخيصي.
 
-يعيد الخادم `data.playbackUrl` بالشكل `/api/v1/tv/playback/{token}`. التوكن مشفر بـ AES-256-GCM، ولا يحتوي النص الظاهر منه على رابط المصدر. الافتراضي خمس دقائق، وتُفرض حدود من 30 ثانية إلى 15 دقيقة. يمكن ضبط `PLAYBACK_TOKEN_SECRET` و`PLAYBACK_TOKEN_TTL_MS` في بيئة التشغيل.
+> مسار التشغيل لا يثق في قرار سابق: يعيد فحص المستخدم، الاشتراك، الجهاز، وحالة القناة عند كل قرار حساس.
 
-مسار `GET /api/v1/streams/authorize` الخاص بالأفلام والمسلسلات والقنوات يعيد نفس نوع playback URL بعد التحقق من الاشتراك، الجهاز، وملكية القناة عند الحاجة.
+## المسار المعتمد
+
+يطلب العميل رمز تشغيل قصير العمر من `POST /api/v1/tv/playback-token` ويرسل `channelId` و`slot` فقط، ومع catch-up يرسل `catchupStartMs` و`catchupDurationMin`. لا يرسل العميل رابط Xtream أو M3U إلى الخادم في هذا الطلب.
+
+يعيد الخادم `data.playbackUrl` بالشكل `/api/v1/tv/playback/{token}`. رمز التشغيل مشفر بـ AES-256-GCM ولا يظهر عنوان المصدر بصيغته الخام. الافتراضي خمس دقائق، مع حدود من 30 ثانية إلى 15 دقيقة. يجب ضبط `PLAYBACK_TOKEN_SECRET` و`PLAYBACK_TOKEN_TTL_MS` في بيئة التشغيل فقط.
+
+| الطبقة | آلية الحماية | نتيجة الفشل |
+|---|---|---|
+| هوية الجهاز | `X-Device-Token` عشوائي 256-bit يبدأ بـ`dzt_` | 401 |
+| التخزين | SHA-256 للرمز فقط و`select:false` | لا يمكن استرداد الرمز من MongoDB |
+| الاشتراك | فحص DB للمستخدم والحالة والخطة وتاريخ الانتهاء | 403 و`SUBSCRIPTION_EXPIRED` |
+| رمز التشغيل | `pt2` يحمل `userId` و`deviceId` ووقت إصدار رمز الجهاز | 401/403 |
+| قناة catalog | لا تعرض إلا عندما `lifecycleStatus=active` | لا تصل قناة غير مراجعة للعميل |
+
+المستخدم النشط يحتاج اشتراكاً صالحاً وخطة `Active`. مدير النظام النشط يتجاوز شرط الاشتراك التجاري فقط؛ لا يتجاوز تعطيل الحساب. مسار `GET /api/v1/streams/authorize` للأفلام والمسلسلات والقنوات يستخدم مبدأ التفويض نفسه.
+
+## Device access token والدوران
+
+يصدر رمز الوصول عند تفعيل العميل أو بالدوران عبر endpoint مصادق عليه. تحفظ وثيقة `Device` فقط الحقول الآتية:
+
+| الحقل | الاستخدام |
+|---|---|
+| `accessTokenHash` | SHA-256 للبحث والتحقق؛ لا يعاد في الاستجابات |
+| `accessTokenIssuedAt` | يربط `pt2` بجيل الرمز الحالي |
+| `accessTokenExpiresAt` | انتهاء صلاحية رمز الجهاز |
+| `accessTokenRevokedAt` | إبطال فوري للدوران أو الإلغاء |
+
+يرسل العميل القيمة في `X-Device-Token` فقط. لا توضع في query string أو analytics أو log. يحتفظ Android بالقيمة في `SecurePreferences` ويخفيها من interceptor logs. عند الدوران أو الإبطال يصبح `deviceTokenIssuedAt` في جميع رموز `pt2` القديمة غير مطابق وتُرفض فوراً.
 
 ## HLS وalternate streams
 
-عندما يكون المصدر Manifest من نوع HLS، يعيد proxy كتابة روابط المقاطع والـ nested manifests إلى playback tokens جديدة. لذلك لا يجب على العميل استخراج أو تخزين upstream URL من محتوى M3U8.
+عندما يكون المصدر manifest من HLS، يعيد proxy كتابة روابط المقاطع وnested manifests إلى playback tokens جديدة **تورث** `deviceId` ووقت إصدار رمز الجهاز. لذلك لا يجوز للعميل استخراج أو تخزين upstream URL من محتوى M3U8، ولا يمكن نقل segment token إلى جهاز آخر.
 
-## المسارات القديمة
+## توافق channelListCode وpt1
 
-المساران `/api/v1/tv/stream/:code?url=...` و`/api/v1/tv/proxy-url/:code?url=...` معطلان افتراضياً ويعيدان `410`. يمكن فتحهما مؤقتاً عبر `ALLOW_LEGACY_RAW_PROXY=true` أثناء ترحيل عميل قديم فقط، ثم يجب إعادة القيمة إلى `false` وإعادة تشغيل الخادم.
+رمز `channelListCode` القصير ليس اعتماداً مناسباً لجهاز محدد. لذلك يبقى التوافق القديم **مقفلاً افتراضياً**:
 
-تصدير `/api/v1/channels/playlist.m3u` العام الخام معطل افتراضياً عبر `ALLOW_LEGACY_RAW_PLAYLIST=false`. قوائم المستخدم وTV وJWT تستخدم playback URLs بدلاً من upstream URLs. يجب ضبط `PUBLIC_BASE_URL` على عنوان HTTPS العام عند استخدام reverse proxy.
+| المسار أو السلوك | شرط التوافق |
+|---|---|
+| `/tv/verify/:code` و`/tv/pair` و`/tv/epg/:code` | `ALLOW_LEGACY_TV_CODE=true` |
+| `/tv/playlist/:code` وJSON المقابل | المتغيران `ALLOW_LEGACY_TV_CODE=true` و`ALLOW_LEGACY_PLAYBACK_TOKEN=true` |
+| `/user-playlist/me/*` التي تصدر روابط v1 | `ALLOW_LEGACY_PLAYBACK_TOKEN=true` |
+| قبول playback token `pt1` | `ALLOW_LEGACY_PLAYBACK_TOKEN=true` |
 
-## إلغاء الصلاحية
+عند تعطيل التوافق تعيد الخدمة `410` و`LEGACY_TV_CODE_DISABLED` أو `LEGACY_PLAYBACK_TOKEN_DISABLED`. هذه استجابة مقصودة؛ يجب ترحيل العميل إلى التفعيل الرسمي وإرسال `X-Device-Token`، لا إعادة تمكين code القصير بشكل دائم.
 
-يتحقق proxy في كل طلب من أن المستخدم ما زال نشطاً وأن `channelListCode` ما زال مطابقاً. إلغاء المستخدم أو تغيير رمز القناة يلغي صلاحية التوكنات السابقة عملياً حتى قبل انتهاء TTL.
+المساران `/api/v1/tv/stream/:code?url=...` و`/api/v1/tv/proxy-url/:code?url=...` معطلان افتراضياً كذلك عبر `ALLOW_LEGACY_RAW_PROXY=false`. تصدير `/api/v1/channels/playlist.m3u` الخام معطل عبر `ALLOW_LEGACY_RAW_PLAYLIST=false`.
 
-## متطلبات التشغيل
+## متطلبات التشغيل والاستجابة للحوادث
 
-يجب استخدام HTTPS، وقيمة عشوائية قوية ومستقلة لـ `PLAYBACK_TOKEN_SECRET`، وعدم تسجيل query strings أو التوكنات في reverse proxy. يجب أيضاً اختبار HLS بمصدر يضم redirect وsegment URLs وقياس buffering وfailover في staging قبل توسيع قاعدة العملاء.
+استخدم HTTPS وسراً قوياً ومستقلاً لـ`PLAYBACK_TOKEN_SECRET`، ولا تسجل query strings أو رموز الاعتماد في reverse proxy. عند فقدان جهاز أو الاشتباه بتسريب رمز، أبطله أو دوّره؛ لا تعالج الحادثة بإظهار source URL أو بتمكين legacy.
+
+قبل الإصدار، تحقق من قبول device token السليم ورفض المفقود أو المشوه أو المنتهي أو المبطل، ورفض المستخدم المعطل والاشتراك المنتهي، ورفض `pt1` والمسارات code عندما تكون الرايات `false`. اختبر HLS بمصدر قانوني يضم redirect وsegment URLs وnested manifests وfailover في staging.
+
+لخطة الترحيل والإرجاع راجع [DEVICE_TOKEN_MIGRATION.md](./DEVICE_TOKEN_MIGRATION.md) و[RELEASE_RUNBOOK.md](./RELEASE_RUNBOOK.md).

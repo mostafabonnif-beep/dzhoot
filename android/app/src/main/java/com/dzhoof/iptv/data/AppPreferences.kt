@@ -13,6 +13,7 @@ object AppPreferences {
     private const val SERVER_URL_KEY = "server_url"
     private const val TV_CODE_KEY = "tv_code"
     private const val SESSION_ID_KEY = "session_id"
+    private const val DEVICE_ACCESS_TOKEN_KEY = "device_access_token"
     private const val DEMO_MODE_KEY = "is_demo_mode"
     private const val EPG_XMLTV_URL_KEY = "epg_xmltv_url"
     private const val PLAYLIST_EPG_URL_KEY = "playlist_epg_url"
@@ -60,13 +61,33 @@ object AppPreferences {
         SecurePreferences(context).putString(SESSION_ID_KEY, sessionId.trim())
     }
 
+    /** Long random device credential returned once by the paired server. */
+    fun getDeviceAccessToken(context: Context): String =
+        try {
+            SecurePreferences(context).getString(DEVICE_ACCESS_TOKEN_KEY, "") ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+
+    fun setDeviceAccessToken(context: Context, token: String) {
+        SecurePreferences(context).putString(DEVICE_ACCESS_TOKEN_KEY, token.trim())
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(PLAYLIST_SOURCE_TYPE_KEY, SOURCE_PAIRED)
+            .remove(DEMO_MODE_KEY)
+            .apply()
+    }
+
+    fun clearDeviceAccessToken(context: Context) {
+        runCatching { SecurePreferences(context).remove(DEVICE_ACCESS_TOKEN_KEY) }
+    }
+
     fun clearSessionId(context: Context) {
         runCatching { SecurePreferences(context).remove(SESSION_ID_KEY) }
     }
 
     fun hasChannelSelection(context: Context): Boolean {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.contains(TV_CODE_KEY)
+        return getDeviceAccessToken(context).isNotBlank() || prefs.contains(TV_CODE_KEY)
     }
 
     fun isDemoMode(context: Context): Boolean {
@@ -214,6 +235,7 @@ object AppPreferences {
             .remove(DEMO_MODE_KEY)
             .apply()
         clearSessionId(context)
+        clearDeviceAccessToken(context)
     }
 
     // ─── Parental controls ─────────────────────────────────────────────

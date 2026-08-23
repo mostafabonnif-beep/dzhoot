@@ -79,7 +79,11 @@ export async function resolveSegmentUrlBySequence(
 
 export interface ProxyTokenContext {
   userId: string;
-  channelListCode: string;
+  /** Present only during the temporary legacy playback-token migration. */
+  channelListCode?: string;
+  /** Device-scoped authorization inherited by nested HLS resources. */
+  deviceId?: string;
+  deviceTokenIssuedAt?: number;
   /** Root playback session that authorizes nested HLS playlists, keys and segments. */
   sessionId?: string;
   /** Client-visible root playback token — media-playlist segments are addressed under it. */
@@ -101,6 +105,8 @@ function nestedPlaybackUrl(
     const { token } = issuePlaybackToken({
       userId: tokenContext.userId,
       channelListCode: tokenContext.channelListCode,
+      deviceId: tokenContext.deviceId,
+      deviceTokenIssuedAt: tokenContext.deviceTokenIssuedAt,
       streamUrl: absoluteUrl,
       upstreamHeaders,
       // HLS manifests may reference playlists, keys and segments recursively.

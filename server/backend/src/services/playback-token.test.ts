@@ -84,3 +84,38 @@ describe('playback tokens', () => {
     jest.useRealTimers();
   });
 });
+
+
+describe('device-scoped playback tokens', () => {
+  const originalPlaybackTokenSecret = process.env.PLAYBACK_TOKEN_SECRET;
+
+  beforeEach(() => {
+    process.env.PLAYBACK_TOKEN_SECRET = 'test-playback-token-secret-for-ci-only-32bytes';
+  });
+
+  afterEach(() => {
+    if (originalPlaybackTokenSecret === undefined) delete process.env.PLAYBACK_TOKEN_SECRET;
+    else process.env.PLAYBACK_TOKEN_SECRET = originalPlaybackTokenSecret;
+  });
+
+  it('binds a v2 token to one device token generation without exposing the source URL', () => {
+    const sourceUrl = 'https://provider.example/live/user/secret/channel.m3u8?token=secret-value';
+    const issued = issuePlaybackToken({
+      userId: 'user-123',
+      streamUrl: sourceUrl,
+      deviceId: 'dz-tv-123',
+      deviceTokenIssuedAt: 1_725_000_000_000,
+      sessionId: 'root-session-token',
+    });
+
+    const payload = verifyPlaybackToken(issued.token);
+    expect(issued.token).not.toContain(sourceUrl);
+    expect(payload).toMatchObject({
+      v: 2,
+      userId: 'user-123',
+      deviceId: 'dz-tv-123',
+      deviceTokenIssuedAt: 1_725_000_000_000,
+      sessionId: 'root-session-token',
+    });
+  });
+});

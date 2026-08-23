@@ -7,6 +7,10 @@ export interface IDeviceDocument extends Document {
   platform?: string;
   appVersion?: string;
   pushToken?: string;
+  accessTokenHash?: string;
+  accessTokenIssuedAt?: Date;
+  accessTokenExpiresAt?: Date | null;
+  accessTokenRevokedAt?: Date | null;
   lastSeenAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -46,6 +50,30 @@ const deviceSchema = new Schema<IDeviceDocument>(
       type: String,
       default: '',
       maxlength: 4096,
+      select: false,
+    },
+    // SHA-256 hash only. The 256-bit raw device token is returned once to the
+    // paired client and must never be stored, serialized, or logged by the API.
+    accessTokenHash: {
+      type: String,
+      default: null,
+      select: false,
+      index: true,
+      sparse: true,
+    },
+    accessTokenIssuedAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+    accessTokenExpiresAt: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+    accessTokenRevokedAt: {
+      type: Date,
+      default: null,
       select: false,
     },
     lastSeenAt: {

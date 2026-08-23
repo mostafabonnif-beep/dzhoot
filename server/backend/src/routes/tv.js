@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const router = express.Router();
 const User = require('../models/User');
+const Device = require('../models/Device');
 const Channel = require('../models/Channel');
 const XtreamSource = require('../models/XtreamSource');
 const Movie = require('../models/Movie');
@@ -49,6 +50,9 @@ function isCustomerVisibleChannel(channel, verifiedSourceIds, directPlaybackSour
   // whether it came from IPTV-org, Xtream, or another managed source.
   // Direct-playback sources are exempt: their isWorking flag reflects the
   // server's datacenter IP, not the customer's network.
+  // Catalog content is public only after explicit verification/activation. Private
+  // BYO entries keep their historical semantics and are governed by ownership.
+  if (channel.ownerId == null && channel.lifecycleStatus !== 'active') return false;
   if (channel.isActive === false || channel.flaggedBad?.isFlagged === true) return false;
   if (channel.metadata?.isWorking === false && !isDirectSource) return false;
   if (channel.metadata?.source !== 'xtream') return true;
@@ -76,6 +80,30 @@ async function ensurePlaybackSubscription(user, res) {
     code: 'SUBSCRIPTION_EXPIRED',
   });
   return false;
+}
+
+// Short channel-list codes are a compatibility-only credential. They are never
+// accepted by default because they cannot be scoped to one device or rotated
+// without changing a user's historical code. M3U/JSON legacy exports also need
+// the v1 playback-token switch because they cannot carry X-Device-Token.
+function requireLegacyTvCodeCompatibility(res, { requiresLegacyPlaybackToken = false } = {}) {
+  if (process.env.ALLOW_LEGACY_TV_CODE !== 'true') {
+    res.status(410).json({
+      success: false,
+      code: 'LEGACY_TV_CODE_DISABLED',
+      error: 'Legacy channel-list code access is disabled. Activate this device again.',
+    });
+    return false;
+  }
+  if (requiresLegacyPlaybackToken && process.env.ALLOW_LEGACY_PLAYBACK_TOKEN !== 'true') {
+    res.status(410).json({
+      success: false,
+      code: 'LEGACY_PLAYBACK_TOKEN_DISABLED',
+      error: 'Legacy playlist export is disabled. Use device-bound playback instead.',
+    });
+    return false;
+  }
+  return true;
 }
 
 // Same cap as the /channels sync — the EPG only needs to cover what the TV can list.
@@ -141,7 +169,19 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
 async function loadEpgChannelIds(user) {
   const catalogView = user.role === 'Admin' || user.allCatalog === true;
   const verifiedSourceIds = await getVerifiedXtreamSourceIds();
-  const baseQuery = catalogView ? { ownerId: null } : { _id: { $in: user.channels } };
+  const baseQuery = catalogView
+    ? { ownerId: null, lifecycleStatus: 'active' }
+    : {
+        $and: [
+          { _id: { $in: user.channels } },
+          {
+            $or: [
+              { ownerId: { $ne: null } },
+              { ownerId: null, lifecycleStatus: 'active' },
+            ],
+          },
+        ],
+      };
   const query = {
     $and: [
       baseQuery,
@@ -235,6 +275,7 @@ async function findUserByCode(code, res) {
 // Get playlist by code (TV App endpoint)
 router.get('/playlist/:code', async (req, res) => {
   try {
+    if (!requireLegacyTvCodeCompatibility(res, { requiresLegacyPlaybackToken: true })) return;
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
     if (!(await ensurePlaybackSubscription(user, res))) return;
@@ -262,6 +303,7 @@ router.get('/playlist/:code', async (req, res) => {
 // Get playlist as JSON (alternative format for TV apps)
 router.get('/playlist/:code/json', async (req, res) => {
   try {
+    if (!requireLegacyTvCodeCompatibility(res, { requiresLegacyPlaybackToken: true })) return;
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
     if (!(await ensurePlaybackSubscription(user, res))) return;
@@ -337,14 +379,8 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     }
 
     const user = req.user;
-    const { isSubscriptionRequired, getActiveSubscription } = require('../services/subscription-service');
-    if (await isSubscriptionRequired() && user.role !== 'Admin' && !(await getActiveSubscription(user.id))) {
-      return res.status(403).json({
-        success: false,
-        error: 'Your subscription has expired. Activate a new code to continue watching.',
-        code: 'SUBSCRIPTION_EXPIRED',
-      });
-    }
+    if (!(await ensurePlaybackSubscription(user, res))) return;
+    const deviceAuth = req.deviceAuth || null;
 
     // ── VOD (movie or series episode) — same encrypted-token + proxy pipeline ──
     if (hasVodRef) {
@@ -387,6 +423,8 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         streamUrl: vodDoc.streamUrl,
         upstreamHeaders: {},
         sessionId: rootSessionId,
+        deviceId: deviceAuth?.deviceId,
+        deviceTokenIssuedAt: deviceAuth?.issuedAt || undefined,
       });
       const session = await registerStreamSession({
         userId: String(user.id),
@@ -561,6 +599,7 @@ router.get('/proxy-url/:code', async (req, res) => {
     }
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
+    if (!(await ensurePlaybackSubscription(user, res))) return;
 
     const { url } = req.query;
     if (!url) {
@@ -651,11 +690,29 @@ router.get('/playback/:token', async (req, res) => {
     const payload = verifyPlaybackToken(token);
     if (!payload) return res.status(401).send('Playback token expired or invalid');
 
-    const user = await User.findOne({
-      _id: payload.userId,
-      channelListCode: payload.channelListCode,
-      isActive: true,
-    }).select('_id channelListCode role');
+    let user;
+    if (payload.v === 2) {
+      const device = await Device.findOne({
+        userId: payload.userId,
+        deviceId: payload.deviceId,
+        accessTokenRevokedAt: null,
+        $or: [{ accessTokenExpiresAt: null }, { accessTokenExpiresAt: { $gt: new Date() } }],
+      }).select('accessTokenIssuedAt');
+      const issuedAt = device?.accessTokenIssuedAt?.getTime?.() || 0;
+      if (!device || issuedAt !== payload.deviceTokenIssuedAt) {
+        return res.status(401).send('Playback authorization revoked');
+      }
+      user = await User.findOne({ _id: payload.userId, isActive: true }).select('_id channelListCode role isActive');
+    } else {
+      if (process.env.ALLOW_LEGACY_PLAYBACK_TOKEN !== 'true') {
+        return res.status(410).send('Legacy playback token disabled; update the paired application');
+      }
+      user = await User.findOne({
+        _id: payload.userId,
+        channelListCode: payload.channelListCode,
+        isActive: true,
+      }).select('_id channelListCode role isActive');
+    }
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
 
@@ -682,7 +739,9 @@ router.get('/playback/:token', async (req, res) => {
 
     const proxyContext = {
       userId: String(user._id),
-      channelListCode: user.channelListCode,
+      channelListCode: payload.channelListCode,
+      deviceId: payload.deviceId,
+      deviceTokenIssuedAt: payload.deviceTokenIssuedAt,
       sessionId: rootSessionId,
       rootToken: token,
     };
@@ -728,6 +787,7 @@ router.get('/stream/:code', async (req, res) => {
     }
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
+    if (!(await ensurePlaybackSubscription(user, res))) return;
     const { url } = req.query;
     if (!url) return res.status(400).send('URL parameter is required');
     return proxyUpstreamStream(
@@ -746,6 +806,7 @@ router.get('/stream/:code', async (req, res) => {
 // Pair device with code (verify code exists)
 router.post('/pair', async (req, res) => {
   try {
+    if (!requireLegacyTvCodeCompatibility(res)) return;
     const { code, deviceName, deviceModel } = req.body;
 
     if (!code || code.length !== 6) {
@@ -805,6 +866,7 @@ router.post('/pair', async (req, res) => {
 // Verify code (check if valid without pairing)
 router.get('/verify/:code', async (req, res) => {
   try {
+    if (!requireLegacyTvCodeCompatibility(res)) return;
     const { code } = req.params;
 
     if (!code || code.length !== 6) {
@@ -849,16 +911,18 @@ router.get('/verify/:code', async (req, res) => {
 // Get EPG as XMLTV format by channel list code
 router.get('/epg/:code', async (req, res) => {
   try {
+    if (!requireLegacyTvCodeCompatibility(res)) return;
     const hours = Math.min(parseInt(req.query.hours) || 24, 72);
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
+    if (!(await ensurePlaybackSubscription(user, res))) return;
 
     // Rendered XMLTV is stable for the cache window (matches Cache-Control below).
     const cacheKey = `xml:${user.channelListCode}:${hours}`;
     const cachedXml = await epgCache.get(cacheKey);
     if (cachedXml) {
       res.setHeader('Content-Type', 'application/xml');
-      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('Cache-Control', 'private, no-store');
       return res.send(cachedXml);
     }
 
@@ -898,14 +962,16 @@ router.get('/epg/:code', async (req, res) => {
 // Get EPG as JSON by channel list code
 router.get('/epg/:code/json', async (req, res) => {
   try {
+    if (!requireLegacyTvCodeCompatibility(res)) return;
     const hours = Math.min(parseInt(req.query.hours) || 24, 72);
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
+    if (!(await ensurePlaybackSubscription(user, res))) return;
 
     const cacheKey = `json:${user.channelListCode}:${hours}`;
     const cachedPayload = await epgCache.get(cacheKey);
     if (cachedPayload) {
-      res.setHeader('Cache-Control', 'public, max-age=300');
+      res.setHeader('Cache-Control', 'private, no-store');
       return res.json(cachedPayload);
     }
 
@@ -945,7 +1011,7 @@ router.get('/epg/:code/json', async (req, res) => {
     };
     await epgCache.set(cacheKey, payload);
 
-    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Cache-Control', 'private, no-store');
     res.json(payload);
   } catch (error) {
     console.error('Error fetching EPG JSON:', error);

@@ -54,6 +54,7 @@ interface Channel {
   order?: number;
   epgId?: string;
   isActive?: boolean;
+  lifecycleStatus?: 'pending_verification' | 'active' | 'degraded' | 'disabled' | 'archived';
   metadata?: {
     isWorking?: boolean;
     lastTested?: string;
@@ -677,7 +678,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       const res = await api.delete('/admin/channels/bulk-by-status', {
         data: { confirmed: true, status: purgeStatus },
       });
-      const n = res.data?.deletedCount ?? 0;
+      const n = res.data?.archivedCount ?? 0;
       toast(t('channels.purgeDone').replace('{count}', String(n)), 'success');
       setPurgeStatus(null);
       await fetchChannels();
@@ -689,8 +690,8 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     }
   }
 
-  // Admin: bulk enable/disable/delete selected rows (PATCH/DELETE /admin/channels/bulk).
-  async function handleBulkSelection(action: 'enable' | 'disable' | 'delete') {
+  // Admin: bulk enable/disable/archive selected rows (PATCH/DELETE /admin/channels/bulk).
+  async function handleBulkSelection(action: 'enable' | 'disable' | 'archive') {
     if (selectedRows.size === 0) return;
     if (action === 'disable') {
       const ok = window.confirm(
@@ -702,13 +703,13 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       );
       if (!ok) return;
     }
-    if (action === 'delete') {
+    if (action === 'archive') {
       const ok = window.confirm(
         locale === 'ar'
-          ? `سيتم حذف ${selectedRows.size} قناة نهائيًا من الكتالوج وإزالتها من قوائم المستخدمين. لا يمكن التراجع.`
+          ? `سيتم أرشفة ${selectedRows.size} قناة وإخفاؤها من قوائم المستخدمين. يمكن استعادتها لاحقًا. هل تريد المتابعة؟`
           : locale === 'fr'
-            ? `${selectedRows.size} chaînes seront supprimées définitivement du catalogue et retirées des listes des utilisateurs. Irréversible.`
-            : `${selectedRows.size} channels will be permanently deleted from the catalog and removed from user lists. This cannot be undone.`,
+            ? `${selectedRows.size} chaînes seront archivées et masquées des listes des utilisateurs. Elles pourront être restaurées. Continuer ?`
+            : `${selectedRows.size} channels will be archived and hidden from user lists. They can be restored later. Continue?`,
       );
       if (!ok) return;
     }
@@ -716,16 +717,16 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     setBulkSelectionLoading(true);
     const ids = Array.from(selectedRows);
     try {
-      if (action === 'delete') {
+      if (action === 'archive') {
         const res = await api.delete('/admin/channels/bulk', {
           data: { confirmed: true, ids },
         });
         toast(
           locale === 'ar'
-            ? `تم حذف ${res.data?.deletedCount ?? ids.length} قناة`
+            ? `تمت أرشفة ${res.data?.archivedCount ?? ids.length} قناة`
             : locale === 'fr'
-              ? `${res.data?.deletedCount ?? ids.length} chaînes supprimées`
-              : `Deleted ${res.data?.deletedCount ?? ids.length} channels`,
+              ? `${res.data?.archivedCount ?? ids.length} chaînes archivées`
+              : `Archived ${res.data?.archivedCount ?? ids.length} channels`,
           'success',
         );
       } else {
@@ -1087,6 +1088,14 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               { label: t('channels.sortOrder'), value: detailChannel.order?.toString() },
             ]
           : [{ label: t('channels.group'), value: detailChannel.channelGroup }]),
+        ...(isAdmin
+          ? [
+              {
+                label: locale === 'ar' ? 'دورة الحياة' : locale === 'fr' ? 'Cycle de vie' : 'Lifecycle',
+                value: detailChannel.lifecycleStatus || 'pending_verification',
+              },
+            ]
+          : []),
         {
           label: t('common.status'),
           value:
@@ -1759,7 +1768,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             {locale === 'ar' ? 'تعطيل' : locale === 'fr' ? 'Désactiver' : 'Disable'}
           </button>
           <button
-            onClick={() => handleBulkSelection('delete')}
+            onClick={() => handleBulkSelection('archive')}
             disabled={bulkSelectionLoading}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-destructive/40 text-destructive hover:bg-destructive/5 disabled:opacity-50 transition-colors"
           >
@@ -1768,7 +1777,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             ) : (
               <Trash2 className="h-3.5 w-3.5" />
             )}
-            {locale === 'ar' ? 'حذف' : locale === 'fr' ? 'Supprimer' : 'Delete'}
+            {locale === 'ar' ? 'أرشفة' : locale === 'fr' ? 'Archiver' : 'Archive'}
           </button>
           <button
             onClick={() => setSelectedRows(new Set())}

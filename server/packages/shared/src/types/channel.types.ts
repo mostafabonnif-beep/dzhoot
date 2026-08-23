@@ -30,6 +30,9 @@ export interface IChannel {
   // null = shared admin catalog; a user id = a private channel owned by that user.
   ownerId?: Types.ObjectId | null;
   isActive?: boolean;
+  /** Production lifecycle gate; only active catalog channels are customer-visible. */
+  lifecycleStatus?: 'pending_verification' | 'active' | 'degraded' | 'disabled' | 'archived';
+  lifecycleUpdatedAt?: Date;
   channelId: string;
   channelName: string;
   channelUrl: string;

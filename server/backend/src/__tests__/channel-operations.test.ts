@@ -78,3 +78,37 @@ describe('GET /admin/stats/channel-operations', () => {
     expect(JSON.stringify(response.body)).not.toContain('healthy.m3u8');
   });
 });
+
+
+describe('PATCH /admin/channels/:id/lifecycle', () => {
+  it('requires confirmation to archive and preserves the channel record for restoration', async () => {
+    const channel = await Channel.create({
+      channelId: `ops-lifecycle-${Date.now()}`,
+      channelName: 'Lifecycle News',
+      channelUrl: 'https://example.com/lifecycle.m3u8',
+      ownerId: null,
+      lifecycleStatus: 'pending_verification',
+      isActive: true,
+    });
+
+    const denied = await request(buildApp())
+      .patch(`/admin/channels/${channel._id}/lifecycle`)
+      .send({ lifecycleStatus: 'archived' });
+    expect(denied.status).toBe(400);
+
+    const archived = await request(buildApp())
+      .patch(`/admin/channels/${channel._id}/lifecycle`)
+      .send({ lifecycleStatus: 'archived', confirmed: true });
+    expect(archived.status).toBe(200);
+    expect(archived.body.data.lifecycleStatus).toBe('archived');
+    expect(archived.body.data.isActive).toBe(false);
+
+    const restored = await request(buildApp())
+      .patch(`/admin/channels/${channel._id}/lifecycle`)
+      .send({ lifecycleStatus: 'active' });
+    expect(restored.status).toBe(200);
+    expect(restored.body.data.lifecycleStatus).toBe('active');
+    expect(restored.body.data.isActive).toBe(true);
+    expect(await Channel.countDocuments({ _id: channel._id })).toBe(1);
+  });
+});

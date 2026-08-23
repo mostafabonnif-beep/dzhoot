@@ -132,10 +132,10 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     val body: ClientRedeemResponse? = response.body()
                     val data = body?.data
                     val sessionId = body?.sessionId
-                    val channelListCode = body?.user?.channelListCode
-                    if (body?.success == true && data != null && !sessionId.isNullOrBlank() && !channelListCode.isNullOrBlank()) {
+                    val deviceAccessToken = body?.deviceAccess?.token
+                    if (body?.success == true && data != null && !sessionId.isNullOrBlank() && !deviceAccessToken.isNullOrBlank()) {
                         AppPreferences.setSessionId(appContext, sessionId)
-                        AppPreferences.setTvCode(appContext, channelListCode)
+                        AppPreferences.setDeviceAccessToken(appContext, deviceAccessToken)
                         Result.success(data)
                     } else {
                         Result.error(IOException(body?.error ?: "فشل تفعيل كود العميل"))

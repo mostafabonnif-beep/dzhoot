@@ -231,10 +231,12 @@ userSchema.methods.generateUserPlaylist = async function (
   let channels;
   if (this.role === 'Admin' || this.allCatalog === true) {
     // Admin and trial users with allCatalog receive the shared catalog only.
-    channels = await ChannelModel.find({ $and: [{ ownerId: null }, xtreamVisibilityGuard] }).sort({ channelGroup: 1, order: 1 });
+    channels = await ChannelModel.find({
+      $and: [{ ownerId: null, isActive: { $ne: false }, lifecycleStatus: 'active' }, xtreamVisibilityGuard],
+    }).sort({ channelGroup: 1, order: 1 });
   } else {
     channels = await ChannelModel.find({
-      $and: [{ _id: { $in: this.channels } }, xtreamVisibilityGuard],
+      $and: [{ _id: { $in: this.channels }, isActive: { $ne: false }, lifecycleStatus: 'active' }, xtreamVisibilityGuard],
     }).sort({ channelGroup: 1, order: 1 });
   }
 

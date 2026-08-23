@@ -221,6 +221,46 @@ router.put('/channels/:id', async (req, res) => {
   }
 });
 
+// Change a catalog channel lifecycle without exposing raw source URLs.
+router.patch('/channels/:id/lifecycle', async (req, res) => {
+  try {
+    const lifecycleStatus = String(req.body?.lifecycleStatus || '').trim();
+    const allowed = new Set(['pending_verification', 'active', 'degraded', 'disabled', 'archived']);
+    if (!allowed.has(lifecycleStatus)) {
+      return res.status(400).json({ success: false, error: 'Invalid lifecycleStatus' });
+    }
+    if (['disabled', 'archived'].includes(lifecycleStatus) && req.body?.confirmed !== true) {
+      return res.status(400).json({ success: false, error: 'Disabling or archiving requires { "confirmed": true }' });
+    }
+    const channel = await Channel.findOneAndUpdate(
+      { _id: req.params.id, ownerId: null },
+      {
+        $set: {
+          lifecycleStatus,
+          lifecycleUpdatedAt: new Date(),
+          isActive: lifecycleStatus === 'active',
+        },
+      },
+      { new: true, runValidators: true },
+    );
+    if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
+
+    await invalidateCatalogCache();
+    audit({
+      userId: req.user.id,
+      action: `set_channel_lifecycle_${lifecycleStatus}`,
+      resource: 'channel',
+      resourceId: channel.channelId,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    return res.json({ success: true, data: channel });
+  } catch (error) {
+    console.error('Error updating channel lifecycle:', error);
+    return res.status(500).json({ success: false, error: 'Failed to update channel lifecycle' });
+  }
+});
+
 // Bulk-delete catalog channels by health status (requires { confirmed: true }).
 // status: 'dead' (isWorking===false) | 'untested' (isWorking never set) | 'notworking' (dead+untested).
 // Lets an admin purge the thousands of dead/unverified streams a raw M3U import
@@ -248,22 +288,17 @@ router.delete('/channels/bulk-by-status', async (req, res) => {
       });
     }
 
-    const catalogIds = await Channel.find(filter).distinct('_id');
-    const deleteResult = await Channel.deleteMany(filter);
-
-    if (catalogIds.length) {
-      await User.updateMany(
-        { channels: { $in: catalogIds } },
-        { $pull: { channels: { $in: catalogIds } } },
-      );
-    }
+    const archiveResult = await Channel.updateMany(
+      filter,
+      { $set: { isActive: false, lifecycleStatus: 'archived', lifecycleUpdatedAt: new Date() } },
+    );
 
     await invalidateCatalogCache();
     audit({
       userId: req.user.id,
-      action: `bulk_delete_${status}_channels`,
+      action: `bulk_archive_${status}_channels`,
       resource: 'channel',
-      resourceId: `${deleteResult.deletedCount} channels`,
+      resourceId: `${archiveResult.modifiedCount} channels`,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
@@ -271,8 +306,8 @@ router.delete('/channels/bulk-by-status', async (req, res) => {
     res.json({
       success: true,
       status,
-      message: `Deleted ${deleteResult.deletedCount} ${status} channels`,
-      deletedCount: deleteResult.deletedCount,
+      message: `Archived ${archiveResult.modifiedCount} ${status} channels`,
+      archivedCount: archiveResult.modifiedCount,
     });
   } catch (error) {
     console.error('Error bulk-deleting channels by status:', error);
@@ -310,7 +345,13 @@ router.patch('/channels/bulk', async (req, res) => {
 
     const updateResult = await Channel.updateMany(
       { _id: { $in: ids }, ownerId: null },
-      { $set: { isActive } },
+      {
+        $set: {
+          isActive,
+          lifecycleStatus: isActive ? 'active' : 'disabled',
+          lifecycleUpdatedAt: new Date(),
+        },
+      },
     );
 
     await invalidateCatalogCache();
@@ -355,31 +396,27 @@ router.delete('/channels/bulk', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Too many ids (max 2000)' });
     }
 
-    // Catalog-only: users' private (owned) channels are never touched.
-    const catalogIds = await Channel.find({ _id: { $in: ids }, ownerId: null }).distinct('_id');
-    const deleteResult = await Channel.deleteMany({ _id: { $in: catalogIds } });
-
-    if (catalogIds.length) {
-      await User.updateMany(
-        { channels: { $in: catalogIds } },
-        { $pull: { channels: { $in: catalogIds } } },
-      );
-    }
+    // Catalog-only: users' private (owned) channels are never touched. Deletion
+    // is intentionally a soft archive so an operator can review or restore it.
+    const archiveResult = await Channel.updateMany(
+      { _id: { $in: ids }, ownerId: null },
+      { $set: { isActive: false, lifecycleStatus: 'archived', lifecycleUpdatedAt: new Date() } },
+    );
 
     await invalidateCatalogCache();
     audit({
       userId: req.user.id,
-      action: 'bulk_delete_channels',
+      action: 'bulk_archive_channels',
       resource: 'channel',
-      resourceId: `${deleteResult.deletedCount} channels`,
+      resourceId: `${archiveResult.modifiedCount} channels`,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
 
     res.json({
       success: true,
-      message: `Deleted ${deleteResult.deletedCount} channels`,
-      deletedCount: deleteResult.deletedCount,
+      message: `Archived ${archiveResult.modifiedCount} channels`,
+      archivedCount: archiveResult.modifiedCount,
     });
   } catch (error) {
     console.error('Error bulk-deleting channels:', error);
@@ -387,11 +424,17 @@ router.delete('/channels/bulk', async (req, res) => {
   }
 });
 
-// Delete channel
+// Archive one channel (reversible). Physical purge is deliberately not exposed by the normal admin UI.
 router.delete('/channels/:id', async (req, res) => {
   try {
-    // Admins can delete catalog channels only — never a user's private channel.
-    const channel = await Channel.findOneAndDelete({ _id: req.params.id, ownerId: null });
+    if (req.body?.confirmed !== true) {
+      return res.status(400).json({ success: false, error: 'Archiving requires { "confirmed": true } in request body' });
+    }
+    const channel = await Channel.findOneAndUpdate(
+      { _id: req.params.id, ownerId: null },
+      { $set: { isActive: false, lifecycleStatus: 'archived', lifecycleUpdatedAt: new Date() } },
+      { new: true },
+    );
 
     if (!channel) {
       return res.status(404).json({
@@ -400,13 +443,10 @@ router.delete('/channels/:id', async (req, res) => {
       });
     }
 
-    // Remove the deleted channel id from every user's channels array to avoid orphan refs
-    await User.updateMany({ channels: req.params.id }, { $pull: { channels: req.params.id } });
-
     await invalidateCatalogCache();
     audit({
       userId: req.user.id,
-      action: 'delete_channel',
+      action: 'archive_channel',
       resource: 'channel',
       resourceId: channel.channelId,
       ipAddress: req.ip,
@@ -415,7 +455,7 @@ router.delete('/channels/:id', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Channel deleted successfully',
+      message: 'Channel archived successfully',
     });
   } catch (error) {
     console.error('Error deleting channel:', error);
@@ -426,7 +466,7 @@ router.delete('/channels/:id', async (req, res) => {
   }
 });
 
-// Delete all channels (requires { confirmed: true } in body)
+// Archive all shared catalog channels (requires { confirmed: true } in body)
 router.delete('/channels', async (req, res) => {
   try {
     if (!req.body?.confirmed) {
@@ -436,32 +476,26 @@ router.delete('/channels', async (req, res) => {
       });
     }
 
-    // Only the shared catalog (ownerId:null) is wiped — users' private (owned) channels survive.
-    const catalogIds = await Channel.find({ ownerId: null }).distinct('_id');
-    const deleteResult = await Channel.deleteMany({ ownerId: null });
-
-    // Remove the deleted catalog refs from users; their private channels stay in the array.
-    if (catalogIds.length) {
-      await User.updateMany(
-        { channels: { $in: catalogIds } },
-        { $pull: { channels: { $in: catalogIds } } },
-      );
-    }
+    // Only the shared catalog (ownerId:null) is archived — users' private channels survive.
+    const archiveResult = await Channel.updateMany(
+      { ownerId: null },
+      { $set: { isActive: false, lifecycleStatus: 'archived', lifecycleUpdatedAt: new Date() } },
+    );
 
     await invalidateCatalogCache();
     audit({
       userId: req.user.id,
-      action: 'delete_all_channels',
+      action: 'archive_all_channels',
       resource: 'channel',
-      resourceId: `${deleteResult.deletedCount} channels`,
+      resourceId: `${archiveResult.modifiedCount} channels`,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
 
     res.json({
       success: true,
-      message: `Successfully deleted ${deleteResult.deletedCount} channels`,
-      deletedCount: deleteResult.deletedCount,
+      message: `Archived ${archiveResult.modifiedCount} channels`,
+      archivedCount: archiveResult.modifiedCount,
     });
   } catch (error) {
     console.error('Error deleting all channels:', error);
@@ -1384,6 +1418,11 @@ router.get('/stats/stream-health', async (req, res) => {
         $group: {
           _id: null,
           total: { $sum: 1 },
+          lifecycleActive: { $sum: { $cond: [{ $eq: ['$lifecycleStatus', 'active'] }, 1, 0] } },
+          lifecyclePending: { $sum: { $cond: [{ $eq: ['$lifecycleStatus', 'pending_verification'] }, 1, 0] } },
+          lifecycleDegraded: { $sum: { $cond: [{ $eq: ['$lifecycleStatus', 'degraded'] }, 1, 0] } },
+          lifecycleDisabled: { $sum: { $cond: [{ $eq: ['$lifecycleStatus', 'disabled'] }, 1, 0] } },
+          lifecycleArchived: { $sum: { $cond: [{ $eq: ['$lifecycleStatus', 'archived'] }, 1, 0] } },
           working: { $sum: { $cond: [{ $eq: ['$metadata.isWorking', true] }, 1, 0] } },
           failing: { $sum: { $cond: [{ $eq: ['$metadata.isWorking', false] }, 1, 0] } },
           untested: {
@@ -1454,6 +1493,11 @@ router.get('/stats/stream-health', async (req, res) => {
       data: {
         channels: channelHealth || {
           total: 0,
+          lifecycleActive: 0,
+          lifecyclePending: 0,
+          lifecycleDegraded: 0,
+          lifecycleDisabled: 0,
+          lifecycleArchived: 0,
           working: 0,
           failing: 0,
           untested: 0,

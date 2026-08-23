@@ -59,13 +59,20 @@ data class ClientRedeemResponse(
     @SerializedName("success") val success: Boolean = false,
     @SerializedName("sessionId") val sessionId: String? = null,
     @SerializedName("user") val user: ClientRedeemUserDto? = null,
+    @SerializedName("deviceAccess") val deviceAccess: DeviceAccessDto? = null,
     @SerializedName("data") val data: SubscriptionViewDataDto? = null,
     @SerializedName("error") val error: String? = null,
     @SerializedName("code") val code: String? = null,
 )
 
 data class ClientRedeemUserDto(
-    @SerializedName("channelListCode") val channelListCode: String? = null,
+    @SerializedName("id") val id: String? = null,
+)
+
+/** A revocable, device-scoped bearer credential; stored only in encrypted preferences. */
+data class DeviceAccessDto(
+    @SerializedName("token") val token: String? = null,
+    @SerializedName("expiresAt") val expiresAt: String? = null,
 )
 
 /** Success payload of POST /api/v1/activation/redeem */

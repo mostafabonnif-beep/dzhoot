@@ -1,20 +1,23 @@
 import crypto from 'crypto';
 
-const TOKEN_VERSION = 'pt1';
+const TOKEN_VERSION = 'pt2';
+const LEGACY_TOKEN_VERSION = 'pt1';
 const DEFAULT_TTL_MS = 5 * 60 * 1000;
 const MAX_STREAM_URL_LENGTH = 8192;
 
 export interface PlaybackTokenPayload {
-  v: 1;
+  v: 1 | 2;
   userId: string;
-  channelListCode: string;
+  /** Legacy binding only. v2 authorization is device-scoped, not code-scoped. */
+  channelListCode?: string;
+  deviceId?: string;
+  /** Epoch milliseconds for the device token generation that issued this URL. */
+  deviceTokenIssuedAt?: number;
   streamUrl: string;
   upstreamHeaders?: {
     userAgent?: string;
     referrer?: string;
   };
-  /** When true, the playback endpoint responds with a 302 redirect to the raw
-   *  upstream URL instead of proxying the bytes (operator opt-in per source). */
   direct?: boolean;
   issuedAt: number;
   expiresAt: number;
@@ -42,17 +45,12 @@ function getKey(): Buffer {
     process.env.PLAYBACK_TOKEN_SECRET ||
     process.env.JWT_ACCESS_SECRET ||
     process.env.XTREAM_SECRET_KEY;
-
-  // Never silently fall back to a known development secret in production.
-  // A predictable playback-token key would let an attacker forge authorization
-  // tokens if the application were deployed with incomplete configuration.
   if (!secret) {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('PLAYBACK_TOKEN_SECRET is required in production');
     }
     throw new Error('Playback token secret is not configured');
   }
-
   return crypto.createHash('sha256').update(secret).digest();
 }
 
@@ -78,8 +76,11 @@ function validateStreamUrl(streamUrl: string): string {
 
 export function issuePlaybackToken(input: {
   userId: string;
-  channelListCode: string;
   streamUrl: string;
+  /** Required only while legacy code-based endpoints remain opt-in. */
+  channelListCode?: string;
+  deviceId?: string;
+  deviceTokenIssuedAt?: number;
   upstreamHeaders?: {
     userAgent?: string;
     referrer?: string;
@@ -91,10 +92,16 @@ export function issuePlaybackToken(input: {
   const now = Date.now();
   const configuredTtl = Number.parseInt(process.env.PLAYBACK_TOKEN_TTL_MS || '', 10) || DEFAULT_TTL_MS;
   const ttlMs = Math.min(Math.max(Number(input.ttlMs) || configuredTtl, 30_000), 15 * 60 * 1000);
+  const deviceId = input.deviceId ? String(input.deviceId).trim().slice(0, 200) : undefined;
+  const deviceTokenIssuedAt = Number.isFinite(input.deviceTokenIssuedAt)
+    ? Number(input.deviceTokenIssuedAt)
+    : undefined;
   const payload: PlaybackTokenPayload = {
-    v: 1,
+    v: deviceId && deviceTokenIssuedAt ? 2 : 1,
     userId: String(input.userId),
-    channelListCode: String(input.channelListCode).trim().toUpperCase(),
+    channelListCode: input.channelListCode ? String(input.channelListCode).trim().toUpperCase() : undefined,
+    deviceId,
+    deviceTokenIssuedAt,
     streamUrl: validateStreamUrl(input.streamUrl),
     upstreamHeaders: sanitizeUpstreamHeaders(input.upstreamHeaders),
     direct: input.direct === true || undefined,
@@ -106,10 +113,7 @@ export function issuePlaybackToken(input: {
 
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', getKey(), iv);
-  const encrypted = Buffer.concat([
-    cipher.update(JSON.stringify(payload), 'utf8'),
-    cipher.final(),
-  ]);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(payload), 'utf8'), cipher.final()]);
   const tag = cipher.getAuthTag();
   const token = [TOKEN_VERSION, encode(iv), encode(tag), encode(encrypted)].join('.');
   return { token, expiresAt: payload.expiresAt };
@@ -118,24 +122,22 @@ export function issuePlaybackToken(input: {
 export function verifyPlaybackToken(token: string): PlaybackTokenPayload | null {
   try {
     const parts = String(token || '').split('.');
-    if (parts.length !== 4 || parts[0] !== TOKEN_VERSION) return null;
+    if (parts.length !== 4 || ![TOKEN_VERSION, LEGACY_TOKEN_VERSION].includes(parts[0])) return null;
     const decipher = crypto.createDecipheriv('aes-256-gcm', getKey(), decode(parts[1]));
     decipher.setAuthTag(decode(parts[2]));
-    const plaintext = Buffer.concat([
-      decipher.update(decode(parts[3])),
-      decipher.final(),
-    ]).toString('utf8');
+    const plaintext = Buffer.concat([decipher.update(decode(parts[3])), decipher.final()]).toString('utf8');
     const payload = JSON.parse(plaintext) as PlaybackTokenPayload;
     if (
-      payload.v !== 1 ||
+      ![1, 2].includes(payload.v) ||
       typeof payload.userId !== 'string' ||
-      typeof payload.channelListCode !== 'string' ||
       typeof payload.streamUrl !== 'string' ||
       typeof payload.expiresAt !== 'number' ||
       payload.expiresAt <= Date.now()
     ) {
       return null;
     }
+    if (payload.v === 2 && (!payload.deviceId || !Number.isFinite(payload.deviceTokenIssuedAt))) return null;
+    if (payload.v === 1 && typeof payload.channelListCode !== 'string') return null;
     validateStreamUrl(payload.streamUrl);
     return payload;
   } catch {

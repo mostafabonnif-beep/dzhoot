@@ -8,6 +8,7 @@ const Session = require('../models/Session');
 const ActivationCode = require('../models/ActivationCode');
 const Plan = require('../models/Plan');
 const { hashActivationCode, normalizeActivationCode } = require('../utils/code-generator');
+const { issueDeviceAccessToken } = require('../services/device-access-token-service');
 
 const REDEEM_WINDOW_MS = 10 * 60 * 1000;
 const REDEEM_MAX_ATTEMPTS = 10;
@@ -98,11 +99,13 @@ router.post('/client-redeem', async (req, res) => {
       userAgent: req.headers['user-agent'],
     });
     const data = await getUserSubscription(user._id.toString());
+    const deviceAccess = await issueDeviceAccessToken(user._id.toString(), normalizedDeviceId);
     redeemAttempts.delete(rateLimitKey);
     return res.json({
       success: true,
       sessionId,
-      user: { id: user._id, username: user.username, role: user.role, channelListCode: user.channelListCode },
+      user: { id: user._id, username: user.username, role: user.role },
+      deviceAccess: { token: deviceAccess.token, expiresAt: deviceAccess.expiresAt },
       data,
     });
   } catch (err) {
@@ -113,6 +116,25 @@ router.post('/client-redeem', async (req, res) => {
 
 // All account-based activation endpoints require a signed-in user.
 router.use(resolveUser);
+
+// POST /api/v1/activation/device-token
+// Rotates the device token for a registered device owned by the authenticated session.
+router.post('/device-token', async (req, res) => {
+  try {
+    const deviceId = String(req.body?.deviceId || '').trim();
+    if (!deviceId || deviceId.length > 200) {
+      return res.status(400).json({ success: false, error: 'deviceId is required', code: 'DEVICE_ID_REQUIRED' });
+    }
+    const issued = await issueDeviceAccessToken(String(req.user.id), deviceId);
+    return res.json({
+      success: true,
+      data: { token: issued.token, expiresAt: issued.expiresAt },
+    });
+  } catch {
+    // Do not disclose whether a device belongs to another account.
+    return res.status(404).json({ success: false, error: 'Registered device not found', code: 'DEVICE_NOT_FOUND' });
+  }
+});
 
 // POST /api/v1/activation/redeem
 // Body: { code: "DZHF-XXXX-XXXX-XXXX", deviceId?, deviceName?, platform?, appVersion? }

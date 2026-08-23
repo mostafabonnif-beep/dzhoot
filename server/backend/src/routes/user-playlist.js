@@ -7,6 +7,29 @@ const { requireAuth } = require('./auth');
 const { audit } = require('../services/audit-log');
 const { issuePlaybackToken } = require('../services/playback-token');
 const { getPublicBaseUrl } = require('../utils/public-url');
+const { checkPlaybackSubscription } = require('../services/playback-access-service');
+
+async function requirePlaybackSubscription(req, res, next) {
+  const access = await checkPlaybackSubscription(String(req.user?.id || ''), req.user?.role);
+  if (access.allowed) return next();
+  return res.status(403).json({
+    success: false,
+    error: 'Your subscription is not active. Activate a valid code to continue watching.',
+    code: 'SUBSCRIPTION_EXPIRED',
+  });
+}
+
+// These older authenticated playlist routes emit v1 URLs because an HTTP M3U
+// client cannot send a device access token. Do not let them emit unusable or
+// weak code-bound credentials while v1 compatibility is disabled.
+function requireLegacyPlaylistCompatibility(_req, res, next) {
+  if (process.env.ALLOW_LEGACY_PLAYBACK_TOKEN === 'true') return next();
+  return res.status(410).json({
+    success: false,
+    code: 'LEGACY_PLAYBACK_TOKEN_DISABLED',
+    error: 'Legacy playlist export is disabled. Use device-bound channel sync and playback.',
+  });
+}
 function tokenizeUserChannel(channel, user, baseUrl) {
   const source = channel.toObject ? channel.toObject() : channel;
   const safe = { ...source, channelUrl: '' };
@@ -43,9 +66,8 @@ const {
 } = require('../services/import-helpers');
 
 // Get current user's channels
-router.get('/me/channels', requireAuth, async (req, res) => {
+router.get('/me/channels', requireAuth, requirePlaybackSubscription, requireLegacyPlaylistCompatibility, async (req, res) => {
   try {
-    console.log('🔵 GET /me/channels called for user:', req.user.id);
     const user = await User.findById(req.user.id).populate(
       'channels',
       'channelName channelGroup channelUrl tvgLogo channelImg metadata metrics flaggedBad alternateStreams',
@@ -54,15 +76,10 @@ router.get('/me/channels', requireAuth, async (req, res) => {
       console.error('❌ User not found:', req.user.id);
       return res.status(404).json({ success: false, error: 'User not found' });
     }
-    console.log(
-      `✅ User: ${user.username}, Role: ${user.role}, Channels: ${user.channels?.length || 0}`,
-    );
-    console.log(
-      '📋 Channel IDs in user.channels:',
-      user.channels?.map((ch) => ch._id || ch).slice(0, 3),
-    );
     const baseUrl = getPublicBaseUrl(req);
-    const channels = (user.channels || []).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    const channels = (user.channels || [])
+      .filter((channel) => channel?.isActive !== false && channel?.lifecycleStatus === 'active')
+      .map((channel) => tokenizeUserChannel(channel, user, baseUrl));
     res.json({ success: true, channels });
   } catch (error) {
     console.error('❌ Get my channels error:', error);
@@ -223,7 +240,7 @@ router.post('/me/channels/remove', requireAuth, async (req, res) => {
 });
 
 // Get current user's channels with viable fallback streams (for Android app)
-router.get('/me/channels-with-fallbacks', requireAuth, async (req, res) => {
+router.get('/me/channels-with-fallbacks', requireAuth, requirePlaybackSubscription, requireLegacyPlaylistCompatibility, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).populate(
       'channels',
@@ -234,7 +251,9 @@ router.get('/me/channels-with-fallbacks', requireAuth, async (req, res) => {
     }
 
     const baseUrl = getPublicBaseUrl(req);
-    const channels = (user.channels || []).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    const channels = (user.channels || [])
+      .filter((channel) => channel?.isActive !== false && channel?.lifecycleStatus === 'active')
+      .map((channel) => tokenizeUserChannel(channel, user, baseUrl));
     res.json({ success: true, channels });
   } catch (error) {
     console.error('Get channels with fallbacks error:', error);
@@ -243,7 +262,7 @@ router.get('/me/channels-with-fallbacks', requireAuth, async (req, res) => {
 });
 
 // Get current user's channel list as M3U
-router.get('/me/playlist.m3u', requireAuth, async (req, res) => {
+router.get('/me/playlist.m3u', requireAuth, requirePlaybackSubscription, requireLegacyPlaylistCompatibility, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).send('#EXTM3U\n#ERROR:User not found');

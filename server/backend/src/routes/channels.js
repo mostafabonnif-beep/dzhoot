@@ -44,6 +44,7 @@ async function verifiedXtreamChannelQuery(baseQuery) {
       baseQuery,
       {
         isActive: { $ne: false },
+        lifecycleStatus: 'active',
         'flaggedBad.isFlagged': { $ne: true },
       },
       {
