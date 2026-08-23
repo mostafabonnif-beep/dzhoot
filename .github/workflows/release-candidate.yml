@@ -89,7 +89,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dzhoof-release-${{ inputs.version_name }}
-          path: android/app/build/outputs/apk/release/*.apk
+          # Product flavors (official/staging) nest the APK under
+          # app/build/outputs/apk/<flavor>/release/ — the plain
+          # apk/release/* path matched nothing.
+          path: app/build/outputs/apk/*/release/*.apk
           if-no-files-found: error
 
       - name: Remove signing material
