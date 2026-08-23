@@ -8,6 +8,8 @@ const { recordPlaybackEvent } = require('../services/playback-event-service');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('./auth');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
+const { issuePlaybackToken } = require('../services/playback-token');
+const { getPublicBaseUrl } = require('../utils/public-url');
 const { escapeRegex } = require('../utils/escapeRegex');
 const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
 const { audit } = require('../services/audit-log');
@@ -158,6 +160,36 @@ async function getDirectPlaybackSourceIds() {
   );
 }
 
+/**
+ * Replace raw upstream URLs with short-lived server playback tokens for TV
+ * clients (the Android app plays the tokenized same-origin URL). The session
+ * for these pre-issued tokens is created lazily on first playback (tv.js),
+ * so no Redis sessions are burned per list fetch. Upstream credentials never
+ * leave the server.
+ */
+function tokenizeListForClient(channels, user, req) {
+  const baseUrl = getPublicBaseUrl(req);
+  const makeUrl = (raw) => {
+    if (!raw || !/^https?:\/\//i.test(String(raw))) return '';
+    const { token } = issuePlaybackToken({
+      userId: String(user.id),
+      channelListCode: user.channelListCode,
+      streamUrl: raw,
+      upstreamHeaders: {},
+    });
+    return `${baseUrl}/api/v1/tv/playback/${token}.m3u8`;
+  };
+  return channels.map((raw, i) => {
+    const safe = { ...raw };
+    if (raw.channelUrl) safe.channelUrl = makeUrl(raw.channelUrl);
+    safe.alternateStreams = (raw.alternateStreams || [])
+      .filter((a) => a.liveness?.status !== 'dead' && a.flaggedBad?.isFlagged !== true)
+      .slice(0, 10)
+      .map((a) => ({ ...a, streamUrl: a.streamUrl ? makeUrl(a.streamUrl) : '' }));
+    return safe;
+  });
+}
+
 // Whitelist projection for the list endpoints (/, /grouped, /search) — verified against what
 // the Android app deserializes and the web frontend reads from THESE endpoints. Drops metrics,
 // timestamps, ownerId, DRM key, unused metadata and heavy alternate subfields (~40% smaller).
@@ -182,9 +214,12 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
   try {
     // allCatalog users are served the shared catalog like admins — avoids a giant $in.
     const catalogView = req.user.role === 'Admin' || req.user.allCatalog === true;
+    // TV clients (with a channel list code) get per-user tokenized URLs — never
+    // served from the shared cache (tokens are user-bound and expire). Only the
+    // URL-free slim payload is cached for web/session consumers.
+    const isTvClient = Boolean(req.user?.channelListCode);
 
-    // The catalog payload is identical across requests — serve from cache when present.
-    if (catalogView) {
+    if (catalogView && !isTvClient) {
       const cached = await channelCache.get('catalog:list');
       if (cached) return res.json(cached);
     }
@@ -203,13 +238,16 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       .lean();
 
     const directSourceIds = await getDirectPlaybackSourceIds();
+    const data = isTvClient
+      ? tokenizeListForClient(channels, req.user, req)
+      : channels.map((channel) => slimAlternates(channel, directSourceIds));
     const payload = {
       success: true,
       count: channels.length,
-      data: channels.map((channel) => slimAlternates(channel, directSourceIds)),
+      data,
     };
 
-    if (catalogView) await channelCache.set('catalog:list', payload);
+    if (catalogView && !isTvClient) await channelCache.set('catalog:list', payload);
 
     res.json(payload);
   } catch (error) {
