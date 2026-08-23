@@ -3,13 +3,17 @@ package com.dzhoof.iptv.presentation.ui.player
 import android.app.ActivityManager
 import android.content.Context
 import androidx.annotation.OptIn
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,6 +42,37 @@ class PlayerFactory @Inject constructor(
     @ApplicationContext private val context: Context,
     private val okHttpClient: OkHttpClient
 ) {
+    private val streamingClient = okHttpClient.newBuilder()
+        .connectTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(25, TimeUnit.SECONDS)
+        .build()
+
+    private val dataSourceFactory = DefaultDataSource.Factory(
+        context,
+        OkHttpDataSource.Factory(streamingClient)
+    )
+
+    /**
+     * Build an explicit HLS media source for tokenized server playback.
+     *
+     * Server playback URLs (/api/v1/tv/playback/...) ALWAYS serve an HLS
+     * playlist — the proxy normalizes every upstream into a media playlist.
+     * Forcing [MimeTypes.APPLICATION_M3U8] here bypasses
+     * DefaultMediaSourceFactory's container inference, which — when the
+     * server's mimeType hint is null or a raw .ts extension is present —
+     * falls back to ProgressiveMediaSource and fails the playlist text with
+     * ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED without ever fetching segments.
+     */
+    fun createHlsMediaSource(url: String): MediaSource {
+        val mediaItem = MediaItem.Builder()
+            .setUri(url)
+            .setMimeType(MimeTypes.APPLICATION_M3U8)
+            .build()
+        return HlsMediaSource.Factory(dataSourceFactory)
+            .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(RETRY_COUNT))
+            .createMediaSource(mediaItem)
+    }
+
     fun create(): ExoPlayer {
         val lowRam = (context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager)
             ?.isLowRamDevice == true
@@ -56,16 +91,6 @@ class PlayerFactory @Inject constructor(
         // 25s (not 8s): Upstream's stream nodes can take ~10s to allocate a session for a
         // channel that hasn't been played recently — an 8s timeout aborts the FIRST
         // request of every cold session and the player reports a source-provider error.
-        val streamingClient = okHttpClient.newBuilder()
-            .connectTimeout(25, TimeUnit.SECONDS)
-            .readTimeout(25, TimeUnit.SECONDS)
-            .build()
-
-        val dataSourceFactory = DefaultDataSource.Factory(
-            context,
-            OkHttpDataSource.Factory(streamingClient)
-        )
-
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
             .setLoadErrorHandlingPolicy(DefaultLoadErrorHandlingPolicy(RETRY_COUNT))
 
