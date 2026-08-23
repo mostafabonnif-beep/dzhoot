@@ -8,16 +8,29 @@ jest.mock('../models/Plan', () => ({
   default: { findById: jest.fn() },
 }));
 
+jest.mock('../models/User', () => ({
+  __esModule: true,
+  default: { findById: jest.fn() },
+}));
+
 import {
   getActiveSubscription,
   isSubscriptionRequired,
 } from './subscription-service';
 import Plan from '../models/Plan';
+import User from '../models/User';
 import { checkPlaybackSubscription } from './playback-access-service';
 
 const mockedRequired = isSubscriptionRequired as jest.MockedFunction<typeof isSubscriptionRequired>;
 const mockedActive = getActiveSubscription as jest.MockedFunction<typeof getActiveSubscription>;
 const mockedPlanFindById = Plan.findById as jest.MockedFunction<typeof Plan.findById>;
+const mockedUserFindById = User.findById as jest.MockedFunction<typeof User.findById>;
+
+function mockUserLookup(user: unknown) {
+  mockedUserFindById.mockReturnValue({
+    select: () => ({ lean: () => ({ exec: jest.fn().mockResolvedValue(user) }) }),
+  } as any);
+}
 
 function mockPlanLookup(plan: unknown) {
   mockedPlanFindById.mockReturnValue({
@@ -28,6 +41,7 @@ function mockPlanLookup(plan: unknown) {
 describe('checkPlaybackSubscription', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUserLookup({ _id: 'u1', isActive: true, role: 'User' });
   });
 
   it('allows playback when the subscription gate is disabled', async () => {
@@ -77,6 +91,7 @@ describe('checkPlaybackSubscription', () => {
     await expect(checkPlaybackSubscription('u1', 'User')).resolves.toEqual({
       allowed: false,
       required: true,
+      reason: 'SUBSCRIPTION_REQUIRED',
       subscription: null,
       plan: null,
     });
@@ -91,9 +106,24 @@ describe('checkPlaybackSubscription', () => {
     await expect(checkPlaybackSubscription('u1', 'User')).resolves.toEqual({
       allowed: false,
       required: true,
+      reason: 'PLAN_UNAVAILABLE',
       subscription,
       plan: null,
     });
+  });
+
+  it('rejects an inactive user before evaluating subscription state', async () => {
+    mockedUserFindById.mockClear();
+    mockUserLookup({ _id: 'u1', isActive: false, role: 'User' });
+
+    await expect(checkPlaybackSubscription('u1', 'User')).resolves.toEqual({
+      allowed: false,
+      required: expect.any(Boolean),
+      reason: 'USER_INACTIVE',
+      subscription: null,
+      plan: null,
+    });
+    expect(mockedActive).not.toHaveBeenCalled();
   });
 
   it('rejects a gated request without a user id', async () => {
@@ -101,6 +131,7 @@ describe('checkPlaybackSubscription', () => {
     await expect(checkPlaybackSubscription(undefined, 'User')).resolves.toEqual({
       allowed: false,
       required: true,
+      reason: 'USER_INACTIVE',
       subscription: null,
       plan: null,
     });
