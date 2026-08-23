@@ -13,7 +13,7 @@ const { isValidObjectId } = require('./catalog-helpers');
 const { epgService } = require('../services/epg-service');
 const { audit } = require('../services/audit-log');
 const { issuePlaybackToken, verifyPlaybackToken } = require('../services/playback-token');
-const { proxyUpstreamStream } = require('../services/upstream-proxy');
+const { proxyUpstreamStream, resolveSegmentUrlBySequence } = require('../services/upstream-proxy');
 const {
   isCatchupSupported,
   buildCatchupUrlForChannel,
@@ -562,6 +562,63 @@ router.get('/proxy-url/:code', async (req, res) => {
 });
 
 // Tokenized TV stream proxy. The token carries an encrypted upstream URL and expires quickly.
+// GET /tv/playback/:token/segments/:seq — normalized media-playlist segments
+// addressed by absolute media sequence under the ROOT token (short, stable URLs
+// that stay identical across playlist reloads — AndroidX Media3 refuses the
+// previous per-segment 500+ char child-token URLs with PARSING_CONTAINER_UNSUPPORTED).
+router.get('/playback/:token/segments/:seq', async (req, res) => {
+  try {
+    const token = String(req.params.token || '');
+    // :seq arrives with the literal .ts extension (…/segments/3.ts)
+    const seq = Number(String(req.params.seq || '').replace(/\.ts$/i, ''));
+    if (!Number.isInteger(seq) || seq < 0) {
+      return res.status(400).send('Invalid segment sequence');
+    }
+    const payload = verifyPlaybackToken(token);
+    if (!payload) return res.status(401).send('Playback token expired or invalid');
+
+    const user = await User.findOne({
+      _id: payload.userId,
+      channelListCode: payload.channelListCode,
+      isActive: true,
+    }).select('_id channelListCode role');
+    if (!user) return res.status(401).send('Playback authorization revoked');
+    if (!(await ensurePlaybackSubscription(user, res))) return;
+
+    const rootSessionId = payload.sessionId || token;
+    if (!(await isStreamSessionActive(String(user._id), rootSessionId))) {
+      const ttlMs = payload.expiresAt ? payload.expiresAt - Date.now() : 30 * 60 * 1000;
+      const session = await registerStreamSession({
+        userId: String(user._id),
+        sessionId: rootSessionId,
+        ttlSec: Math.max(60, Math.round(ttlMs / 1000)),
+      });
+      if (!session.allowed) {
+        return res.status(429).send('Playback session could not be registered');
+      }
+    }
+
+    // Resolve the requested absolute sequence to an upstream segment URL by
+    // re-reading the current upstream window (cached ~3s per stream).
+    const segUrl = await resolveSegmentUrlBySequence(
+      payload.streamUrl,
+      seq,
+      payload.upstreamHeaders,
+    );
+    if (!segUrl) return res.status(404).send('Segment not found in current window');
+
+    const proxyContext = {
+      userId: String(user._id),
+      channelListCode: user.channelListCode,
+      sessionId: rootSessionId,
+    };
+    return proxyUpstreamStream(req, res, segUrl, proxyContext, undefined, payload.upstreamHeaders);
+  } catch (error) {
+    console.error('Segment proxy error:', error);
+    if (!res.headersSent) res.status(502).send('Bad Gateway');
+  }
+});
+
 // GET /tv/playback/:token
 router.get('/playback/:token', async (req, res) => {
   try {
@@ -605,6 +662,7 @@ router.get('/playback/:token', async (req, res) => {
       userId: String(user._id),
       channelListCode: user.channelListCode,
       sessionId: rootSessionId,
+      rootToken: token,
     };
 
     if (payload.direct === true) {
