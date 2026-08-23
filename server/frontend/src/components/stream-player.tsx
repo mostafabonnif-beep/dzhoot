@@ -227,7 +227,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
                       if (destroyed) return;
                       if (next && next !== currentSrc) {
                         setStatus('Switching stream source...');
-                        tryHlsSource(next, next.startsWith('/api/v1/tv/'));
+                        tryHlsSource(next, next.includes('/api/v1/tv/'));
                       } else {
                         setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
                       }
@@ -241,7 +241,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
           void nextSource().then((src) => {
             if (destroyed) return;
             if (src) {
-              tryHlsSource(src, src.startsWith('/api/v1/tv/'));
+              tryHlsSource(src, src.includes('/api/v1/tv/'));
             } else {
               setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
             }
