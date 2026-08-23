@@ -297,10 +297,11 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
       channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
       channelImg: iconUrl(item.stream_icon),
       channelGroup: group || 'Uncategorized',
-      // tvgId is deliberately NOT in $set when the provider sends none:
-      // preserving an operator-assigned tvgId keeps EPG matching stable across
-      // scheduled syncs (a provider with no epg_channel_id would otherwise wipe
-      // every manual mapping to '' on each sync).
+      // tvgId is set ONLY on INSERT ($setOnInsert) and never overwritten by a
+      // sync: operator-assigned tvgIds (which may point at a better guide than
+      // the provider's epg_channel_id, e.g. epgshare TR1 real schedules vs
+      // iptv-org "No Data" placeholders) must survive scheduled syncs. New
+      // channels still inherit the provider's epg_channel_id on first import.
       tvgName: String(item.name || '').trim(),
       isActive: true,
       order: Number(item.num) || 0,
@@ -312,13 +313,8 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
       'catchup.type': 'timeshift',
       'catchup.days': XTREAM_TIMESHIFT_DAYS,
     },
+    $setOnInsert: { tvgId: String(item.epg_channel_id || '').trim() },
   };
-  if (item.epg_channel_id) {
-    update.$set.tvgId = String(item.epg_channel_id).trim();
-  } else {
-    // Only applies on INSERT — existing manual tvgId mappings survive syncs.
-    update.$setOnInsert = { tvgId: '' };
-  }
   return Channel.findOneAndUpdate(
     { ownerId: null, channelId },
     update,
