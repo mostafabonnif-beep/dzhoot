@@ -5,6 +5,7 @@ const User = require('../models/User');
 const Channel = require('../models/Channel');
 const XtreamSource = require('../models/XtreamSource');
 const Movie = require('../models/Movie');
+const Series = require('../models/Series');
 const Episode = require('../models/Episode');
 const EpgProgram = require('../models/EpgProgram');
 const PairingRequest = require('../models/PairingRequest');
@@ -358,6 +359,16 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       }
       if (!vodDoc) {
         return res.status(404).json({ success: false, error: 'Content not found' });
+      }
+      // An episode stays playable only while its parent series is active —
+      // { isActive: { $ne: false } } keeps legacy docs (no field) playable.
+      if (vodKind === 'episode' && vodDoc.seriesId) {
+        const parentSeries = await Series.findOne(
+          { _id: vodDoc.seriesId, isActive: { $ne: false } },
+        ).select('_id').lean();
+        if (!parentSeries) {
+          return res.status(404).json({ success: false, error: 'Content not found' });
+        }
       }
       if (!vodDoc.streamUrl) {
         return res.status(404).json({ success: false, error: 'Content has no playable stream' });
