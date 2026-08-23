@@ -85,14 +85,17 @@ jobs:
           DZHOOF_API_URL: ${{ inputs.api_url }}
         run: ./gradlew assembleRelease --stacktrace -PversionName=${{ inputs.version_name }}
 
+      - name: List built APKs
+        working-directory: android
+        run: find app/build/outputs -name "*.apk" -exec ls -la {} \; || true
+
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
           name: dzhoof-release-${{ inputs.version_name }}
-          # Product flavors (official/staging) nest the APK under
-          # app/build/outputs/apk/<flavor>/release/ — the plain
-          # apk/release/* path matched nothing.
-          path: app/build/outputs/apk/*/release/*.apk
+          # upload-artifact resolves paths against the repo root (GITHUB_WORKSPACE),
+          # not the step's working-directory — hence the leading android/.
+          path: android/app/build/outputs/apk/*/release/*.apk
           if-no-files-found: error
 
       - name: Remove signing material
