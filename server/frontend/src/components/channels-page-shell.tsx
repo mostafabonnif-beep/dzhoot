@@ -1873,12 +1873,13 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               {
                 name: getName(c),
                 url: getUrl(c),
-                channelId: c._id,
+                id: c._id,
+                channelId: c.channelId,
                 alternateUrls: c.alternateStreams
                   ?.filter((a) => !a.flaggedBad?.isFlagged)
                   .map((a) => a.streamUrl),
               },
-              { mode: 'direct-fallback' },
+              { mode: 'proxy' },
             ),
           onEdit: isAdmin ? () => openEdit(c) : undefined,
           onDelete: () => handleDelete(c._id),
