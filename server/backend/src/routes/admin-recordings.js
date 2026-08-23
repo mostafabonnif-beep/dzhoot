@@ -112,13 +112,16 @@ router.get('/:id/download', async (req, res) => {
     }
     const file = recordingService.recordingFilePath(rec.slug, rec.fileName);
     if (!fs.existsSync(file)) return res.status(404).json({ success: false, error: 'File missing' });
-    const safe = (rec.channelName || 'recording').replace(/[^\p{L}\p{N} _-]/gu, '').slice(0, 60) || 'recording';
+    // ASCII-only filename: unicode channel names (ᴴᴰ etc.) break the
+    // Content-Disposition header (Node rejects non-ISO-8859-1 bytes).
+    const safe = (rec.channelName || 'recording').replace(/[^A-Za-z0-9 _-]/g, '').trim().slice(0, 60) || 'recording';
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Content-Disposition', `attachment; filename="${safe}-${rec.slug}.mp4"`);
     res.setHeader('Content-Length', fs.statSync(file).size);
     audit({ ...reqCtx(req), action: 'RECORDING_DOWNLOAD', resource: 'Recording', resourceId: String(rec._id) });
     fs.createReadStream(file).pipe(res);
   } catch (err) {
+    console.error('Error downloading recording:', err);
     return res.status(500).json({ success: false, error: 'Failed to download recording' });
   }
 });
