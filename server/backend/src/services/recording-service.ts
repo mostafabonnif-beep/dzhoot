@@ -183,7 +183,10 @@ export async function startRecording(channelId: string, userId?: string): Promis
     activeJobs.delete(String(rec._id));
     const fresh = await Recording.findById(rec._id).exec();
     if (!fresh) return;
-    if (code === 0 || code === null) {
+    // The capture may exit non-zero on a user-initiated stop (SIGTERM commonly
+    // yields 255 while flushing). What matters is whether it produced data.
+    const hasData = fs.existsSync(tsFile) && fs.statSync(tsFile).size > 0;
+    if (hasData) {
       await finalize(fresh, false);
     } else {
       fresh.status = 'failed';
@@ -196,10 +199,15 @@ export async function startRecording(channelId: string, userId?: string): Promis
     activeJobs.delete(String(rec._id));
     const fresh = await Recording.findById(rec._id).exec();
     if (!fresh) return;
-    fresh.status = 'failed';
-    fresh.error = `failed to spawn ffmpeg: ${err.message}`;
-    fresh.endedAt = new Date();
-    await fresh.save();
+    const hasData = fs.existsSync(tsFile) && fs.statSync(tsFile).size > 0;
+    if (hasData) {
+      await finalize(fresh, false);
+    } else {
+      fresh.status = 'failed';
+      fresh.error = `failed to spawn ffmpeg: ${err.message}`;
+      fresh.endedAt = new Date();
+      await fresh.save();
+    }
   });
 
   return { rec };
