@@ -9,6 +9,10 @@ interface StreamPlayerChannel {
   name: string;
   url: string;
   logo?: string;
+  /** Mongo _id of the catalog channel — used for playback metrics (report-play). */
+  id?: string;
+  /** Catalog channel reference (e.g. `xt:<sourceId>:<streamId>`) — used to
+   *  issue a server-side playback token (the reliable same-origin proxy path). */
   channelId?: string;
   alternateUrls?: string[];
 }
@@ -16,8 +20,28 @@ interface StreamPlayerChannel {
 interface StreamPlayerProps {
   channel: StreamPlayerChannel | null;
   onClose: () => void;
-  /** 'proxy' = only use proxy (default). 'direct-fallback' = try direct first, fallback to proxy. */
+  /**
+   * 'proxy' (default) = play through the server playback-token pipeline
+   * (same-origin HTTPS proxy URLs — works for upstreams that block datacenter
+   * IPs, and avoids browser mixed-content on http:// CDN segments).
+   * 'direct-fallback' = try the token pipeline first, then the raw URL.
+   */
   mode?: 'proxy' | 'direct-fallback';
+}
+
+/** Issue a server playback token for a catalog channel slot. */
+async function fetchTokenizedUrl(
+  channelId: string,
+  slot: number,
+): Promise<{ url?: string; error?: string }> {
+  try {
+    const res = await api.post('/tv/playback-token', { channelId, slot });
+    const d = res.data;
+    if (d?.success && d.data?.playbackUrl) return { url: d.data.playbackUrl };
+    return { error: d?.error || 'Failed to issue playback token' };
+  } catch (e: any) {
+    return { error: e?.response?.data?.error || e?.message || 'Playback token request failed' };
+  }
 }
 
 export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: StreamPlayerProps) {
@@ -67,15 +91,14 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       wasActiveRef.current = false;
       return;
     }
-    const url = channel.url;
-    const directUrl = url;
-    const proxyUrl = `/api/v1/stream-proxy?url=${encodeURIComponent(url)}`;
-    const alternateUrls = channel.alternateUrls || [];
+    const ch = channel;
+    const url = ch.url;
+    const alternateUrls = ch.alternateUrls || [];
     let alternateIndex = 0;
     const sessionId = typeof window !== 'undefined' ? useAuthStore.getState().sessionId : null;
     let destroyed = false;
     let activeHls: { destroy: () => void } | null = null;
-    let currentSource: 'direct' | 'proxy' = mode === 'proxy' ? 'proxy' : 'direct';
+    let currentSource: 'direct' | 'proxy' = 'proxy';
     currentSourceRef.current = currentSource;
     // Native-HLS (Safari) listeners — hoisted so cleanup can remove them.
     let nativeLoadedMeta: (() => void) | null = null;
@@ -114,6 +137,39 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
         const Hls = HlsModule.default;
         if (destroyed) return;
 
+        // Candidate source resolution:
+        //  - Catalog channels (channelId present) play through the server
+        //    playback-token pipeline (slots 0..3). The proxy rewrites segment
+        //    URLs to same-origin HTTPS paths, so upstream http:// CDN segments
+        //    are never fetched directly by the browser (mixed content) and
+        //    datacenter-IP-blocked upstreams (HTTP 456) work via the server.
+        //  - 'direct-fallback' mode additionally tries the raw URL last.
+        //  - Non-catalog channels (no channelId) fall back to raw direct URLs.
+        let tokenSlot = 0;
+        const maxTokenSlot = Math.min(3, Math.max(alternateUrls.length, 0));
+        let directTried = false;
+
+        async function nextSource(): Promise<string | null> {
+          if (destroyed) return null;
+          if (ch.channelId && tokenSlot <= maxTokenSlot) {
+            const slot = tokenSlot++;
+            const r = await fetchTokenizedUrl(ch.channelId, slot);
+            if (r.url) return r.url;
+            // Token failed for this slot (e.g. no more viable alternates) —
+            // keep advancing instead of failing hard.
+            setStatus('Trying alternate stream...');
+            return nextSource();
+          }
+          if (mode === 'direct-fallback' && !directTried) {
+            directTried = true;
+            return url;
+          }
+          if (!ch.channelId && alternateIndex < alternateUrls.length) {
+            return alternateUrls[alternateIndex++];
+          }
+          return null;
+        }
+
         if (Hls.isSupported()) {
           const tryHlsSource = (src: string, isProxy: boolean) => {
             if (destroyed) return;
@@ -121,7 +177,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             currentSource = isProxy ? 'proxy' : 'direct';
             currentSourceRef.current = currentSource;
             setActiveSource(currentSource);
-            if (isProxy && mode === 'direct-fallback') setStatus('Trying proxy...');
+            if (isProxy && mode === 'direct-fallback') setStatus('Trying server stream...');
             setPlayerError('');
 
             const hls = new Hls({
@@ -137,7 +193,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
               fragLoadingTimeOut: 20000,
               fragLoadingMaxRetry: 2,
               xhrSetup: (xhr: XMLHttpRequest, xhrUrl: string) => {
-                if (xhrUrl.includes('/api/v1/stream-proxy') && sessionId) {
+                if (xhrUrl.includes('/api/v1/tv/') && sessionId) {
                   xhr.setRequestHeader('X-Session-Id', sessionId);
                 }
               },
@@ -160,34 +216,38 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
                   if (data.type === 'mediaError') {
                     setStatus('Media error — recovering...');
                     hls.recoverMediaError();
-                  } else if (!isProxy && mode === 'direct-fallback') {
-                    safeDestroyHls(hls);
-                    tryHlsSource(proxyUrl, true);
-                  } else if (data.type === 'networkError' && mode === 'proxy') {
+                  } else if (data.type === 'networkError') {
                     setStatus('Network error — retrying...');
                     hls.startLoad();
-                  } else if (alternateIndex < alternateUrls.length) {
-                    const altUrl = alternateUrls[alternateIndex++];
-                    const altProxy = `/api/v1/stream-proxy?url=${encodeURIComponent(altUrl)}`;
-                    setStatus(`Trying alternate ${alternateIndex}/${alternateUrls.length}...`);
-                    safeDestroyHls(hls);
-                    tryHlsSource(altProxy, true);
                   } else {
-                    setPlayerError(`Fatal error: ${data.details}`);
+                    // Fatal manifest/level/other error — advance to the next source.
+                    const currentSrc = src;
                     safeDestroyHls(hls);
+                    void nextSource().then((next) => {
+                      if (destroyed) return;
+                      if (next && next !== currentSrc) {
+                        setStatus('Switching stream source...');
+                        tryHlsSource(next, next.startsWith('/api/v1/tv/'));
+                      } else {
+                        setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
+                      }
+                    });
                   }
                 }
               },
             );
           };
 
-          tryHlsSource(mode === 'proxy' ? proxyUrl : directUrl, mode === 'proxy');
+          void nextSource().then((src) => {
+            if (destroyed) return;
+            if (src) {
+              tryHlsSource(src, src.startsWith('/api/v1/tv/'));
+            } else {
+              setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
+            }
+          });
         } else if (video!.canPlayType('application/vnd.apple.mpegurl')) {
-          const startUrl = mode === 'proxy' ? proxyUrl : directUrl;
-          currentSource = mode === 'proxy' ? 'proxy' : 'direct';
-          currentSourceRef.current = currentSource;
-          setActiveSource(currentSource);
-          video!.src = startUrl;
+          // Native HLS (Safari): resolve candidates sequentially via <video>.
           let nativeFallback = false;
           nativeLoadedMeta = () => {
             if (!destroyed) {
@@ -197,26 +257,30 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
           };
           nativeError = () => {
             if (destroyed) return;
-            if (!nativeFallback && mode === 'direct-fallback') {
+            if (!nativeFallback) {
               nativeFallback = true;
-              currentSource = 'proxy';
-              currentSourceRef.current = currentSource;
-              setActiveSource(currentSource);
-              setStatus('Trying proxy...');
-              video!.src = proxyUrl;
-              video!.load();
-            } else if (alternateIndex < alternateUrls.length) {
-              const altUrl = alternateUrls[alternateIndex++];
-              currentSource = 'proxy';
-              currentSourceRef.current = currentSource;
-              setActiveSource(currentSource);
-              setStatus(`Trying alternate ${alternateIndex}/${alternateUrls.length}...`);
-              video!.src = `/api/v1/stream-proxy?url=${encodeURIComponent(altUrl)}`;
-              video!.load();
+              void nextSource().then((next) => {
+                if (destroyed) return;
+                if (next) {
+                  setStatus('Switching stream source...');
+                  video!.src = next;
+                  video!.load();
+                } else {
+                  setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
+                }
+              });
             } else {
-              setPlayerError('Playback error');
+              setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
             }
           };
+          void nextSource().then((src) => {
+            if (destroyed) return;
+            if (src) {
+              video!.src = src;
+            } else {
+              setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
+            }
+          });
           video!.addEventListener('loadedmetadata', nativeLoadedMeta);
           video!.addEventListener('error', nativeError);
         } else {
@@ -230,19 +294,20 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
     initPlayer();
     const PLAY_REPORT_DEDUP_MS = 30_000;
     const reportPlay = () => {
-      if (!channel.channelId) return;
+      const channelId = channel.id || channel.channelId;
+      if (!channelId) return;
       const prev = playReportedRef.current;
       if (
         prev &&
-        prev.channelId === channel.channelId &&
+        prev.channelId === channelId &&
         Date.now() - prev.at < PLAY_REPORT_DEDUP_MS
       )
         return;
-      playReportedRef.current = { channelId: channel.channelId, at: Date.now() };
+      playReportedRef.current = { channelId, at: Date.now() };
       const deviceId = `web-${sessionId || 'anonymous'}`;
       api
         .post(
-          `/channels/${channel.channelId}/report-play`,
+          `/channels/${channelId}/report-play`,
           { deviceId, proxyPlay: currentSourceRef.current === 'proxy' },
           {
             headers: { 'X-Skip-Auth-Redirect': '1' },

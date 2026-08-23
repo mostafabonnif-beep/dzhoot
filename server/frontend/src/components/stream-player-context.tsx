@@ -16,6 +16,10 @@ interface StreamChannel {
   name: string;
   url: string;
   logo?: string;
+  /** Mongo _id of the catalog channel — used for playback metrics (report-play). */
+  id?: string;
+  /** Catalog channel reference (e.g. `xt:<sourceId>:<streamId>`) — used to
+   *  issue a server-side playback token (the reliable same-origin proxy path). */
   channelId?: string;
   alternateUrls?: string[];
 }
