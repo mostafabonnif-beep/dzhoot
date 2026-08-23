@@ -400,7 +400,12 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       });
     }
 
-    const channel = await Channel.findOne({ channelId: channelRef, isActive: { $ne: false } }).lean();
+    let channel = await Channel.findOne({ channelId: channelRef, isActive: { $ne: false } }).lean();
+    // Clients historically send the Mongo _id (e.g. older app builds) — resolve
+    // it defensively so a stale client can't brick playback with a 404.
+    if (!channel && isValidObjectId(channelRef)) {
+      channel = await Channel.findOne({ _id: channelRef, isActive: { $ne: false } }).lean();
+    }
     if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
 
     let xtreamDirectPlayback = false;
@@ -582,7 +587,18 @@ router.get('/playback/:token', async (req, res) => {
     // to fetch every resource referenced by a tokenized manifest.
     const rootSessionId = payload.sessionId || req.params.token;
     if (!(await isStreamSessionActive(String(user._id), rootSessionId))) {
-      return res.status(429).send('Playback session is no longer active');
+      // Pre-issued tokens (channel lists, alternate slots) may arrive without a
+      // registered session — create one lazily (bounded by the user's concurrent
+      // limit) instead of failing the first playback with a hard 429.
+      const ttlMs = payload.expiresAt ? payload.expiresAt - Date.now() : 30 * 60 * 1000;
+      const session = await registerStreamSession({
+        userId: String(user._id),
+        sessionId: rootSessionId,
+        ttlSec: Math.max(60, Math.round(ttlMs / 1000)),
+      });
+      if (!session.allowed) {
+        return res.status(429).send('Playback session could not be registered');
+      }
     }
 
     const proxyContext = {
