@@ -332,8 +332,12 @@ async function upsertMovie(sourceId: mongoose.Types.ObjectId, item: any, group: 
         rating: item.rating_5based ? Number(item.rating_5based) : null,
         streamUrl: vodUrl(creds, item.stream_id, ext),
         containerExtension: ext,
-        isActive: true,
       },
+      // Only default to active on INSERT. On update, an existing isActive=false
+      // (manual admin disable OR a previous prune) is preserved so neither an
+      // accidental sync nor routine pruning silently resurrects content the
+      // operator deliberately hid.
+      $setOnInsert: { isActive: true },
     },
     { upsert: true, setDefaultsOnInsert: true },
   ).exec();
@@ -354,8 +358,9 @@ async function upsertSeries(sourceId: mongoose.Types.ObjectId, item: any, group:
         genre: item.genre || '',
         releaseDate: item.releaseDate || '',
         rating: item.rating_5based ? Number(item.rating_5based) : null,
-        isActive: true,
       },
+      // Only default to active on INSERT (same rationale as upsertMovie).
+      $setOnInsert: { isActive: true },
     },
     { upsert: true, setDefaultsOnInsert: true },
   ).exec();

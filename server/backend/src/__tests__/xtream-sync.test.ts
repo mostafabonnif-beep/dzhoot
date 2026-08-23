@@ -299,4 +299,60 @@ describe('xtream-service', () => {
     expect(refreshed!.syncStatus).toBe('error');
     expect(refreshed!.lastError).toBeTruthy();
   });
+
+  it('preserves a manual admin movie disable across re-syncs', async () => {
+    const source = await makeSource();
+    await syncXtreamSource(String(source._id));
+
+    // Admin manually disables the movie.
+    await Movie.updateOne({ sourceId: source._id, externalId: '201' }, { $set: { isActive: false } });
+
+    // Re-sync with the panel unchanged — the disable must survive.
+    await syncXtreamSource(String(source._id));
+
+    const movie = await Movie.findOne({ sourceId: source._id, externalId: '201' }).lean();
+    expect(movie!.isActive).toBe(false);
+  });
+
+  it('preserves a manual admin series disable across re-syncs', async () => {
+    const source = await makeSource();
+    await syncXtreamSource(String(source._id));
+
+    await Series.updateOne({ sourceId: source._id, externalId: '301' }, { $set: { isActive: false } });
+    await syncXtreamSource(String(source._id));
+
+    const series = await Series.findOne({ sourceId: source._id, externalId: '301' }).lean();
+    expect(series!.isActive).toBe(false);
+  });
+
+  it('keeps pruned movies/series inactive when the panel still lists them as gone', async () => {
+    const source = await makeSource();
+    await syncXtreamSource(String(source._id));
+
+    // Panel drops the movie (201) and series (301).
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      const parsed = new URL(url);
+      const action = parsed.searchParams.get('action') || undefined;
+      if (action === 'get_vod_streams') return { data: [] };
+      if (action === 'get_series') return { data: [] };
+      return { data: fixturePayload(action) };
+    });
+    await syncXtreamSource(String(source._id));
+
+    // Pruned.
+    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(false);
+    expect((await Series.findOne({ externalId: '301' }).lean())!.isActive).toBe(false);
+
+    // Panel brings them back — a fresh sync re-activates them ONLY on insert;
+    // since docs already exist, isActive stays false until an admin re-enables.
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      const parsed = new URL(url);
+      const action = parsed.searchParams.get('action') || undefined;
+      return { data: fixturePayload(action) };
+    });
+    await syncXtreamSource(String(source._id));
+
+    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(false);
+    expect((await Series.findOne({ externalId: '301' }).lean())!.isActive).toBe(false);
+  });
 });
