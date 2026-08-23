@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.source.MediaSource
 import com.dzhoof.iptv.domain.model.PlaybackTarget
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -47,6 +48,7 @@ internal suspend fun prepareChannelStream(
     catchupStartMs: Long,
     catchupDurationMin: Int,
     resolvePlaybackUrl: suspend (channelId: String, slot: Int, catchupStartMs: Long, catchupDurationMin: Int) -> PlaybackTarget?,
+    buildHlsMediaSource: (url: String) -> MediaSource,
 ): Boolean {
     errorRecoveryManager.reset()
     val serverUrl = AppPreferences.getServerUrl(context).trimEnd('/')
@@ -60,7 +62,7 @@ internal suspend fun prepareChannelStream(
             errorRecoveryManager.setStreamSlots(
                 listOf(ErrorRecoveryManager.StreamSlot(catchupTarget.url, null, isPrimary = true, mimeType = catchupTarget.mimeType)),
             )
-            exoPlayer.setMediaItem(mediaItem(catchupTarget.url, catchupTarget.mimeType))
+            exoPlayer.setMediaSource(buildHlsMediaSource(catchupTarget.url))
         } else {
             val slotTargets = coroutineScope {
                 (0..3).map { slot ->
@@ -77,7 +79,11 @@ internal suspend fun prepareChannelStream(
                 )
             }
             errorRecoveryManager.setStreamSlots(slots)
-            exoPlayer.setMediaItem(mediaItem(primaryTarget.url, primaryTarget.mimeType))
+            // Explicit HLS source: server playback always serves a normalized
+            // HLS playlist; inferring the container from mimeType is fragile
+            // (falls back to progressive parsing and fails with
+            // ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED).
+            exoPlayer.setMediaSource(buildHlsMediaSource(primaryTarget.url))
         }
         exoPlayer.prepare()
         return true

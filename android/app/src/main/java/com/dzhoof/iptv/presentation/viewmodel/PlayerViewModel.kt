@@ -93,6 +93,15 @@ class PlayerViewModel @Inject constructor(
     fun createPlayer(): ExoPlayer = playerFactory.create()
 
     /**
+     * Explicit HLS media source for tokenized server playback. See
+     * [PlayerFactory.createHlsMediaSource] — server playback ALWAYS serves an
+     * HLS playlist, so forcing the m3u8 container avoids the progressive-source
+     * fallback that fails with ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
+     */
+    fun createHlsMediaSource(url: String): androidx.media3.exoplayer.source.MediaSource =
+        playerFactory.createHlsMediaSource(url)
+
+    /**
      * Requests a short-lived server-side playback URL. The app sends only the
      * catalog channel reference and slot; upstream credentials never leave the server.
      */

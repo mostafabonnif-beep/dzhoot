@@ -184,6 +184,7 @@ fun PlayerScreen(
                 catchupStartMs = catchupStartMs,
                 catchupDurationMin = catchupDurationMin,
                 resolvePlaybackUrl = viewModel::requestPlaybackUrl,
+                buildHlsMediaSource = viewModel::createHlsMediaSource,
             )
             if (!prepared) {
                 viewModel.onStreamDead("Invalid stream URL")
