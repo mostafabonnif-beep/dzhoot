@@ -96,7 +96,7 @@ describe('TV playback subscription enforcement', () => {
     const response = await request(app()).get(`/tv/playlist/${user.channelListCode}`);
 
     expect(response.status).toBe(200);
-    expect(response.text).toContain('#EXTM3U');
+    expect(String(response.text ?? response.body ?? '')).toContain('#EXTM3U');
   });
 
   it('blocks playlist, EPG, and a playback token issued before subscription expiry', async () => {
