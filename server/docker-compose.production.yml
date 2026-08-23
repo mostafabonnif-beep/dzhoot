@@ -100,7 +100,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1536m
+          memory: 2048m
         reservations:
           memory: 256m
     logging:
@@ -233,7 +233,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1536m
+          memory: 2048m
     networks:
       - dzhoof-network
     logging:
