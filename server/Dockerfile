@@ -32,7 +32,7 @@ ENV APP_VERSION=${APP_VERSION}
 WORKDIR /app
 
 # Install dependencies for native modules, curl for health checks, and yt-dlp for YouTube stream resolution
-RUN apk add --no-cache python3 make g++ curl && \
+RUN apk add --no-cache python3 make g++ curl ffmpeg && \
     wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
     chmod +x /usr/local/bin/yt-dlp
 
@@ -53,8 +53,8 @@ COPY backend/src ./backend/src
 COPY packages/shared/src ./packages/shared/src
 
 # Create directories for uploads and APKs
-RUN mkdir -p uploads apks && \
-    chmod 755 uploads apks
+RUN mkdir -p uploads apks recordings && \
+    chmod 775 uploads apks recordings
 
 # Expose port
 EXPOSE 3000
