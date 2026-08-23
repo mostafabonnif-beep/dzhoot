@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff } from 'lucide-react';
+import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff, Download, Upload } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/components/locale-provider';
@@ -35,6 +35,8 @@ export default function SettingsPage() {
   const [disablePassword, setDisablePassword] = useState('');
   const [disableCode, setDisableCode] = useState('');
   const [totpLoading, setTotpLoading] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const copyTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
@@ -135,6 +137,67 @@ export default function SettingsPage() {
       toast('تعذر تعطيل 2FA. تحقق من كلمة المرور والرمز.', 'error');
     } finally {
       setTotpLoading(false);
+    }
+  }
+
+  async function handleExportSettings() {
+    setSettingsBusy(true);
+    try {
+      const res = await api.get('/admin/app-settings/export', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dzhoot-settings-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast(
+        locale === 'ar' ? 'تم تصدير الإعدادات' : locale === 'fr' ? 'Paramètres exportés' : 'Settings exported',
+        'success',
+      );
+    } catch {
+      toast(locale === 'ar' ? 'فشل تصدير الإعدادات' : 'Export failed', 'error');
+    } finally {
+      setSettingsBusy(false);
+    }
+  }
+
+  async function handleImportSettingsFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset so picking the same file twice still fires onChange.
+    e.target.value = '';
+    if (!file) return;
+    if (
+      !window.confirm(
+        locale === 'ar'
+          ? 'تأكيد: استيراد الإعدادات من هذا الملف سيستبدل القيم الحالية للمفاتيح المعروفة. متابعة؟'
+          : locale === 'fr'
+            ? 'Confirmer : importer remplacera les valeurs actuelles. Continuer ?'
+            : 'Confirm: importing will overwrite current known settings. Continue?',
+      )
+    ) {
+      return;
+    }
+    setSettingsBusy(true);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const res = await api.post('/admin/app-settings/import', parsed);
+      const keys = res.data?.importedKeys || [];
+      toast(
+        locale === 'ar'
+          ? `تم استيراد ${keys.length} إعداداً: ${keys.join('، ')}`
+          : `Imported ${keys.length} settings`,
+        'success',
+      );
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        (locale === 'ar' ? 'فشل الاستيراد — تحقق من صيغة الملف' : 'Import failed');
+      toast(msg, 'error');
+    } finally {
+      setSettingsBusy(false);
     }
   }
 
@@ -430,6 +493,55 @@ export default function SettingsPage() {
                   ? 'Nettoyer les sessions expirées'
                   : 'Clean Up Expired Sessions'}
             </button>
+          </div>
+        </div>
+      </div>
+
+      {/* App Settings Backup (export / import) */}
+      <div className="border border-border">
+        <div className="px-4 py-2 bg-muted/50 border-b border-border">
+          <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+            {locale === 'ar'
+              ? 'نسخ الإعدادات الاحتياطي'
+              : locale === 'fr'
+                ? 'Sauvegarde des paramètres'
+                : 'Settings backup'}
+          </h2>
+        </div>
+        <div className="px-4 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            {locale === 'ar'
+              ? 'صدّر إعدادات التطبيق (الصفحة الرئيسية، شرط الاشتراك) إلى ملف JSON، أو استعدها من نسخة سابقة. حالات إيقاف المهام المجدولة لا تُصدَّر.'
+              : locale === 'fr'
+                ? 'Exportez les paramètres (accueil, abonnement requis) en JSON ou restaurez-les.'
+                : 'Export app settings (home, subscription requirement) to JSON, or restore from a backup.'}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportSettings}
+              disabled={settingsBusy}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 active:bg-muted disabled:opacity-50"
+            >
+              <Download className="h-4 w-4" />
+              {locale === 'ar' ? 'تصدير' : locale === 'fr' ? 'Exporter' : 'Export'}
+            </button>
+            <button
+              type="button"
+              onClick={() => importFileRef.current?.click()}
+              disabled={settingsBusy}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 active:bg-muted disabled:opacity-50"
+            >
+              <Upload className="h-4 w-4" />
+              {locale === 'ar' ? 'استيراد' : locale === 'fr' ? 'Importer' : 'Import'}
+            </button>
+            <input
+              ref={importFileRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={handleImportSettingsFile}
+            />
           </div>
         </div>
       </div>
