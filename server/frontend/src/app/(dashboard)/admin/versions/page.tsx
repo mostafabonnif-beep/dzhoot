@@ -47,7 +47,13 @@ export default function VersionsPage() {
       }
 
       if (latestRes.status === 'rejected' && versionsRes.status === 'rejected') {
-        setError('Failed to load version information');
+        setError(
+          locale === 'ar'
+            ? 'فشل تحميل معلومات الإصدار'
+            : locale === 'fr'
+              ? 'Échec du chargement des informations de version'
+              : 'Failed to load version information',
+        );
       }
 
       try {
@@ -63,7 +69,7 @@ export default function VersionsPage() {
     }
     fetchData();
     return () => controller.abort();
-  }, []);
+  }, [locale]);
 
   function formatBytes(bytes?: number): string {
     if (!bytes) return '—';
@@ -113,7 +119,11 @@ export default function VersionsPage() {
                   <Tag className="h-4 w-4 text-primary" />
                   <span className="text-lg font-display font-bold">{latest.versionName}</span>
                   <span className="text-xs text-muted-foreground font-mono">
-                    (code: {latest.versionCode})
+                    {locale === 'ar'
+                      ? `(الرمز: ${latest.versionCode})`
+                      : locale === 'fr'
+                        ? `(code : ${latest.versionCode})`
+                        : `(code: ${latest.versionCode})`}
                   </span>
                 </div>
                 {latest.releasedAt && (
@@ -172,7 +182,13 @@ export default function VersionsPage() {
                 href={downloadUrl || latest.downloadUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label={`Download APK version ${latest.versionName}`}
+                aria-label={
+                  locale === 'ar'
+                    ? `تنزيل نسخة APK ${latest.versionName}`
+                    : locale === 'fr'
+                      ? `Télécharger la version APK ${latest.versionName}`
+                      : `Download APK version ${latest.versionName}`
+                }
                 className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"
               >
                 <Download className="h-4 w-4" />
@@ -188,7 +204,11 @@ export default function VersionsPage() {
           <AlertCircle className="h-8 w-8 text-muted-foreground mx-auto mb-3" aria-hidden="true" />
           <p className="text-sm text-muted-foreground">{t('common.noData')}</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Upload an APK or configure GitHub releases to manage versions
+            {locale === 'ar'
+              ? 'ارفع ملف APK أو اربط GitHub Releases لإدارة الإصدارات'
+              : locale === 'fr'
+                ? 'Téléversez un APK ou configurez les versions GitHub Releases pour gérer les versions'
+                : 'Upload an APK or configure GitHub releases to manage versions'}
           </p>
         </div>
       )}

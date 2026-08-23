@@ -12,6 +12,7 @@ import {
   Clock,
   UserPlus,
   Monitor,
+  Package,
 } from 'lucide-react';
 import {
   PieChart,
@@ -28,6 +29,7 @@ import {
   CartesianGrid,
 } from 'recharts';
 import api from '@/lib/api';
+import { useLocale, type Locale } from '@/components/locale-provider';
 
 interface RecentUser {
   username: string;
@@ -160,16 +162,32 @@ function formatDate(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function timeAgo(ts: string | null | undefined): string {
+function timeAgo(ts: string | null | undefined, locale: Locale): string {
   if (!ts) return '—';
   const sec = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
   if (isNaN(sec)) return '—';
-  if (sec < 60) return 'just now';
+  if (sec < 60)
+    return locale === 'ar' ? 'الآن' : locale === 'fr' ? "à l'instant" : 'just now';
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m ago`;
+  if (min < 60)
+    return locale === 'ar'
+      ? `منذ ${min} دقيقة`
+      : locale === 'fr'
+        ? `il y a ${min} min`
+        : `${min}m ago`;
   const hrs = Math.floor(min / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24)
+    return locale === 'ar'
+      ? `منذ ${hrs} ساعة`
+      : locale === 'fr'
+        ? `il y a ${hrs} h`
+        : `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return locale === 'ar'
+    ? `منذ ${days} يوم`
+    : locale === 'fr'
+      ? `il y a ${days} j`
+      : `${days}d ago`;
 }
 
 function formatMs(ms: number | null): string {
@@ -182,17 +200,33 @@ function formatSourceName(id: string): string {
   return id.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const TASK_STATUS_LABELS: Record<string, (l: Locale) => string> = {
+  completed: (l) => (l === 'ar' ? 'مكتمل' : l === 'fr' ? 'Terminé' : 'Completed'),
+  failed: (l) => (l === 'ar' ? 'فشل' : l === 'fr' ? 'Échoué' : 'Failed'),
+  running: (l) => (l === 'ar' ? 'قيد التشغيل' : l === 'fr' ? 'En cours' : 'Running'),
+  pending: (l) => (l === 'ar' ? 'معلق' : l === 'fr' ? 'En attente' : 'Pending'),
+};
+
+const PAIRING_STATUS_LABELS: Record<string, (l: Locale) => string> = {
+  completed: (l) => (l === 'ar' ? 'مكتملة' : l === 'fr' ? 'Terminé' : 'Completed'),
+  pending: (l) => (l === 'ar' ? 'معلقة' : l === 'fr' ? 'En attente' : 'Pending'),
+  expired: (l) => (l === 'ar' ? 'منتهية' : l === 'fr' ? 'Expiré' : 'Expired'),
+};
+
 function normalizeByGroup(
   byGroup: Array<{ _id: string; count: number }> | Record<string, number>,
+  locale: Locale,
 ): Array<{ name: string; value: number }> {
+  const uncategorized =
+    locale === 'ar' ? 'غير مصنف' : locale === 'fr' ? 'Non catégorisé' : 'Uncategorized';
   if (Array.isArray(byGroup)) {
     return byGroup.map((g) => ({
-      name: g._id || 'Uncategorized',
+      name: g._id || uncategorized,
       value: g.count,
     }));
   }
   return Object.entries(byGroup).map(([name, value]) => ({
-    name: name || 'Uncategorized',
+    name: name || uncategorized,
     value,
   }));
 }
@@ -263,6 +297,7 @@ function TrendChart({
   range: TimeRange;
   onRangeChange: (r: TimeRange) => void;
 }) {
+  const { locale } = useLocale();
   const ranges: TimeRange[] = ['7d', '30d', '90d'];
   const formatted = data.map((d) => ({ ...d, label: formatDate(d.date) }));
 
@@ -290,7 +325,13 @@ function TrendChart({
       </div>
       <div className="p-4">
         {data.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">No data for this period</p>
+          <p className="text-sm text-muted-foreground text-center py-8">
+            {locale === 'ar'
+              ? 'لا توجد بيانات لهذه الفترة'
+              : locale === 'fr'
+                ? 'Aucune donnée pour cette période'
+                : 'No data for this period'}
+          </p>
         ) : (
           <ResponsiveContainer width="100%" height={200}>
             <AreaChart data={formatted}>
@@ -326,6 +367,7 @@ function TrendChart({
 }
 
 export default function StatsPage() {
+  const { locale } = useLocale();
   const [stats, setStats] = useState<DetailedStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -380,7 +422,14 @@ export default function StatsPage() {
           },
           appVersions: {
             total: d.app?.totalVersions ?? d.appVersions?.total ?? 0,
-            latest: d.app?.latestVersion ?? d.appVersions?.latest ?? null,
+            // latestVersion is the full version DOC, not a string — normalize to
+            // versionName (or apkFileName) so it can be rendered safely.
+            latest: (() => {
+              const raw = d.app?.latestVersion ?? d.appVersions?.latest ?? null;
+              if (!raw) return null;
+              if (typeof raw === 'string') return raw;
+              return raw.versionName || raw.apkFileName || String(raw._id || '');
+            })(),
           },
         });
 
@@ -458,31 +507,122 @@ export default function StatsPage() {
     );
   }
 
-  const channelGroups = normalizeByGroup(stats?.channels.byGroup || []);
+  const channelGroups = normalizeByGroup(stats?.channels.byGroup || [], locale);
   const locationData = (stats?.sessions.byLocation || []).map((l) => ({
-    name: l._id || 'غير معروف',
+    name: l._id || (locale === 'ar' ? 'غير معروف' : locale === 'fr' ? 'Inconnu' : 'Unknown'),
     value: l.count,
   }));
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">الإحصائيات</h1>
-        <p className="text-sm text-muted-foreground mt-1">مؤشرات النظام واتجاهاته</p>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">
+          {locale === 'ar' ? 'الإحصائيات' : locale === 'fr' ? 'Statistiques' : 'Statistics'}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {locale === 'ar'
+            ? 'مؤشرات النظام واتجاهاته'
+            : locale === 'fr'
+              ? 'Métriques système et tendances'
+              : 'System metrics and trends'}
+        </p>
       </div>
 
       {/* Overview cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="إجمالي القنوات" value={stats?.channels.total ?? 0} icon={Tv} />
-        <StatCard label="إجمالي المستخدمين" value={stats?.users.total ?? 0} icon={Users} />
-        <StatCard label="الجلسات النشطة" value={stats?.sessions.active ?? 0} icon={Activity} />
-        <StatCard label="عمليات الربط اليوم" value={stats?.pairings.today ?? 0} icon={Smartphone} />
+        <StatCard
+          label={
+            locale === 'ar' ? 'إجمالي القنوات' : locale === 'fr' ? 'Total des chaînes' : 'Total Channels'
+          }
+          value={stats?.channels.total ?? 0}
+          icon={Tv}
+        />
+        <StatCard
+          label={
+            locale === 'ar'
+              ? 'إجمالي المستخدمين'
+              : locale === 'fr'
+                ? 'Total des utilisateurs'
+                : 'Total Users'
+          }
+          value={stats?.users.total ?? 0}
+          icon={Users}
+        />
+        <StatCard
+          label={
+            locale === 'ar' ? 'الجلسات النشطة' : locale === 'fr' ? 'Sessions actives' : 'Active Sessions'
+          }
+          value={stats?.sessions.active ?? 0}
+          icon={Activity}
+        />
+        <StatCard
+          label={
+            locale === 'ar'
+              ? 'عمليات الربط اليوم'
+              : locale === 'fr'
+                ? 'Appairages du jour'
+                : "Today's Pairings"
+          }
+          value={stats?.pairings.today ?? 0}
+          icon={Smartphone}
+        />
+        <StatCard
+          label={
+            locale === 'ar'
+              ? 'إصدارات التطبيق'
+              : locale === 'fr'
+                ? 'Versions de l’application'
+                : 'App releases'
+          }
+          value={stats?.appVersions.total ?? 0}
+          icon={Package}
+        />
       </div>
+
+      {/* App version strip (data was fetched but never rendered before) */}
+      {stats?.appVersions.latest && (
+        <div className="border border-border px-4 py-3 flex flex-wrap items-center gap-3 text-sm">
+          <span className="text-muted-foreground">
+            {locale === 'ar'
+              ? 'أحدث إصدار منشور:'
+              : locale === 'fr'
+                ? 'Dernière version publiée :'
+                : 'Latest published release:'}
+          </span>
+          <code className="text-xs font-mono bg-muted px-2 py-1 border border-border" dir="ltr">
+            {String(stats.appVersions.latest)}
+          </code>
+          <a
+            href="/admin/versions"
+            className="text-xs text-primary hover:underline"
+          >
+            {locale === 'ar'
+              ? 'فتح صفحة الإصدارات ←'
+              : locale === 'fr'
+                ? 'Ouvrir les versions ←'
+                : 'Open releases →'}
+          </a>
+        </div>
+      )}
 
       {/* Charts row: Pie + Bar */}
       <div className="grid md:grid-cols-2 gap-6">
-        <ChartCard title="القنوات حسب المجموعة">
+        <ChartCard
+          title={
+            locale === 'ar'
+              ? 'القنوات حسب المجموعة'
+              : locale === 'fr'
+                ? 'Chaînes par groupe'
+                : 'Channels by Group'
+          }
+        >
           {channelGroups.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">لا توجد بيانات قنوات</p>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              {locale === 'ar'
+                ? 'لا توجد بيانات قنوات'
+                : locale === 'fr'
+                  ? 'Aucune donnée de chaîne'
+                  : 'No channel data'}
+            </p>
           ) : (
             <div className="flex flex-col items-center">
               <ResponsiveContainer width="100%" height={240}>
@@ -523,9 +663,23 @@ export default function StatsPage() {
           )}
         </ChartCard>
 
-        <ChartCard title="الجلسات حسب الموقع">
+        <ChartCard
+          title={
+            locale === 'ar'
+              ? 'الجلسات حسب الموقع'
+              : locale === 'fr'
+                ? 'Sessions par emplacement'
+                : 'Sessions by Location'
+          }
+        >
           {locationData.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">لا توجد بيانات مواقع</p>
+            <p className="text-sm text-muted-foreground text-center py-8">
+              {locale === 'ar'
+                ? 'لا توجد بيانات مواقع'
+                : locale === 'fr'
+                  ? 'Aucune donnée de localisation'
+                  : 'No location data'}
+            </p>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={locationData} layout="vertical" margin={{ left: 10, right: 20 }}>
@@ -568,26 +722,38 @@ export default function StatsPage() {
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp className="h-5 w-5 text-muted-foreground" />
           <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            الاتجاهات بمرور الوقت
+            {locale === 'ar'
+              ? 'الاتجاهات بمرور الوقت'
+              : locale === 'fr'
+                ? 'Tendances au fil du temps'
+                : 'Trends Over Time'}
           </h2>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
           <TrendChart
-            title="تسجيلات المستخدمين"
+            title={
+              locale === 'ar'
+                ? 'تسجيلات المستخدمين'
+                : locale === 'fr'
+                  ? 'Inscriptions utilisateurs'
+                  : 'User Registrations'
+            }
             data={userTrend}
             color="hsl(38, 75%, 38%)"
             range={userRange}
             onRangeChange={setUserRange}
           />
           <TrendChart
-            title="Sessions"
+            title={locale === 'ar' ? 'الجلسات' : locale === 'fr' ? 'Sessions' : 'Sessions'}
             data={sessionTrend}
             color="hsl(220, 60%, 50%)"
             range={sessionRange}
             onRangeChange={setSessionRange}
           />
           <TrendChart
-            title="ربط الأجهزة"
+            title={
+              locale === 'ar' ? 'ربط الأجهزة' : locale === 'fr' ? 'Appairages' : 'Pairings'
+            }
             data={pairingTrend}
             color="hsl(142, 60%, 34%)"
             range={pairingRange}
@@ -601,18 +767,22 @@ export default function StatsPage() {
         <div className="border border-border">
           <div className="px-4 py-2 bg-muted/50 border-b border-border">
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Channels
+              {locale === 'ar' ? 'القنوات' : locale === 'fr' ? 'Chaînes' : 'Channels'}
             </h2>
           </div>
           <dl className="divide-y divide-border">
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">نشطة</dt>
+              <dt className="text-sm text-muted-foreground">
+                {locale === 'ar' ? 'نشطة' : locale === 'fr' ? 'Actives' : 'Active'}
+              </dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.channels.active}
               </dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">غير نشطة</dt>
+              <dt className="text-sm text-muted-foreground">
+                {locale === 'ar' ? 'غير نشطة' : locale === 'fr' ? 'Inactives' : 'Inactive'}
+              </dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.channels.inactive}
               </dd>
@@ -623,24 +793,30 @@ export default function StatsPage() {
         <div className="border border-border">
           <div className="px-4 py-2 bg-muted/50 border-b border-border">
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              ربط الأجهزة
+              {locale === 'ar' ? 'ربط الأجهزة' : locale === 'fr' ? 'Appairages' : 'Pairings'}
             </h2>
           </div>
           <dl className="divide-y divide-border">
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">الإجمالي</dt>
+              <dt className="text-sm text-muted-foreground">
+                {locale === 'ar' ? 'الإجمالي' : locale === 'fr' ? 'Total' : 'Total'}
+              </dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.pairings.total}
               </dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">مكتملة</dt>
+              <dt className="text-sm text-muted-foreground">
+                {locale === 'ar' ? 'مكتملة' : locale === 'fr' ? 'Complétées' : 'Completed'}
+              </dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.pairings.completed}
               </dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">معلقة</dt>
+              <dt className="text-sm text-muted-foreground">
+                {locale === 'ar' ? 'معلقة' : locale === 'fr' ? 'En attente' : 'Pending'}
+              </dt>
               <dd className="text-sm font-display font-bold tabular-nums">
                 {stats?.pairings.pending}
               </dd>
@@ -655,7 +831,7 @@ export default function StatsPage() {
           <div className="flex items-center gap-2 mb-4">
             <Radio className="h-5 w-5 text-muted-foreground" />
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              سلامة البث
+              {locale === 'ar' ? 'سلامة البث' : locale === 'fr' ? 'Santé des flux' : 'Stream Health'}
             </h2>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -663,31 +839,47 @@ export default function StatsPage() {
             <div className="border border-border">
               <div className="px-4 py-2 bg-muted/50 border-b border-border">
                 <h3 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                  القنوات المحلية
+                  {locale === 'ar'
+                    ? 'القنوات المحلية'
+                    : locale === 'fr'
+                      ? 'Chaînes locales'
+                      : 'Local Channels'}
                 </h3>
               </div>
               <div className="p-4 space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">تعمل</span>
+                  <span className="text-muted-foreground">
+                    {locale === 'ar' ? 'تعمل' : locale === 'fr' ? 'Fonctionnelles' : 'Working'}
+                  </span>
                   <span className="font-display font-bold tabular-nums text-[hsl(var(--signal-green))]">
                     {streamHealth.channels.working}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">متوقفة</span>
+                  <span className="text-muted-foreground">
+                    {locale === 'ar' ? 'متوقفة' : locale === 'fr' ? 'En panne' : 'Down'}
+                  </span>
                   <span className="font-display font-bold tabular-nums text-[hsl(var(--signal-red))]">
                     {streamHealth.channels.failing}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">غير مختبرة</span>
+                  <span className="text-muted-foreground">
+                    {locale === 'ar' ? 'غير مختبرة' : locale === 'fr' ? 'Non testées' : 'Untested'}
+                  </span>
                   <span className="font-display font-bold tabular-nums">
                     {streamHealth.channels.untested}
                   </span>
                 </div>
                 {streamHealth.channels.avgResponseTime != null && (
                   <div className="flex items-center justify-between text-sm pt-1 border-t border-border">
-                    <span className="text-muted-foreground">متوسط الاستجابة</span>
+                    <span className="text-muted-foreground">
+                      {locale === 'ar'
+                        ? 'متوسط الاستجابة'
+                        : locale === 'fr'
+                          ? 'Temps de réponse moyen'
+                          : 'Avg Response Time'}
+                    </span>
                     <span className="font-display font-bold tabular-nums">
                       {formatMs(streamHealth.channels.avgResponseTime)}
                     </span>
@@ -728,24 +920,36 @@ export default function StatsPage() {
                 </div>
                 <div className="p-4 space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Alive</span>
+                    <span className="text-muted-foreground">
+                      {locale === 'ar' ? 'متاح' : locale === 'fr' ? 'Actif' : 'Alive'}
+                    </span>
                     <span className="font-display font-bold tabular-nums text-[hsl(var(--signal-green))]">
                       {src.alive}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Dead</span>
+                    <span className="text-muted-foreground">
+                      {locale === 'ar' ? 'متوقف' : locale === 'fr' ? 'Inactif' : 'Dead'}
+                    </span>
                     <span className="font-display font-bold tabular-nums text-[hsl(var(--signal-red))]">
                       {src.dead}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">غير معروف</span>
+                    <span className="text-muted-foreground">
+                      {locale === 'ar' ? 'غير معروف' : locale === 'fr' ? 'Inconnu' : 'Unknown'}
+                    </span>
                     <span className="font-display font-bold tabular-nums">{src.unknown}</span>
                   </div>
                   {src.avgResponseTime != null && (
                     <div className="flex items-center justify-between text-sm pt-1 border-t border-border">
-                      <span className="text-muted-foreground">متوسط الاستجابة</span>
+                      <span className="text-muted-foreground">
+                        {locale === 'ar'
+                          ? 'متوسط الاستجابة'
+                          : locale === 'fr'
+                            ? 'Temps de réponse moyen'
+                            : 'Avg Response Time'}
+                      </span>
                       <span className="font-display font-bold tabular-nums">
                         {formatMs(src.avgResponseTime)}
                       </span>
@@ -780,33 +984,63 @@ export default function StatsPage() {
           <div className="flex items-center gap-2 mb-4">
             <Activity className="h-5 w-5 text-muted-foreground" />
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Stream Metrics
+              {locale === 'ar'
+                ? 'مقاييس البث'
+                : locale === 'fr'
+                  ? 'Métriques des flux'
+                  : 'Stream Metrics'}
             </h2>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <StatCard
-              label="الإجمالي Alive"
+              label={
+                locale === 'ar' ? 'إجمالي المتاحة' : locale === 'fr' ? 'Total actifs' : 'Total Alive'
+              }
               value={streamHealth.channels.totalAliveCount ?? 0}
               icon={Radio}
             />
             <StatCard
-              label="الإجمالي Dead"
+              label={
+                locale === 'ar'
+                  ? 'إجمالي المتوقفة'
+                  : locale === 'fr'
+                    ? 'Total inactifs'
+                    : 'Total Dead'
+              }
               value={streamHealth.channels.totalDeadCount ?? 0}
               icon={Radio}
             />
             <StatCard
-              label="الإجمالي Unresponsive"
+              label={
+                locale === 'ar'
+                  ? 'إجمالي غير المستجيبة'
+                  : locale === 'fr'
+                    ? 'Total sans réponse'
+                    : 'Total Unresponsive'
+              }
               value={streamHealth.channels.totalUnresponsiveCount ?? 0}
               icon={Radio}
             />
             <StatCard
-              label="الإجمالي Plays"
+              label={
+                locale === 'ar'
+                  ? 'إجمالي التشغيلات'
+                  : locale === 'fr'
+                    ? 'Total des lectures'
+                    : 'Total Plays'
+              }
               value={streamHealth.channels.totalPlayCount ?? 0}
               icon={Radio}
             />
             <StatCard
-              label="Proxy Plays"
+              label={
+                locale === 'ar'
+                  ? 'التشغيلات عبر الوكيل'
+                  : locale === 'fr'
+                    ? 'Lectures via proxy'
+                    : 'Proxy Plays'
+              }
               value={streamHealth.channels.totalProxyPlayCount ?? 0}
               icon={Radio}
             />
@@ -814,25 +1048,43 @@ export default function StatsPage() {
 
           <div className="grid md:grid-cols-2 gap-6">
             {/* القنوات الأكثر توقفًا */}
-            <ChartCard title="القنوات الأكثر توقفًا Streams">
+            <ChartCard
+              title={
+                locale === 'ar'
+                  ? 'القنوات الأكثر توقفًا'
+                  : locale === 'fr'
+                    ? 'Flux les plus en panne'
+                    : 'Most Failing Streams'
+              }
+            >
               {streamHealth.metrics.mostFailing.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">لا توجد قنوات متوقفة</p>
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  {locale === 'ar'
+                    ? 'لا توجد قنوات متوقفة'
+                    : locale === 'fr'
+                      ? 'Aucune chaîne en panne'
+                      : 'No down channels'}
+                </p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border">
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          القناة
+                          {locale === 'ar' ? 'القناة' : locale === 'fr' ? 'Chaîne' : 'Channel'}
                         </th>
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          المجموعة
+                          {locale === 'ar' ? 'المجموعة' : locale === 'fr' ? 'Groupe' : 'Group'}
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          متوقفة
+                          {locale === 'ar' ? 'متوقفة' : locale === 'fr' ? 'En panne' : 'Down'}
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          آخر توقف
+                          {locale === 'ar'
+                            ? 'آخر توقف'
+                            : locale === 'fr'
+                              ? 'Dernier arrêt'
+                              : 'Last Dead'}
                         </th>
                       </tr>
                     </thead>
@@ -840,7 +1092,8 @@ export default function StatsPage() {
                       {streamHealth.metrics.mostFailing.map((ch) => (
                         <tr key={ch._id}>
                           <td className="py-2 font-medium truncate max-w-[160px]">
-                            {ch.channelName || 'غير معروف'}
+                            {ch.channelName ||
+                              (locale === 'ar' ? 'غير معروف' : locale === 'fr' ? 'Inconnu' : 'Unknown')}
                           </td>
                           <td className="py-2 text-muted-foreground truncate max-w-[100px] hidden sm:table-cell">
                             {ch.channelGroup || '—'}
@@ -849,7 +1102,7 @@ export default function StatsPage() {
                             {ch.metrics.deadCount ?? 0}
                           </td>
                           <td className="py-2 text-right text-muted-foreground hidden sm:table-cell">
-                            {ch.metrics.lastDeadAt ? timeAgo(ch.metrics.lastDeadAt) : '—'}
+                            {ch.metrics.lastDeadAt ? timeAgo(ch.metrics.lastDeadAt, locale) : '—'}
                           </td>
                         </tr>
                       ))}
@@ -860,25 +1113,43 @@ export default function StatsPage() {
             </ChartCard>
 
             {/* Most Popular */}
-            <ChartCard title="القنوات الأكثر تشغيلًا">
+            <ChartCard
+              title={
+                locale === 'ar'
+                  ? 'القنوات الأكثر تشغيلًا'
+                  : locale === 'fr'
+                    ? 'Chaînes les plus lues'
+                    : 'Most Played Channels'
+              }
+            >
               {streamHealth.metrics.mostPopular.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">لا توجد بيانات تشغيل</p>
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  {locale === 'ar'
+                    ? 'لا توجد بيانات تشغيل'
+                    : locale === 'fr'
+                      ? 'Aucune donnée de lecture'
+                      : 'No play data'}
+                </p>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-border">
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          القناة
+                          {locale === 'ar' ? 'القناة' : locale === 'fr' ? 'Chaîne' : 'Channel'}
                         </th>
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          المجموعة
+                          {locale === 'ar' ? 'المجموعة' : locale === 'fr' ? 'Groupe' : 'Group'}
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          مرات التشغيل
+                          {locale === 'ar' ? 'مرات التشغيل' : locale === 'fr' ? 'Lectures' : 'Plays'}
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          آخر تشغيل
+                          {locale === 'ar'
+                            ? 'آخر تشغيل'
+                            : locale === 'fr'
+                              ? 'Dernière lecture'
+                              : 'Last Played'}
                         </th>
                       </tr>
                     </thead>
@@ -886,7 +1157,8 @@ export default function StatsPage() {
                       {streamHealth.metrics.mostPopular.map((ch) => (
                         <tr key={ch._id}>
                           <td className="py-2 font-medium truncate max-w-[160px]">
-                            {ch.channelName || 'غير معروف'}
+                            {ch.channelName ||
+                              (locale === 'ar' ? 'غير معروف' : locale === 'fr' ? 'Inconnu' : 'Unknown')}
                           </td>
                           <td className="py-2 text-muted-foreground truncate max-w-[100px] hidden sm:table-cell">
                             {ch.channelGroup || '—'}
@@ -895,7 +1167,9 @@ export default function StatsPage() {
                             {ch.metrics.playCount ?? 0}
                           </td>
                           <td className="py-2 text-right text-muted-foreground hidden sm:table-cell">
-                            {ch.metrics.lastPlayedAt ? timeAgo(ch.metrics.lastPlayedAt) : '—'}
+                            {ch.metrics.lastPlayedAt
+                              ? timeAgo(ch.metrics.lastPlayedAt, locale)
+                              : '—'}
                           </td>
                         </tr>
                       ))}
@@ -906,10 +1180,22 @@ export default function StatsPage() {
             </ChartCard>
 
             {/* Removal Candidates */}
-            <ChartCard title="Removal Candidates">
+            <ChartCard
+              title={
+                locale === 'ar'
+                  ? 'مرشحو الإزالة'
+                  : locale === 'fr'
+                    ? 'Candidats à la suppression'
+                    : 'Removal Candidates'
+              }
+            >
               {streamHealth.metrics.removalCandidates.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No removal candidates
+                  {locale === 'ar'
+                    ? 'لا يوجد مرشحون للإزالة'
+                    : locale === 'fr'
+                      ? 'Aucun candidat à la suppression'
+                      : 'No removal candidates'}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -917,16 +1203,16 @@ export default function StatsPage() {
                     <thead>
                       <tr className="border-b border-border">
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          القناة
+                          {locale === 'ar' ? 'القناة' : locale === 'fr' ? 'Chaîne' : 'Channel'}
                         </th>
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          المجموعة
+                          {locale === 'ar' ? 'المجموعة' : locale === 'fr' ? 'Groupe' : 'Group'}
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          متوقفة
+                          {locale === 'ar' ? 'متوقفة' : locale === 'fr' ? 'En panne' : 'Down'}
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          مرات التشغيل
+                          {locale === 'ar' ? 'مرات التشغيل' : locale === 'fr' ? 'Lectures' : 'Plays'}
                         </th>
                       </tr>
                     </thead>
@@ -934,7 +1220,8 @@ export default function StatsPage() {
                       {streamHealth.metrics.removalCandidates.map((ch) => (
                         <tr key={ch._id}>
                           <td className="py-2 font-medium truncate max-w-[160px]">
-                            {ch.channelName || 'غير معروف'}
+                            {ch.channelName ||
+                              (locale === 'ar' ? 'غير معروف' : locale === 'fr' ? 'Inconnu' : 'Unknown')}
                           </td>
                           <td className="py-2 text-muted-foreground truncate max-w-[100px] hidden sm:table-cell">
                             {ch.channelGroup || '—'}
@@ -954,10 +1241,22 @@ export default function StatsPage() {
             </ChartCard>
 
             {/* Unresponsive Streams */}
-            <ChartCard title="Unresponsive Streams">
+            <ChartCard
+              title={
+                locale === 'ar'
+                  ? 'بث غير مستجيب'
+                  : locale === 'fr'
+                    ? 'Flux sans réponse'
+                    : 'Unresponsive Streams'
+              }
+            >
               {streamHealth.metrics.unresponsiveStreams.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  No unresponsive streams
+                  {locale === 'ar'
+                    ? 'لا توجد بثوث غير مستجيبة'
+                    : locale === 'fr'
+                      ? 'Aucun flux sans réponse'
+                      : 'No unresponsive streams'}
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -965,16 +1264,16 @@ export default function StatsPage() {
                     <thead>
                       <tr className="border-b border-border">
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          القناة
+                          {locale === 'ar' ? 'القناة' : locale === 'fr' ? 'Chaîne' : 'Channel'}
                         </th>
                         <th className="pb-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          المجموعة
+                          {locale === 'ar' ? 'المجموعة' : locale === 'fr' ? 'Groupe' : 'Group'}
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                          Count
+                          {locale === 'ar' ? 'العدد' : locale === 'fr' ? 'Nombre' : 'Count'}
                         </th>
                         <th className="pb-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                          Last
+                          {locale === 'ar' ? 'آخر مرة' : locale === 'fr' ? 'Dernière' : 'Last'}
                         </th>
                       </tr>
                     </thead>
@@ -982,7 +1281,8 @@ export default function StatsPage() {
                       {streamHealth.metrics.unresponsiveStreams.map((ch) => (
                         <tr key={ch._id}>
                           <td className="py-2 font-medium truncate max-w-[160px]">
-                            {ch.channelName || 'غير معروف'}
+                            {ch.channelName ||
+                              (locale === 'ar' ? 'غير معروف' : locale === 'fr' ? 'Inconnu' : 'Unknown')}
                           </td>
                           <td className="py-2 text-muted-foreground truncate max-w-[100px] hidden sm:table-cell">
                             {ch.channelGroup || '—'}
@@ -992,7 +1292,7 @@ export default function StatsPage() {
                           </td>
                           <td className="py-2 text-right text-muted-foreground hidden sm:table-cell">
                             {ch.metrics.lastUnresponsiveAt
-                              ? timeAgo(ch.metrics.lastUnresponsiveAt)
+                              ? timeAgo(ch.metrics.lastUnresponsiveAt, locale)
                               : '—'}
                           </td>
                         </tr>
@@ -1012,7 +1312,11 @@ export default function StatsPage() {
           <div className="flex items-center gap-2 mb-4">
             <Clock className="h-5 w-5 text-muted-foreground" />
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Scheduler Tasks
+              {locale === 'ar'
+                ? 'المهام المجدولة'
+                : locale === 'fr'
+                  ? 'Tâches planifiées'
+                  : 'Scheduler Tasks'}
             </h2>
           </div>
           <div className="border border-border overflow-x-auto">
@@ -1020,26 +1324,40 @@ export default function StatsPage() {
               <thead>
                 <tr className="bg-muted/50 border-b border-border">
                   <th className="px-4 py-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                    Task
+                    {locale === 'ar' ? 'المهمة' : locale === 'fr' ? 'Tâche' : 'Task'}
                   </th>
                   <th className="px-4 py-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                    Last Status
+                    {locale === 'ar'
+                      ? 'آخر حالة'
+                      : locale === 'fr'
+                        ? 'Dernier statut'
+                        : 'Last Status'}
                   </th>
                   <th className="px-4 py-2 text-left text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden sm:table-cell">
-                    Last Run
+                    {locale === 'ar'
+                      ? 'آخر تشغيل'
+                      : locale === 'fr'
+                        ? 'Dernière exécution'
+                        : 'Last Run'}
                   </th>
                   <th className="px-4 py-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden md:table-cell">
-                    Duration
+                    {locale === 'ar' ? 'المدة' : locale === 'fr' ? 'Durée' : 'Duration'}
                   </th>
                   <th className="px-4 py-2 text-right text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hidden lg:table-cell">
-                    Success Rate
+                    {locale === 'ar'
+                      ? 'نسبة النجاح'
+                      : locale === 'fr'
+                        ? 'Taux de réussite'
+                        : 'Success Rate'}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {schedulerTasks.map((task) => {
                   const rate =
-                    task.totalRuns > 0 ? Math.round((task.completed / task.totalRuns) * 100) : null;
+                    task.totalRuns > 0
+                      ? Math.round((task.completed / task.totalRuns) * 100)
+                      : null;
                   return (
                     <tr key={task.taskName}>
                       <td className="px-4 py-2.5 font-medium truncate max-w-[200px]">
@@ -1057,11 +1375,11 @@ export default function StatsPage() {
                                   : 'bg-muted text-muted-foreground'
                           }`}
                         >
-                          {task.lastStatus}
+                          {TASK_STATUS_LABELS[task.lastStatus]?.(locale) ?? task.lastStatus}
                         </span>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground hidden sm:table-cell">
-                        {task.lastStartedAt ? timeAgo(task.lastStartedAt) : '—'}
+                        {task.lastStartedAt ? timeAgo(task.lastStartedAt, locale) : '—'}
                       </td>
                       <td className="px-4 py-2.5 text-right font-display tabular-nums hidden md:table-cell">
                         {formatMs(task.lastDurationMs)}
@@ -1086,9 +1404,23 @@ export default function StatsPage() {
       {/* Recent Users / الجلسات النشطة / Recent Pairings */}
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Recent Users */}
-        <ChartCard title="Recent Users">
+        <ChartCard
+          title={
+            locale === 'ar'
+              ? 'أحدث المستخدمين'
+              : locale === 'fr'
+                ? 'Utilisateurs récents'
+                : 'Recent Users'
+          }
+        >
           {(stats?.users.recent?.length ?? 0) === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No recent users</p>
+            <p className="text-sm text-muted-foreground text-center py-4">
+              {locale === 'ar'
+                ? 'لا يوجد مستخدمون جدد'
+                : locale === 'fr'
+                  ? 'Aucun utilisateur récent'
+                  : 'No recent users'}
+            </p>
           ) : (
             <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
               {stats?.users.recent.slice(0, 8).map((u, i) => (
@@ -1101,7 +1433,7 @@ export default function StatsPage() {
                     <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
-                    {timeAgo(u.createdAt)}
+                    {timeAgo(u.createdAt, locale)}
                   </span>
                 </div>
               ))}
@@ -1110,9 +1442,19 @@ export default function StatsPage() {
         </ChartCard>
 
         {/* الجلسات النشطة */}
-        <ChartCard title="الجلسات النشطة">
+        <ChartCard
+          title={
+            locale === 'ar' ? 'الجلسات النشطة' : locale === 'fr' ? 'Sessions actives' : 'Active Sessions'
+          }
+        >
           {(stats?.sessions.activeSessions?.length ?? 0) === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No active sessions</p>
+            <p className="text-sm text-muted-foreground text-center py-4">
+              {locale === 'ar'
+                ? 'لا توجد جلسات نشطة'
+                : locale === 'fr'
+                  ? 'Aucune session active'
+                  : 'No active sessions'}
+            </p>
           ) : (
             <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
               {stats?.sessions.activeSessions.slice(0, 8).map((s, i) => (
@@ -1125,11 +1467,12 @@ export default function StatsPage() {
                     <p className="text-xs text-muted-foreground truncate">
                       {s.location && s.location !== 'غير معروف'
                         ? s.location
-                        : s.ipAddress || 'غير معروف'}
+                        : s.ipAddress ||
+                          (locale === 'ar' ? 'غير معروف' : locale === 'fr' ? 'Inconnu' : 'Unknown')}
                     </p>
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
-                    {timeAgo(s.lastActivity)}
+                    {timeAgo(s.lastActivity, locale)}
                   </span>
                 </div>
               ))}
@@ -1138,9 +1481,23 @@ export default function StatsPage() {
         </ChartCard>
 
         {/* Recent Pairings */}
-        <ChartCard title="Recent Pairings">
+        <ChartCard
+          title={
+            locale === 'ar'
+              ? 'أحدث عمليات الربط'
+              : locale === 'fr'
+                ? 'Appairages récents'
+                : 'Recent Pairings'
+          }
+        >
           {(stats?.pairings.recent?.length ?? 0) === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-4">No recent pairings</p>
+            <p className="text-sm text-muted-foreground text-center py-4">
+              {locale === 'ar'
+                ? 'لا توجد عمليات ربط حديثة'
+                : locale === 'fr'
+                  ? 'Aucun appairage récent'
+                  : 'No recent pairings'}
+            </p>
           ) : (
             <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
               {stats?.pairings.recent.slice(0, 8).map((p, i) => (
@@ -1150,10 +1507,17 @@ export default function StatsPage() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium truncate">
-                      {p.deviceName || p.deviceModel || 'غير معروف Device'}
+                      {p.deviceName ||
+                        p.deviceModel ||
+                        (locale === 'ar'
+                          ? 'جهاز غير معروف'
+                          : locale === 'fr'
+                            ? 'Appareil inconnu'
+                            : 'Unknown device')}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {p.username || 'Unpaired'}
+                      {p.username ||
+                        (locale === 'ar' ? 'غير مقترن' : locale === 'fr' ? 'Non appairé' : 'Unpaired')}
                     </p>
                   </div>
                   <span
@@ -1165,7 +1529,7 @@ export default function StatsPage() {
                           : 'bg-muted text-muted-foreground'
                     }`}
                   >
-                    {p.status}
+                    {PAIRING_STATUS_LABELS[p.status]?.(locale) ?? p.status}
                   </span>
                 </div>
               ))}

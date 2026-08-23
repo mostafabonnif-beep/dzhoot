@@ -1,10 +1,12 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Channel = require('../models/Channel');
 const AppVersion = require('../models/AppVersion');
 const User = require('../models/User');
 const Session = require('../models/Session');
 const PairingRequest = require('../models/PairingRequest');
+const Device = require('../models/Device');
 const { requireAuth, requireAdmin } = require('./auth');
 const { escapeRegex } = require('../utils/escapeRegex');
 const { audit } = require('../services/audit-log');
@@ -246,6 +248,110 @@ router.delete('/channels/bulk-by-status', async (req, res) => {
       success: false,
       error: 'Failed to bulk-delete channels',
     });
+  }
+});
+
+// Bulk enable/disable catalog channels by explicit ID list.
+// NOTE: must be registered before DELETE /channels/:id so 'bulk' never
+// shadow-matches the :id parameter.
+router.patch('/channels/bulk', async (req, res) => {
+  try {
+    const rawIds = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter(Boolean) : [];
+    const ids = rawIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'ids[] is required (valid ObjectIds)' });
+    }
+    if (rawIds.length > 2000) {
+      return res.status(400).json({ success: false, error: 'Too many ids (max 2000)' });
+    }
+    if (typeof req.body?.isActive !== 'boolean') {
+      return res.status(400).json({ success: false, error: 'isActive (boolean) is required' });
+    }
+    const isActive = req.body.isActive;
+    // Disabling channels is reversible but broad — require explicit confirmation.
+    if (!isActive && req.body?.confirmed !== true) {
+      return res.status(400).json({
+        success: false,
+        error: 'Disabling channels requires { "confirmed": true } in request body',
+      });
+    }
+
+    const updateResult = await Channel.updateMany(
+      { _id: { $in: ids }, ownerId: null },
+      { $set: { isActive } },
+    );
+
+    await invalidateCatalogCache();
+    audit({
+      userId: req.user.id,
+      action: isActive ? 'bulk_enable_channels' : 'bulk_disable_channels',
+      resource: 'channel',
+      resourceId: `${updateResult.modifiedCount} channels`,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      isActive,
+      updatedCount: updateResult.modifiedCount,
+      matchedCount: updateResult.matchedCount,
+    });
+  } catch (error) {
+    console.error('Error bulk-updating channels:', error);
+    res.status(500).json({ success: false, error: 'Failed to bulk-update channels' });
+  }
+});
+
+// Bulk delete catalog channels by explicit ID list (requires { confirmed: true }).
+// NOTE: must be registered before DELETE /channels/:id so 'bulk' never
+// shadow-matches the :id parameter.
+router.delete('/channels/bulk', async (req, res) => {
+  try {
+    if (req.body?.confirmed !== true) {
+      return res.status(400).json({
+        success: false,
+        error: 'Destructive operation requires { "confirmed": true } in request body',
+      });
+    }
+    const rawIds = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter(Boolean) : [];
+    const ids = rawIds.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'ids[] is required (valid ObjectIds)' });
+    }
+    if (rawIds.length > 2000) {
+      return res.status(400).json({ success: false, error: 'Too many ids (max 2000)' });
+    }
+
+    // Catalog-only: users' private (owned) channels are never touched.
+    const catalogIds = await Channel.find({ _id: { $in: ids }, ownerId: null }).distinct('_id');
+    const deleteResult = await Channel.deleteMany({ _id: { $in: catalogIds } });
+
+    if (catalogIds.length) {
+      await User.updateMany(
+        { channels: { $in: catalogIds } },
+        { $pull: { channels: { $in: catalogIds } } },
+      );
+    }
+
+    await invalidateCatalogCache();
+    audit({
+      userId: req.user.id,
+      action: 'bulk_delete_channels',
+      resource: 'channel',
+      resourceId: `${deleteResult.deletedCount} channels`,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      message: `Deleted ${deleteResult.deletedCount} channels`,
+      deletedCount: deleteResult.deletedCount,
+    });
+  } catch (error) {
+    console.error('Error bulk-deleting channels:', error);
+    res.status(500).json({ success: false, error: 'Failed to bulk-delete channels' });
   }
 });
 
@@ -668,6 +774,183 @@ router.get('/channels', async (req, res) => {
 // ============ STATISTICS ============
 
 // Detailed statistics endpoint
+// ─── Device management (admin) ─────────────────────────────
+
+// List registered devices with their owner, paginated + searchable.
+router.get('/devices', async (req, res) => {
+  try {
+    const { search, page, pageSize, status } = req.query;
+    const p = parseInt(page, 10) || 1;
+    const ps = Math.min(parseInt(pageSize, 10) || 50, 200);
+    const filter = {};
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), 'i');
+      filter.$or = [{ name: regex }, { deviceId: regex }, { platform: regex }];
+    }
+    if (status === 'active') filter.lastSeenAt = { $gte: new Date(Date.now() - 7 * 86400000) };
+    if (status === 'stale') {
+      filter.$or = [
+        { lastSeenAt: { $lt: new Date(Date.now() - 7 * 86400000) } },
+        { lastSeenAt: { $exists: false } },
+        { lastSeenAt: null },
+      ];
+    }
+
+    const [devices, totalCount] = await Promise.all([
+      Device.find(filter)
+        .sort({ lastSeenAt: -1 })
+        .skip((p - 1) * ps)
+        .limit(ps)
+        .lean(),
+      Device.countDocuments(filter),
+    ]);
+
+    const userIds = devices.map((d) => d.userId).filter(Boolean);
+    const users = await User.find({ _id: { $in: userIds } })
+      .select('username email isActive')
+      .lean();
+    const userById = new Map(users.map((u) => [String(u._id), u]));
+
+    const data = devices.map((d) => ({
+      _id: String(d._id),
+      deviceId: d.deviceId,
+      name: d.name || '',
+      platform: d.platform || '',
+      appVersion: d.appVersion || '',
+      lastSeenAt: d.lastSeenAt ? new Date(d.lastSeenAt).toISOString() : null,
+      createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : null,
+      user: d.userId
+        ? {
+            _id: String(d.userId),
+            username: userById.get(String(d.userId))?.username || '',
+            email: userById.get(String(d.userId))?.email || '',
+            isActive: userById.get(String(d.userId))?.isActive ?? true,
+          }
+        : null,
+    }));
+
+    res.json({ success: true, count: data.length, totalCount, page: p, pageSize: ps, data });
+  } catch (error) {
+    console.error('Error listing devices:', error);
+    res.status(500).json({ success: false, error: 'Failed to list devices' });
+  }
+});
+
+// Unpair/remove a registered device (frees a device slot for the owner).
+router.delete('/devices/:id', async (req, res) => {
+  try {
+    if (req.body?.confirmed !== true) {
+      return res.status(400).json({
+        success: false,
+        error: 'Destructive operation requires { "confirmed": true } in request body',
+      });
+    }
+    const id = String(req.params.id || '');
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid device id' });
+    }
+    const device = await Device.findByIdAndDelete(id);
+    if (!device) return res.status(404).json({ success: false, error: 'Device not found' });
+
+    audit({
+      userId: req.user.id,
+      action: 'device_unpair',
+      resource: 'Device',
+      resourceId: String(device._id),
+      changes: { after: { deviceId: device.deviceId, userId: String(device.userId || '') } },
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({ success: true, message: 'Device unpaired', deviceId: device.deviceId });
+  } catch (error) {
+    console.error('Error unpairing device:', error);
+    res.status(500).json({ success: false, error: 'Failed to unpair device' });
+  }
+});
+
+// List pairing requests (admin visibility for pending flows).
+router.get('/pairing-requests', async (req, res) => {
+  try {
+    const { page, pageSize, status } = req.query;
+    const p = parseInt(page, 10) || 1;
+    const ps = Math.min(parseInt(pageSize, 10) || 50, 200);
+    const filter = {};
+    if (status && status !== 'ALL') filter.status = status;
+
+    const [requests, totalCount] = await Promise.all([
+      PairingRequest.find(filter)
+        .sort({ createdAt: -1 })
+        .skip((p - 1) * ps)
+        .limit(ps)
+        .populate('userId', 'username email')
+        .lean(),
+      PairingRequest.countDocuments(filter),
+    ]);
+
+    res.json({
+      success: true,
+      count: requests.length,
+      totalCount,
+      page: p,
+      pageSize: ps,
+      data: requests.map((r) => ({
+        _id: String(r._id),
+        pin: r.pin || '',
+        deviceName: r.deviceName || '',
+        deviceModel: r.deviceModel || '',
+        status: r.status,
+        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+        expiresAt: r.expiresAt ? new Date(r.expiresAt).toISOString() : null,
+        user: r.userId
+          ? { _id: String(r.userId._id), username: r.userId.username || '', email: r.userId.email || '' }
+          : null,
+      })),
+    });
+  } catch (error) {
+    console.error('Error listing pairing requests:', error);
+    res.status(500).json({ success: false, error: 'Failed to list pairing requests' });
+  }
+});
+
+// Revoke a pending pairing request (deleted immediately; audit trail kept).
+// Marking it 'expired' would misreport to the TV during the TTL-delete window,
+// so we remove the doc outright — the TV then sees "PIN not found" right away.
+router.delete('/pairing-requests/:id', async (req, res) => {
+  try {
+    if (req.body?.confirmed !== true) {
+      return res.status(400).json({
+        success: false,
+        error: 'Destructive operation requires { "confirmed": true } in request body',
+      });
+    }
+    const id = String(req.params.id || '');
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid pairing request id' });
+    }
+    const reqDoc = await PairingRequest.findById(id);
+    if (!reqDoc) return res.status(404).json({ success: false, error: 'Pairing request not found' });
+
+    await PairingRequest.deleteOne({ _id: id });
+
+    audit({
+      userId: req.user.id,
+      action: 'pairing_revoke',
+      resource: 'PairingRequest',
+      resourceId: String(reqDoc._id),
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({ success: true, message: 'Pairing request revoked' });
+  } catch (error) {
+    console.error('Error revoking pairing request:', error);
+    res.status(500).json({ success: false, error: 'Failed to revoke pairing request' });
+  }
+});
+
+// ─── Stats ────────────────────────────────────────────────
+
 router.get('/stats/detailed', async (req, res) => {
   try {
     // Channel statistics

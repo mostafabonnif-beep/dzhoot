@@ -86,7 +86,7 @@ export default function SubscriptionPage() {
   async function handleRemoveDevice(deviceId: string) {
     try {
       await api.delete(`/me/devices/${encodeURIComponent(deviceId)}`);
-      toast('Device removed', 'success');
+      toast('تمت إزالة الجهاز', 'success');
       fetchData();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };

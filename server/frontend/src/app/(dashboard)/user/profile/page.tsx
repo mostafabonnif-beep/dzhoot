@@ -175,7 +175,7 @@ export default function ProfilePage() {
         }
       }
     } catch {
-      toast('Failed to regenerate code', 'error');
+      toast('فشل إعادة توليد الكود', 'error');
     }
   }
 
@@ -184,7 +184,7 @@ export default function ProfilePage() {
       await api.delete(`/auth/sessions/${sessionId}`);
       setSessions((prev) => prev.filter((s) => s.sessionId !== sessionId));
     } catch {
-      toast('Failed to revoke session', 'error');
+      toast('فشل إلغاء الجلسة', 'error');
     }
   }
 

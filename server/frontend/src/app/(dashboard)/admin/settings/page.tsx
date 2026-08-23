@@ -54,8 +54,10 @@ export default function SettingsPage() {
         if (infoRes) setInfo(infoRes.data.data || infoRes.data);
         const config = configRes?.data?.data || configRes?.data;
         if (config?.defaultTvCode) {
+          // The legacy /api/v1/channels/playlist.m3u endpoint is 410-gated;
+          // the canonical public playlist is the TV route (same as dashboard).
           setPlaylistUrl(
-            `${window.location.origin}/api/v1/channels/playlist.m3u?code=${config.defaultTvCode}`,
+            `${window.location.origin}/api/v1/tv/playlist/${encodeURIComponent(config.defaultTvCode)}`,
           );
         }
       } catch (err: unknown) {
@@ -137,12 +139,28 @@ export default function SettingsPage() {
   }
 
   async function handleClearCache() {
+    const confirmed = window.confirm(
+      locale === 'ar'
+        ? 'سيتم مسح جميع بيانات IPTV-Org المخزنة مؤقتًا (القوائم وحالة البث). يستغرق إعادة جلبها وقتًا. هل تريد المتابعة؟'
+        : locale === 'fr'
+          ? 'Toutes les données mises en cache d’IPTV-Org (listes et état des flux) seront effacées. Leur récupération prend du temps. Continuer ?'
+          : 'All cached IPTV-Org data (playlists and liveness state) will be cleared. Refetching takes time. Continue?',
+    );
+    if (!confirmed) return;
     setCacheLoading(true);
     try {
       await api.post('/iptv-org/clear-cache');
       await fetchCacheStatus();
+      toast(
+        locale === 'ar'
+          ? 'تم مسح ذاكرة التخزين المؤقت'
+          : locale === 'fr'
+            ? 'Cache vidé'
+            : 'Cache cleared',
+        'success',
+      );
     } catch {
-      toast('Failed to clear cache', 'error');
+      toast('فشل مسح ذاكرة التخزين المؤقت', 'error');
     } finally {
       setCacheLoading(false);
     }
@@ -158,9 +176,13 @@ export default function SettingsPage() {
   function formatAge(ms?: number) {
     if (!ms) return '—';
     const mins = Math.floor(ms / 60000);
-    if (mins < 1) return '< 1 min';
-    if (mins < 60) return `${mins} min`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    if (mins < 1)
+      return locale === 'ar' ? 'أقل من دقيقة' : locale === 'fr' ? "< 1 min" : '< 1 min';
+    if (mins < 60)
+      return locale === 'ar' ? `${mins} دقيقة` : locale === 'fr' ? `${mins} min` : `${mins} min`;
+    return locale === 'ar'
+      ? `${Math.floor(mins / 60)} س و${mins % 60} د`
+      : `${Math.floor(mins / 60)}h ${mins % 60}m`;
   }
 
   if (loading) {
@@ -191,7 +213,7 @@ export default function SettingsPage() {
               <dd className="text-sm font-medium">{info.name}</dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">Version</dt>
+              <dt className="text-sm text-muted-foreground">الإصدار</dt>
               <dd className="text-sm font-medium">{info.version}</dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
@@ -203,7 +225,7 @@ export default function SettingsPage() {
             </div>
             {info.features && Object.keys(info.features).length > 0 && (
               <div className="px-4 py-3">
-                <dt className="text-sm text-muted-foreground mb-2">Features</dt>
+                <dt className="text-sm text-muted-foreground mb-2">الميزات</dt>
                 <dd className="flex flex-wrap gap-2">
                   {Object.entries(info.features).map(([key, enabled]) => (
                     <span
@@ -230,7 +252,11 @@ export default function SettingsPage() {
           </div>
           <div className="px-4 py-4 space-y-3">
             <p className="text-sm text-muted-foreground">
-              M3U playlist URL containing all channels in the system.
+              {locale === 'ar'
+                ? 'رابط قائمة تشغيل M3U يحتوي على جميع قنوات النظام.'
+                : locale === 'fr'
+                  ? 'URL de la playlist M3U contenant toutes les chaînes du système.'
+                  : 'M3U playlist URL containing all channels in the system.'}
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs font-mono bg-muted px-3 py-2 truncate border border-border">
@@ -238,7 +264,13 @@ export default function SettingsPage() {
               </code>
               <button
                 onClick={handleCopy}
-                aria-label="Copy to clipboard"
+                aria-label={
+                  locale === 'ar'
+                    ? 'نسخ إلى الحافظة'
+                    : locale === 'fr'
+                      ? 'Copier dans le presse-papiers'
+                      : 'Copy to clipboard'
+                }
                 className="flex items-center gap-1.5 px-3 py-2 text-sm border border-border text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors shrink-0"
               >
                 {copied ? (
@@ -257,7 +289,7 @@ export default function SettingsPage() {
       <div className="border border-border">
         <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2">
           <div>
-            <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">Two-factor authentication</h2>
+            <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">المصادقة الثنائية</h2>
             <p className="mt-1 text-xs text-muted-foreground">حماية إضافية لحسابات المشرفين عبر تطبيق Authenticator.</p>
           </div>
           {totpEnabled ? <ShieldCheck className="h-5 w-5 text-signal-green" /> : <ShieldOff className="h-5 w-5 text-muted-foreground" />}
@@ -317,39 +349,86 @@ export default function SettingsPage() {
         <div className="px-4 py-4 space-y-4">
           <div>
             <p className="text-sm text-muted-foreground mb-3">
-              Revoke all sessions except your current one. Other users and tabs will need to log in
-              again.
+              {locale === 'ar'
+                ? 'إلغاء جميع الجلسات باستثناء جلستك الحالية. سيُطلب من المستخدمين والتبويبات الأخرى تسجيل الدخول مجددًا.'
+                : locale === 'fr'
+                  ? 'Révoquer toutes les sessions sauf la vôtre. Les autres utilisateurs et onglets devront se reconnecter.'
+                  : 'Revoke all sessions except your current one. Other users and tabs will need to log in again.'}
             </p>
             <button
               onClick={async () => {
+                const confirmed = window.confirm(
+                  locale === 'ar'
+                    ? 'سيتم تسجيل خروج جميع المستخدمين والتبويبات الأخرى من لوحة التحكم. هل تريد المتابعة؟'
+                    : locale === 'fr'
+                      ? 'Tous les autres utilisateurs et onglets seront déconnectés du panneau d’administration. Continuer ?'
+                      : 'All other users and tabs will be logged out of the admin panel. Continue?',
+                );
+                if (!confirmed) return;
                 try {
                   const res = await api.post('/auth/revoke-other-sessions');
-                  toast(res.data.message || 'Other sessions revoked', 'success');
+                  toast(
+                    res.data.message ||
+                      (locale === 'ar'
+                        ? 'تم إلغاء الجلسات الأخرى'
+                        : locale === 'fr'
+                          ? 'Sessions révoquées'
+                          : 'Other sessions revoked'),
+                    'success',
+                  );
                 } catch {
-                  toast('Failed to revoke sessions', 'error');
+                  toast('فشل إلغاء الجلسات', 'error');
                 }
               }}
               className="inline-flex items-center px-4 py-2 text-sm font-medium border-2 border-destructive/40 bg-destructive/5 text-destructive shadow-sm transition-colors hover:bg-destructive/10 active:bg-destructive/15"
             >
-              Revoke All Other Sessions
+              {locale === 'ar'
+                ? 'إلغاء الجلسات الأخرى'
+                : locale === 'fr'
+                  ? 'Révoquer les autres sessions'
+                  : 'Revoke All Other Sessions'}
             </button>
           </div>
           <div className="border-t border-border pt-4">
             <p className="text-sm text-muted-foreground mb-3">
-              Remove all expired sessions from the database.
+              {locale === 'ar'
+                ? 'حذف جميع الجلسات المنتهية من قاعدة البيانات.'
+                : locale === 'fr'
+                  ? 'Supprimer toutes les sessions expirées de la base de données.'
+                  : 'Remove all expired sessions from the database.'}
             </p>
             <button
               onClick={async () => {
+                const confirmed = window.confirm(
+                  locale === 'ar'
+                    ? 'سيتم حذف جميع الجلسات المنتهية نهائيًا. هل تريد المتابعة؟'
+                    : locale === 'fr'
+                      ? 'Toutes les sessions expirées seront supprimées définitivement. Continuer ?'
+                      : 'All expired sessions will be permanently removed. Continue?',
+                );
+                if (!confirmed) return;
                 try {
                   const res = await api.post('/auth/cleanup-sessions');
-                  toast(res.data.message || 'Sessions cleaned up', 'success');
+                  toast(
+                    res.data.message ||
+                      (locale === 'ar'
+                        ? 'تم تنظيف الجلسات'
+                        : locale === 'fr'
+                          ? 'Sessions nettoyées'
+                          : 'Sessions cleaned up'),
+                    'success',
+                  );
                 } catch {
-                  toast('Failed to clean up sessions', 'error');
+                  toast('فشل تنظيف الجلسات', 'error');
                 }
               }}
               className="inline-flex items-center px-4 py-2 text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 active:bg-muted"
             >
-              Clean Up Expired Sessions
+              {locale === 'ar'
+                ? 'تنظيف الجلسات المنتهية'
+                : locale === 'fr'
+                  ? 'Nettoyer les sessions expirées'
+                  : 'Clean Up Expired Sessions'}
             </button>
           </div>
         </div>
@@ -364,7 +443,13 @@ export default function SettingsPage() {
           <button
             onClick={handleClearCache}
             disabled={cacheLoading}
-            aria-label="Clear IPTV-Org cache"
+            aria-label={
+              locale === 'ar'
+                ? 'مسح ذاكرة IPTV-Org المؤقتة'
+                : locale === 'fr'
+                  ? 'Vider le cache IPTV-Org'
+                  : 'Clear IPTV-Org cache'
+            }
             className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.1em] text-destructive hover:text-destructive/80 transition-colors font-medium disabled:opacity-50"
           >
             {cacheLoading ? (
@@ -377,14 +462,21 @@ export default function SettingsPage() {
         </div>
         <div className="divide-y divide-border">
           {cacheStatus.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-muted-foreground">No cache data available</div>
+            <div className="px-4 py-4 text-sm text-muted-foreground">لا توجد بيانات ذاكرة تخزين مؤقت</div>
           ) : (
             cacheStatus.map((entry) => (
               <div key={entry.key} className="flex items-center justify-between px-4 py-3">
                 <span className="text-sm capitalize">{entry.key}</span>
                 <div className="flex items-center gap-3">
                   {entry.count !== undefined && (
-                    <span className="text-xs text-muted-foreground">{entry.count} items</span>
+                    <span className="text-xs text-muted-foreground">
+                      {entry.count}{' '}
+                      {locale === 'ar'
+                        ? 'عنصر'
+                        : locale === 'fr'
+                          ? 'éléments'
+                          : 'items'}
+                    </span>
                   )}
                   <span className="text-xs text-muted-foreground">{formatAge(entry.age)}</span>
                   <div className="relative inline-flex items-center gap-1.5">
@@ -392,7 +484,17 @@ export default function SettingsPage() {
                       className={`w-1.5 h-1.5 rounded-full ${entry.cached ? 'bg-signal-green' : 'bg-muted-foreground/30'}`}
                     />
                     <span className="text-xs text-muted-foreground">
-                      {entry.cached ? 'Cached' : 'Empty'}
+                      {entry.cached
+                        ? locale === 'ar'
+                          ? 'مخزّنة'
+                          : locale === 'fr'
+                            ? 'En cache'
+                            : 'Cached'
+                        : locale === 'ar'
+                          ? 'فارغة'
+                          : locale === 'fr'
+                            ? 'Vide'
+                            : 'Empty'}
                     </span>
                   </div>
                 </div>

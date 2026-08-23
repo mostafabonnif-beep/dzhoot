@@ -4,12 +4,61 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Channel = require('../models/Channel');
 const AuditLog = require('../models/AuditLog');
+const Subscription = require('../models/Subscription');
+const Plan = require('../models/Plan');
+const Device = require('../models/Device');
 const { requireAuth, requireAdmin } = require('./auth');
 const { escapeRegex } = require('../utils/escapeRegex');
-const { audit } = require('../services/audit-log');
+const { audit, reqCtx } = require('../services/audit-log');
 
 function isValidObjectId(id) {
   return mongoose.Types.ObjectId.isValid(id) && /^[0-9a-fA-F]{24}$/.test(id);
+}
+
+// Attach subscription + device-usage info to an array of user objects.
+// Shape added per user: `subscription: { planId, planName, status, startsAt, expiresAt } | null`
+// and `devicesInUse: number`.
+async function attachSubscriptionInfo(users) {
+  if (users.length === 0) return;
+  const userIds = users.map((u) => u._id);
+
+  // Latest subscription per user (prefers the one expiring latest).
+  const subs = await Subscription.aggregate([
+    { $match: { userId: { $in: userIds } } },
+    { $sort: { expiresAt: -1 } },
+    { $group: { _id: '$userId', doc: { $first: '$$ROOT' } } },
+  ]);
+  const subByUser = new Map(subs.map((s) => [String(s._id), s.doc]));
+  const planIds = subs.map((s) => s.doc.planId).filter(Boolean);
+  const plans = await Plan.find({ _id: { $in: planIds } }).select('name').lean();
+  const planByName = new Map(plans.map((p) => [String(p._id), p.name]));
+
+  const deviceCounts = await Device.aggregate([
+    { $match: { userId: { $in: userIds } } },
+    { $group: { _id: '$userId', count: { $sum: 1 } } },
+  ]);
+  const deviceCountByUser = new Map(deviceCounts.map((d) => [String(d._id), d.count]));
+
+  const now = Date.now();
+  for (const user of users) {
+    const sub = subByUser.get(String(user._id));
+    // Mirror the user-facing normalization: an ACTIVE subscription whose
+    // expiry passed is reported as EXPIRED.
+    let status = sub?.status || '';
+    if (status === 'ACTIVE' && sub.expiresAt && new Date(sub.expiresAt).getTime() < now) {
+      status = 'EXPIRED';
+    }
+    user.subscription = sub
+      ? {
+          planId: String(sub.planId || ''),
+          planName: sub.planId ? planByName.get(String(sub.planId)) || '' : '',
+          status,
+          startsAt: sub.startsAt ? new Date(sub.startsAt).toISOString() : null,
+          expiresAt: sub.expiresAt ? new Date(sub.expiresAt).toISOString() : null,
+        }
+      : null;
+    user.devicesInUse = deviceCountByUser.get(String(user._id)) || 0;
+  }
 }
 
 // Get distinct filter options for users
@@ -146,6 +195,8 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
       return userObj;
     });
 
+    await attachSubscriptionInfo(data);
+
     res.json({
       success: true,
       count: data.length,
@@ -160,6 +211,82 @@ router.get('/', requireAuth, requireAdmin, async (req, res) => {
       success: false,
       error: 'Failed to fetch users',
     });
+  }
+});
+
+// Export users as CSV (Admin only) — respects the same filters as the list.
+router.get('/export/csv', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    const { role, status, search } = req.query;
+    const filter = {};
+
+    if (role) {
+      const roles = role.split(',').map((r) => r.trim()).filter(Boolean);
+      if (roles.length > 0) filter.role = { $in: roles };
+    }
+    if (status) {
+      const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
+      const hasActive = statuses.includes('Active');
+      const hasInactive = statuses.includes('Inactive');
+      if (hasActive && !hasInactive) filter.isActive = true;
+      else if (hasInactive && !hasActive) filter.isActive = false;
+    }
+    if (search) {
+      const regex = new RegExp(escapeRegex(search), 'i');
+      filter.$or = [{ username: regex }, { email: regex }, { channelListCode: regex }];
+    }
+
+    const users = await User.find(filter)
+      .select('-password -emailVerificationToken -emailVerificationExpires -passwordResetToken -passwordResetExpires -googleId -githubId')
+      .sort({ createdAt: -1 })
+      .limit(50000)
+      .lean();
+
+    await attachSubscriptionInfo(users);
+
+    // CSV formula-injection guard: neutralize cells starting with = + - @.
+    const esc = (v) => {
+      const s = String(v ?? '');
+      const guarded = /^[=+\-@]/.test(s) ? `'${s}` : s;
+      return `"${guarded.replace(/"/g, '""')}"`;
+    };
+    const rows = [
+      ['username', 'email', 'role', 'status', 'channel_code', 'channel_count', 'last_login', 'created_at', 'subscription_plan', 'subscription_status', 'subscription_expires_at', 'devices_in_use'].join(','),
+    ];
+    for (const u of users) {
+      const channelCount = u.channels ? u.channels.length : 0;
+      rows.push([
+        esc(u.username), esc(u.email), esc(u.role),
+        esc(u.isActive === false ? 'Inactive' : 'Active'),
+        esc(u.channelListCode),
+        esc(channelCount),
+        esc(u.lastLogin ? new Date(u.lastLogin).toISOString() : ''),
+        esc(u.createdAt ? new Date(u.createdAt).toISOString() : ''),
+        esc(u.subscription?.planName || ''),
+        esc(u.subscription?.status || ''),
+        esc(u.subscription?.expiresAt || ''),
+        esc(u.devicesInUse ?? 0),
+      ].join(','));
+    }
+
+    audit({
+      ...reqCtx(req),
+      action: 'users_export',
+      resource: 'User',
+      changes: {
+        after: {
+          count: users.length,
+          filters: { role, status, search: search ? String(search).slice(0, 200) : undefined },
+        },
+      },
+    });
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="users.csv"');
+    return res.send('\ufeff' + rows.join('\n'));
+  } catch (error) {
+    console.error('Error exporting users:', error);
+    return res.status(500).json({ success: false, error: 'Failed to export users' });
   }
 });
 
@@ -272,9 +399,12 @@ router.get('/:id', requireAuth, async (req, res) => {
       });
     }
 
+    const data = user.toJSON ? user.toJSON() : { ...user };
+    await attachSubscriptionInfo([data]);
+
     res.json({
       success: true,
-      data: user,
+      data,
     });
   } catch (error) {
     console.error('Error fetching user:', error);

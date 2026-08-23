@@ -29,6 +29,10 @@ interface ChannelDataTableProps<T> {
   nameAriaSort?: 'ascending' | 'descending' | 'none';
   columns: DataTableColumn<T>[];
   getActions: (item: T) => ChannelActions;
+  /** Optional selection column prepended before the name column. When provided,
+   *  the caller must prepend a matching track to `gridTemplate`. */
+  selectableHeader?: ReactNode;
+  renderSelectCell?: (item: T) => ReactNode;
 }
 
 const HEADER_TEXT = 'text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium';
@@ -48,8 +52,21 @@ export default function ChannelDataTable<T>({
   nameAriaSort,
   columns,
   getActions,
+  selectableHeader,
+  renderSelectCell,
 }: ChannelDataTableProps<T>) {
+  const selectionColumn: DataTableColumn<T> | null =
+    selectableHeader && renderSelectCell
+      ? {
+          key: '__select',
+          header: selectableHeader,
+          cell: renderSelectCell,
+          mobileHidden: true,
+        }
+      : null;
+
   const allColumns: DataTableColumn<T>[] = [
+    ...(selectionColumn ? [selectionColumn] : []),
     {
       key: 'name',
       ariaSort: nameAriaSort,

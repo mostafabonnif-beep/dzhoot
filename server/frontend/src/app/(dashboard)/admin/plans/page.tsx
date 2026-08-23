@@ -52,7 +52,7 @@ const inputClass =
 
 export default function PlansPage() {
   const { toast } = useToast();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [plans, setPlans] = useState<PlanData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -76,11 +76,18 @@ export default function PlansPage() {
       setTotalCount(body.totalCount ?? 0);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || 'Failed to load plans');
+      setError(
+        axiosErr.response?.data?.error ||
+          (locale === 'ar'
+            ? 'فشل تحميل الباقات'
+            : locale === 'fr'
+              ? 'Échec du chargement des forfaits'
+              : 'Failed to load plans'),
+      );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     fetchPlans();
@@ -125,16 +132,23 @@ export default function PlansPage() {
       };
       if (editingId) {
         await api.patch(`/admin/plans/${editingId}`, payload);
-        toast('Plan updated', 'success');
+        toast('تم تحديث الباقة', 'success');
       } else {
         await api.post('/admin/plans', payload);
-        toast('Plan created', 'success');
+        toast('تم إنشاء الباقة', 'success');
       }
       setFormOpen(false);
       fetchPlans();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setFormError(axiosErr.response?.data?.error || 'Failed to save plan');
+      setFormError(
+        axiosErr.response?.data?.error ||
+          (locale === 'ar'
+            ? 'فشل حفظ الباقة'
+            : locale === 'fr'
+              ? 'Échec de l’enregistrement du forfait'
+              : 'Failed to save plan'),
+      );
     } finally {
       setSaving(false);
     }
@@ -148,15 +162,15 @@ export default function PlansPage() {
       const data = res.data?.data;
       toast(
         data?.deactivated
-          ? `Plan has codes — deactivated instead of deleted`
-          : 'Plan deleted',
+          ? 'الباقة مرتبطة بأكواد — تم تعطيلها بدلاً من حذفها'
+          : 'تم حذف الباقة',
         'success',
       );
       setDeleteTarget(null);
       fetchPlans();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      toast(axiosErr.response?.data?.error || 'Failed to delete plan', 'error');
+      toast(axiosErr.response?.data?.error || 'فشل حذف الباقة', 'error');
     } finally {
       setDeleting(false);
     }
@@ -172,7 +186,7 @@ export default function PlansPage() {
   const columns: DataTableColumn<PlanData>[] = [
     {
       key: 'name',
-      header: 'Plan',
+      header: locale === 'ar' ? 'الباقة' : locale === 'fr' ? 'Forfait' : 'Plan',
       cell: (p) => (
         <div className="min-w-0">
           <div className="font-medium truncate">{p.name}</div>
@@ -184,22 +198,26 @@ export default function PlansPage() {
     },
     {
       key: 'duration',
-      header: 'Duration',
-      cell: (p) => <span>{p.durationDays} days</span>,
+      header: locale === 'ar' ? 'المدة' : locale === 'fr' ? 'Durée' : 'Duration',
+      cell: (p) => (
+        <span>
+          {p.durationDays} {locale === 'ar' ? 'يوم' : locale === 'fr' ? 'jours' : 'days'}
+        </span>
+      ),
     },
     {
       key: 'devices',
-      header: 'Devices',
+      header: locale === 'ar' ? 'الأجهزة' : locale === 'fr' ? 'Appareils' : 'Devices',
       cell: (p) => <span>{p.maxDevices}</span>,
     },
     {
       key: 'concurrent',
-      header: 'Concurrent',
+      header: locale === 'ar' ? 'المتزامنة' : locale === 'fr' ? 'Simultané' : 'Concurrent',
       cell: (p) => <span>{p.maxConcurrentStreams ?? 1}</span>,
     },
     {
       key: 'price',
-      header: 'Price',
+      header: locale === 'ar' ? 'السعر' : locale === 'fr' ? 'Prix' : 'Price',
       cell: (p) => (
         <span>
           {p.price ?? 0} {p.currency}
@@ -208,21 +226,22 @@ export default function PlansPage() {
     },
     {
       key: 'codes',
-      header: 'Codes',
+      header: locale === 'ar' ? 'الأكواد' : locale === 'fr' ? 'Codes' : 'Codes',
       cell: (p) => (
         <span>
-          {p.usedCodeCount ?? 0}/{p.codeCount ?? 0} used
+          {p.usedCodeCount ?? 0}/{p.codeCount ?? 0}{' '}
+          {locale === 'ar' ? 'مستخدمة' : locale === 'fr' ? 'utilisés' : 'used'}
         </span>
       ),
     },
     {
       key: 'status',
-      header: 'Status',
+      header: locale === 'ar' ? 'الحالة' : locale === 'fr' ? 'Statut' : 'Status',
       cell: (p) =>
         p.status === 'Active' ? (
           <span className="inline-flex items-center gap-1.5 text-xs">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Active
+            {locale === 'ar' ? 'نشطة' : locale === 'fr' ? 'Actif' : 'Active'}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -333,7 +352,7 @@ export default function PlansPage() {
               className={inputClass}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="3 أشهر / 3 Months"
+              placeholder={locale === 'ar' ? '3 أشهر' : locale === 'fr' ? '3 mois' : '3 Months'}
             />
           </div>
           <div className="space-y-1.5">
@@ -344,7 +363,13 @@ export default function PlansPage() {
               className={`${inputClass} h-auto py-2`}
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              placeholder="وصف الباقة / Plan description"
+              placeholder={
+                locale === 'ar'
+                  ? 'وصف الباقة'
+                  : locale === 'fr'
+                    ? 'Description du forfait'
+                    : 'Plan description'
+              }
               rows={2}
             />
           </div>
