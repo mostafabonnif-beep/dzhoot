@@ -436,6 +436,7 @@ app.use('/api/v1/home', require('./routes/home'));
 app.use('/api/v1/admin/notifications', require('./routes/admin-notifications'));
 app.use('/api/v1/admin/app-settings', require('./routes/admin-app-settings'));
 app.use('/api/v1/admin/vod', require('./routes/admin-vod'));
+app.use('/api/v1/admin/recordings', require('./routes/admin-recordings'));
 app.use('/api/v1/iptv-org', require('./routes/iptv-org'));
 app.use('/api/v1/external-sources', require('./routes/external-sources'));
 app.use('/api/v1/test', require('./routes/channel-test'));
