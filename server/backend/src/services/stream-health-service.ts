@@ -7,6 +7,16 @@ import type { IChannelDocument } from '@dzhoof/shared';
 
 const BATCH_SIZE = 200;
 const CONCURRENCY = parseInt(process.env.STREAM_HEALTH_CONCURRENCY || '10', 10);
+// Probe timeout for primary/alternate liveness checks. Some legal M3U streams
+// answer in 10-15s (slow CDNs); a hard 10s probe marked them dead while they
+// actually work. Configurable via STREAM_PROBE_TIMEOUT_MS (ms).
+const PROBE_TIMEOUT_MS = parseInt(process.env.STREAM_PROBE_TIMEOUT_MS || '15000', 10);
+// A channel already marked dead is re-probed after this cooldown so it can
+// recover automatically when the upstream comes back. Previously a dead
+// primary was never re-checked (only alternates were considered) and stayed
+// dead forever unless manually tested. Configurable via
+// STREAM_DEAD_RECHECK_HOURS.
+const DEAD_RECHECK_MS = parseInt(process.env.STREAM_DEAD_RECHECK_HOURS || '6', 10) * 3600000;
 
 interface HealthCheckResult {
   checked: number;
@@ -102,20 +112,38 @@ export class StreamHealthService {
     directSourceIds: Set<string> = new Set(),
   ): Promise<'ok' | 'promoted' | 'all-dead' | 'flagged-skipped'> {
     // Direct-playback sources: the datacenter probe is meaningless (upstream
-    // blocks the server IP) — never mark these channels dead or rewrite their
-    // liveness from a probe that cannot reach them.
+    // blocks the server IP) — liveness can only be judged from real client
+    // playback events, not from a server probe. Normalize any stale
+    // `isWorking=false` left over from an earlier server-probed era so these
+    // channels are no longer reported dead to the admin dashboard (they ARE
+    // served to clients directly; a false "dead" label makes the whole
+    // catalog look broken).
     if (directSourceIds.has(String(channel.metadata?.xtreamSourceId || ''))) {
+      if (channel.metadata?.isWorking === false) {
+        channel.metadata = channel.metadata || {};
+        channel.metadata.isWorking = true;
+        channel.metadata.lastTested = new Date();
+        await channel.save();
+      }
       return 'ok';
     }
 
     // Check if primary is dead or flagged
     const primaryDead = channel.metadata?.isWorking === false;
     const primaryFlagged = channel.flaggedBad?.isFlagged === true;
+    // Dead primaries get one more probe after a cooldown (DEAD_RECHECK_MS) so
+    // recovered upstreams are promoted back automatically instead of staying
+    // dead forever. Never re-probe a flagged channel.
+    const lastTested = channel.metadata?.lastTested
+      ? new Date(channel.metadata.lastTested).getTime()
+      : 0;
+    const staleDeadPrimary =
+      primaryDead && !primaryFlagged && Date.now() - lastTested > DEAD_RECHECK_MS;
 
-    if (!primaryDead && !primaryFlagged) {
-      // Primary seems fine — probe to confirm
+    if ((!primaryDead && !primaryFlagged) || staleDeadPrimary) {
+      // Primary seems fine (or is a stale-dead candidate) — probe to confirm
       try {
-        const probeResult = await probeStream(channel.channelUrl, { timeout: 10000 });
+        const probeResult = await probeStream(channel.channelUrl, { timeout: PROBE_TIMEOUT_MS });
         // Update primary liveness
         channel.metadata = channel.metadata || {};
         channel.metadata.isWorking = probeResult.status === 'alive';
@@ -150,7 +178,7 @@ export class StreamHealthService {
 
       try {
         const result = await probeStream(alt.streamUrl, {
-          timeout: 10000,
+          timeout: PROBE_TIMEOUT_MS,
           userAgent: alt.userAgent || undefined,
           referrer: alt.referrer || undefined,
         });
