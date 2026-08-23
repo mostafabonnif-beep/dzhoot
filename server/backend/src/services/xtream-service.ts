@@ -290,28 +290,38 @@ const XTREAM_TIMESHIFT_DAYS = Number(process.env.XTREAM_TIMESHIFT_DAYS) || 3;
 
 async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials, playbackFormat: XtreamPlaybackFormat = 'm3u8') {
   const channelId = `xt:${String(sourceId)}:${item.stream_id}`;
+  const update: Record<string, any> = {
+    $set: {
+      channelId,
+      channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
+      channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
+      channelImg: iconUrl(item.stream_icon),
+      channelGroup: group || 'Uncategorized',
+      // tvgId is deliberately NOT in $set when the provider sends none:
+      // preserving an operator-assigned tvgId keeps EPG matching stable across
+      // scheduled syncs (a provider with no epg_channel_id would otherwise wipe
+      // every manual mapping to '' on each sync).
+      tvgName: String(item.name || '').trim(),
+      isActive: true,
+      order: Number(item.num) || 0,
+      'metadata.source': 'xtream',
+      'metadata.xtreamSourceId': String(sourceId),
+      'metadata.xtreamStreamId': Number(item.stream_id),
+      // Xtream panels expose catch-up via the /timeshift/ endpoint — flag it
+      // so clients know this channel can play past programs.
+      'catchup.type': 'timeshift',
+      'catchup.days': XTREAM_TIMESHIFT_DAYS,
+    },
+  };
+  if (item.epg_channel_id) {
+    update.$set.tvgId = String(item.epg_channel_id).trim();
+  } else {
+    // Only applies on INSERT — existing manual tvgId mappings survive syncs.
+    update.$setOnInsert = { tvgId: '' };
+  }
   return Channel.findOneAndUpdate(
     { ownerId: null, channelId },
-    {
-      $set: {
-        channelId,
-        channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
-        channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
-        channelImg: iconUrl(item.stream_icon),
-        channelGroup: group || 'Uncategorized',
-        tvgId: item.epg_channel_id || '',
-        tvgName: String(item.name || '').trim(),
-        isActive: true,
-        order: Number(item.num) || 0,
-        'metadata.source': 'xtream',
-        'metadata.xtreamSourceId': String(sourceId),
-        'metadata.xtreamStreamId': Number(item.stream_id),
-        // Xtream panels expose catch-up via the /timeshift/ endpoint — flag it
-        // so clients know this channel can play past programs.
-        'catchup.type': 'timeshift',
-        'catchup.days': XTREAM_TIMESHIFT_DAYS,
-      },
-    },
+    update,
     { upsert: true, setDefaultsOnInsert: true },
   ).exec();
 }

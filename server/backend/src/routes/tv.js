@@ -166,21 +166,27 @@ async function loadEpgChannelIds(user) {
     knownEpgIds = await EpgProgram.distinct('channelEpgId');
     await epgCache.set('known-ids', knownEpgIds, 600);
   }
-  const knownSet = new Set(knownEpgIds);
+  // EPG channel ids in guides and provider-issued tvgIds disagree on casing
+  // (beINSPORTS1.tr vs beINSports1.tr). Matching is case-insensitive everywhere
+  // else (coverage query, app cache keys), so normalize here too: the known set
+  // and the info map are keyed lowercased, while epgIds keep the original casing
+  // and are matched case-insensitively by the program query (collation).
+  const knownSet = new Set(knownEpgIds.map((id) => String(id).toLowerCase()));
 
   const epgIds = [];
   const channelInfoMap = new Map();
   for (const ch of channels) {
     const ids = [ch.channelId, ch.tvgId, ch.tvgName].filter(Boolean);
     for (const id of ids) {
-      if (!channelInfoMap.has(id)) {
-        channelInfoMap.set(id, {
+      const key = String(id).toLowerCase();
+      if (!channelInfoMap.has(key)) {
+        channelInfoMap.set(key, {
           epgId: id,
           channelId: ch.channelId,
           name: ch.channelName,
           icon: ch.tvgLogo || ch.channelImg || '',
         });
-        if (knownSet.has(id)) epgIds.push(id);
+        if (knownSet.has(key)) epgIds.push(id);
       }
     }
   }
@@ -895,7 +901,7 @@ router.get('/epg/:code/json', async (req, res) => {
     const grouped = {};
     for (const prog of programs) {
       if (!grouped[prog.channelEpgId]) {
-        const info = channelInfoMap.get(prog.channelEpgId) || {};
+        const info = channelInfoMap.get(String(prog.channelEpgId).toLowerCase()) || {};
         grouped[prog.channelEpgId] = {
           channelId: prog.channelEpgId,
           channelName: info.name || prog.channelEpgId,

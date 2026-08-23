@@ -809,6 +809,10 @@ export class EpgService {
       endTime: { $gte: now },
       startTime: { $lte: endRange },
     })
+      // Guides and provider-issued tvgIds disagree on casing (beINSPORTS1.tr vs
+      // beINSports1.tr) — match case-insensitively so the app guide fills in for
+      // every channel whose tvgId matches a stored program id.
+      .collation({ locale: 'en', strength: 2 })
       .sort({ channelEpgId: 1, startTime: 1 })
       .lean();
   }
