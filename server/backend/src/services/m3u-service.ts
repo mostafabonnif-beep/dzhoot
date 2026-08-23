@@ -214,16 +214,19 @@ async function probeChannels(channels: any[]) {
 }
 
 async function upsertChannel(sourceId: mongoose.Types.ObjectId, channel: any) {
+  const fields: Record<string, any> = {
+    ...channel,
+    isActive: true,
+    'metadata.source': 'm3u',
+    'metadata.m3uSourceId': String(sourceId),
+  };
+  // Preserve an operator-assigned tvgId when the playlist omits/empties one:
+  // a playlist without a tvg-id attribute (or with tvg-id="") must not wipe
+  // manual EPG mappings on every scheduled sync.
+  if (!fields.tvgId) delete fields.tvgId;
   return Channel.findOneAndUpdate(
     { ownerId: null, channelId: channel.channelId },
-    {
-      $set: {
-        ...channel,
-        isActive: true,
-        'metadata.source': 'm3u',
-        'metadata.m3uSourceId': String(sourceId),
-      },
-    },
+    { $set: fields },
     { upsert: true, setDefaultsOnInsert: true, new: true },
   ).exec();
 }
