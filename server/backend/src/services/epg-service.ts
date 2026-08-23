@@ -5,6 +5,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { createGunzip } from 'zlib';
 import EpgProgram from '../models/EpgProgram';
 import M3USource from '../models/M3USource';
+import EpgSourceOverride from '../models/EpgSourceOverride';
 import { epgCache } from './cache';
 import { decryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
@@ -88,6 +89,16 @@ try {
 const BATCH_SIZE = 500;
 const IPTV_EPG_BASE = 'https://iptv-epg.org/files';
 
+/** Strip userinfo (user:pass@) from URLs before persisting them, so embedded
+ *  credentials never land in override docs or the audit log. */
+function sanitizeUrlForStorage(url: string): string {
+  try {
+    return url.replace(/\/\/[^/@\s]+@/, '//***@');
+  } catch {
+    return url;
+  }
+}
+
 function heapUsedMb(): number {
   return Math.round((process.memoryUsage().heapUsed / 1048576) * 10) / 10;
 }
@@ -121,6 +132,13 @@ interface EpgSourceInfo {
   url: string;
   coveredChannelIds: string[];
   source: string;
+  /** Operator-set override state (merged at discovery time). */
+  disabled?: boolean;
+  lastOkAt?: Date | null;
+  lastFailedAt?: Date | null;
+  lastError?: string | null;
+  lastTestedAt?: Date | null;
+  lastTestResult?: { ok: boolean; programCount?: number; error?: string } | null;
 }
 
 interface ParsedProgram {
@@ -174,6 +192,7 @@ interface EpgStats {
 export class EpgService {
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private refreshPromise: Promise<void> | null = null;
+  private testPromise: Promise<{ ok: boolean; programCount: number; error?: string }> | null = null;
   private lastRefreshedAt: Date | null = null;
   private lastSourceCount = 0;
   private lastRefreshDurationMs = 0;
@@ -241,8 +260,10 @@ export class EpgService {
     try {
       console.log('[epg-service] Starting EPG refresh...');
 
-      // 1. Discover what XMLTV files we need
-      const sources = await this.discoverEpgSources();
+      // 1. Discover what XMLTV files we need (operator-disabled sources are
+      //    still returned with state but excluded from the fetch list).
+      const allSources = await this.discoverEpgSources();
+      const sources = allSources.filter((s) => !s.disabled);
       this.lastSourceCount = sources.length;
 
       if (sources.length === 0) {
@@ -273,11 +294,14 @@ export class EpgService {
           const beforeHeap = heapUsedMb();
           try {
             const programs = await this.fetchAndParseXmltv(source.url, source.coveredChannelIds);
-            if (programs.length > 0) {
-              const count = await this.upsertPrograms(programs);
-              return count;
-            }
-            return 0;
+            const count = programs.length > 0 ? await this.upsertPrograms(programs) : 0;
+            // Persist per-source health so the admin UI can show durable
+            // ok/failed state (and operators can disable chronic failures).
+            await this.recordSourceResult(source.url, true);
+            return count;
+          } catch (err: any) {
+            await this.recordSourceResult(source.url, false, err?.message || String(err));
+            throw err;
           } finally {
             console.log(
               `[epg-service] Source ${source.source}: heap ${beforeHeap}MB -> ${heapUsedMb()}MB (rss ${rssMb()}MB, ${Math.round((Date.now() - startTime) / 1000)}s elapsed)`,
@@ -446,7 +470,133 @@ export class EpgService {
       });
     }
 
-    return sources;
+    // Merge per-source override state (operator disabled + durable health).
+    // Disabled sources are still returned here so the admin UI can re-enable
+    // them; refreshEpg() filters them out before fetching.
+    const overrides = await EpgSourceOverride.find({}).lean();
+    const overrideByUrl = new Map(overrides.map((o: any) => [o.url, o]));
+    return sources.map((s) => {
+      const ov = overrideByUrl.get(s.url);
+      if (!ov) {
+        return { ...s, disabled: false, lastOkAt: null, lastFailedAt: null, lastError: null, lastTestedAt: null, lastTestResult: null };
+      }
+      return {
+        ...s,
+        disabled: Boolean(ov.disabled),
+        lastOkAt: ov.lastOkAt ?? null,
+        lastFailedAt: ov.lastFailedAt ?? null,
+        lastError: ov.lastError ?? null,
+        lastTestedAt: ov.lastTestedAt ?? null,
+        lastTestResult: ov.lastTestResult ?? null,
+      };
+    });
+  }
+
+  // ─── Per-source overrides & health (admin) ─────────────────
+
+  /** Persist a durable ok/failed marker for a source (used by refresh + tests). */
+  async recordSourceResult(url: string, ok: boolean, error?: string): Promise<void> {
+    const safeUrl = sanitizeUrlForStorage(url);
+    try {
+      if (ok) {
+        await EpgSourceOverride.updateOne(
+          { url: safeUrl },
+          { $set: { lastOkAt: new Date() }, $unset: { lastFailedAt: 1, lastError: 1 } },
+          { upsert: true },
+        );
+      } else {
+        await EpgSourceOverride.updateOne(
+          { url: safeUrl },
+          {
+            $set: {
+              lastFailedAt: new Date(),
+              lastError: sanitizeUrlForStorage(String(error || 'unknown error')).slice(0, 500),
+            },
+          },
+          { upsert: true },
+        );
+      }
+    } catch (err) {
+      console.warn('[epg-service] Failed to record source result:', err);
+    }
+  }
+
+  /** Enable/disable a source for future refreshes (persisted). */
+  async setSourceDisabled(url: string, disabled: boolean, note?: string): Promise<void> {
+    const safeUrl = sanitizeUrlForStorage(url);
+    try {
+      await EpgSourceOverride.updateOne(
+        { url: safeUrl },
+        {
+          $set: {
+            disabled,
+            ...(note !== undefined ? { note: String(note).slice(0, 500) } : {}),
+          },
+        },
+        { upsert: true },
+      );
+    } catch (err: any) {
+      // Upsert race on the unique index (e.g. a refresh recording a result at
+      // the same moment) — retry once, then surface the error.
+      if (err?.code === 11000) {
+        await EpgSourceOverride.updateOne(
+          { url: safeUrl },
+          { $set: { disabled, ...(note !== undefined ? { note: String(note).slice(0, 500) } : {}) } },
+        );
+        return;
+      }
+      throw err;
+    }
+  }
+
+  /** Fetch + parse a single source on demand (bounded), persist the result. */
+  async testSource(url: string): Promise<{ ok: boolean; programCount: number; error?: string }> {
+    // Serialize manual tests: a single large guide can already spike RSS close
+    // to the heap guard; parallel manual tests must not stack on top of it.
+    if (this.testPromise) {
+      return { ok: false, programCount: 0, error: 'Another source test is already in progress' };
+    }
+    if (rssMb() > EPG_HEAP_GUARD_MB) {
+      return {
+        ok: false,
+        programCount: 0,
+        error: `Server memory is too high to test (RSS ${rssMb()}MB, limit ${EPG_HEAP_GUARD_MB}MB)`,
+      };
+    }
+
+    this.testPromise = this.runSourceTest(url);
+    try {
+      const result = await this.testPromise;
+      try {
+        await EpgSourceOverride.updateOne(
+          { url: sanitizeUrlForStorage(url) },
+          { $set: { lastTestedAt: new Date(), lastTestResult: result } },
+          { upsert: true },
+        );
+      } catch (err) {
+        console.warn('[epg-service] Failed to persist source test:', err);
+      }
+      return result;
+    } finally {
+      this.testPromise = null;
+    }
+  }
+
+  private async runSourceTest(url: string): Promise<{ ok: boolean; programCount: number; error?: string }> {
+    let coveredIds: string[] = ['*'];
+    try {
+      const sources = await this.discoverEpgSources();
+      const match = sources.find((s) => s.url === url);
+      if (match) coveredIds = match.coveredChannelIds;
+    } catch {
+      // Fall back to '*' when discovery itself fails; the fetch is what we test.
+    }
+    try {
+      const programs = await this.fetchAndParseXmltv(url, coveredIds);
+      return { ok: true, programCount: programs.length };
+    } catch (err: any) {
+      return { ok: false, programCount: 0, error: String(err?.message || err).slice(0, 500) };
+    }
   }
 
   // ─── Fetch & Parse XMLTV ───────────────────────────────

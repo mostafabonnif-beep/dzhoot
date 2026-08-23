@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Loader2, Search } from 'lucide-react';
 import api from '@/lib/api';
-import { useLocale } from '@/components/locale-provider';
+import { useLocale, type Locale } from '@/components/locale-provider';
 import Pagination from '@/components/ui/pagination';
 import ColumnFilter from '@/components/ui/column-filter';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
@@ -20,42 +20,64 @@ interface AuditEntry {
   timestamp: string;
 }
 
-const ACTION_LABELS: Record<string, string> = {
-  login: 'Login',
-  logout: 'Logout',
-  register: 'Register',
-  change_password: 'Change Password',
-  create_channel: 'Create Channel',
-  update_channel: 'Update Channel',
-  delete_channel: 'Delete Channel',
-  delete_all_channels: 'Delete All Channels',
-  import_m3u: 'Import M3U',
-  import_iptv_org: 'Import IPTV-org',
-  import_iptv_org_user: 'Import (User)',
-  create_user: 'Create User',
-  update_user: 'Update User',
-  delete_user: 'Delete User',
+const ACTION_LABELS: Record<string, (l: Locale) => string> = {
+  login: (l) => (l === 'ar' ? 'تسجيل الدخول' : l === 'fr' ? 'Connexion' : 'Login'),
+  logout: (l) => (l === 'ar' ? 'تسجيل الخروج' : l === 'fr' ? 'Déconnexion' : 'Logout'),
+  register: (l) => (l === 'ar' ? 'تسجيل' : l === 'fr' ? 'Inscription' : 'Register'),
+  change_password: (l) =>
+    l === 'ar'
+      ? 'تغيير كلمة المرور'
+      : l === 'fr'
+        ? 'Changer le mot de passe'
+        : 'Change Password',
+  create_channel: (l) => (l === 'ar' ? 'إنشاء قناة' : l === 'fr' ? 'Créer une chaîne' : 'Create Channel'),
+  update_channel: (l) =>
+    l === 'ar' ? 'تحديث القناة' : l === 'fr' ? 'Modifier la chaîne' : 'Update Channel',
+  delete_channel: (l) =>
+    l === 'ar' ? 'حذف قناة' : l === 'fr' ? 'Supprimer une chaîne' : 'Delete Channel',
+  delete_all_channels: (l) =>
+    l === 'ar'
+      ? 'حذف جميع القنوات'
+      : l === 'fr'
+        ? 'Supprimer toutes les chaînes'
+        : 'Delete All Channels',
+  import_m3u: (l) => (l === 'ar' ? 'استيراد M3U' : l === 'fr' ? 'Importer M3U' : 'Import M3U'),
+  import_iptv_org: (l) =>
+    l === 'ar' ? 'استيراد IPTV-org' : l === 'fr' ? 'Importer IPTV-org' : 'Import IPTV-org',
+  import_iptv_org_user: (l) =>
+    l === 'ar'
+      ? 'استيراد (مستخدم)'
+      : l === 'fr'
+        ? 'Importer (utilisateur)'
+        : 'Import (User)',
+  create_user: (l) =>
+    l === 'ar' ? 'إنشاء مستخدم' : l === 'fr' ? 'Créer un utilisateur' : 'Create User',
+  update_user: (l) =>
+    l === 'ar' ? 'تحديث مستخدم' : l === 'fr' ? 'Modifier un utilisateur' : 'Update User',
+  delete_user: (l) =>
+    l === 'ar' ? 'حذف مستخدم' : l === 'fr' ? 'Supprimer un utilisateur' : 'Delete User',
 };
 
-function formatLabel(action: string) {
-  return ACTION_LABELS[action] || action.replace(/_/g, ' ');
+function formatLabel(action: string, locale: Locale) {
+  return ACTION_LABELS[action]?.(locale) || action.replace(/_/g, ' ');
 }
 
 function formatTime(ts: string) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function formatDate(ts: string) {
+function formatDate(ts: string, locale: Locale) {
   const d = new Date(ts);
   const now = new Date();
   const diff = now.getTime() - d.getTime();
   const days = Math.floor(diff / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
+  if (days === 0) return locale === 'ar' ? 'اليوم' : locale === 'fr' ? "Aujourd'hui" : 'Today';
+  if (days === 1) return locale === 'ar' ? 'أمس' : locale === 'fr' ? 'Hier' : 'Yesterday';
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 function ResourceCell({ log }: { log: AuditEntry }) {
+  const { locale } = useLocale();
   const [expanded, setExpanded] = useState(false);
   if (!log.resourceId) {
     return <span className="text-sm text-muted-foreground block truncate">{log.resource}</span>;
@@ -65,7 +87,19 @@ function ResourceCell({ log }: { log: AuditEntry }) {
       type="button"
       onClick={() => setExpanded((v) => !v)}
       aria-expanded={expanded}
-      title={expanded ? 'Click to collapse' : 'Click to show full ID'}
+      title={
+        expanded
+          ? locale === 'ar'
+            ? 'اضغط للطي'
+            : locale === 'fr'
+              ? 'Cliquer pour réduire'
+              : 'Click to collapse'
+          : locale === 'ar'
+            ? 'اضغط لعرض المعرّف الكامل'
+            : locale === 'fr'
+              ? "Cliquer pour afficher l'ID complet"
+              : 'Click to show full ID'
+      }
       className={`block w-full min-w-0 text-left text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary ${
         expanded ? 'whitespace-normal break-all' : 'truncate'
       }`}
@@ -93,6 +127,9 @@ export default function ActivityPage() {
   const [selectedActions, setSelectedActions] = useState<string[]>([]);
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  // Date-range filter (backend supports from/to on the audit log)
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const fetchLogs = useCallback(
     async (signal?: AbortSignal) => {
@@ -114,6 +151,8 @@ export default function ActivityPage() {
         if (selectedStatuses.length > 0 && selectedStatuses.length < filterOptions.status.length) {
           params.set('status', selectedStatuses.join(','));
         }
+        if (dateFrom) params.set('from', `${dateFrom}T00:00:00`);
+        if (dateTo) params.set('to', `${dateTo}T23:59:59`);
 
         const res = await api.get(`/activity?${params.toString()}`, { signal });
         const data = res.data?.data || res.data;
@@ -121,12 +160,18 @@ export default function ActivityPage() {
         setTotalCount(data.totalCount || 0);
       } catch (err: unknown) {
         if (err instanceof Error && err.name !== 'CanceledError')
-          setError('Failed to load activity logs');
+          setError(
+            locale === 'ar'
+              ? 'فشل تحميل سجل النشاط'
+              : locale === 'fr'
+                ? 'Échec du chargement du journal d’activité'
+                : 'Failed to load activity logs',
+          );
       } finally {
         setLoading(false);
       }
     },
-    [page, debouncedSearch, selectedActions, selectedResources, selectedStatuses, filterOptions],
+    [page, debouncedSearch, selectedActions, selectedResources, selectedStatuses, filterOptions, dateFrom, dateTo, locale],
   );
 
   useEffect(() => {
@@ -180,6 +225,52 @@ export default function ActivityPage() {
         />
       </div>
 
+      {/* Date-range filter */}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 border border-border bg-muted/20 text-sm">
+        <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
+          {locale === 'ar' ? 'الفترة' : locale === 'fr' ? 'Période' : 'Period'}
+        </span>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => {
+            setDateFrom(e.target.value);
+            setPage(1);
+          }}
+          aria-label={
+            locale === 'ar' ? 'من تاريخ' : locale === 'fr' ? 'Du' : 'From'
+          }
+          className="h-8 px-2 border border-border bg-background text-xs focus-visible:outline-none focus-visible:border-primary"
+        />
+        <span className="text-muted-foreground">
+          {locale === 'ar' ? 'إلى' : locale === 'fr' ? 'au' : 'to'}
+        </span>
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => {
+            setDateTo(e.target.value);
+            setPage(1);
+          }}
+          aria-label={
+            locale === 'ar' ? 'إلى تاريخ' : locale === 'fr' ? 'Au' : 'To'
+          }
+          className="h-8 px-2 border border-border bg-background text-xs focus-visible:outline-none focus-visible:border-primary"
+        />
+        {(dateFrom || dateTo) && (
+          <button
+            onClick={() => {
+              setDateFrom('');
+              setDateTo('');
+              setPage(1);
+            }}
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            {locale === 'ar' ? 'مسح' : locale === 'fr' ? 'Effacer' : 'Clear'}
+          </button>
+        )}
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -189,11 +280,19 @@ export default function ActivityPage() {
           data={logs}
           gridTemplate="minmax(100px,1fr) minmax(110px,1.2fr) minmax(130px,1.4fr) minmax(160px,2.6fr) minmax(90px,1fr) minmax(110px,1.1fr)"
           resizable
-          ariaLabel="Activity log table"
+          ariaLabel={
+            locale === 'ar'
+              ? 'جدول سجل النشاط'
+              : locale === 'fr'
+                ? 'Tableau du journal d’activité'
+                : 'Activity log table'
+          }
           emptyMessage={t('common.noResults')}
           rowKey={(log) => log._id}
           rowAriaLabel={(log) =>
-            `${formatLabel(log.action)} by ${log.userId?.username || 'unknown'}`
+            `${formatLabel(log.action, locale)} ${
+              locale === 'ar' ? 'بواسطة' : locale === 'fr' ? 'par' : 'by'
+            } ${log.userId?.username || (locale === 'ar' ? 'غير معروف' : locale === 'fr' ? 'Inconnu' : 'unknown')}`
           }
           columns={
             [
@@ -207,7 +306,7 @@ export default function ActivityPage() {
                       <span className="font-medium">{formatTime(log.timestamp)}</span>
                     </time>
                     <time dateTime={log.timestamp} className="ml-1.5 text-muted-foreground/60">
-                      {formatDate(log.timestamp)}
+                      {formatDate(log.timestamp, locale)}
                     </time>
                   </div>
                 ),
@@ -227,11 +326,11 @@ export default function ActivityPage() {
                 header: (
                   <ColumnFilter
                     label={locale === 'ar' ? 'الإجراء' : locale === 'fr' ? 'Action' : 'Action'}
-                    options={filterOptions.action.map((a) => formatLabel(a))}
-                    selected={selectedActions.map((a) => formatLabel(a))}
+                    options={filterOptions.action.map((a) => formatLabel(a, locale))}
+                    selected={selectedActions.map((a) => formatLabel(a, locale))}
                     onChange={(labels) => {
                       const reverseMap = Object.fromEntries(
-                        filterOptions.action.map((a) => [formatLabel(a), a]),
+                        filterOptions.action.map((a) => [formatLabel(a, locale), a]),
                       );
                       setSelectedActions(labels.map((l) => reverseMap[l] || l));
                     }}
@@ -239,7 +338,7 @@ export default function ActivityPage() {
                 ),
                 cell: (log) => (
                   <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    {formatLabel(log.action)}
+                    {formatLabel(log.action, locale)}
                   </span>
                 ),
               },
@@ -277,9 +376,31 @@ export default function ActivityPage() {
                       }`}
                       aria-hidden="true"
                     />
-                    <span className="text-xs text-muted-foreground">{log.status}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {log.status === 'success'
+                        ? locale === 'ar'
+                          ? 'نجاح'
+                          : locale === 'fr'
+                            ? 'Succès'
+                            : 'Success'
+                        : locale === 'ar'
+                          ? 'فشل'
+                          : locale === 'fr'
+                            ? 'Échec'
+                            : 'Failure'}
+                    </span>
                     <span className="sr-only">
-                      {log.status === 'success' ? 'Success' : 'Failure'}
+                      {log.status === 'success'
+                        ? locale === 'ar'
+                          ? 'نجاح'
+                          : locale === 'fr'
+                            ? 'Succès'
+                            : 'Success'
+                        : locale === 'ar'
+                          ? 'فشل'
+                          : locale === 'fr'
+                            ? 'Échec'
+                            : 'Failure'}
                     </span>
                   </span>
                 ),

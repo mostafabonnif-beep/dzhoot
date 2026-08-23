@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth, requireAdmin } = require('./auth');
 const { schedulerService } = require('../services/scheduler-service');
+const { setTaskEnabled } = require('../services/scheduler-service');
 const { audit } = require('../services/audit-log');
+const { getTask } = require('../services/task-registry');
 
 // All scheduler routes require admin
 router.use(requireAuth);
@@ -46,6 +48,56 @@ router.get('/runs/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching run detail:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch run' });
+  }
+});
+
+// Pause a task — scheduled runs are skipped (manual triggers still work).
+router.post('/tasks/:taskName/pause', async (req, res) => {
+  try {
+    const { taskName } = req.params;
+    if (!getTask(taskName)) {
+      return res.status(404).json({ success: false, error: `Unknown task: ${taskName}` });
+    }
+    await setTaskEnabled(taskName, false, req.user.id);
+
+    audit({
+      userId: req.user.id,
+      action: 'pause_scheduled_task',
+      resource: 'scheduler',
+      resourceId: taskName,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({ success: true, taskName, enabled: false });
+  } catch (error) {
+    console.error('Error pausing scheduler task:', error);
+    res.status(500).json({ success: false, error: 'Failed to pause task' });
+  }
+});
+
+// Resume a paused task.
+router.post('/tasks/:taskName/resume', async (req, res) => {
+  try {
+    const { taskName } = req.params;
+    if (!getTask(taskName)) {
+      return res.status(404).json({ success: false, error: `Unknown task: ${taskName}` });
+    }
+    await setTaskEnabled(taskName, true, req.user.id);
+
+    audit({
+      userId: req.user.id,
+      action: 'resume_scheduled_task',
+      resource: 'scheduler',
+      resourceId: taskName,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({ success: true, taskName, enabled: true });
+  } catch (error) {
+    console.error('Error resuming scheduler task:', error);
+    res.status(500).json({ success: false, error: 'Failed to resume task' });
   }
 });
 

@@ -1,13 +1,50 @@
 import { ScheduledTaskRun } from '../models/ScheduledTaskRun';
 import { getAllTasks, getTask } from './task-registry';
 import { sendOperationalAlert } from './alert-notifier';
+import AppSetting from '../models/AppSetting';
 
 const LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes — stale locks are auto-released
 const HEARTBEAT_MS = 60 * 1000; // refresh the lock every minute while a task runs
 const PROCESS_ID = `${process.pid}-${Date.now()}`;
 
+function taskSettingKey(taskName: string): string {
+  return `scheduler_enabled_${taskName}`;
+}
+
+// Whether a task is enabled for SCHEDULED runs (manual triggers still work).
+// Default: enabled. Persisted via AppSetting so the admin UI can pause tasks.
+export async function isTaskEnabled(taskName: string): Promise<boolean> {
+  try {
+    const doc = await AppSetting.findOne({ key: taskSettingKey(taskName) }).lean();
+    return doc?.value !== false;
+  } catch {
+    return true;
+  }
+}
+
+export async function setTaskEnabled(taskName: string, enabled: boolean, updatedBy?: string): Promise<void> {
+  try {
+    await AppSetting.findOneAndUpdate(
+      { key: taskSettingKey(taskName) },
+      { $set: { value: enabled, updatedBy: updatedBy || null } },
+      { upsert: true, setDefaultsOnInsert: true },
+    );
+  } catch (err: any) {
+    // Concurrent upsert on the unique key (double-click / two tabs) — retry once.
+    if (err?.code === 11000) {
+      await AppSetting.findOneAndUpdate(
+        { key: taskSettingKey(taskName) },
+        { $set: { value: enabled, updatedBy: updatedBy || null } },
+      );
+      return;
+    }
+    throw err;
+  }
+}
+
 class SchedulerService {
   private timers: Map<string, ReturnType<typeof setInterval>> = new Map();
+  private catchUpTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   // Start interval timers for all registered tasks
   async start(): Promise<void> {
@@ -17,7 +54,9 @@ class SchedulerService {
     const tasks = getAllTasks();
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
-      const timer = setInterval(() => {
+      const timer = setInterval(async () => {
+        // Paused tasks keep their timer but skip scheduled executions.
+        if (!(await isTaskEnabled(task.name))) return;
         this.executeTask(task.name, 'scheduled').catch((err) =>
           console.error(`[scheduler] Scheduled run of '${task.name}' failed:`, err.message),
         );
@@ -42,6 +81,7 @@ class SchedulerService {
     task: { name: string; intervalMs: number },
     index: number,
   ): Promise<void> {
+    if (!(await isTaskEnabled(task.name))) return;
     const lastCompleted = await ScheduledTaskRun.findOne({
       taskName: task.name,
       status: 'completed',
@@ -53,21 +93,29 @@ class SchedulerService {
     const overdue = !lastAt || Date.now() - new Date(lastAt).getTime() >= task.intervalMs;
     if (!overdue) return;
 
-    // Stagger to avoid all overdue tasks firing at once on start.
-    const delayMs = index * 5000;
-    setTimeout(() => {
+    // Stagger to avoid all overdue tasks firing at once on start. Re-check the
+    // enabled flag at fire time too — an admin may pause within the stagger
+    // window, and a paused task must NOT run.
+    const timer = setTimeout(async () => {
+      this.catchUpTimers.delete(task.name);
+      if (!(await isTaskEnabled(task.name))) return;
       this.executeTask(task.name, 'scheduled').catch((err) =>
         console.error(`[scheduler] Catch-up run of '${task.name}' failed:`, err.message),
       );
-    }, delayMs);
+    }, index * 5000);
+    this.catchUpTimers.set(task.name, timer);
   }
 
-  // Stop all interval timers
+  // Stop all interval timers (and pending catch-up runs)
   stop(): void {
     for (const [, timer] of this.timers) {
       clearInterval(timer);
     }
     this.timers.clear();
+    for (const [, timer] of this.catchUpTimers) {
+      clearTimeout(timer);
+    }
+    this.catchUpTimers.clear();
     console.log('[scheduler] Stopped all tasks');
   }
 
@@ -239,35 +287,35 @@ class SchedulerService {
   // Get all tasks with their last run info for admin UI
   async getTasksWithStatus(): Promise<any[]> {
     const tasks = getAllTasks();
-    const result = [];
 
-    for (const task of tasks) {
-      const lastRun = await ScheduledTaskRun.findOne({ taskName: task.name })
-        .sort({ startedAt: -1 })
-        .lean();
+    // Parallelize the per-task DB reads (last run, running state, enabled flag).
+    const rows = await Promise.all(
+      tasks.map(async (task) => {
+        const [lastRun, isRunning, enabled] = await Promise.all([
+          ScheduledTaskRun.findOne({ taskName: task.name }).sort({ startedAt: -1 }).lean(),
+          ScheduledTaskRun.exists({ taskName: task.name, status: 'running' }),
+          isTaskEnabled(task.name),
+        ]);
 
-      const isRunning = await ScheduledTaskRun.exists({
-        taskName: task.name,
-        status: 'running',
-      });
+        let nextRunAt: string | null = null;
+        if (lastRun?.startedAt) {
+          nextRunAt = new Date(new Date(lastRun.startedAt).getTime() + task.intervalMs).toISOString();
+        }
 
-      let nextRunAt: string | null = null;
-      if (lastRun?.startedAt) {
-        nextRunAt = new Date(new Date(lastRun.startedAt).getTime() + task.intervalMs).toISOString();
-      }
+        return {
+          name: task.name,
+          displayName: task.displayName,
+          description: task.description,
+          intervalMs: task.intervalMs,
+          enabled,
+          lastRun: lastRun || null,
+          nextRunAt,
+          isRunning: !!isRunning,
+        };
+      }),
+    );
 
-      result.push({
-        name: task.name,
-        displayName: task.displayName,
-        description: task.description,
-        intervalMs: task.intervalMs,
-        lastRun: lastRun || null,
-        nextRunAt,
-        isRunning: !!isRunning,
-      });
-    }
-
-    return result;
+    return rows;
   }
 
   // Paginated run history
@@ -302,4 +350,4 @@ class SchedulerService {
 
 export const schedulerService = new SchedulerService();
 
-module.exports = { schedulerService, SchedulerService };
+module.exports = { schedulerService, SchedulerService, isTaskEnabled, setTaskEnabled };

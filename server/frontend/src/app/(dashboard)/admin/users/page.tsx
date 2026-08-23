@@ -16,6 +16,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Download,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -38,11 +39,19 @@ interface UserData {
   channelListCode?: string;
   channelCount?: number;
   lastActivity?: string;
+  devicesInUse?: number;
+  subscription?: {
+    planId?: string;
+    planName?: string;
+    status?: string;
+    startsAt?: string | null;
+    expiresAt?: string | null;
+  } | null;
 }
 
 export default function UsersPage() {
   const { toast } = useToast();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const router = useRouter();
   const [users, setUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -100,7 +109,7 @@ export default function UsersPage() {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         const axiosErr = err as { code?: string };
         if (axiosErr.code === 'ERR_CANCELED') return;
-        setError('Failed to load users');
+        setError('فشل تحميل المستخدمين');
       } finally {
         setLoading(false);
       }
@@ -137,9 +146,10 @@ export default function UsersPage() {
     if (!deleteConfirm) return;
     try {
       await api.delete(`/users/${deleteConfirm.id}`);
-      setUsers((prev) => prev.filter((u) => u._id !== deleteConfirm.id));
+      // Refetch so totalCount and pagination stay accurate after a delete.
+      await fetchUsers();
     } catch {
-      toast('Failed to delete user', 'error');
+      toast('فشل حذف المستخدم', 'error');
     } finally {
       setDeleteConfirm(null);
     }
@@ -164,7 +174,14 @@ export default function UsersPage() {
       fetchUsers();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setAddError(axiosErr.response?.data?.error || 'Failed to create user');
+      setAddError(
+        axiosErr.response?.data?.error ||
+          (locale === 'ar'
+            ? 'فشل إنشاء المستخدم'
+            : locale === 'fr'
+              ? 'Échec de la création de l’utilisateur'
+              : 'Failed to create user'),
+      );
     } finally {
       setAddLoading(false);
     }
@@ -177,6 +194,45 @@ export default function UsersPage() {
     setTimeout(() => setCopiedCode(null), 1500);
   }
 
+  // Export current filtered user list as CSV (respects search + filters).
+  const [exportingCsv, setExportingCsv] = useState(false);
+  async function handleExportCsv() {
+    if (exportingCsv) return;
+    setExportingCsv(true);
+    try {
+      const params = new URLSearchParams();
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (selectedRoles.length > 0 && selectedRoles.length < filterOptions.role.length) {
+        params.set('role', selectedRoles.join(','));
+      }
+      if (selectedStatuses.length > 0 && selectedStatuses.length < filterOptions.status.length) {
+        params.set('status', selectedStatuses.join(','));
+      }
+      const res = await api.get(`/users/export/csv?${params.toString()}`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dzhoof-users-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast(
+        locale === 'ar' ? 'تم تصدير المستخدمين' : locale === 'fr' ? 'Utilisateurs exportés' : 'Users exported',
+        'success',
+      );
+    } catch {
+      toast(
+        locale === 'ar' ? 'فشل تصدير المستخدمين' : locale === 'fr' ? 'Échec de l’export' : 'Failed to export users',
+        'error',
+      );
+    } finally {
+      setExportingCsv(false);
+    }
+  }
+
   async function handleToggleActive(e: React.MouseEvent, user: UserData) {
     e.stopPropagation();
     try {
@@ -185,7 +241,7 @@ export default function UsersPage() {
         prev.map((u) => (u._id === user._id ? { ...u, isActive: !user.isActive } : u)),
       );
     } catch {
-      toast('Failed to update user status', 'error');
+      toast('فشل تحديث حالة المستخدم', 'error');
     }
   }
 
@@ -226,16 +282,30 @@ export default function UsersPage() {
           <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">{t('admin.users')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{totalCount} {t('admin.registeredUsers')}</p>
         </div>
-        <button
-          onClick={() => {
-            setShowAddForm(true);
-            setAddError('');
-          }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 active:bg-primary/80"
-        >
-          <UserPlus className="h-4 w-4" aria-hidden="true" />
-          Add User
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleExportCsv}
+            disabled={exportingCsv}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-2 border-border bg-card uppercase tracking-[0.1em] transition-colors hover:border-primary/40 disabled:opacity-50"
+          >
+            {exportingCsv ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            {locale === 'ar' ? 'تصدير CSV' : locale === 'fr' ? 'Exporter CSV' : 'Export CSV'}
+          </button>
+          <button
+            onClick={() => {
+              setShowAddForm(true);
+              setAddError('');
+            }}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 active:bg-primary/80"
+          >
+            <UserPlus className="h-4 w-4" aria-hidden="true" />
+            {locale === 'ar' ? 'إضافة مستخدم' : locale === 'fr' ? 'Ajouter un utilisateur' : 'Add User'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -248,30 +318,44 @@ export default function UsersPage() {
       )}
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
           type="text"
           placeholder={t('admin.searchPlaceholder')}
           aria-label={t('admin.searchUsers')}
           value={search}
           onChange={(e) => handleSearchChange(e.target.value)}
-          className="w-full h-10 pl-10 pr-4 border border-border bg-card text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
+          className="w-full h-10 ps-10 pe-4 border border-border bg-card text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
         />
       </div>
 
       <DataTable<UserData>
         data={paginated}
-        gridTemplate="1fr 1fr 140px 100px 120px 80px 80px 80px"
-        ariaLabel="Users table"
+        gridTemplate="1fr 1fr 140px 100px 120px 80px 80px 80px 160px"
+        ariaLabel={locale === 'ar' ? 'جدول المستخدمين' : locale === 'fr' ? 'Tableau des utilisateurs' : 'Users table'}
         emptyMessage={
           debouncedSearch
-            ? 'No users match your search'
-            : 'No users registered yet. Click "Add User" to invite team members.'
+            ? locale === 'ar'
+              ? 'لا يوجد مستخدمون يطابقون بحثك'
+              : locale === 'fr'
+                ? 'Aucun utilisateur ne correspond à votre recherche'
+                : 'No users match your search'
+            : locale === 'ar'
+              ? 'لا يوجد مستخدمون مسجلون بعد. اضغط «إضافة مستخدم» لدعوة أعضاء الفريق.'
+              : locale === 'fr'
+                ? 'Aucun utilisateur inscrit pour le moment. Cliquez sur « Ajouter un utilisateur » pour inviter des membres.'
+                : 'No users registered yet. Click "Add User" to invite team members.'
         }
         rowKey={(u) => u._id}
         breakpoint="md"
         onRowClick={(u) => router.push(`/admin/users/${u._id}`)}
-        rowAriaLabel={(u) => `User: ${u.username}`}
+        rowAriaLabel={(u) =>
+          locale === 'ar'
+            ? `المستخدم: ${u.username}`
+            : locale === 'fr'
+              ? `Utilisateur : ${u.username}`
+              : `User: ${u.username}`
+        }
         columns={
           [
             {
@@ -286,12 +370,16 @@ export default function UsersPage() {
                   {u.role === 'Admin' ? (
                     <>
                       <Shield className="h-4 w-4 text-primary shrink-0" aria-hidden="true" />
-                      <span className="sr-only">Admin</span>
+                      <span className="sr-only">
+                        {locale === 'ar' ? 'مسؤول' : 'Admin'}
+                      </span>
                     </>
                   ) : (
                     <>
                       <User className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden="true" />
-                      <span className="sr-only">User</span>
+                      <span className="sr-only">
+                        {locale === 'ar' ? 'مستخدم' : locale === 'fr' ? 'Utilisateur' : 'User'}
+                      </span>
                     </>
                   )}
                   <span className="text-sm font-medium truncate">{u.username}</span>
@@ -316,7 +404,7 @@ export default function UsersPage() {
                   onClick={() => handleSort('lastActivity')}
                   className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors"
                 >
-                  Last_Activity
+                  {locale === 'ar' ? 'آخر نشاط' : locale === 'fr' ? 'Dernière activité' : 'Last Activity'}
                   {sortBy === 'lastActivity' ? (
                     sortOrder === 'desc' ? (
                       <ArrowDown className="h-3 w-3" />
@@ -347,7 +435,7 @@ export default function UsersPage() {
                   onClick={() => handleSort('channelCount')}
                   className="inline-flex items-center gap-1 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors"
                 >
-                  User Ch.
+                  {locale === 'ar' ? 'قنوات المستخدم' : locale === 'fr' ? 'Chaînes' : 'User Ch.'}
                   {sortBy === 'channelCount' ? (
                     sortOrder === 'desc' ? (
                       <ArrowDown className="h-3 w-3" />
@@ -369,7 +457,7 @@ export default function UsersPage() {
               key: 'channelCode',
               header: (
                 <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                  Channel Code
+                  {locale === 'ar' ? 'رمز القناة' : locale === 'fr' ? 'Code chaîne' : 'Channel Code'}
                 </span>
               ),
               cell: (u) => (
@@ -432,6 +520,67 @@ export default function UsersPage() {
               ),
             },
             {
+              key: 'subscription',
+              mobileHidden: true,
+              header: (
+                <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+                  {locale === 'ar' ? 'الاشتراك' : locale === 'fr' ? 'Abonnement' : 'Subscription'}
+                </span>
+              ),
+              cell: (u) => {
+                const sub = u.subscription;
+                if (!sub?.planName) {
+                  return (
+                    <span className="text-xs text-muted-foreground">
+                      {locale === 'ar' ? 'لا يوجد' : locale === 'fr' ? 'Aucun' : 'None'}
+                    </span>
+                  );
+                }
+                const statusCls =
+                  sub.status === 'ACTIVE'
+                    ? 'bg-signal-green/10 text-signal-green border-signal-green/30'
+                    : sub.status === 'EXPIRED'
+                      ? 'bg-signal-red/10 text-signal-red border-signal-red/30'
+                      : 'bg-muted text-muted-foreground border-border';
+                const statusLabel =
+                  sub.status === 'ACTIVE'
+                    ? locale === 'ar'
+                      ? 'نشط'
+                      : locale === 'fr'
+                        ? 'Actif'
+                        : 'Active'
+                    : sub.status === 'EXPIRED'
+                      ? locale === 'ar'
+                        ? 'منتهي'
+                        : locale === 'fr'
+                          ? 'Expiré'
+                          : 'Expired'
+                      : locale === 'ar'
+                        ? 'ملغى'
+                        : locale === 'fr'
+                          ? 'Annulé'
+                          : 'Cancelled';
+                return (
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium truncate">{sub.planName}</span>
+                      <span className={`shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 border ${statusCls}`}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      {sub.expiresAt
+                        ? `${locale === 'ar' ? 'ينتهي' : locale === 'fr' ? 'Expire' : 'Expires'} ${new Date(sub.expiresAt).toLocaleDateString()}`
+                        : '—'}
+                      {typeof u.devicesInUse === 'number' && u.devicesInUse > 0
+                        ? ` · ${u.devicesInUse} ${locale === 'ar' ? 'جهاز' : locale === 'fr' ? 'app.' : 'dev.'}`
+                        : ''}
+                    </div>
+                  </div>
+                );
+              },
+            },
+            {
               key: 'actions',
               headerClassName: 'text-right',
               header: (
@@ -461,7 +610,13 @@ export default function UsersPage() {
                       handleDelete(e, u._id, u.username);
                     }}
                     className="flex items-center justify-center h-8 w-8 text-muted-foreground hover:text-destructive transition-colors"
-                    aria-label={`Delete ${u.username}`}
+                    aria-label={
+                      locale === 'ar'
+                        ? `حذف ${u.username}`
+                        : locale === 'fr'
+                          ? `Supprimer ${u.username}`
+                          : `Delete ${u.username}`
+                    }
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

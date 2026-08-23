@@ -6,11 +6,14 @@ export interface IActivationCodeDocument extends Document {
   codeHash: string;
   codeLast4: string;
   prefix: string;
+  /** AES-256-GCM encrypted copy of the plaintext code, so admins can reveal it later. */
+  codeEnc?: string | null;
   planId: mongoose.Types.ObjectId;
   status: ActivationCodeStatus;
   activatedAt?: Date | null;
   activatedBy?: mongoose.Types.ObjectId | null;
   codeExpiresAt?: Date | null;
+  notes?: string | null;
   createdBy?: mongoose.Types.ObjectId | null;
   resellerId?: mongoose.Types.ObjectId | null;
   createdAt: Date;
@@ -40,6 +43,13 @@ const activationCodeSchema = new Schema<IActivationCodeDocument>(
       trim: true,
       maxlength: 10,
     },
+    // Recoverable copy of the plaintext code (AES-256-GCM via utils/crypto).
+    // Optional so legacy hash-only codes keep working; only revealable to admins.
+    codeEnc: {
+      type: String,
+      default: null,
+      select: false,
+    },
     planId: {
       type: Schema.Types.ObjectId,
       ref: 'Plan',
@@ -65,6 +75,12 @@ const activationCodeSchema = new Schema<IActivationCodeDocument>(
       type: Date,
       default: null,
       index: true,
+    },
+    notes: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 500,
     },
     createdBy: {
       type: Schema.Types.ObjectId,

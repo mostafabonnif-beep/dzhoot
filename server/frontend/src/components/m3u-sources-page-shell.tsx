@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Eye, Link2, Loader2, Play, Plus, RefreshCw, RotateCcw, Trash2, XCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -44,6 +44,9 @@ export default function M3USourcesPageShell() {
   const [sources, setSources] = useState<M3USource[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Live mirror of `sources` for async polling callbacks (avoids stale closures).
+  const sourcesRef = useRef<M3USource[]>([]);
+  sourcesRef.current = sources;
   const [form, setForm] = useState({ name: '', playlistUrl: '', epgUrl: '' });
   const [previews, setPreviews] = useState<Record<string, SyncPreview | undefined>>({});
   const [busySourceId, setBusySourceId] = useState<string | null>(null);
@@ -143,7 +146,27 @@ export default function M3USourcesPageShell() {
     try {
       await api.post(`/admin/m3u-sources/${source._id}/sync`);
       toast('بدأت مزامنة مصدر M3U في الخلفية', 'info');
-      await loadSources();
+      // Poll until the source finishes syncing (max ~3 minutes), so the UI
+      // reflects the real result without a manual reload.
+      const startedAt = Date.now();
+      const poll = async () => {
+        await loadSources();
+        const current = sourcesRef.current.find((s) => s._id === source._id);
+        const stillSyncing = current?.syncStatus === 'syncing';
+        if (stillSyncing && Date.now() - startedAt < 180000) {
+          setTimeout(poll, 4000);
+        } else {
+          toast(
+            current?.syncStatus === 'error'
+              ? `فشلت مزامنة «${source.name}»: ${current.lastError || 'غير معروف'}`
+              : current?.syncStatus === 'syncing'
+                ? 'لا تزال المزامنة جارية — حدّث الصفحة لاحقاً'
+                : `اكتملت مزامنة «${source.name}»`,
+            current?.syncStatus === 'error' ? 'error' : 'success',
+          );
+        }
+      };
+      setTimeout(poll, 3000);
     } catch {
       toast('تعذر بدء المزامنة', 'error');
     }
@@ -265,7 +288,7 @@ export default function M3USourcesPageShell() {
               </p>
 
               <div className="mt-4 flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs">
-                <span><strong>Direct Playback</strong><span className="mr-2 text-muted-foreground">{source.directPlayback ? 'مفعل' : 'متوقف'}</span></span>
+                <span><strong>التشغيل المباشر</strong><span className="ms-2 text-muted-foreground">{source.directPlayback ? 'مفعل' : 'متوقف'}</span></span>
                 <button onClick={() => toggleDirectPlayback(source)} className="rounded-md border px-3 py-1.5 font-medium hover:bg-muted">
                   {source.directPlayback ? 'تعطيل' : 'تفعيل'}
                 </button>

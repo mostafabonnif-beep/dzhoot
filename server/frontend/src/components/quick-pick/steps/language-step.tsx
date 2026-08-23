@@ -86,7 +86,7 @@ export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageSt
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
         <input
           type="text"
           placeholder={t('quickPick.searchLanguages')}
@@ -96,7 +96,7 @@ export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageSt
             setSearch(e.target.value);
             if (e.target.value) setShowAll(true);
           }}
-          className="w-full pl-9 pr-3 py-2 text-sm border border-border bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
+          className="w-full ps-9 pe-3 py-2 text-sm border border-border bg-background focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
         />
       </div>
 

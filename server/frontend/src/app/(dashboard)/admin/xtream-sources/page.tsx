@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Database, Loader2, Plus, RefreshCw, Server, Trash2, Wifi, XCircle } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -28,11 +28,18 @@ function errorMessage(error: unknown, fallback: string) {
 
 function formatDate(value?: string | null) {
   if (!value) return 'لم تتم المزامنة بعد';
-  return new Date(value).toLocaleString('ar-DZ');
+  // 'ar-DZ' renders Latin digits with Arabic month names; fall back gracefully.
+  try {
+    return new Intl.DateTimeFormat('ar-DZ', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  } catch {
+    return new Date(value).toLocaleString();
+  }
 }
 
 export default function AdminXtreamSourcesPage() {
   const [sources, setSources] = useState<XtreamSource[]>([]);
+  const sourcesRef = useRef<XtreamSource[]>([]);
+  sourcesRef.current = sources;
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -94,11 +101,29 @@ export default function AdminXtreamSourcesPage() {
     setNotice('');
     try {
       await api.post(`/admin/xtream-sources/${source._id}/sync`);
-      setNotice('بدأت المزامنة في الخلفية. ستتحدث الحالة تلقائيًا عند إعادة تحميل الصفحة.');
-      await loadSources();
+      setNotice('بدأت المزامنة في الخلفية — يتم متابعة الحالة تلقائياً...');
+      // Poll until the source finishes syncing (max ~3 minutes).
+      const startedAt = Date.now();
+      const poll = async () => {
+        await loadSources();
+        const current = sourcesRef.current.find((s) => s._id === source._id);
+        const stillSyncing = current?.syncStatus === 'syncing';
+        if (stillSyncing && Date.now() - startedAt < 180000) {
+          setTimeout(poll, 4000);
+        } else {
+          setSyncingId(null);
+          setNotice(
+            current?.syncStatus === 'error'
+              ? `فشلت مزامنة «${source.name}»: ${current.lastError || 'غير معروف'}`
+              : current?.syncStatus === 'syncing'
+                ? 'لا تزال المزامنة جارية — حدّث الصفحة لاحقاً'
+                : `اكتملت مزامنة «${source.name}»`,
+          );
+        }
+      };
+      setTimeout(poll, 3000);
     } catch (err: unknown) {
       setError(errorMessage(err, 'تعذر بدء المزامنة.'));
-    } finally {
       setSyncingId(null);
     }
   }
@@ -176,7 +201,7 @@ export default function AdminXtreamSourcesPage() {
             <div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary/10 p-2 text-primary"><Server className="h-5 w-5" /></div><div><h3 className="font-semibold">{source.name}</h3><p className="mt-1 break-all text-xs text-muted-foreground">{source.serverUrl}</p></div></div><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${source.status === 'Active' ? 'bg-signal-green/10 text-signal-green' : 'bg-muted text-muted-foreground'}`}>{source.status === 'Active' ? 'نشط' : 'غير نشط'}</span></div>
             <div className="mt-5 grid grid-cols-3 gap-2 text-center"><div className="rounded-xl bg-muted/50 p-3"><Database className="mx-auto mb-1 h-4 w-4 text-primary" /><strong className="block text-lg">{source.stats?.channels ?? 0}</strong><span className="text-[11px] text-muted-foreground">قنوات</span></div><div className="rounded-xl bg-muted/50 p-3"><strong className="block text-lg">{source.stats?.movies ?? 0}</strong><span className="text-[11px] text-muted-foreground">أفلام</span></div><div className="rounded-xl bg-muted/50 p-3"><strong className="block text-lg">{source.stats?.series ?? 0}</strong><span className="text-[11px] text-muted-foreground">مسلسلات</span></div></div>
             <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">{source.syncStatus === 'syncing' ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : source.syncStatus === 'error' ? <XCircle className="h-4 w-4 text-destructive" /> : <CheckCircle2 className="h-4 w-4 text-signal-green" />}<span>{source.syncStatus === 'syncing' ? 'جارٍ تنفيذ المزامنة…' : source.syncStatus === 'error' ? `فشلت المزامنة: ${source.lastError || 'خطأ غير معروف'}` : `آخر مزامنة: ${formatDate(source.lastSyncAt)}`}</span></div>
-            <div className="mt-4 flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-xs"><span><strong>Direct Playback</strong><span className="mr-2 text-muted-foreground">{source.directPlayback ? "مفعل" : "متوقف"}</span></span><button onClick={() => toggleDirectPlayback(source)} className="rounded-lg border border-border px-3 py-1.5 font-medium hover:border-primary/40">{source.directPlayback ? "تعطيل" : "تفعيل"}</button></div><div className="mt-5 flex flex-wrap gap-2"><button onClick={() => testSource(source)} disabled={testingId === source._id} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Wifi className="h-4 w-4" />{testingId === source._id ? 'جارٍ الاختبار…' : 'اختبار الاتصال'}</button><button onClick={() => syncSource(source)} disabled={syncingId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${syncingId === source._id || source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} />مزامنة الآن</button><button onClick={() => deleteSource(source)} className="mr-auto inline-flex items-center gap-2 rounded-xl border border-destructive/30 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" />حذف</button></div>
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-xs"><span><strong>التشغيل المباشر</strong><span className="ms-2 text-muted-foreground">{source.directPlayback ? "مفعل" : "متوقف"}</span></span><button onClick={() => toggleDirectPlayback(source)} className="rounded-lg border border-border px-3 py-1.5 font-medium hover:border-primary/40">{source.directPlayback ? "تعطيل" : "تفعيل"}</button></div><div className="mt-5 flex flex-wrap gap-2"><button onClick={() => testSource(source)} disabled={testingId === source._id} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Wifi className="h-4 w-4" />{testingId === source._id ? 'جارٍ الاختبار…' : 'اختبار الاتصال'}</button><button onClick={() => syncSource(source)} disabled={syncingId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${syncingId === source._id || source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} />مزامنة الآن</button><button onClick={() => deleteSource(source)} className="ms-auto inline-flex items-center gap-2 rounded-xl border border-destructive/30 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" />حذف</button></div>
           </article>
         ))}</div>}
       </section>

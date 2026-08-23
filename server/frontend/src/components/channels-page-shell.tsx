@@ -16,6 +16,7 @@ import {
   ArrowDown,
   Flag,
   Heart,
+  Ban,
 } from 'lucide-react';
 import Link from 'next/link';
 import api from '@/lib/api';
@@ -51,6 +52,7 @@ interface Channel {
   channelDrmKey?: string;
   channelDrmType?: string;
   order?: number;
+  epgId?: string;
   isActive?: boolean;
   metadata?: {
     isWorking?: boolean;
@@ -101,7 +103,7 @@ type SortDir = 'asc' | 'desc';
 export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   const isAdmin = mode === 'admin';
   const { toast } = useToast();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { user } = useAuthStore();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,6 +177,16 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   // Bulk delete
   const [showBulkDelete, setShowBulkDelete] = useState(false);
   const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
+
+  // Admin: row selection for bulk enable/disable/delete
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [bulkSelectionLoading, setBulkSelectionLoading] = useState(false);
+
+  // Clear row selection whenever the visible page changes (bulk actions apply
+  // only to rows the admin can see, keeping destructive ops predictable).
+  useEffect(() => {
+    setSelectedRows(new Set());
+  }, [page, debouncedSearch, isAdmin]);
 
   // Admin: M3U Import
   const [showImport, setShowImport] = useState(false);
@@ -674,6 +686,219 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       toast(t('channels.purgeFailed'), 'error');
     } finally {
       setPurgeLoading(false);
+    }
+  }
+
+  // Admin: bulk enable/disable/delete selected rows (PATCH/DELETE /admin/channels/bulk).
+  async function handleBulkSelection(action: 'enable' | 'disable' | 'delete') {
+    if (selectedRows.size === 0) return;
+    if (action === 'disable') {
+      const ok = window.confirm(
+        locale === 'ar'
+          ? `سيتم تعطيل ${selectedRows.size} قناة من الكتالوج (تختفي من قوائم المستخدمين مؤقتًا). هل تريد المتابعة؟`
+          : locale === 'fr'
+            ? `${selectedRows.size} chaînes seront désactivées du catalogue (masquées temporairement des listes des utilisateurs). Continuer ?`
+            : `${selectedRows.size} channels will be disabled in the catalog (temporarily hidden from user lists). Continue?`,
+      );
+      if (!ok) return;
+    }
+    if (action === 'delete') {
+      const ok = window.confirm(
+        locale === 'ar'
+          ? `سيتم حذف ${selectedRows.size} قناة نهائيًا من الكتالوج وإزالتها من قوائم المستخدمين. لا يمكن التراجع.`
+          : locale === 'fr'
+            ? `${selectedRows.size} chaînes seront supprimées définitivement du catalogue et retirées des listes des utilisateurs. Irréversible.`
+            : `${selectedRows.size} channels will be permanently deleted from the catalog and removed from user lists. This cannot be undone.`,
+      );
+      if (!ok) return;
+    }
+
+    setBulkSelectionLoading(true);
+    const ids = Array.from(selectedRows);
+    try {
+      if (action === 'delete') {
+        const res = await api.delete('/admin/channels/bulk', {
+          data: { confirmed: true, ids },
+        });
+        toast(
+          locale === 'ar'
+            ? `تم حذف ${res.data?.deletedCount ?? ids.length} قناة`
+            : locale === 'fr'
+              ? `${res.data?.deletedCount ?? ids.length} chaînes supprimées`
+              : `Deleted ${res.data?.deletedCount ?? ids.length} channels`,
+          'success',
+        );
+      } else {
+        const res = await api.patch('/admin/channels/bulk', {
+          ids,
+          isActive: action === 'enable',
+          confirmed: action === 'disable',
+        });
+        toast(
+          locale === 'ar'
+            ? action === 'enable'
+              ? `تم تفعيل ${res.data?.updatedCount ?? ids.length} قناة`
+              : `تم تعطيل ${res.data?.updatedCount ?? ids.length} قناة`
+            : locale === 'fr'
+              ? action === 'enable'
+                ? `${res.data?.updatedCount ?? ids.length} chaînes activées`
+                : `${res.data?.updatedCount ?? ids.length} chaînes désactivées`
+              : action === 'enable'
+                ? `Enabled ${res.data?.updatedCount ?? ids.length} channels`
+                : `Disabled ${res.data?.updatedCount ?? ids.length} channels`,
+          'success',
+        );
+      }
+      setSelectedRows(new Set());
+      await fetchChannels();
+      refreshFilterOptions();
+    } catch {
+      toast(
+        locale === 'ar'
+          ? 'فشلت العملية الجماعية'
+          : locale === 'fr'
+            ? 'Échec de l’opération groupée'
+            : 'Bulk operation failed',
+        'error',
+      );
+    } finally {
+      setBulkSelectionLoading(false);
+    }
+  }
+
+  // Admin: export the full catalog (all pages) as an M3U file — the old
+  // "Export M3U" copied the admin's own channel-list code, which admins
+  // usually don't have (dead button).
+  const [exportingCatalog, setExportingCatalog] = useState(false);
+  const [exportingCatalogCsv, setExportingCatalogCsv] = useState(false);
+
+  async function fetchAllCatalogChannels(): Promise<Channel[]> {
+    const all: Channel[] = [];
+    let cursor = 1;
+    const pageSize = 200;
+    let hasMore = true;
+    while (hasMore && cursor <= 250) {
+      const res = await api.get('/admin/channels', {
+        params: { page: cursor, pageSize, ownerId: 'null' },
+      });
+      const body = res.data?.data || res.data;
+      const rows: Channel[] = Array.isArray(body) ? body : body?.channels || body?.items || [];
+      all.push(...rows);
+      const total = body?.totalCount ?? body?.total ?? rows.length;
+      hasMore = rows.length > 0 && cursor * pageSize < total;
+      cursor += 1;
+    }
+    return all;
+  }
+
+  async function handleExportCatalogM3U() {
+    if (exportingCatalog) return;
+    setExportingCatalog(true);
+    try {
+      const all = await fetchAllCatalogChannels();
+      if (all.length === 0) {
+        toast(t('channels.noChannelsYet'), 'error');
+        return;
+      }
+      const lines = ['#EXTM3U'];
+      for (const ch of all) {
+        const name = getName(ch).replace(/,/g, '');
+        const url = getUrl(ch);
+        if (!url) continue;
+        lines.push(`#EXTINF:-1 tvg-id="${ch.epgId || ''}" tvg-logo="${getLogo(ch) || ''}",${name}`);
+        lines.push(url);
+      }
+      const blob = new Blob([lines.join('\n')], { type: 'audio/x-mpegurl' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dzhoof-catalog-${new Date().toISOString().slice(0, 10)}.m3u`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast(
+        locale === 'ar'
+          ? `تم تصدير ${all.length} قناة`
+          : locale === 'fr'
+            ? `${all.length} chaînes exportées`
+            : `Exported ${all.length} channels`,
+        'success',
+      );
+    } catch {
+      toast(
+        locale === 'ar'
+          ? 'فشل تصدير M3U'
+          : locale === 'fr'
+            ? 'Échec de l’export M3U'
+            : 'Failed to export M3U',
+        'error',
+      );
+    } finally {
+      setExportingCatalog(false);
+    }
+  }
+
+  async function handleExportCatalogCsv() {
+    if (exportingCatalogCsv) return;
+    setExportingCatalogCsv(true);
+    try {
+      const all = await fetchAllCatalogChannels();
+      if (all.length === 0) {
+        toast(t('channels.noChannelsYet'), 'error');
+        return;
+      }
+      const esc = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const rows = [
+        ['id', 'name', 'group', 'url', 'country', 'language', 'status', 'plays', 'last_tested'].join(','),
+      ];
+      for (const ch of all) {
+        rows.push([
+          esc(ch._id),
+          esc(getName(ch)),
+          esc(ch.channelGroup || ''),
+          esc(getUrl(ch)),
+          esc(ch.metadata?.country || ''),
+          esc(ch.metadata?.language || ''),
+          esc(
+            ch.metadata?.isWorking === false
+              ? 'dead'
+              : ch.metadata?.isWorking === true
+                ? 'working'
+                : 'untested',
+          ),
+          esc(ch.metrics?.playCount ?? 0),
+          esc(ch.metadata?.lastTested ? new Date(ch.metadata.lastTested).toISOString() : ''),
+        ].join(','));
+      }
+      const blob = new Blob(['\ufeff' + rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dzhoof-catalog-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast(
+        locale === 'ar'
+          ? `تم تصدير ${all.length} قناة`
+          : locale === 'fr'
+            ? `${all.length} chaînes exportées`
+            : `Exported ${all.length} channels`,
+        'success',
+      );
+    } catch {
+      toast(
+        locale === 'ar'
+          ? 'فشل تصدير CSV'
+          : locale === 'fr'
+            ? 'Échec de l’export CSV'
+            : 'Failed to export CSV',
+        'error',
+      );
+    } finally {
+      setExportingCatalogCsv(false);
     }
   }
 
@@ -1297,15 +1522,32 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           </button>
           {channels.length > 0 && (
             <button
-              onClick={handleCopyM3U}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 uppercase tracking-[0.1em]"
+              onClick={isAdmin ? handleExportCatalogM3U : handleCopyM3U}
+              disabled={isAdmin && exportingCatalog}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 uppercase tracking-[0.1em] disabled:opacity-50"
             >
-              {copied ? (
+              {exportingCatalog ? (
+                <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+              ) : copied && !isAdmin ? (
                 <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-signal-green" />
               ) : (
                 <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               )}
               {t('channels.exportM3u')}
+            </button>
+          )}
+          {isAdmin && channels.length > 0 && (
+            <button
+              onClick={handleExportCatalogCsv}
+              disabled={exportingCatalogCsv}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 uppercase tracking-[0.1em] disabled:opacity-50"
+            >
+              {exportingCatalogCsv ? (
+                <Loader2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              )}
+              {locale === 'ar' ? 'تصدير CSV' : locale === 'fr' ? 'Exporter CSV' : 'Export CSV'}
             </button>
           )}
           <button
@@ -1373,13 +1615,13 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             {t('channels.addToMyList')}
           </h2>
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
               placeholder={t('channels.searchAvailable')}
               value={addSearch}
               onChange={(e) => setAddSearch(e.target.value)}
-              className="w-full h-10 pl-10 pr-4 border border-border bg-background text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
+              className="w-full h-10 ps-10 pe-4 border border-border bg-background text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
               aria-label={t('channels.searchAvailable')}
             />
           </div>
@@ -1490,10 +1732,60 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       })()}
 
       {/* Channel List */}
+      {isAdmin && selectedRows.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border border-primary/40 bg-primary/5 px-4 py-2.5">
+          <span className="text-sm font-medium">
+            {locale === 'ar'
+              ? `${selectedRows.size} قناة محددة`
+              : locale === 'fr'
+                ? `${selectedRows.size} chaînes sélectionnées`
+                : `${selectedRows.size} channels selected`}
+          </span>
+          <span className="flex-1" />
+          <button
+            onClick={() => handleBulkSelection('enable')}
+            disabled={bulkSelectionLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-signal-green/40 text-signal-green hover:bg-signal-green/5 disabled:opacity-50 transition-colors"
+          >
+            <Check className="h-3.5 w-3.5" />
+            {locale === 'ar' ? 'تفعيل' : locale === 'fr' ? 'Activer' : 'Enable'}
+          </button>
+          <button
+            onClick={() => handleBulkSelection('disable')}
+            disabled={bulkSelectionLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-signal-amber/40 text-signal-amber hover:bg-signal-amber/5 disabled:opacity-50 transition-colors"
+          >
+            <Ban className="h-3.5 w-3.5" />
+            {locale === 'ar' ? 'تعطيل' : locale === 'fr' ? 'Désactiver' : 'Disable'}
+          </button>
+          <button
+            onClick={() => handleBulkSelection('delete')}
+            disabled={bulkSelectionLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border border-destructive/40 text-destructive hover:bg-destructive/5 disabled:opacity-50 transition-colors"
+          >
+            {bulkSelectionLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Trash2 className="h-3.5 w-3.5" />
+            )}
+            {locale === 'ar' ? 'حذف' : locale === 'fr' ? 'Supprimer' : 'Delete'}
+          </button>
+          <button
+            onClick={() => setSelectedRows(new Set())}
+            disabled={bulkSelectionLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground disabled:opacity-50 transition-colors"
+          >
+            {locale === 'ar' ? 'إلغاء التحديد' : locale === 'fr' ? 'Désélectionner' : 'Clear selection'}
+          </button>
+        </div>
+      )}
+
       <ChannelDataTable<Channel>
         data={displayData}
         gridTemplate={
-          isAdmin ? '1fr 40px 1fr 100px 100px 120px 70px 110px' : '1fr 40px 180px 130px 60px 110px'
+          isAdmin
+            ? `40px 1fr 40px 1fr 100px 100px 120px 70px 110px`
+            : '1fr 40px 180px 130px 60px 110px'
         }
         ariaLabel={isAdmin ? t('channels.tableAria') : t('channels.myTableAria')}
         emptyMessage={
@@ -1507,6 +1799,53 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         getName={getName}
         getLogo={getLogo}
         onDetail={(c) => setDetailChannel(c)}
+        selectableHeader={
+          isAdmin ? (
+            <input
+              type="checkbox"
+              aria-label={
+                locale === 'ar'
+                  ? 'تحديد كل قنوات هذه الصفحة'
+                  : locale === 'fr'
+                    ? 'Sélectionner toutes les chaînes de cette page'
+                    : 'Select all channels on this page'
+              }
+              checked={displayData.length > 0 && displayData.every((c) => selectedRows.has(c._id))}
+              onChange={(e) => {
+                const next = new Set(selectedRows);
+                if (e.target.checked) displayData.forEach((c) => next.add(c._id));
+                else displayData.forEach((c) => next.delete(c._id));
+                setSelectedRows(next);
+              }}
+              className="accent-primary"
+            />
+          ) : undefined
+        }
+        renderSelectCell={
+          isAdmin
+            ? (c) => (
+                <input
+                  type="checkbox"
+                  aria-label={
+                    locale === 'ar'
+                      ? `تحديد ${getName(c)}`
+                      : locale === 'fr'
+                        ? `Sélectionner ${getName(c)}`
+                        : `Select ${getName(c)}`
+                  }
+                  checked={selectedRows.has(c._id)}
+                  onChange={(e) => {
+                    const next = new Set(selectedRows);
+                    if (e.target.checked) next.add(c._id);
+                    else next.delete(c._id);
+                    setSelectedRows(next);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="accent-primary"
+                />
+              )
+            : undefined
+        }
         nameHeader={
           !isAdmin ? (
             <button

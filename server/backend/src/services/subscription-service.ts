@@ -13,6 +13,7 @@ import {
   codeLast4,
   hashIp,
 } from '../utils/code-generator';
+import { encryptSecret } from '../utils/crypto';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEVICE_LOCK_TTL_MS = 15_000;
@@ -291,7 +292,11 @@ export async function registerDevice(userId: string, info: DeviceInfo, maxDevice
   });
 }
 
-/** Generate a batch of codes. Plaintext codes are returned exactly once. */
+/**
+ * Generate a batch of codes. Plaintext codes are returned in the response,
+ * and an AES-256-GCM encrypted copy (codeEnc) is persisted alongside the
+ * verification hash so admins can reveal codes later from the dashboard.
+ */
 export async function generateCodes(opts: {
   planId: string;
   quantity: number;
@@ -325,6 +330,7 @@ export async function generateCodes(opts: {
       codeHash: hash,
       codeLast4: codeLast4(code),
       prefix,
+      codeEnc: encryptSecret(code),
       planId: plan._id,
       status: 'UNUSED',
       codeExpiresAt,

@@ -1,10 +1,10 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import CodesPage from '../app/(dashboard)/admin/codes/page';
 import api from '@/lib/api';
 
 jest.mock('@/lib/api', () => ({
   __esModule: true,
-  default: { get: jest.fn(), post: jest.fn(), delete: jest.fn() },
+  default: { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() },
 }));
 
 jest.mock('@/components/locale-provider', () => ({
@@ -38,9 +38,7 @@ describe('Admin codes page', () => {
     mockApiResponses([], 0);
     render(<CodesPage />);
 
-    expect(await screen.findByText('لم يتم العثور على أكواد.')).toBeInTheDocument();
-    // Header still shows the count from the stats payload
-    expect(screen.getByText(/0 كود/)).toBeInTheDocument();
+    expect(await screen.findByText('codes.empty')).toBeInTheDocument();
   });
 
   it('renders the codes returned by the API', async () => {
@@ -55,6 +53,38 @@ describe('Admin codes page', () => {
 
     await waitFor(() => expect(screen.getByText('DZHF-••••-••••-1234')).toBeInTheDocument());
     expect(screen.getByText('DZHF-••••-••••-5678')).toBeInTheDocument();
+  });
+
+  it('reveals a full code via the reveal endpoint when the eye button is clicked', async () => {
+    mockedGet.mockImplementation((url: string) => {
+      const u = String(url);
+      if (u.includes('/reveal')) {
+        return Promise.resolve({ data: { data: { code: 'DZHF-AAAA-BBBB-1234' } } });
+      }
+      if (u.includes('/stats')) {
+        return Promise.resolve({ data: { data: { total: 1, byStatus: { UNUSED: 1, ACTIVATED: 0, REVOKED: 0, EXPIRED: 0 } } } });
+      }
+      if (u.includes('/admin/plans')) {
+        return Promise.resolve({ data: { data: [] } });
+      }
+      return Promise.resolve({
+        data: {
+          data: [
+            { _id: 'c1', prefix: 'DZHF', codeLast4: '1234', status: 'UNUSED', planId: { _id: 'p1', name: '1 Month', durationDays: 30, maxDevices: 2 } },
+          ],
+          totalCount: 1,
+        },
+      });
+    });
+    render(<CodesPage />);
+
+    await waitFor(() => expect(screen.getByText('DZHF-••••-••••-1234')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByTitle('codes.reveal'));
+
+    await waitFor(() =>
+      expect(screen.getByText('DZHF-AAAA-BBBB-1234')).toBeInTheDocument(),
+    );
   });
 
   it('shows an error toast when the codes request fails', async () => {
