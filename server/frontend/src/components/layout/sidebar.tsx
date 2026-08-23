@@ -24,6 +24,7 @@ import {
   CreditCard,
   KeyRound,
   Bell,
+  Video,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
 import { BrandMark } from './brand-mark';
@@ -49,6 +50,7 @@ const adminLinks = [
   { href: '/admin/activity', labelKey: 'nav.activity', icon: Activity },
   { href: '/admin/scheduler', labelKey: 'nav.scheduler', icon: Clock },
   { href: '/admin/notifications', labelKey: 'nav.notifications', icon: Bell },
+  { href: '/admin/recordings', labelKey: 'nav.recordings', icon: Video },
   { href: '/admin/settings', labelKey: 'nav.settings', icon: Settings },
 ];
 

@@ -89,6 +89,13 @@ services:
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       DISABLE_SCHEDULER: 'true'
       SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED}
+      # Live-stream recording (ffmpeg inside the API container)
+      RECORDINGS_DIR: /app/recordings
+      RECORDING_MAX_SECONDS: ${RECORDING_MAX_SECONDS:-43200}
+      RECORDING_RETENTION_DAYS: ${RECORDING_RETENTION_DAYS:-30}
+      RECORDING_MAX_CONCURRENT: ${RECORDING_MAX_CONCURRENT:-2}
+    volumes:
+      - recordings_data:/app/recordings
     networks:
       - dzhoof-network
       - gkz-network
@@ -257,4 +264,6 @@ volumes:
   mongodb_data:
     driver: local
   redis_data:
+    driver: local
+  recordings_data:
     driver: local
