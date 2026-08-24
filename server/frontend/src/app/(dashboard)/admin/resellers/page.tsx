@@ -17,6 +17,7 @@ interface ResellerData {
   notes?: string;
   status: 'Active' | 'Inactive';
   prices?: { planId: string; price: number }[];
+  username?: string;
   stats?: { total: number; activated: number; remaining: number };
   createdAt?: string;
 }
@@ -28,6 +29,8 @@ interface ResellerForm {
   notes: string;
   status: 'Active' | 'Inactive';
   prices: { planId: string; price: string }[];
+  username: string;
+  password: string;
 }
 
 const emptyForm: ResellerForm = {
@@ -37,6 +40,8 @@ const emptyForm: ResellerForm = {
   notes: '',
   status: 'Active',
   prices: [],
+  username: '',
+  password: '',
 };
 
 const inputClass =
@@ -103,6 +108,8 @@ export default function ResellersPage() {
       notes: r.notes || '',
       status: r.status,
       prices: existing,
+      username: r.username || '',
+      password: '',
     });
     setFormError('');
     setFormOpen(true);
@@ -121,6 +128,8 @@ export default function ResellersPage() {
         prices: form.prices
           .filter((p) => p.planId && p.price !== '')
           .map((p) => ({ planId: p.planId, price: Number(p.price) })),
+        username: form.username.trim() || undefined,
+        password: form.password || undefined,
       };
       if (editingId) {
         await api.put(`/admin/resellers/${editingId}`, payload);
@@ -366,6 +375,33 @@ export default function ResellersPage() {
               <option value="Active">{t('resellers.active')}</option>
               <option value="Inactive">{t('resellers.inactive')}</option>
             </select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                {t('resellers.username')}
+              </label>
+              <input
+                className={inputClass}
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                placeholder="username"
+                dir="ltr"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                {t('resellers.password')}
+              </label>
+              <input
+                type="password"
+                className={inputClass}
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                placeholder={form.username ? '••••••' : ''}
+                dir="ltr"
+              />
+            </div>
           </div>
           <div className="space-y-1.5">
             <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
