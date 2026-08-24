@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Loader2, Send, Trash2, Plus, Bell, Check } from 'lucide-react';
+import { Loader2, Send, Trash2, Plus, Bell, Check, CalendarClock } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/components/locale-provider';
@@ -39,8 +39,11 @@ export default function NotificationsPage() {
   const [imageUrl, setImageUrl] = useState('');
   const [deepLink, setDeepLink] = useState('');
   const [audience, setAudience] = useState<'ALL' | 'ACTIVE'>('ALL');
+  const [scheduledAt, setScheduledAt] = useState('');
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState('');
+
+  const [statusFilter, setStatusFilter] = useState('');
 
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -48,7 +51,9 @@ export default function NotificationsPage() {
   const fetchNotifications = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/admin/notifications', { params: { page, pageSize } });
+      const res = await api.get('/admin/notifications', {
+        params: { page, pageSize, ...(statusFilter ? { status: statusFilter } : {}) },
+      });
       const body = res.data;
       setNotifications(Array.isArray(body) ? body : body.data || []);
       setTotalCount(body.totalCount ?? (Array.isArray(body) ? body.length : 0));
@@ -58,7 +63,7 @@ export default function NotificationsPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, statusFilter]);
 
   useEffect(() => {
     fetchNotifications();
@@ -79,14 +84,21 @@ export default function NotificationsPage() {
         imageUrl: imageUrl.trim(),
         deepLink: deepLink.trim(),
         audience,
+        scheduledAt: scheduledAt || undefined,
       });
-      toast(L('تم إنشاء الإشعار (مسودة)', 'Notification créée (brouillon)', 'Notification created (draft)'), 'success');
+      toast(
+        scheduledAt
+          ? L('تمت جدولة الإشعار', 'Notification programmée', 'Notification scheduled')
+          : L('تم إنشاء الإشعار (مسودة)', 'Notification créée (brouillon)', 'Notification created (draft)'),
+        'success',
+      );
       setShowForm(false);
       setTitle('');
       setBody('');
       setImageUrl('');
       setDeepLink('');
       setAudience('ALL');
+      setScheduledAt('');
       await fetchNotifications();
     } catch {
       setFormError(L('فشل إنشاء الإشعار', 'Échec de la création', 'Failed to create notification'));
@@ -160,13 +172,29 @@ export default function NotificationsPage() {
             {L('إنشاء وإرسال إشعارات الدفع عبر FCM', 'Créer et envoyer des notifications push via FCM', 'Create and send push notifications via FCM')}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"
-        >
-          <Plus className="h-4 w-4" />
-          {L('إشعار جديد', 'Nouvelle notification', 'New notification')}
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
+            className={inputClass}
+            aria-label={L('تصفية حسب الحالة', 'Filtrer par statut', 'Filter by status')}
+          >
+            <option value="">{L('الكل', 'Tous', 'All')}</option>
+            <option value="DRAFT">{L('مسودة', 'Brouillons', 'Drafts')}</option>
+            <option value="SCHEDULED">{L('مجدول', 'Programmées', 'Scheduled')}</option>
+            <option value="SENT">{L('مُرسَل', 'Envoyées', 'Sent')}</option>
+          </select>
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"
+          >
+            <Plus className="h-4 w-4" />
+            {L('إشعار جديد', 'Nouvelle notification', 'New notification')}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -209,14 +237,44 @@ export default function NotificationsPage() {
               <input value={deepLink} onChange={(e) => setDeepLink(e.target.value)} className={inputClass} dir="ltr" />
             </label>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5" />
+                {L('جدولة الإرسال (اختياري)', 'Envoi programmé (facultatif)', 'Schedule send (optional)')}
+              </span>
+              <input
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                className={inputClass}
+              />
+            </label>
+            <div className="flex items-end">
+              <p className="text-xs text-muted-foreground/70">
+                {L(
+                  'اتركه فارغاً لإنشاء الإشعار كمسودة فوراً.',
+                  'Laisser vide pour créer la notification en brouillon immédiatement.',
+                  'Leave empty to create the notification as a draft immediately.',
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            {scheduledAt && (
+              <p className="text-xs text-muted-foreground/70">
+                {L('سيُرسل في', 'Envoi programmé le', 'Scheduled for')}: {new Date(scheduledAt).toLocaleString()}
+              </p>
+            )}
             <button
               type="submit"
               disabled={creating}
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
               {creating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {L('إنشاء مسودة', 'Créer le brouillon', 'Create draft')}
+              {scheduledAt
+                ? L('جدولة الإرسال', 'Programmer', 'Schedule')
+                : L('إنشاء مسودة', 'Créer le brouillon', 'Create draft')}
             </button>
             <button
               type="button"
@@ -249,12 +307,16 @@ export default function NotificationsPage() {
                     className={`shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 border ${
                       n.status === 'SENT'
                         ? 'border-signal-green/30 text-signal-green'
-                        : 'border-signal-amber/40 text-signal-amber'
+                        : n.status === 'SCHEDULED'
+                          ? 'border-signal-blue/40 text-signal-blue'
+                          : 'border-signal-amber/40 text-signal-amber'
                     }`}
                   >
                     {n.status === 'SENT'
                       ? L('مُرسَل', 'Envoyée', 'Sent')
-                      : L('مسودة', 'Brouillon', 'Draft')}
+                      : n.status === 'SCHEDULED'
+                        ? L('مجدول', 'Programmée', 'Scheduled')
+                        : L('مسودة', 'Brouillon', 'Draft')}
                   </span>
                   <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                     {n.audience === 'ALL'
@@ -265,11 +327,14 @@ export default function NotificationsPage() {
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{n.body}</p>
                 <p className="text-[11px] text-muted-foreground/70 mt-1">
                   {n.createdAt ? new Date(n.createdAt).toLocaleString() : ''}
+                  {n.scheduledAt
+                    ? ` · ${L('مجدول', 'Programmée le', 'Scheduled')}: ${new Date(n.scheduledAt).toLocaleString()}`
+                    : ''}
                   {n.sentAt ? ` · ${L('أُرسل', 'Envoyée le', 'Sent')}: ${new Date(n.sentAt).toLocaleString()}` : ''}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {n.status !== 'SENT' && (
+                {n.status === 'DRAFT' && (
                   <button
                     onClick={() => handleSend(n)}
                     disabled={sendingId === n._id}

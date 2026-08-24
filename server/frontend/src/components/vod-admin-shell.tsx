@@ -12,23 +12,45 @@ import {
   Power,
   PowerOff,
   Trash2,
+  Pencil,
   X,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 import Pagination from '@/components/ui/pagination';
 import SearchInput from '@/components/ui/search-input';
+import Modal from '@/components/ui/modal';
+import { useLocale } from '@/components/locale-provider';
 
 interface VodItem {
   _id: string;
   title: string;
   category: string;
   poster?: string;
+  backdrop?: string;
+  description?: string;
+  plot?: string;
+  cast?: string;
+  director?: string;
+  genre?: string;
+  releaseDate?: string;
   year?: number;
   duration?: number;
   rating?: number;
   sourceId?: string;
   isActive: boolean;
+}
+
+interface EditField {
+  name: string;
+  label: string;
+  type?: 'text' | 'number' | 'textarea';
+  required?: boolean;
+  min?: number;
+  max?: number;
+  step?: number;
+  integer?: boolean;
+  nullable?: boolean;
 }
 
 interface VodAdminShellProps {
@@ -56,6 +78,8 @@ export default function VodAdminShell({
   icon,
 }: VodAdminShellProps) {
   const isMovies = kind === 'movies';
+  const { locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
   const [items, setItems] = useState<VodItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +97,12 @@ export default function VodAdminShell({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Metadata editing (per-item edit modal)
+  const [editing, setEditing] = useState<VodItem | null>(null);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -248,6 +278,113 @@ export default function VodAdminShell({
       setNotice(msg);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // Edit form fields depend on the kind. Labels are localized (Arabic-first).
+  const editFields: EditField[] = isMovies
+    ? [
+        { name: 'title', label: L('العنوان', 'Titre', 'Title'), required: true },
+        { name: 'category', label: L('التصنيف', 'Catégorie', 'Category') },
+        { name: 'year', label: L('السنة', 'Année', 'Year'), type: 'number', min: 1800, max: 2100, step: 1, integer: true, nullable: true },
+        { name: 'duration', label: L('المدة (بالدقائق)', 'Durée (minutes)', 'Duration (minutes)'), type: 'number', min: 1, step: 1, integer: true, nullable: true },
+        { name: 'rating', label: L('التقييم', 'Note', 'Rating'), type: 'number', min: 0, max: 10, step: 0.1, nullable: true },
+        { name: 'poster', label: L('رابط الملصق', 'Affiche (URL)', 'Poster URL') },
+        { name: 'backdrop', label: L('رابط الخلفية', 'Fond (URL)', 'Backdrop URL') },
+        { name: 'description', label: L('الوصف', 'Description', 'Description'), type: 'textarea' },
+      ]
+    : [
+        { name: 'title', label: L('العنوان', 'Titre', 'Title'), required: true },
+        { name: 'category', label: L('التصنيف', 'Catégorie', 'Category') },
+        { name: 'rating', label: L('التقييم', 'Note', 'Rating'), type: 'number', min: 0, max: 10, step: 0.1, nullable: true },
+        { name: 'poster', label: L('رابط الملصق', 'Affiche (URL)', 'Poster URL') },
+        { name: 'backdrop', label: L('رابط الخلفية', 'Fond (URL)', 'Backdrop URL') },
+        { name: 'plot', label: L('القصة', 'Synopsis', 'Plot'), type: 'textarea' },
+        { name: 'cast', label: L('طاقم التمثيل', 'Casting', 'Cast'), type: 'textarea' },
+        { name: 'director', label: L('المخرج', 'Réalisateur', 'Director') },
+        { name: 'genre', label: L('النوع', 'Genre', 'Genre') },
+        { name: 'releaseDate', label: L('تاريخ الإصدار', 'Date de sortie', 'Release date') },
+      ];
+
+  const fieldDisplayValue = (item: VodItem, name: string): string => {
+    const value = item[name as keyof VodItem];
+    return value === null || value === undefined ? '' : String(value);
+  };
+
+  const openEdit = (item: VodItem) => {
+    const initial: Record<string, string> = {};
+    for (const field of editFields) {
+      initial[field.name] = fieldDisplayValue(item, field.name);
+    }
+    setForm(initial);
+    setFormError(null);
+    setEditing(item);
+  };
+
+  const closeEdit = () => {
+    setEditing(null);
+    setFormError(null);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+
+    // Send only fields the user actually changed (non-empty, or null to clear
+    // a nullable numeric like year/duration/rating).
+    const payload: Record<string, unknown> = {};
+    for (const field of editFields) {
+      const value = (form[field.name] ?? '').trim();
+      const original = fieldDisplayValue(editing, field.name);
+
+      if (field.type === 'number') {
+        if (value === '') {
+          if (original !== '' && field.nullable) payload[field.name] = null;
+          continue;
+        }
+        const num = Number(value);
+        if (!Number.isFinite(num) || (field.integer && !Number.isInteger(num))) {
+          setFormError(`${field.label}: ${L('يجب أن يكون رقمًا صحيحًا', 'Doit être un nombre entier', 'Must be a whole number')}`);
+          return;
+        }
+        if (field.min !== undefined && num < field.min) {
+          setFormError(`${field.label}: ${L(`يجب أن يكون ${field.min} على الأقل`, `Doit être au moins ${field.min}`, `Must be at least ${field.min}`)}`);
+          return;
+        }
+        if (field.max !== undefined && num > field.max) {
+          setFormError(`${field.label}: ${L(`يجب ألا يتجاوز ${field.max}`, `Doit être au plus ${field.max}`, `Must be at most ${field.max}`)}`);
+          return;
+        }
+        if (value !== original) payload[field.name] = num;
+        continue;
+      }
+
+      if (field.required && value === '') {
+        setFormError(L('العنوان مطلوب', 'Le titre est requis', 'Title is required'));
+        return;
+      }
+      if (value !== '' && value !== original) payload[field.name] = value;
+    }
+
+    if (Object.keys(payload).length === 0) {
+      setFormError(L('لا توجد تغييرات لحفظها', 'Aucune modification à enregistrer', 'No changes to save'));
+      return;
+    }
+
+    setSaving(true);
+    setFormError(null);
+    try {
+      await api.patch(`/admin/vod/${kind}/${editing._id}`, payload);
+      setNotice(L('تم تحديث البيانات بنجاح', 'Données mises à jour avec succès', 'Data updated successfully'));
+      setEditing(null);
+      await fetchItems();
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        L('فشل تحديث البيانات', 'Échec de la mise à jour des données', 'Failed to update data');
+      setFormError(msg);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -494,6 +631,15 @@ export default function VodAdminShell({
                   <button
                     type="button"
                     disabled={busy}
+                    onClick={() => openEdit(item)}
+                    title={L('تعديل', 'Modifier', 'Edit')}
+                    className="inline-flex items-center justify-center rounded bg-accent px-2 py-1 text-[11px] font-medium hover:bg-accent/70 disabled:opacity-50"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
                     onClick={() => runSingle(item, 'delete')}
                     title="حذف"
                     className="inline-flex items-center justify-center rounded bg-destructive/10 px-2 py-1 text-[11px] font-medium text-destructive hover:bg-destructive/20 disabled:opacity-50"
@@ -570,6 +716,15 @@ export default function VodAdminShell({
                       <button
                         type="button"
                         disabled={busy}
+                        onClick={() => openEdit(item)}
+                        title={L('تعديل', 'Modifier', 'Edit')}
+                        className="rounded p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
                         onClick={() => runSingle(item, 'delete')}
                         title="حذف"
                         className="rounded p-1.5 text-destructive hover:bg-destructive/10 disabled:opacity-50"
@@ -588,6 +743,75 @@ export default function VodAdminShell({
       <div className="flex justify-center py-4">
         <Pagination page={page} pageSize={PAGE_SIZE} totalCount={total} onPageChange={setPage} />
       </div>
+
+      {/* Per-item metadata edit modal */}
+      <Modal
+        open={editing !== null}
+        onClose={closeEdit}
+        title={L(isMovies ? 'تعديل الفيلم' : 'تعديل المسلسل', isMovies ? 'Modifier le film' : 'Modifier la série', isMovies ? 'Edit movie' : 'Edit series')}
+        size="lg"
+        ariaLabelledBy="vod-edit-modal-title"
+      >
+        {editing && (
+          <form onSubmit={handleEditSubmit} className="p-4 sm:p-5 space-y-4" noValidate>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {editFields.map((field) => (
+                <div key={field.name} className={field.type === 'textarea' ? 'sm:col-span-2' : ''}>
+                  <label htmlFor={`edit-${field.name}`} className="block text-sm font-medium mb-1">
+                    {field.label}
+                    {field.required ? <span className="text-destructive"> *</span> : null}
+                  </label>
+                  {field.type === 'textarea' ? (
+                    <textarea
+                      id={`edit-${field.name}`}
+                      value={form[field.name] ?? ''}
+                      onChange={(e) => setForm((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                      rows={4}
+                      className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    />
+                  ) : (
+                    <input
+                      id={`edit-${field.name}`}
+                      type={field.type === 'number' ? 'number' : 'text'}
+                      value={form[field.name] ?? ''}
+                      onChange={(e) => setForm((prev) => ({ ...prev, [field.name]: e.target.value }))}
+                      min={field.type === 'number' ? field.min : undefined}
+                      max={field.type === 'number' ? field.max : undefined}
+                      step={field.type === 'number' ? (field.step ?? 1) : undefined}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {formError && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm text-destructive" role="alert">
+                {formError}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
+              <button
+                type="button"
+                onClick={closeEdit}
+                disabled={saving}
+                className="inline-flex items-center rounded-md bg-accent px-4 py-2 text-sm font-medium hover:bg-accent/80 disabled:opacity-50"
+              >
+                {L('إلغاء', 'Annuler', 'Cancel')}
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {saving ? L('جارٍ الحفظ...', 'Enregistrement…', 'Saving…') : L('حفظ', 'Enregistrer', 'Save')}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }

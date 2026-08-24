@@ -1,13 +1,14 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { Languages, LogOut, Menu, Moon, Sun, UserCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Languages, LogOut, Menu, Moon, Search, Sun, UserCircle } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
 import api from '@/lib/api';
 import { useLocale } from '@/components/locale-provider';
+import GlobalSearch from '@/components/global-search';
 
 export function Header() {
   const router = useRouter();
@@ -17,6 +18,14 @@ export function Header() {
   const { locale, setLocale, t } = useLocale();
 
   const [picError, setPicError] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [isMac, setIsMac] = useState(false);
+
+  useEffect(() => {
+    setIsMac(typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform));
+  }, []);
+
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
 
   const rawPic = user?.profilePicture;
   const profilePic =
@@ -49,6 +58,17 @@ export function Header() {
         <Menu className="h-5 w-5" />
       </button>
       <div className="relative inline-flex items-center gap-1.5 ml-auto">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
+            aria-label={L('بحث', 'Recherche', 'Search')}
+            title={L('بحث (Ctrl+K)', 'Recherche (Ctrl+K)', 'Search (Ctrl+K)')}
+          >
+            <Search className="h-4 w-4" />
+            <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {isMac ? '⌘K' : 'Ctrl K'}
+            </kbd>
+          </button>
                   <label className="inline-flex h-10 items-center gap-1.5 border-l border-border px-2 text-xs text-muted-foreground">
             <Languages className="h-4 w-4" aria-hidden="true" />
             <span className="sr-only">{t('language.label')}</span>
@@ -103,6 +123,7 @@ export function Header() {
           <LogOut className="h-4 w-4" />
         </button>
       </div>
+      <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </header>
   );
 }

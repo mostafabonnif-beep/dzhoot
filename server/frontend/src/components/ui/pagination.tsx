@@ -16,6 +16,10 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange }:
   const label = (ar: string, en: string, fr: string) => locale === 'ar' ? ar : locale === 'fr' ? fr : en;
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
 
+  // RTL: "previous" points right, "next" points left — mirror the arrows.
+  const PrevIcon = locale === 'ar' ? ChevronRight : ChevronLeft;
+  const NextIcon = locale === 'ar' ? ChevronLeft : ChevronRight;
+
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, totalCount);
 
@@ -46,7 +50,7 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange }:
           className="flex items-center justify-center h-11 w-11 border border-border text-muted-foreground hover:text-foreground hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-primary transition-colors disabled:opacity-30 disabled:pointer-events-none"
           aria-label={label('الصفحة السابقة', 'Previous page', 'Page précédente')}
         >
-          <ChevronLeft className="h-4 w-4" />
+          <PrevIcon className="h-4 w-4" />
         </button>
         {pageNumbers.map((item, idx) =>
           item === 'ellipsis' ? (
@@ -80,7 +84,7 @@ export default function Pagination({ page, pageSize, totalCount, onPageChange }:
           className="flex items-center justify-center h-11 w-11 border border-border text-muted-foreground hover:text-foreground hover:border-foreground/20 focus-visible:ring-2 focus-visible:ring-primary transition-colors disabled:opacity-30 disabled:pointer-events-none"
           aria-label={label('الصفحة التالية', 'Next page', 'Page suivante')}
         >
-          <ChevronRight className="h-4 w-4" />
+          <NextIcon className="h-4 w-4" />
         </button>
       </div>
     </nav>

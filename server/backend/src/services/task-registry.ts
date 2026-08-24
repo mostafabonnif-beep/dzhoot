@@ -6,10 +6,12 @@ import { ExternalSourceCacheMeta, ExternalSourceChannel } from '../models/Extern
 import { IptvOrgChannel } from '../models/IptvOrgCache';
 import XtreamSource from '../models/XtreamSource';
 import M3USource from '../models/M3USource';
+import Notification from '../models/Notification';
 import { syncXtreamSource, verifyXtreamSource } from './xtream-service';
 import { syncM3USource } from './m3u-service';
 import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
 import { expireStaleCodesAndReturnCredit } from './subscription-service';
+import { sendNotificationToDevices } from './fcm-service';
 
 export interface SubtaskResult {
   name: string;
@@ -51,6 +53,7 @@ const M3U_SYNC_INTERVAL = intervalMs(process.env.M3U_SYNC_INTERVAL_MS, 21600000)
 const OPS_REPORT_INTERVAL = intervalMs(process.env.OPS_REPORT_INTERVAL_MS, 86400000);
 const EXPIRY_ALERT_INTERVAL = intervalMs(process.env.EXPIRY_ALERT_INTERVAL_MS, 86400000);
 const CODE_EXPIRY_INTERVAL = intervalMs(process.env.CODE_EXPIRY_INTERVAL_MS, 86400000);
+const NOTIFICATION_DISPATCH_INTERVAL = intervalMs(process.env.NOTIFICATION_DISPATCH_INTERVAL_MS, 60000);
 
 /** Daily operations report to admins (codes activated per reseller, new users, …). */
 async function dailyReportHandler(): Promise<TaskResult> {
@@ -112,6 +115,83 @@ async function codeExpiryHandler(): Promise<TaskResult> {
     ];
     return { summary: { ok: false, error: err?.message || String(err) }, subtasks };
   }
+}
+
+/** Every minute: send due SCHEDULED push notifications via FCM. */
+async function notificationDispatcherHandler(): Promise<TaskResult> {
+  const startedAt = Date.now();
+  const subtasks: SubtaskResult[] = [];
+  let sent = 0;
+  let failed = 0;
+  let skippedNotConfigured = 0;
+
+  let due: any[] = [];
+  try {
+    due = await Notification.find({
+      status: 'SCHEDULED',
+      scheduledAt: { $lte: new Date() },
+    })
+      .sort({ scheduledAt: 1 })
+      .limit(50)
+      .lean();
+  } catch (err: any) {
+    subtasks.push({
+      name: 'notification-dispatcher-query',
+      status: 'failed',
+      durationMs: Date.now() - startedAt,
+      error: err?.message || String(err),
+    });
+  }
+
+  for (const notification of due) {
+    const subStart = Date.now();
+    const name = String(notification.title || notification._id);
+    try {
+      const fcm = await sendNotificationToDevices({
+        title: notification.title,
+        body: notification.body,
+        imageUrl: notification.imageUrl,
+        deepLink: notification.deepLink,
+        audience: notification.audience,
+      });
+      // Mark SENT even when FCM is unconfigured — matches the manual-send path.
+      // A throw above leaves it SCHEDULED so it retries on the next tick.
+      await Notification.updateOne(
+        { _id: notification._id },
+        { $set: { status: 'SENT', sentAt: new Date() } },
+      ).exec();
+      if (fcm.configured === false) {
+        skippedNotConfigured += 1;
+        subtasks.push({
+          name,
+          status: 'completed',
+          durationMs: Date.now() - subStart,
+          result: fcm,
+        });
+      } else {
+        sent += 1;
+        subtasks.push({
+          name,
+          status: 'completed',
+          durationMs: Date.now() - subStart,
+          result: fcm,
+        });
+      }
+    } catch (err: any) {
+      failed += 1;
+      subtasks.push({
+        name,
+        status: 'failed',
+        durationMs: Date.now() - subStart,
+        error: err?.message || String(err),
+      });
+    }
+  }
+
+  return {
+    summary: { sent, failed, skippedNotConfigured },
+    subtasks,
+  };
 }
 
 async function livenessHandler(): Promise<TaskResult> {
@@ -447,6 +527,13 @@ const tasks: TaskDefinition[] = [
     description: 'Expire unused reseller codes past their validity window and return the credit to the reseller',
     intervalMs: CODE_EXPIRY_INTERVAL,
     handler: codeExpiryHandler,
+  },
+  {
+    name: 'notification-dispatcher',
+    displayName: 'Scheduled Notification Dispatcher',
+    description: 'Send due SCHEDULED push notifications via FCM',
+    intervalMs: NOTIFICATION_DISPATCH_INTERVAL,
+    handler: notificationDispatcherHandler,
   },
 ];
 
