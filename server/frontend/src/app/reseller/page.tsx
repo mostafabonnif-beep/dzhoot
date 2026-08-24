@@ -2,11 +2,31 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Store, Package, KeyRound, Download, Copy, Check, LogOut } from 'lucide-react';
+import {
+  Loader2,
+  Store,
+  Package,
+  KeyRound,
+  Download,
+  Copy,
+  Check,
+  LogOut,
+  Wand2,
+  Minus,
+  Plus,
+  BadgeCheck,
+} from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
 import { useToast } from '@/hooks/use-toast';
 import Modal from '@/components/ui/modal';
+import { useLocale } from '@/components/locale-provider';
+
+interface CreditItem {
+  planId: string;
+  quantity: number;
+  plan: { name: string; durationDays: number };
+}
 
 interface BatchItem {
   _id: string;
@@ -46,9 +66,15 @@ function statusBadge(status: CodeItem['status']) {
 export default function ResellerDashboardPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { t } = useLocale();
   const logout = useAuthStore((s) => s.logout);
   const accessToken = useAuthStore((s) => s.accessToken);
-  const [me, setMe] = useState<{ name: string; city: string; stats: { total: number; activated: number; remaining: number } } | null>(null);
+  const [me, setMe] = useState<{
+    name: string;
+    city: string;
+    stats: { total: number; activated: number; remaining: number };
+    credit: CreditItem[];
+  } | null>(null);
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -56,6 +82,13 @@ export default function ResellerDashboardPage() {
   const [codes, setCodes] = useState<CodeItem[]>([]);
   const [codesLoading, setCodesLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Generation state
+  const [genPlanId, setGenPlanId] = useState('');
+  const [genQty, setGenQty] = useState(1);
+  const [generating, setGenerating] = useState(false);
+  const [genResult, setGenResult] = useState<{ batchNumber: number; planName: string; codes: string[] } | null>(null);
+  const [genCopied, setGenCopied] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -67,11 +100,11 @@ export default function ResellerDashboardPage() {
       setBatches(batchRes.data?.data || []);
       setError('');
     } catch {
-      setError('تعذر تحميل البيانات');
+      setError(t('portal.loginError'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -89,7 +122,7 @@ export default function ResellerDashboardPage() {
       const res = await api.get(`/reseller/batches/${batch._id}/codes`);
       setCodes(res.data?.data || []);
     } catch {
-      setError('تعذر تحميل الأكواد');
+      setError(t('portal.loginError'));
     } finally {
       setCodesLoading(false);
     }
@@ -98,9 +131,40 @@ export default function ResellerDashboardPage() {
   function copyAll() {
     navigator.clipboard.writeText(codes.map((c) => c.code).join('\n')).then(() => {
       setCopied(true);
-      toast('تم نسخ جميع الأكواد', 'success');
+      toast(t('portal.copied'), 'success');
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  function copyGenerated() {
+    if (!genResult) return;
+    navigator.clipboard.writeText(genResult.codes.join('\n')).then(() => {
+      setGenCopied(true);
+      toast(t('portal.copied'), 'success');
+      setTimeout(() => setGenCopied(false), 2000);
+    });
+  }
+
+  async function generateCodes() {
+    if (!genPlanId || genQty < 1) return;
+    setGenerating(true);
+    try {
+      const res = await api.post('/reseller/codes/generate', { planId: genPlanId, quantity: genQty });
+      const data = res.data?.data;
+      setGenResult({
+        batchNumber: data.batch.batchNumber,
+        planName: data.batch.plan.name,
+        codes: data.codes || [],
+      });
+      toast(t('portal.generatedSuccess'), 'success');
+      setGenQty(1);
+      load(); // refresh credit + batches
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast(axiosErr.response?.data?.error || t('portal.loginError'), 'error');
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function downloadBatch(batch: BatchItem) {
@@ -113,7 +177,7 @@ export default function ResellerDashboardPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast('تعذر تنزيل الملف', 'error');
+      toast(t('portal.loginError'), 'error');
     }
   }
 
@@ -130,13 +194,15 @@ export default function ResellerDashboardPage() {
     );
   }
 
+  const credit = me?.credit || [];
+
   return (
     <div className="min-h-screen bg-background" dir="rtl">
       <header className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Store className="h-5 w-5 text-primary" />
-            <span className="font-semibold">بوابة الموزعين — DZ HOOF</span>
+            <span className="font-semibold">{t('portal.loginTitle')}</span>
           </div>
           <div className="flex items-center gap-3">
             {me && (
@@ -148,7 +214,7 @@ export default function ResellerDashboardPage() {
               onClick={handleLogout}
               className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
             >
-              <LogOut className="h-4 w-4" /> خروج
+              <LogOut className="h-4 w-4" /> {t('portal.logout')}
             </button>
           </div>
         </div>
@@ -157,18 +223,54 @@ export default function ResellerDashboardPage() {
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         {error && <div className="text-sm text-destructive">{error}</div>}
 
+        {/* Credit + self-service generation */}
+        <section className="border border-border bg-card p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
+            <BadgeCheck className="h-4 w-4" /> {t('portal.myCredit')}
+          </h2>
+          {credit.length === 0 ? (
+            <div className="text-sm text-muted-foreground">{t('portal.noCredit')}</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {credit.map((c) => (
+                <div key={c.planId} className="border border-border p-3 flex flex-col gap-2">
+                  <div>
+                    <div className="font-medium text-sm">{c.plan.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {c.plan.durationDays} {t('portal.days')}
+                    </div>
+                  </div>
+                  <div className="text-2xl font-semibold">{c.quantity}</div>
+                  <div className="text-xs text-muted-foreground">{t('portal.remainingCredit')}</div>
+                  <button
+                    onClick={() => {
+                      setGenPlanId(c.planId);
+                      setGenQty(1);
+                      setGenResult(null);
+                    }}
+                    disabled={c.quantity < 1}
+                    className="inline-flex items-center justify-center gap-1.5 text-xs px-2.5 py-1.5 border border-primary/40 text-primary hover:bg-primary/5 disabled:opacity-40 disabled:pointer-events-none"
+                  >
+                    <Wand2 className="h-3.5 w-3.5" /> {t('portal.generateCodes')}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
         {me && (
           <div className="grid grid-cols-3 gap-3">
             <div className="border border-border bg-card p-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">إجمالي الأكواد</div>
+              <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.totalCodes')}</div>
               <div className="text-2xl font-semibold mt-1">{me.stats.total}</div>
             </div>
             <div className="border border-border bg-card p-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">مُفعّلة</div>
+              <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.activated')}</div>
               <div className="text-2xl font-semibold mt-1 text-emerald-600 dark:text-emerald-400">{me.stats.activated}</div>
             </div>
             <div className="border border-border bg-card p-4">
-              <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">المتبقي</div>
+              <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.remainingCredit')}</div>
               <div className="text-2xl font-semibold mt-1 text-sky-600 dark:text-sky-400">{me.stats.remaining}</div>
             </div>
           </div>
@@ -176,31 +278,33 @@ export default function ResellerDashboardPage() {
 
         <section>
           <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
-            <Package className="h-4 w-4" /> دفعاتي
+            <Package className="h-4 w-4" /> {t('portal.myBatches')}
           </h2>
           {batches.length === 0 ? (
             <div className="border border-dashed border-border p-8 text-center text-muted-foreground">
-              لا توجد دفعات بعد — تواصل مع الإدارة لاستلام أول دفعة.
+              {t('portal.noBatches')}
             </div>
           ) : (
             <div className="border border-border bg-card overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-xs uppercase tracking-[0.15em] text-muted-foreground">
-                    <th className="text-right p-3">الدفعة</th>
-                    <th className="text-right p-3">المدة</th>
-                    <th className="text-right p-3">تاريخ الاستلام</th>
-                    <th className="text-right p-3">مُفعّل / إجمالي</th>
-                    <th className="text-right p-3">المتبقي</th>
+                    <th className="text-right p-3">{t('portal.batch')}</th>
+                    <th className="text-right p-3">{t('portal.duration')}</th>
+                    <th className="text-right p-3">{t('portal.receiptDate')}</th>
+                    <th className="text-right p-3">{t('portal.activatedTotal')}</th>
+                    <th className="text-right p-3">{t('portal.remainingCredit')}</th>
                     <th className="text-right p-3"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {batches.map((b) => (
                     <tr key={b._id} className="border-b border-border/50 last:border-0">
-                      <td className="p-3 font-medium">دفعة {b.batchNumber}</td>
+                      <td className="p-3 font-medium">
+                        {t('portal.batch')} {b.batchNumber}
+                      </td>
                       <td className="p-3">
-                        {b.plan ? `${b.plan.name} — ${b.plan.durationDays} يوم` : '—'}
+                        {b.plan ? `${b.plan.name} — ${b.plan.durationDays} ${t('portal.days')}` : '—'}
                       </td>
                       <td className="p-3" dir="ltr">{b.receiptDate?.slice(0, 10)}</td>
                       <td className="p-3">
@@ -215,13 +319,13 @@ export default function ResellerDashboardPage() {
                             onClick={() => openCodes(b)}
                             className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-border hover:bg-muted"
                           >
-                            <KeyRound className="h-3.5 w-3.5" /> الأكواد
+                            <KeyRound className="h-3.5 w-3.5" /> {t('portal.codes')}
                           </button>
                           <button
                             onClick={() => downloadBatch(b)}
                             className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-border hover:bg-muted"
                           >
-                            <Download className="h-3.5 w-3.5" /> ملف
+                            <Download className="h-3.5 w-3.5" /> {t('portal.file')}
                           </button>
                         </div>
                       </td>
@@ -234,18 +338,19 @@ export default function ResellerDashboardPage() {
         </section>
       </main>
 
-      <Modal open={!!openBatch} onClose={() => setOpenBatch(null)} title={openBatch ? `دفعة ${openBatch.batchNumber} — الأكواد` : ''}>
+      {/* Batch codes modal */}
+      <Modal open={!!openBatch} onClose={() => setOpenBatch(null)} title={openBatch ? `${t('portal.batch')} ${openBatch.batchNumber} — ${t('portal.codes')}` : ''}>
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground">
-              {codes.filter((c) => c.status === 'ACTIVATED').length} مفعّل من {codes.length}
+              {codes.filter((c) => c.status === 'ACTIVATED').length} {t('portal.activated')} {codes.length}
             </span>
             <button
               onClick={copyAll}
               className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-border hover:bg-muted"
             >
               {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-              نسخ الكل
+              {t('portal.copyAll')}
             </button>
           </div>
           {codesLoading ? (
@@ -261,11 +366,87 @@ export default function ResellerDashboardPage() {
                 </div>
               ))}
               {codes.length === 0 && !codesLoading && (
-                <div className="text-center text-muted-foreground py-6">لا توجد أكواد في هذه الدفعة.</div>
+                <div className="text-center text-muted-foreground py-6">{t('portal.emptyCodes')}</div>
               )}
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Generation modal */}
+      <Modal
+        open={!!genPlanId || !!genResult}
+        onClose={() => {
+          setGenPlanId('');
+          setGenResult(null);
+        }}
+        title={genResult ? `${t('portal.newCodes')} — ${genResult.planName}` : t('portal.generateCodes')}
+      >
+        {genResult ? (
+          <div className="space-y-3">
+            <div className="flex items-start gap-2 text-sm border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-emerald-700 dark:text-emerald-400">
+              <BadgeCheck className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>
+                {t('portal.startsOnActivation')}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">
+                {t('portal.batch')} {genResult.batchNumber} — {genResult.codes.length}
+              </span>
+              <button
+                onClick={copyGenerated}
+                className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-border hover:bg-muted"
+              >
+                {genCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                {t('portal.copyAll')}
+              </button>
+            </div>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {genResult.codes.map((code, i) => (
+                <div key={i} className="border border-border px-3 py-2.5 text-center">
+                  <code className="text-base font-mono font-semibold tracking-wide" dir="ltr">{code}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm">العدد</span>
+              <button
+                onClick={() => setGenQty((q) => Math.max(1, q - 1))}
+                className="p-1.5 border border-border hover:bg-muted"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </button>
+              <input
+                type="number"
+                min={1}
+                max={50}
+                className={`${inputClass} w-20 text-center`}
+                value={genQty}
+                onChange={(e) => setGenQty(Math.min(50, Math.max(1, Number(e.target.value) || 1)))}
+              />
+              <button
+                onClick={() => setGenQty((q) => Math.min(50, q + 1))}
+                className="p-1.5 border border-border hover:bg-muted"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+              <span className="text-xs text-muted-foreground">{t('portal.quantity')}</span>
+            </div>
+            <button
+              onClick={generateCodes}
+              disabled={generating}
+              className="inline-flex w-full items-center justify-center gap-2 h-10 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
+            >
+              {generating && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t('portal.generate')}
+            </button>
+            <div className="text-xs text-muted-foreground">{t('portal.startsOnActivation')}</div>
+          </div>
+        )}
       </Modal>
     </div>
   );

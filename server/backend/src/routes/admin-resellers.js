@@ -17,6 +17,19 @@ function parseId(id) {
   return mongoose.isValidObjectId(id) ? id : null;
 }
 
+/** Clean a credit array: [{planId, quantity}] — merge duplicates by summing, drop invalid. */
+function cleanCredit(raw) {
+  if (!Array.isArray(raw)) return [];
+  const byPlan = new Map();
+  for (const item of raw) {
+    if (!item || !parseId(item.planId)) continue;
+    const qty = Number(item.quantity);
+    if (!Number.isInteger(qty) || qty < 0) continue;
+    byPlan.set(String(item.planId), (byPlan.get(String(item.planId)) || 0) + qty);
+  }
+  return [...byPlan.entries()].map(([planId, quantity]) => ({ planId, quantity }));
+}
+
 // GET / — list resellers with code stats
 router.get('/', async (req, res) => {
   try {
@@ -41,7 +54,7 @@ router.get('/', async (req, res) => {
 // POST / — create reseller
 router.post('/', async (req, res) => {
   try {
-    const { name, city, phone, notes, status, prices, username, password } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password, credit } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'name is required' });
     }
@@ -63,6 +76,7 @@ router.post('/', async (req, res) => {
       notes: String(notes || '').trim(),
       status: status === 'Inactive' ? 'Inactive' : 'Active',
       prices: cleanPrices,
+      credit: cleanCredit(credit),
       username: username ? String(username).trim().toLowerCase() : undefined,
       passwordHash: password ? String(password) : undefined,
     });
@@ -79,7 +93,7 @@ router.put('/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
-    const { name, city, phone, notes, status, prices, username, password } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password, credit } = req.body || {};
     const update = {};
     if (username !== undefined) {
       if (username && !/^[a-z0-9_.-]{3,50}$/i.test(String(username).trim())) {
@@ -107,6 +121,7 @@ router.put('/:id', async (req, res) => {
             .map((p) => ({ planId: p.planId, price: Number(p.price) }))
         : [];
     }
+    if (credit !== undefined) update.credit = cleanCredit(credit);
     if (!update.name) return res.status(400).json({ success: false, error: 'name is required' });
     const doc = await Reseller.findByIdAndUpdate(id, { $set: update }, { new: true }).exec();
     if (!doc) return res.status(404).json({ success: false, error: 'Reseller not found' });
