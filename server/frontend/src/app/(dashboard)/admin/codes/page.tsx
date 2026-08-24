@@ -30,6 +30,8 @@ interface CodeData {
   prefix: string;
   codeLast4: string;
   planId: { _id: string; name: string; durationDays: number; maxDevices: number } | string;
+  resellerId?: { _id: string; name: string; city?: string } | string | null;
+  batchId?: { _id: string; batchNumber: number; receiptDate?: string | null } | string | null;
   status: 'UNUSED' | 'ACTIVATED' | 'REVOKED' | 'EXPIRED';
   activatedAt?: string | null;
   activatedBy?: { _id: string; username: string } | null;
@@ -47,6 +49,13 @@ interface PlanOption {
   _id: string;
   name: string;
   durationDays: number;
+}
+
+interface ResellerOption {
+  _id: string;
+  name: string;
+  city?: string;
+  status: 'Active' | 'Inactive';
 }
 
 const inputClass =
@@ -83,6 +92,7 @@ export default function CodesPage() {
   const [codes, setCodes] = useState<CodeData[]>([]);
   const [stats, setStats] = useState<StatsData | null>(null);
   const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [resellers, setResellers] = useState<ResellerOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
@@ -90,6 +100,7 @@ export default function CodesPage() {
 
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [planFilter, setPlanFilter] = useState('ALL');
+  const [resellerFilter, setResellerFilter] = useState('ALL');
   const { search, debouncedSearch, handleSearchChange } = useDebouncedSearch('', 300);
 
   // Reveal state: map of codeId -> plaintext, plus per-row reveal loading
@@ -128,7 +139,7 @@ export default function CodesPage() {
   // Clear selection when the visible page or filters change.
   useEffect(() => {
     setSelectedCodes(new Set());
-  }, [page, debouncedSearch, statusFilter, planFilter]);
+  }, [page, debouncedSearch, statusFilter, planFilter, resellerFilter]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -146,6 +157,7 @@ export default function CodesPage() {
       params.set('pageSize', String(pageSize));
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
       if (planFilter !== 'ALL') params.set('planId', planFilter);
+      if (resellerFilter !== 'ALL') params.set('resellerId', resellerFilter);
       if (debouncedSearch) params.set('search', debouncedSearch);
       const res = await api.get(`/admin/activation-codes?${params.toString()}`);
       const body = res.data;
@@ -157,7 +169,7 @@ export default function CodesPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, planFilter, debouncedSearch, toast, t]);
+  }, [page, statusFilter, planFilter, resellerFilter, debouncedSearch, toast, t]);
 
   useEffect(() => {
     fetchCodes();
@@ -176,9 +188,19 @@ export default function CodesPage() {
       .catch(() => {});
   }, []);
 
+  // Load reseller options for the filter
+  useEffect(() => {
+    api
+      .get('/admin/resellers')
+      .then((res) => {
+        setResellers(res.data?.data || []);
+      })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     setPage(1);
-  }, [statusFilter, planFilter, debouncedSearch]);
+  }, [statusFilter, planFilter, resellerFilter, debouncedSearch]);
 
   function copyText(text: string) {
     navigator.clipboard.writeText(text).catch(() => {});
@@ -492,6 +514,37 @@ export default function CodesPage() {
       },
     },
     {
+      key: 'reseller',
+      header: t('codes.reseller'),
+      cell: (c) => {
+        const reseller = typeof c.resellerId === 'object' && c.resellerId ? c.resellerId : null;
+        return reseller ? (
+          <div className="min-w-0">
+            <div className="truncate">{reseller.name}</div>
+            {reseller.city && (
+              <div className="text-xs text-muted-foreground truncate">{reseller.city}</div>
+            )}
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+      mobileHidden: true,
+    },
+    {
+      key: 'batch',
+      header: t('codes.batch'),
+      cell: (c) => {
+        const batch = typeof c.batchId === 'object' && c.batchId ? c.batchId : null;
+        return batch ? (
+          <span className="text-sm whitespace-nowrap">#{batch.batchNumber}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        );
+      },
+      mobileHidden: true,
+    },
+    {
       key: 'status',
       header: t('codes.status'),
       cell: (c) => statusBadge(c.status, t),
@@ -675,6 +728,18 @@ export default function CodesPage() {
             </option>
           ))}
         </select>
+        <select
+          className={`${inputClass} sm:w-48`}
+          value={resellerFilter}
+          onChange={(e) => setResellerFilter(e.target.value)}
+        >
+          <option value="ALL">{t('codes.allResellers')}</option>
+          {resellers.map((r) => (
+            <option key={r._id} value={r._id}>
+              {r.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {selectedCodes.size > 0 && (
@@ -714,7 +779,7 @@ export default function CodesPage() {
       <DataTable
         columns={columns}
         data={codes}
-        gridTemplate="40px minmax(240px,1.8fr) minmax(130px,0.9fr) 110px 150px 120px 130px"
+        gridTemplate="40px minmax(220px,1.6fr) minmax(110px,0.8fr) minmax(120px,0.9fr) 90px 110px 140px 110px 130px"
         ariaLabel={t('codes.title')}
         emptyMessage={t('codes.empty')}
         rowKey={(c) => c._id}

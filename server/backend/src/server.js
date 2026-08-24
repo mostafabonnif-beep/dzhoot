@@ -424,6 +424,8 @@ app.use('/api/v1/admin', require('./routes/admin'));
 // Subscription & activation (commercial backbone)
 app.use('/api/v1/admin/plans', require('./routes/admin-plans'));
 app.use('/api/v1/admin/activation-codes', require('./routes/admin-activation-codes'));
+app.use('/api/v1/admin/resellers', require('./routes/admin-resellers'));
+app.use('/api/v1/admin/code-batches', require('./routes/admin-code-batches'));
 app.use('/api/v1/activation', require('./routes/activation'));
 app.use('/api/v1/me', require('./routes/me'));
 // Xtream Codes sources + VOD catalog

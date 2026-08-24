@@ -16,6 +16,7 @@ export interface IActivationCodeDocument extends Document {
   notes?: string | null;
   createdBy?: mongoose.Types.ObjectId | null;
   resellerId?: mongoose.Types.ObjectId | null;
+  batchId?: mongoose.Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -89,8 +90,15 @@ const activationCodeSchema = new Schema<IActivationCodeDocument>(
     },
     resellerId: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: 'Reseller',
       default: null,
+      index: true,
+    },
+    batchId: {
+      type: Schema.Types.ObjectId,
+      ref: 'CodeBatch',
+      default: null,
+      index: true,
     },
   },
   {
