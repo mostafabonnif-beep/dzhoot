@@ -45,6 +45,24 @@ interface StreamHealthData {
   };
 }
 
+interface BusinessData {
+  summary: {
+    activatedThisMonth: number;
+    activatedTotal: number;
+    revenueThisMonth: number;
+    revenueTotal: number;
+    activeSubscriptions: number;
+    activeResellers: number;
+    creditRemaining: number;
+    codesGeneratedThisMonth: number;
+    pricesSet: boolean;
+  };
+  byPlanThisMonth: Array<{ planId: string; planName: string; count: number; price: number; currency: string; revenue: number }>;
+  byPlanTotal: Array<{ planId: string; planName: string; count: number; price: number; currency: string; revenue: number }>;
+  creditByPlan: Array<{ planId: string; planName: string; quantity: number }>;
+  recentActivations: Array<{ code: string; planName: string; price: number; currency: string; resellerName: string | null; activatedAt: string }>;
+}
+
 const quickActions = [
   { label: 'اختيار سريع', href: '/admin/quick-pick', icon: Zap },
   { label: 'إدارة القنوات', href: '/admin/channels', icon: Tv },
@@ -55,6 +73,11 @@ const quickActions = [
 function formatTime(timestamp: string) {
   const date = new Date(timestamp);
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function fmtMoney(value: number, currency = 'DZD') {
+  const n = new Intl.NumberFormat('ar-DZ', { maximumFractionDigits: 0 }).format(value || 0);
+  return `${n} ${currency}`;
 }
 
 function formatDate(timestamp: string) {
@@ -74,6 +97,7 @@ export default function AdminDashboard() {
   const [channelOperations, setChannelOperations] = useState<ChannelOperationsData | null>(null);
   const [epgCoverage, setEpgCoverage] = useState<EpgCoverageData | null>(null);
   const [playbackQuality, setPlaybackQuality] = useState<PlaybackQualityData | null>(null);
+  const [business, setBusiness] = useState<BusinessData | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -87,13 +111,14 @@ export default function AdminDashboard() {
   }
 
   const loadDashboard = useCallback(async (signal?: AbortSignal) => {
-    const [statsResult, configResult, healthResult, operationsResult, coverageResult, qualityResult] = await Promise.allSettled([
+    const [statsResult, configResult, healthResult, operationsResult, coverageResult, qualityResult, businessResult] = await Promise.allSettled([
       api.get('/admin/stats/detailed', { signal }),
       api.get('/config/defaults', { signal }),
       api.get('/admin/stats/stream-health', { signal }),
       getChannelOperations(signal),
       getEpgCoverage(signal),
       getPlaybackQuality(signal),
+      api.get('/admin/business/summary', { signal }),
     ]);
 
     if (signal?.aborted) return;
@@ -114,6 +139,7 @@ export default function AdminDashboard() {
     if (operationsResult.status === 'fulfilled') setChannelOperations(operationsResult.value);
     if (coverageResult.status === 'fulfilled') setEpgCoverage(coverageResult.value);
     if (qualityResult.status === 'fulfilled') setPlaybackQuality(qualityResult.value);
+    if (businessResult.status === 'fulfilled') setBusiness(businessResult.value.data?.data || null);
 
     setStats({
       channels: { total: data.channels?.total ?? 0, active: data.channels?.active ?? 0, inactive: data.channels?.inactive ?? 0 },
@@ -303,6 +329,71 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
+
+      {business && (
+        <section className="brand-surface overflow-hidden rounded-3xl border border-border/70">
+          <div className="flex flex-col gap-3 border-b border-border bg-muted/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">نظرة الأعمال</h2>
+              <p className="mt-1 text-xs text-muted-foreground">التفعيلات والإيرادات والاشتراكات — من أكواد التفعيل والخطط.</p>
+            </div>
+            {!business.summary.pricesSet && business.summary.activatedTotal > 0 && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                الإيراد 0 حتى تُضبط الأسعار في صفحة الباقات
+              </span>
+            )}
+          </div>
+          <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { label: 'تفعيلات هذا الشهر', value: business.summary.activatedThisMonth, sub: `${business.summary.activatedTotal} إجمالي`, href: '/admin/codes' },
+              { label: 'إيراد هذا الشهر', value: fmtMoney(business.summary.revenueThisMonth), sub: `${fmtMoney(business.summary.revenueTotal)} إجمالي`, href: '/admin/plans' },
+              { label: 'اشتراكات نشطة', value: business.summary.activeSubscriptions, sub: `${business.summary.codesGeneratedThisMonth} كود وُلّد هذا الشهر`, href: '/admin/users' },
+              { label: 'رصيد أكواد المحلات', value: business.summary.creditRemaining, sub: `${business.summary.activeResellers} محل نشط`, href: '/admin/resellers' },
+            ].map((m, i) => (
+              <Link
+                key={m.label}
+                href={m.href}
+                className={`bg-card p-4 transition-colors hover:bg-primary/[0.03] ${i > 0 ? 'border-l border-border' : ''}`}
+              >
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{m.label}</p>
+                <p className="mt-1.5 text-2xl font-display font-bold tabular-nums">{m.value}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{m.sub}</p>
+              </Link>
+            ))}
+          </div>
+          {business.recentActivations.length > 0 && (
+            <div className="border-t border-border">
+              <div className="px-4 py-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">آخر التفعيلات</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-y border-border bg-muted/40 text-right text-xs text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">الكود</th>
+                      <th className="px-4 py-2 font-medium">الباقة</th>
+                      <th className="px-4 py-2 font-medium">المحل</th>
+                      <th className="px-4 py-2 font-medium">الوقت</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {business.recentActivations.map((a) => (
+                      <tr key={a.code} className="border-b border-border/60 last:border-0">
+                        <td className="px-4 py-2 font-mono text-xs" dir="ltr">{a.code}</td>
+                        <td className="px-4 py-2">{a.planName}</td>
+                        <td className="px-4 py-2">{a.resellerName || '—'}</td>
+                        <td className="px-4 py-2 text-xs text-muted-foreground">
+                          {new Date(a.activatedAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {channelOperations && (
         <section className="brand-surface overflow-hidden rounded-3xl border border-border/70">
