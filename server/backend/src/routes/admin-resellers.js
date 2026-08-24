@@ -33,7 +33,7 @@ function cleanCredit(raw) {
   return [...byPlan.entries()].map(([planId, quantity]) => ({ planId, quantity }));
 }
 
-// GET / — list resellers with code stats
+// GET / — list resellers with code stats + purchase value
 router.get('/', async (req, res) => {
   try {
     const resellers = await Reseller.find({}).sort({ createdAt: -1 }).lean();
@@ -43,9 +43,18 @@ router.get('/', async (req, res) => {
     const statsByReseller = new Map(
       codeStats.filter((s) => s._id).map((s) => [String(s._id), { total: s.total, activated: s.activated }]),
     );
+    const purchaseAgg = await CreditTransaction.aggregate([
+      { $match: { type: 'GRANT' } },
+      { $group: { _id: '$resellerId', value: { $sum: '$amount' } } },
+    ]);
+    const purchasesByReseller = new Map(purchaseAgg.filter((p) => p._id).map((p) => [String(p._id), p.value || 0]));
     const data = resellers.map((r) => {
       const st = statsByReseller.get(String(r._id)) || { total: 0, activated: 0 };
-      return { ...r, stats: { total: st.total, activated: st.activated, remaining: st.total - st.activated } };
+      return {
+        ...r,
+        stats: { total: st.total, activated: st.activated, remaining: st.total - st.activated },
+        purchasedValue: purchasesByReseller.get(String(r._id)) || 0,
+      };
     });
     res.json({ success: true, data });
   } catch (err) {

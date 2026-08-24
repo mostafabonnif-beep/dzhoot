@@ -125,3 +125,44 @@ describe('GET /admin/business/summary', () => {
     expect(response.body.data.summary.activatedThisMonth).toBe(1);
   });
 });
+
+describe('GET /admin/business/summary — reseller sales', () => {
+  it('reports per-reseller activations and purchase value', async () => {
+    const plan = await Plan.create({ name: 'شهري', durationDays: 30, price: 500, maxDevices: 1, maxConcurrentStreams: 1 });
+    const reseller = await Reseller.create({
+      name: 'محل مبيعات',
+      city: 'الجزائر',
+      status: 'Active',
+      credit: [{ planId: plan._id, quantity: 5 }],
+      prices: [{ planId: plan._id, price: 400 }],
+    });
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    await ActivationCode.create([
+      { prefix: 'DZHF', codeHash: 's1', codeLast4: 'AA01', planId: plan._id, status: 'ACTIVATED', activatedAt: new Date(monthStart.getTime() + 1000), resellerId: reseller._id },
+      { prefix: 'DZHF', codeHash: 's2', codeLast4: 'AA02', planId: plan._id, status: 'ACTIVATED', activatedAt: new Date(monthStart.getTime() + 2000), resellerId: reseller._id },
+    ]);
+    // Purchase ledger: 5 × 400 = 2000
+    const CreditTransaction = require('../models/CreditTransaction').default || require('../models/CreditTransaction');
+    await CreditTransaction.create({
+      resellerId: reseller._id,
+      planId: plan._id,
+      type: 'GRANT',
+      quantity: 5,
+      balanceAfter: 5,
+      unitPrice: 400,
+      amount: 2000,
+    });
+
+    const response = await request(buildApp()).get('/admin/business/summary');
+    expect(response.status).toBe(200);
+
+    const byReseller = response.body.data.byReseller;
+    const row = byReseller.find((r: any) => String(r.resellerId) === String(reseller._id));
+    expect(row).toBeDefined();
+    expect(row.name).toBe('محل مبيعات');
+    expect(row.monthActivations).toBe(2);
+    expect(row.totalActivations).toBe(2);
+    expect(row.purchases).toBe(2000);
+  });
+});
