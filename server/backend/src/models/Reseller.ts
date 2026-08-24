@@ -9,6 +9,9 @@ export interface IResellerDocument extends Document {
   status: 'Active' | 'Inactive';
   /** Wholesale price per plan (سعر الجملة): [{planId, price}] — optional. */
   prices?: Array<{ planId: mongoose.Types.ObjectId; price: number }>;
+  /** Code credit per plan (رصيد الأكواد): [{planId, quantity}] — reseller can
+   *  self-generate codes while credit remains; decremented on each generation. */
+  credit?: Array<{ planId: mongoose.Types.ObjectId; quantity: number }>;
   /** Portal login (بوابة الموزعين) — set by admin; inactive resellers cannot log in. */
   username?: string;
   passwordHash?: string;
@@ -54,6 +57,16 @@ const resellerSchema = new Schema<IResellerDocument>(
           _id: false,
           planId: { type: Schema.Types.ObjectId, ref: 'Plan' },
           price: { type: Number, min: 0, default: 0 },
+        },
+      ],
+      default: [],
+    },
+    credit: {
+      type: [
+        {
+          _id: false,
+          planId: { type: Schema.Types.ObjectId, ref: 'Plan' },
+          quantity: { type: Number, min: 0, default: 0 },
         },
       ],
       default: [],

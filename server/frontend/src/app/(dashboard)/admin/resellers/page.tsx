@@ -17,6 +17,7 @@ interface ResellerData {
   notes?: string;
   status: 'Active' | 'Inactive';
   prices?: { planId: string; price: number }[];
+  credit?: { planId: string; quantity: number }[];
   username?: string;
   stats?: { total: number; activated: number; remaining: number };
   createdAt?: string;
@@ -29,6 +30,7 @@ interface ResellerForm {
   notes: string;
   status: 'Active' | 'Inactive';
   prices: { planId: string; price: string }[];
+  credit: { planId: string; quantity: string }[];
   username: string;
   password: string;
 }
@@ -40,6 +42,7 @@ const emptyForm: ResellerForm = {
   notes: '',
   status: 'Active',
   prices: [],
+  credit: [],
   username: '',
   password: '',
 };
@@ -101,6 +104,7 @@ export default function ResellersPage() {
   function openEdit(r: ResellerData) {
     setEditingId(r._id);
     const existing = (r.prices || []).map((p) => ({ planId: String(p.planId), price: String(p.price) }));
+    const existingCredit = (r.credit || []).map((c) => ({ planId: String(c.planId), quantity: String(c.quantity) }));
     setForm({
       name: r.name,
       city: r.city || '',
@@ -108,6 +112,7 @@ export default function ResellersPage() {
       notes: r.notes || '',
       status: r.status,
       prices: existing,
+      credit: existingCredit,
       username: r.username || '',
       password: '',
     });
@@ -128,6 +133,9 @@ export default function ResellersPage() {
         prices: form.prices
           .filter((p) => p.planId && p.price !== '')
           .map((p) => ({ planId: p.planId, price: Number(p.price) })),
+        credit: form.credit
+          .filter((c) => c.planId && c.quantity !== '')
+          .map((c) => ({ planId: c.planId, quantity: Number(c.quantity) })),
         username: form.username.trim() || undefined,
         password: form.password || undefined,
       };
@@ -226,6 +234,28 @@ export default function ResellersPage() {
             <div className="text-xs text-muted-foreground truncate">
               {stats.remaining} {t('resellers.remaining')}
             </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: 'credit',
+      header: t('resellers.credit'),
+      cell: (r) => {
+        const credit = (r.credit || []).filter((c) => (Number(c.quantity) || 0) > 0);
+        const totalQty = credit.reduce((s, c) => s + (Number(c.quantity) || 0), 0);
+        if (totalQty === 0) return <span className="text-muted-foreground">—</span>;
+        return (
+          <div className="min-w-0 max-w-[11rem]">
+            {credit.map((c) => {
+              const plan = plans.find((p) => p._id === String(c.planId));
+              return (
+                <div key={String(c.planId)} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate">{plan?.name || '—'}</span>
+                  <span className="font-medium tabular-nums">{c.quantity}</span>
+                </div>
+              );
+            })}
           </div>
         );
       },
@@ -433,6 +463,45 @@ export default function ResellersPage() {
                       }}
                     />
                     <span className="text-xs text-muted-foreground w-8">دج</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              {t('resellers.credit')}
+            </label>
+            <p className="text-xs text-muted-foreground">{t('resellers.creditHint')}</p>
+            <div className="space-y-2 border border-border p-3">
+              {plans.length === 0 && (
+                <div className="text-xs text-muted-foreground">{t('resellers.noPlans')}</div>
+              )}
+              {plans.map((plan) => {
+                const entry = form.credit.find((c) => c.planId === plan._id);
+                return (
+                  <div key={plan._id} className="flex items-center gap-2">
+                    <span className="flex-1 text-sm">
+                      {plan.name} <span className="text-muted-foreground text-xs">({plan.durationDays} يوم)</span>
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      className={`${inputClass} w-28`}
+                      placeholder="0"
+                      value={entry?.quantity ?? ''}
+                      onChange={(e) => {
+                        const others = form.credit.filter((c) => c.planId !== plan._id);
+                        setForm({
+                          ...form,
+                          credit:
+                            e.target.value === ''
+                              ? others
+                              : [...others, { planId: plan._id, quantity: e.target.value }],
+                        });
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground w-8">كود</span>
                   </div>
                 );
               })}
