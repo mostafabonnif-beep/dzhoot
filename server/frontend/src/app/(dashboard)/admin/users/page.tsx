@@ -277,7 +277,7 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">{t('admin.users')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{totalCount} {t('admin.registeredUsers')}</p>
@@ -388,6 +388,7 @@ export default function UsersPage() {
             },
             {
               key: 'email',
+              mobileHidden: true,
               header: (
                 <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
                   البريد الإلكتروني
@@ -430,6 +431,7 @@ export default function UsersPage() {
             },
             {
               key: 'userChannels',
+              mobileHidden: true,
               header: (
                 <button
                   onClick={() => handleSort('channelCount')}
@@ -455,6 +457,7 @@ export default function UsersPage() {
             },
             {
               key: 'channelCode',
+              mobileHidden: true,
               header: (
                 <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
                   {locale === 'ar' ? 'رمز القناة' : locale === 'fr' ? 'Code chaîne' : 'Channel Code'}
