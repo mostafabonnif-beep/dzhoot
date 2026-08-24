@@ -34,6 +34,7 @@ interface BatchData {
   reseller: { _id?: string; name: string; city?: string } | null;
   plan: { _id?: string; name: string; durationDays: number } | null;
   stats?: { total: number; activated: number; remaining: number; revoked: number };
+  wholesalePrice?: number | null;
   createdAt?: string;
 }
 
@@ -53,6 +54,8 @@ interface BatchResult {
     plan: { name: string; durationDays: number } | null;
     receiptDate: string;
     quantity: number;
+    wholesalePrice?: number | null;
+    wholesaleTotal?: number | null;
   };
   codes: string[];
 }
@@ -295,6 +298,22 @@ export default function CodeBatchesPage() {
       key: 'quantity',
       header: t('batches.quantity'),
       cell: (b) => <span>{b.quantity}</span>,
+    },
+    {
+      key: 'wholesale',
+      header: t('batches.wholesale'),
+      mobileHidden: true,
+      cell: (b) =>
+        b.wholesalePrice != null ? (
+          <span>
+            {b.wholesalePrice} دج
+            {b.stats?.total ? (
+              <span className="block text-xs text-muted-foreground">
+                = {b.wholesalePrice * b.stats.total} دج
+              </span>
+            ) : null}
+          </span>
+        ) : null,
     },
     {
       key: 'receiptDate',
@@ -558,6 +577,17 @@ export default function CodeBatchesPage() {
                   </div>
                   <div className="text-sm font-medium mt-0.5">{result.batch.quantity}</div>
                 </div>
+                {result.batch.wholesaleTotal != null ? (
+                  <div className="border border-border bg-muted/30 px-3 py-2">
+                    <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                      {t('batches.wholesaleTotal')}
+                    </div>
+                    <div className="text-sm font-medium mt-0.5">
+                      {result.batch.wholesalePrice} دج × {result.batch.quantity} ={' '}
+                      <strong>{result.batch.wholesaleTotal} دج</strong>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="border border-border bg-muted/30 px-3 py-2">
                   <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">
                     {t('batches.receiptDate')}

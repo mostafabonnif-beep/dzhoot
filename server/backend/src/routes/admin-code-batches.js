@@ -53,10 +53,13 @@ router.get('/', async (req, res) => {
 
     const data = batches.map((b) => {
       const st = statsByBatch.get(String(b._id)) || { total: 0, activated: 0, revoked: 0 };
+      const res = resellerMap.get(String(b.resellerId)) || null;
+      const priceEntry = (res?.prices || []).find((p) => String(p.planId) === String(b.planId));
       return {
         ...b,
-        reseller: resellerMap.get(String(b.resellerId)) || null,
+        reseller: res,
         plan: planMap.get(String(b.planId)) || null,
+        wholesalePrice: priceEntry ? Number(priceEntry.price) : null,
         stats: {
           total: st.total,
           activated: st.activated,
@@ -89,6 +92,11 @@ router.post('/', async (req, res) => {
     ]);
     if (!reseller) return res.status(400).json({ success: false, error: 'Reseller not found' });
     if (!plan || plan.status !== 'Active') return res.status(400).json({ success: false, error: 'Plan not found or inactive' });
+
+    // Wholesale price for this shop on this plan (سعر الجملة) if configured.
+    const priceEntry = (reseller.prices || []).find((p) => String(p.planId) === String(planId));
+    const wholesalePrice = priceEntry ? Number(priceEntry.price) : null;
+    const wholesaleTotal = wholesalePrice !== null ? wholesalePrice * qty : null;
 
     // Sequential batch number per reseller: دفعة 1، دفعة 2، …
     const lastBatch = await CodeBatch.findOne({ resellerId }).sort({ batchNumber: -1 }).select('batchNumber').lean().exec();
@@ -140,6 +148,8 @@ router.post('/', async (req, res) => {
           plan: { name: plan.name, durationDays: plan.durationDays },
           receiptDate: receipt,
           quantity: result.count,
+          wholesalePrice,
+          wholesaleTotal,
         },
         codes: result.codes, // plaintext — shown once; also exportable from the batch sheet
       },

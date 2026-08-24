@@ -8,6 +8,7 @@ import XtreamSource from '../models/XtreamSource';
 import M3USource from '../models/M3USource';
 import { syncXtreamSource, verifyXtreamSource } from './xtream-service';
 import { syncM3USource } from './m3u-service';
+import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
 
 export interface SubtaskResult {
   name: string;
@@ -46,6 +47,40 @@ const STREAM_HEALTH_INTERVAL = intervalMs(process.env.STREAM_HEALTH_CHECK_INTERV
 const YOUTUBE_REFRESH_INTERVAL = intervalMs(process.env.YOUTUBE_REFRESH_INTERVAL_MS, 14400000);
 const XTREAM_SYNC_INTERVAL = intervalMs(process.env.XTREAM_SYNC_INTERVAL_MS, 21600000);
 const M3U_SYNC_INTERVAL = intervalMs(process.env.M3U_SYNC_INTERVAL_MS, 21600000);
+const OPS_REPORT_INTERVAL = intervalMs(process.env.OPS_REPORT_INTERVAL_MS, 86400000);
+const EXPIRY_ALERT_INTERVAL = intervalMs(process.env.EXPIRY_ALERT_INTERVAL_MS, 86400000);
+
+/** Daily operations report to admins (codes activated per reseller, new users, …). */
+async function dailyReportHandler(): Promise<TaskResult> {
+  const start = Date.now();
+  const result = await sendDailyOpsReport();
+  const subtasks: SubtaskResult[] = [
+    {
+      name: 'daily-report',
+      status: result.ok ? 'completed' : 'failed',
+      durationMs: Date.now() - start,
+      result: { recipients: result.recipients },
+      error: result.error || undefined,
+    },
+  ];
+  return { summary: { ok: result.ok, recipients: result.recipients }, subtasks };
+}
+
+/** Subscription expiry reminders (ACTIVE subs expiring within 3 days). */
+async function expiryAlertHandler(): Promise<TaskResult> {
+  const start = Date.now();
+  const result = await sendExpiryAlerts(3);
+  const subtasks: SubtaskResult[] = [
+    {
+      name: 'subscription-expiry-alert',
+      status: result.ok ? 'completed' : 'failed',
+      durationMs: Date.now() - start,
+      result: { sent: result.sent },
+      error: result.error || undefined,
+    },
+  ];
+  return { summary: { ok: result.ok, sent: result.sent }, subtasks };
+}
 
 async function livenessHandler(): Promise<TaskResult> {
   const subtasks: SubtaskResult[] = [];
@@ -359,6 +394,20 @@ const tasks: TaskDefinition[] = [
       'Resolve fresh HLS URLs for YouTube-based channels (YouTube Live + Prasar Bharati)',
     intervalMs: YOUTUBE_REFRESH_INTERVAL,
     handler: youtubeUrlRefreshHandler,
+  },
+  {
+    name: 'daily-report',
+    displayName: 'Daily Operations Report',
+    description: 'Email admins a daily summary: codes activated per reseller, new users, active subscriptions',
+    intervalMs: OPS_REPORT_INTERVAL,
+    handler: dailyReportHandler,
+  },
+  {
+    name: 'subscription-expiry-alert',
+    displayName: 'Subscription Expiry Alerts',
+    description: 'Email users whose ACTIVE subscription expires within 3 days',
+    intervalMs: EXPIRY_ALERT_INTERVAL,
+    handler: expiryAlertHandler,
   },
 ];
 

@@ -6,6 +6,8 @@ export interface IResellerDocument extends Document {
   phone?: string;
   notes?: string;
   status: 'Active' | 'Inactive';
+  /** Wholesale price per plan (سعر الجملة): [{planId, price}] — optional. */
+  prices?: Array<{ planId: mongoose.Types.ObjectId; price: number }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +42,16 @@ const resellerSchema = new Schema<IResellerDocument>(
       enum: ['Active', 'Inactive'],
       default: 'Active',
       index: true,
+    },
+    prices: {
+      type: [
+        {
+          _id: false,
+          planId: { type: Schema.Types.ObjectId, ref: 'Plan' },
+          price: { type: Number, min: 0, default: 0 },
+        },
+      ],
+      default: [],
     },
   },
   { timestamps: true },

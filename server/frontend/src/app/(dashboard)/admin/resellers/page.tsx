@@ -16,6 +16,7 @@ interface ResellerData {
   phone?: string;
   notes?: string;
   status: 'Active' | 'Inactive';
+  prices?: { planId: string; price: number }[];
   stats?: { total: number; activated: number; remaining: number };
   createdAt?: string;
 }
@@ -26,6 +27,7 @@ interface ResellerForm {
   phone: string;
   notes: string;
   status: 'Active' | 'Inactive';
+  prices: { planId: string; price: string }[];
 }
 
 const emptyForm: ResellerForm = {
@@ -34,6 +36,7 @@ const emptyForm: ResellerForm = {
   phone: '',
   notes: '',
   status: 'Active',
+  prices: [],
 };
 
 const inputClass =
@@ -54,6 +57,16 @@ export default function ResellersPage() {
 
   const [deleteTarget, setDeleteTarget] = useState<ResellerData | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [plans, setPlans] = useState<{ _id: string; name: string; durationDays: number }[]>([]);
+
+  const fetchPlans = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/plans');
+      setPlans((res.data?.data || []).filter((p: { status?: string }) => p.status !== 'Inactive'));
+    } catch {
+      // price editor is optional — ignore failures
+    }
+  }, []);
 
   const fetchResellers = useCallback(async () => {
     try {
@@ -70,7 +83,8 @@ export default function ResellersPage() {
 
   useEffect(() => {
     fetchResellers();
-  }, [fetchResellers]);
+    fetchPlans();
+  }, [fetchResellers, fetchPlans]);
 
   function openCreate() {
     setEditingId(null);
@@ -81,12 +95,14 @@ export default function ResellersPage() {
 
   function openEdit(r: ResellerData) {
     setEditingId(r._id);
+    const existing = (r.prices || []).map((p) => ({ planId: String(p.planId), price: String(p.price) }));
     setForm({
       name: r.name,
       city: r.city || '',
       phone: r.phone || '',
       notes: r.notes || '',
       status: r.status,
+      prices: existing,
     });
     setFormError('');
     setFormOpen(true);
@@ -102,6 +118,9 @@ export default function ResellersPage() {
         phone: form.phone.trim(),
         notes: form.notes.trim(),
         status: form.status,
+        prices: form.prices
+          .filter((p) => p.planId && p.price !== '')
+          .map((p) => ({ planId: p.planId, price: Number(p.price) })),
       };
       if (editingId) {
         await api.put(`/admin/resellers/${editingId}`, payload);
@@ -347,6 +366,41 @@ export default function ResellersPage() {
               <option value="Active">{t('resellers.active')}</option>
               <option value="Inactive">{t('resellers.inactive')}</option>
             </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              {t('resellers.wholesalePrices')}
+            </label>
+            <div className="space-y-2 border border-border p-3">
+              {plans.length === 0 && (
+                <div className="text-xs text-muted-foreground">{t('resellers.noPlans')}</div>
+              )}
+              {plans.map((plan) => {
+                const entry = form.prices.find((p) => p.planId === plan._id);
+                return (
+                  <div key={plan._id} className="flex items-center gap-2">
+                    <span className="flex-1 text-sm">
+                      {plan.name} <span className="text-muted-foreground text-xs">({plan.durationDays} يوم)</span>
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      className={`${inputClass} w-28`}
+                      placeholder="0"
+                      value={entry?.price ?? ''}
+                      onChange={(e) => {
+                        const others = form.prices.filter((p) => p.planId !== plan._id);
+                        setForm({
+                          ...form,
+                          prices: e.target.value === '' ? others : [...others, { planId: plan._id, price: e.target.value }],
+                        });
+                      }}
+                    />
+                    <span className="text-xs text-muted-foreground w-8">دج</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
           <div className="flex items-center gap-3 pt-2">
             <button
