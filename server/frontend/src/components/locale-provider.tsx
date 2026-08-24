@@ -239,6 +239,8 @@ const common = {
   'resellers.loadError': ['فشل تحميل المحلات', 'Failed to load resellers', 'Échec du chargement des revendeurs'],
   'resellers.saveError': ['فشل حفظ المحل', 'Failed to save reseller', 'Échec de l\'enregistrement du revendeur'],
   'resellers.wholesalePrices': ['أسعار الجملة (دج)', 'Wholesale prices (DZD)', 'Prix de gros (DZD)'],
+  'resellers.username': ['اسم الدخول (بوابة الموزع)', 'Login username (reseller portal)', 'Nom d\'utilisateur (portail revendeur)'],
+  'resellers.password': ['كلمة المرور', 'Password', 'Mot de passe'],
   'resellers.noPlans': ['لا توجد باقات — أضف باقات من صفحة الباقات أولًا', 'No plans — add plans from the Plans page first', 'Aucun forfait — ajoutez des forfaits depuis la page Forfaits'],
   'resellers.deleteTitle': ['حذف المحل', 'Delete reseller', 'Supprimer le revendeur'],
   'resellers.deleteConfirm': ['حذف هذا المحل نهائيًا؟ لا يمكن التراجع.', 'Permanently delete this reseller? This cannot be undone.', 'Supprimer définitivement ce revendeur ? Irréversible.'],

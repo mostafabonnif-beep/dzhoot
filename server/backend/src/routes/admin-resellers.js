@@ -40,9 +40,15 @@ router.get('/', async (req, res) => {
 // POST / — create reseller
 router.post('/', async (req, res) => {
   try {
-    const { name, city, phone, notes, status, prices } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'name is required' });
+    }
+    if (username && !/^[a-z0-9_.-]{3,50}$/i.test(String(username).trim())) {
+      return res.status(400).json({ success: false, error: 'username must be 3-50 letters/numbers/._-' });
+    }
+    if (password && String(password).length < 6) {
+      return res.status(400).json({ success: false, error: 'password must be at least 6 characters' });
     }
     const cleanPrices = Array.isArray(prices)
       ? prices
@@ -56,6 +62,8 @@ router.post('/', async (req, res) => {
       notes: String(notes || '').trim(),
       status: status === 'Inactive' ? 'Inactive' : 'Active',
       prices: cleanPrices,
+      username: username ? String(username).trim().toLowerCase() : undefined,
+      passwordHash: password ? String(password) : undefined,
     });
     audit({ ...reqCtx(req), action: 'RESELLER_CREATE', resource: 'Reseller', resourceId: String(doc._id), changes: { after: { name: doc.name, city: doc.city } } });
     res.status(201).json({ success: true, data: doc });
@@ -70,8 +78,21 @@ router.put('/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
-    const { name, city, phone, notes, status, prices } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password } = req.body || {};
     const update = {};
+    if (username !== undefined) {
+      if (username && !/^[a-z0-9_.-]{3,50}$/i.test(String(username).trim())) {
+        return res.status(400).json({ success: false, error: 'username must be 3-50 letters/numbers/._-' });
+      }
+      update.username = username ? String(username).trim().toLowerCase() : null;
+    }
+    if (password !== undefined) {
+      if (password && String(password).length < 6) {
+        return res.status(400).json({ success: false, error: 'password must be at least 6 characters' });
+      }
+      // pre-save hook hashes non-empty values; '' clears the login
+      update.passwordHash = password ? String(password) : '';
+    }
     if (name !== undefined) update.name = String(name).trim();
     if (city !== undefined) update.city = String(city).trim();
     if (phone !== undefined) update.phone = String(phone).trim();
