@@ -72,5 +72,7 @@ const codeBatchSchema = new Schema<ICodeBatchDocument>(
 // A reseller's batches are numbered sequentially.
 codeBatchSchema.index({ resellerId: 1, batchNumber: 1 }, { unique: true });
 
-export default (mongoose.models.CodeBatch as mongoose.Model<ICodeBatchDocument>) ||
-  mongoose.model<ICodeBatchDocument>('CodeBatch', codeBatchSchema);
+const CodeBatch = mongoose.model<ICodeBatchDocument>('CodeBatch', codeBatchSchema);
+
+module.exports = CodeBatch;
+export default CodeBatch;

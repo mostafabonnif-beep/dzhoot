@@ -45,5 +45,7 @@ const resellerSchema = new Schema<IResellerDocument>(
   { timestamps: true },
 );
 
-export default (mongoose.models.Reseller as mongoose.Model<IResellerDocument>) ||
-  mongoose.model<IResellerDocument>('Reseller', resellerSchema);
+const Reseller = mongoose.model<IResellerDocument>('Reseller', resellerSchema);
+
+module.exports = Reseller;
+export default Reseller;
