@@ -11,6 +11,10 @@ export interface ICreditTransactionDocument extends Document {
   quantity: number;
   /** Reseller's remaining credit for this plan after this transaction */
   balanceAfter: number;
+  /** Wholesale unit price at transaction time (0 if unset) — purchase value = quantity × unitPrice */
+  unitPrice?: number;
+  /** Purchase value of the movement (quantity × unitPrice) for GRANT rows */
+  amount?: number;
   /** Reason / human note (e.g. batch number, operator) */
   note?: string;
   /** Who performed it (admin user id, or null for system/reseller actions) */
@@ -45,6 +49,16 @@ const creditTransactionSchema = new Schema<ICreditTransactionDocument>(
     balanceAfter: {
       type: Number,
       required: true,
+      min: 0,
+      default: 0,
+    },
+    unitPrice: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    amount: {
+      type: Number,
       min: 0,
       default: 0,
     },

@@ -57,7 +57,7 @@ router.get('/', async (req, res) => {
 // POST / — create reseller
 router.post('/', async (req, res) => {
   try {
-    const { name, city, phone, notes, status, prices, username, password, credit } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password, credit, prefix } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'name is required' });
     }
@@ -67,11 +67,16 @@ router.post('/', async (req, res) => {
     if (password && String(password).length < 6) {
       return res.status(400).json({ success: false, error: 'password must be at least 6 characters' });
     }
+    const cleanPrefix = prefix ? String(prefix).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) : undefined;
+    if (prefix && (!cleanPrefix || cleanPrefix.length < 3)) {
+      return res.status(400).json({ success: false, error: 'prefix must be 3-6 letters/numbers' });
+    }
     const cleanPrices = Array.isArray(prices)
       ? prices
           .filter((p) => p && p.planId && Number.isFinite(Number(p.price)) && Number(p.price) >= 0)
           .map((p) => ({ planId: p.planId, price: Number(p.price) }))
       : [];
+    const priceMap = new Map(cleanPrices.map((p) => [String(p.planId), Number(p.price) || 0]));
     const doc = await Reseller.create({
       name: String(name).trim(),
       city: String(city || '').trim(),
@@ -82,6 +87,7 @@ router.post('/', async (req, res) => {
       credit: cleanCredit(credit),
       username: username ? String(username).trim().toLowerCase() : undefined,
       passwordHash: password ? String(password) : undefined,
+      prefix: cleanPrefix,
     });
     // Ledger: record every initial credit grant (balanceAfter = granted qty).
     for (const c of cleanCredit(credit)) {
@@ -91,6 +97,7 @@ router.post('/', async (req, res) => {
         type: 'GRANT',
         quantity: c.quantity,
         balanceAfter: c.quantity,
+        unitPrice: priceMap.get(String(c.planId)) || 0,
         note: 'منح رصيد عند إنشاء المحل',
         createdBy: req.user?.id || null,
       });
@@ -108,7 +115,7 @@ router.put('/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
-    const { name, city, phone, notes, status, prices, username, password, credit } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password, credit, prefix } = req.body || {};
     const update = {};
     if (username !== undefined) {
       if (username && !/^[a-z0-9_.-]{3,50}$/i.test(String(username).trim())) {
@@ -129,6 +136,13 @@ router.put('/:id', async (req, res) => {
     if (phone !== undefined) update.phone = String(phone).trim();
     if (notes !== undefined) update.notes = String(notes).trim();
     if (status !== undefined) update.status = status === 'Inactive' ? 'Inactive' : 'Active';
+    if (prefix !== undefined) {
+      const cleanPrefix = prefix ? String(prefix).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) : undefined;
+      if (prefix && (!cleanPrefix || cleanPrefix.length < 3)) {
+        return res.status(400).json({ success: false, error: 'prefix must be 3-6 letters/numbers' });
+      }
+      update.prefix = cleanPrefix || null;
+    }
     if (prices !== undefined) {
       update.prices = Array.isArray(prices)
         ? prices
@@ -146,6 +160,7 @@ router.put('/:id', async (req, res) => {
       const oldMap = new Map((prev?.credit || []).map((c) => [String(c.planId), Number(c.quantity) || 0]));
       const newCredit = cleanCredit(credit);
       const newMap = new Map(newCredit.map((c) => [String(c.planId), Number(c.quantity) || 0]));
+      const priceMap = new Map((doc.prices || []).map((p) => [String(p.planId), Number(p.price) || 0]));
       const allPlans = new Set([...oldMap.keys(), ...newMap.keys()]);
       for (const planId of allPlans) {
         const oldQty = oldMap.get(planId) || 0;
@@ -158,6 +173,7 @@ router.put('/:id', async (req, res) => {
           type: 'GRANT',
           quantity: delta,
           balanceAfter: newQty,
+          unitPrice: priceMap.get(planId) || 0,
           note: delta > 0 ? `منح رصيد (${delta})` : `خصم رصيد (${-delta})`,
           createdBy: req.user?.id || null,
         });
@@ -228,6 +244,8 @@ router.get('/:id/ledger', async (req, res) => {
       type: r.type,
       quantity: r.quantity,
       balanceAfter: r.balanceAfter,
+      unitPrice: r.unitPrice || 0,
+      amount: r.amount || 0,
       planName: planMap.get(String(r.planId)) || '—',
       note: r.note || '',
       createdAt: r.createdAt,

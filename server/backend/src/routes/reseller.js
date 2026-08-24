@@ -8,6 +8,8 @@ const Reseller = require('../models/Reseller');
 const { decryptSecret } = require('../utils/crypto');
 const { generateCodes, getCodeExpiryDays, recordCreditTx } = require('../services/subscription-service');
 const CreditTransaction = require('../models/CreditTransaction');
+const ActivationRedemption = require('../models/ActivationRedemption');
+const Subscription = require('../models/Subscription');
 const { requireReseller } = require('../middleware/requireReseller');
 
 // Reseller portal (بوابة الموزعين): /api/v1/reseller/*
@@ -63,12 +65,36 @@ router.get('/me', async (req, res) => {
         },
       }));
 
+    // Account summary: how much credit was bought (purchases), consumed, returned.
+    const ledgerAgg = await CreditTransaction.aggregate([
+      { $match: { resellerId: r._id } },
+      {
+        $group: {
+          _id: null,
+          grantedQty: { $sum: { $cond: [{ $eq: ['$type', 'GRANT'] }, '$quantity', 0] } },
+          grantedValue: { $sum: { $cond: [{ $eq: ['$type', 'GRANT'] }, '$amount', 0] } },
+          consumedQty: { $sum: { $cond: [{ $eq: ['$type', 'CONSUME'] }, -'$quantity', 0] } },
+          returnedQty: { $sum: { $cond: [{ $in: ['$type', ['RETURN', 'EXPIRE_RETURN']] }, '$quantity', 0] } },
+        },
+      },
+    ]);
+    const acc = ledgerAgg[0] || { grantedQty: 0, grantedValue: 0, consumedQty: 0, returnedQty: 0 };
+
+    // Expiring-soon: unused codes that die within 7 days (or already past — caught by the daily task).
+    const soon = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const expiringSoon = await ActivationCode.countDocuments({
+      resellerId: r._id,
+      status: 'UNUSED',
+      codeExpiresAt: { $lte: soon, $gt: new Date() },
+    });
+
     res.json({
       success: true,
       data: {
         _id: r._id,
         name: r.name,
         city: r.city || '',
+        prefix: r.prefix || 'DZHF',
         stats: {
           total,
           activated,
@@ -77,6 +103,14 @@ router.get('/me', async (req, res) => {
         },
         credit: await resellerCredit(r._id),
         prices,
+        account: {
+          purchasedQty: acc.grantedQty,
+          purchasedValue: acc.grantedValue,
+          consumedQty: acc.consumedQty,
+          returnedQty: acc.returnedQty,
+          netQty: acc.grantedQty - acc.consumedQty - acc.returnedQty,
+        },
+        expiringSoon,
       },
     });
   } catch (err) {
@@ -107,6 +141,8 @@ router.get('/ledger', async (req, res) => {
       type: r.type,
       quantity: r.quantity,
       balanceAfter: r.balanceAfter,
+      unitPrice: r.unitPrice || 0,
+      amount: r.amount || 0,
       planName: planMap.get(String(r.planId)) || '—',
       note: r.note || '',
       createdAt: r.createdAt,
@@ -177,7 +213,7 @@ router.post('/codes/generate', async (req, res) => {
     const result = await generateCodes({
       planId: String(planId),
       quantity: qty,
-      prefix: 'DZHF',
+      prefix: req.reseller.prefix || 'DZHF',
       codeExpiresInDays: codeExpiryDays,
       resellerId: String(req.reseller._id),
       batchId: String(batch._id),
@@ -269,7 +305,8 @@ router.get('/batches', async (req, res) => {
   }
 });
 
-// GET /batches/:id/codes — PLAINTEXT codes of one of their batches (they sell these)
+// GET /batches/:id/codes — PLAINTEXT codes of one of their batches (they sell these).
+// Activated codes also expose the subscription window (the days the customer got).
 router.get('/batches/:id/codes', async (req, res) => {
   try {
     const id = parseId(req.params.id);
@@ -281,12 +318,38 @@ router.get('/batches/:id/codes', async (req, res) => {
       .sort({ createdAt: 1 })
       .lean()
       .exec();
-    const data = codes.map((c) => ({
-      _id: c._id,
-      code: c.codeEnc ? decryptSecret(c.codeEnc) : `${c.prefix}-••••-••••-${c.codeLast4}`,
-      status: c.status,
-      activatedAt: c.activatedAt || null,
-    }));
+
+    // For activated codes, resolve the subscription window via the redemption link.
+    const activated = codes.filter((c) => c.status === 'ACTIVATED');
+    const redemptions = activated.length
+      ? await ActivationRedemption.find({ activationCodeId: { $in: activated.map((c) => c._id) } })
+          .select('activationCodeId subscriptionId')
+          .lean()
+          .exec()
+      : [];
+    const subIds = [...new Set(redemptions.map((r) => r.subscriptionId).filter(Boolean))];
+    const subs = subIds.length
+      ? await Subscription.find({ _id: { $in: subIds } }).select('startsAt expiresAt').lean().exec()
+      : [];
+    const subMap = new Map(subs.map((s) => [String(s._id), s]));
+    const subByCode = new Map();
+    for (const r of redemptions) {
+      if (r.subscriptionId && subMap.has(String(r.subscriptionId))) {
+        subByCode.set(String(r.activationCodeId), subMap.get(String(r.subscriptionId)));
+      }
+    }
+
+    const data = codes.map((c) => {
+      const sub = subByCode.get(String(c._id));
+      return {
+        _id: c._id,
+        code: c.codeEnc ? decryptSecret(c.codeEnc) : `${c.prefix}-••••-••••-${c.codeLast4}`,
+        status: c.status,
+        activatedAt: c.activatedAt || null,
+        subscriptionStartsAt: sub?.startsAt || null,
+        subscriptionExpiresAt: sub?.expiresAt || null,
+      };
+    });
     res.json({ success: true, data });
   } catch (err) {
     console.error('[reseller] codes error:', err);
