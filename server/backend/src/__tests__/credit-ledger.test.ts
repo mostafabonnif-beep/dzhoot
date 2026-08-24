@@ -142,3 +142,48 @@ describe('Auto expiry with credit return (انتهاء الصلاحية)', () =>
     expect(result.creditReturned).toHaveLength(0);
   });
 });
+
+describe('Round 9: reseller prefix & purchase amounts', () => {
+  it('Reseller model stores and validates a unique uppercase prefix', async () => {
+    const plan = await makePlan();
+    const r1 = await Reseller.create({ name: 'محل 1', city: 'وهران', status: 'Active', prefix: 'oran1', credit: [{ planId: plan._id, quantity: 1 }] });
+    expect(r1.prefix).toBe('ORAN1'); // stored uppercase
+
+    await expect(
+      Reseller.create({ name: 'محل 2', city: 'قسنطينة', status: 'Active', prefix: 'ORAN1' }),
+    ).rejects.toThrow(); // duplicate prefix rejected
+
+    await expect(
+      Reseller.create({ name: 'محل 3', city: 'عنابة', status: 'Active', prefix: 'A' }),
+    ).rejects.toThrow(); // too short
+  });
+
+  it('generateCodes uses the provided prefix for codes', async () => {
+    const plan = await makePlan();
+    const reseller = await Reseller.create({ name: 'محل 4', city: 'تلمسان', status: 'Active', prefix: 'TLM5' });
+    const gen = await generateCodes({ planId: String(plan._id), quantity: 2, prefix: 'TLM5', resellerId: String(reseller._id) });
+    expect(gen.ok).toBe(true);
+    if (gen.ok) {
+      for (const code of gen.codes) expect(code.startsWith('TLM5')).toBe(true);
+    }
+    const stored = await ActivationCode.find({ resellerId: reseller._id }).lean().exec();
+    expect(stored.every((c) => c.prefix === 'TLM5')).toBe(true);
+  });
+
+  it('recordCreditTx stores unitPrice and purchase amount for GRANT rows', async () => {
+    const plan = await makePlan();
+    const reseller = await makeReseller(plan._id, 0);
+    await recordCreditTx({
+      resellerId: String(reseller._id),
+      planId: String(plan._id),
+      type: 'GRANT',
+      quantity: 10,
+      balanceAfter: 10,
+      unitPrice: 800,
+      note: 'شراء رصيد',
+    });
+    const row = await CreditTransaction.findOne({ resellerId: reseller._id }).lean().exec();
+    expect(row?.unitPrice).toBe(800);
+    expect(row?.amount).toBe(8000); // 10 × 800
+  });
+});

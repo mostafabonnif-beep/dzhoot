@@ -14,6 +14,8 @@ export interface IResellerDocument extends Document {
   credit?: Array<{ planId: mongoose.Types.ObjectId; quantity: number }>;
   /** Portal login (بوابة الموزعين) — set by admin; inactive resellers cannot log in. */
   username?: string;
+  /** Unique code prefix (3-6 chars) printed on this reseller's codes. */
+  prefix?: string;
   passwordHash?: string;
   lastLoginAt?: Date | null;
   createdAt: Date;
@@ -76,6 +78,18 @@ const resellerSchema = new Schema<IResellerDocument>(
       trim: true,
       lowercase: true,
       maxlength: 50,
+      unique: true,
+      sparse: true,
+      index: true,
+    },
+    /** Unique code prefix (3-6 chars) printed on this reseller's codes — e.g. "ALG1". */
+    prefix: {
+      type: String,
+      uppercase: true,
+      trim: true,
+      maxlength: 6,
+      minlength: 3,
+      match: [/^[A-Z0-9]{3,6}$/, 'prefix must be 3-6 letters/numbers'],
       unique: true,
       sparse: true,
       index: true,

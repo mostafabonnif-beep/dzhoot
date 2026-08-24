@@ -19,6 +19,7 @@ interface ResellerData {
   prices?: { planId: string; price: number }[];
   credit?: { planId: string; quantity: number }[];
   username?: string;
+  prefix?: string;
   stats?: { total: number; activated: number; remaining: number };
   createdAt?: string;
 }
@@ -33,6 +34,7 @@ interface ResellerForm {
   credit: { planId: string; quantity: string }[];
   username: string;
   password: string;
+  prefix: string;
 }
 
 const emptyForm: ResellerForm = {
@@ -45,6 +47,7 @@ const emptyForm: ResellerForm = {
   credit: [],
   username: '',
   password: '',
+  prefix: '',
 };
 
 const inputClass =
@@ -115,6 +118,7 @@ export default function ResellersPage() {
       credit: existingCredit,
       username: r.username || '',
       password: '',
+      prefix: r.prefix || '',
     });
     setFormError('');
     setFormOpen(true);
@@ -138,6 +142,7 @@ export default function ResellersPage() {
           .map((c) => ({ planId: c.planId, quantity: Number(c.quantity) })),
         username: form.username.trim() || undefined,
         password: form.password || undefined,
+        prefix: form.prefix.trim() ? form.prefix.trim().toUpperCase() : undefined,
       };
       if (editingId) {
         await api.put(`/admin/resellers/${editingId}`, payload);
@@ -232,7 +237,14 @@ export default function ResellersPage() {
       header: t('resellers.name'),
       cell: (r) => (
         <div className="min-w-0">
-          <div className="font-medium truncate">{r.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium truncate">{r.name}</span>
+            {r.prefix && (
+              <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-primary" dir="ltr">
+                {r.prefix}
+              </span>
+            )}
+          </div>
           {r.notes && <div className="text-xs text-muted-foreground truncate">{r.notes}</div>}
         </div>
       ),
@@ -477,6 +489,20 @@ export default function ResellersPage() {
                 placeholder="username"
                 dir="ltr"
               />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                {t('resellers.prefix')}
+              </label>
+              <input
+                className={inputClass}
+                value={form.prefix}
+                onChange={(e) => setForm({ ...form, prefix: e.target.value.toUpperCase() })}
+                placeholder="ALG1"
+                maxLength={6}
+                dir="ltr"
+              />
+              <p className="text-[11px] text-muted-foreground">{t('resellers.prefixHint')}</p>
             </div>
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">

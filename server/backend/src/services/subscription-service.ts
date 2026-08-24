@@ -400,7 +400,10 @@ export async function recordCreditTx(opts: {
   balanceAfter: number;
   note?: string;
   createdBy?: string | null;
+  /** Wholesale unit price at transaction time — purchase value = quantity × unitPrice */
+  unitPrice?: number;
 }): Promise<void> {
+  const unitPrice = Math.max(Number(opts.unitPrice) || 0, 0);
   try {
     await CreditTransaction.create({
       resellerId: new mongoose.Types.ObjectId(opts.resellerId),
@@ -408,6 +411,8 @@ export async function recordCreditTx(opts: {
       type: opts.type,
       quantity: opts.quantity,
       balanceAfter: Math.max(opts.balanceAfter, 0),
+      unitPrice,
+      amount: Math.abs(opts.quantity) * unitPrice,
       note: opts.note || '',
       createdBy: opts.createdBy ? new mongoose.Types.ObjectId(opts.createdBy) : null,
     });
