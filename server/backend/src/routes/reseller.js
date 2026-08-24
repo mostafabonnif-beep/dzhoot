@@ -96,7 +96,11 @@ router.get('/batches/:id/codes', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
     const batch = await CodeBatch.findOne({ _id: id, resellerId: req.reseller._id }).lean().exec();
     if (!batch) return res.status(404).json({ success: false, error: 'Batch not found' });
-    const codes = await ActivationCode.find({ batchId: id }).sort({ createdAt: 1 }).lean().exec();
+    const codes = await ActivationCode.find({ batchId: id })
+      .select('+codeEnc prefix codeLast4 status activatedAt')
+      .sort({ createdAt: 1 })
+      .lean()
+      .exec();
     const data = codes.map((c) => ({
       _id: c._id,
       code: c.codeEnc ? decryptSecret(c.codeEnc) : `${c.prefix}-••••-••••-${c.codeLast4}`,
