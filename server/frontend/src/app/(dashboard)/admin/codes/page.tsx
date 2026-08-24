@@ -515,6 +515,7 @@ export default function CodesPage() {
     },
     {
       key: 'reseller',
+      mobileHidden: true,
       header: t('codes.reseller'),
       cell: (c) => {
         const reseller = typeof c.resellerId === 'object' && c.resellerId ? c.resellerId : null;
@@ -529,7 +530,6 @@ export default function CodesPage() {
           <span className="text-muted-foreground">—</span>
         );
       },
-      mobileHidden: true,
     },
     {
       key: 'batch',
@@ -561,6 +561,7 @@ export default function CodesPage() {
     },
     {
       key: 'codeExpiresAt',
+      mobileHidden: true,
       header: t('codes.expiresAt'),
       cell: (c) =>
         c.codeExpiresAt ? (
@@ -650,7 +651,7 @@ export default function CodesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">
             {t('codes.title')}

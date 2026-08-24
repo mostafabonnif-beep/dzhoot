@@ -301,8 +301,8 @@ export default function CodeBatchesPage() {
     },
     {
       key: 'wholesale',
-      header: t('batches.wholesale'),
       mobileHidden: true,
+      header: t('batches.wholesale'),
       cell: (b) =>
         b.wholesalePrice != null ? (
           <span>
@@ -317,6 +317,7 @@ export default function CodeBatchesPage() {
     },
     {
       key: 'receiptDate',
+      mobileHidden: true,
       header: t('batches.receiptDate'),
       cell: (b) => (
         <span className="text-xs whitespace-nowrap" dir="ltr">

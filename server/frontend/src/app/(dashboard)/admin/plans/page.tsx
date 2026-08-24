@@ -207,11 +207,13 @@ export default function PlansPage() {
     },
     {
       key: 'devices',
+      mobileHidden: true,
       header: locale === 'ar' ? 'الأجهزة' : locale === 'fr' ? 'Appareils' : 'Devices',
       cell: (p) => <span>{p.maxDevices}</span>,
     },
     {
       key: 'concurrent',
+      mobileHidden: true,
       header: locale === 'ar' ? 'المتزامنة' : locale === 'fr' ? 'Simultané' : 'Concurrent',
       cell: (p) => <span>{p.maxConcurrentStreams ?? 1}</span>,
     },

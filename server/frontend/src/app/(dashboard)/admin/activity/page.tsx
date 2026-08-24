@@ -344,6 +344,7 @@ export default function ActivityPage() {
               },
               {
                 key: 'resource',
+                mobileHidden: true,
                 headerClassName:
                   'text-xs uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1',
                 header: (
@@ -407,6 +408,7 @@ export default function ActivityPage() {
               },
               {
                 key: 'ip',
+                mobileHidden: true,
                 headerClassName: 'text-xs uppercase tracking-[0.15em] text-muted-foreground',
                 header: 'IP',
                 cell: (log) => (

@@ -252,11 +252,13 @@ export default function ResellersPage() {
     },
     {
       key: 'city',
+      mobileHidden: true,
       header: t('resellers.city'),
       cell: (r) => <span>{r.city || '—'}</span>,
     },
     {
       key: 'phone',
+      mobileHidden: true,
       header: t('resellers.phone'),
       cell: (r) =>
         r.phone ? (
