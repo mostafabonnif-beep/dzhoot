@@ -25,6 +25,7 @@ import {
   KeyRound,
   Bell,
   Video,
+  Store,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
 import { BrandMark } from './brand-mark';
@@ -40,6 +41,8 @@ const adminLinks = [
   { href: '/admin/devices', labelKey: 'nav.devices', icon: Smartphone },
   { href: '/admin/plans', labelKey: 'nav.plans', icon: CreditCard },
   { href: '/admin/codes', labelKey: 'nav.codes', icon: KeyRound },
+  { href: '/admin/resellers', labelKey: 'nav.resellers', icon: Store },
+  { href: '/admin/code-batches', labelKey: 'nav.codeBatches', icon: Package },
   { href: '/admin/import', labelKey: 'nav.import', icon: Globe },
   { href: '/admin/m3u-sources', labelKey: 'nav.m3uSources', icon: Link2 },
   { href: '/admin/xtream-sources', labelKey: 'nav.xtreamSources', icon: Server },
@@ -68,9 +71,9 @@ const userLinks = [
 const adminNavigationGroups = [
   { labelKey: 'nav.section.overview', links: adminLinks.slice(0, 1) },
   { labelKey: 'nav.section.content', links: adminLinks.slice(1, 5) },
-  { labelKey: 'nav.section.customers', links: adminLinks.slice(5, 9) },
-  { labelKey: 'nav.section.sources', links: adminLinks.slice(9, 14) },
-  { labelKey: 'nav.section.operations', links: adminLinks.slice(14) },
+  { labelKey: 'nav.section.customers', links: adminLinks.slice(5, 11) },
+  { labelKey: 'nav.section.sources', links: adminLinks.slice(11, 16) },
+  { labelKey: 'nav.section.operations', links: adminLinks.slice(16) },
 ];
 
 export function Sidebar({ role }: { role: 'admin' | 'user' }) {

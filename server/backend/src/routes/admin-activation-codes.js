@@ -23,11 +23,13 @@ function parseId(id) {
 // GET / — list codes with filters (planId, status, search by last4, pagination)
 router.get('/', async (req, res) => {
   try {
-    const { planId, status, search, page = 1, pageSize = 50 } = req.query;
+    const { planId, status, search, page = 1, pageSize = 50, resellerId, batchId } = req.query;
     const query = {};
 
     if (planId && parseId(planId)) query.planId = parseId(planId);
     if (status && status !== 'ALL') query.status = status;
+    if (resellerId && parseId(resellerId)) query.resellerId = parseId(resellerId);
+    if (batchId && parseId(batchId)) query.batchId = parseId(batchId);
     if (search) query.codeLast4 = { $regex: String(search).toUpperCase(), $options: 'i' };
 
     // Flip stale UNUSED codes to EXPIRED so the list is honest.
@@ -40,6 +42,8 @@ router.get('/', async (req, res) => {
       .limit(Number(pageSize))
       .populate('planId', 'name durationDays maxDevices')
       .populate('activatedBy', 'username email')
+      .populate('resellerId', 'name city')
+      .populate('batchId', 'batchNumber receiptDate')
       .lean();
 
     return res.json({ success: true, data: codes, totalCount });

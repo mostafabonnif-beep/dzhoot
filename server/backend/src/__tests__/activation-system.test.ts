@@ -82,6 +82,27 @@ describe('generateCodes', () => {
     const result = await generateCodes({ planId: new mongoose.Types.ObjectId().toString(), quantity: 1 });
     expect(result.ok).toBe(false);
   });
+
+  it('links codes to a reseller and batch when provided', async () => {
+    const plan = await makePlan();
+    const resellerId = new mongoose.Types.ObjectId();
+    const batchId = new mongoose.Types.ObjectId();
+    const gen = await generateCodes({
+      planId: String(plan._id),
+      quantity: 2,
+      resellerId: String(resellerId),
+      batchId: String(batchId),
+    });
+    expect(gen.ok).toBe(true);
+    if (!gen.ok) return;
+
+    const stored = await ActivationCode.find({ planId: plan._id }).lean();
+    expect(stored).toHaveLength(2);
+    for (const doc of stored) {
+      expect(String(doc.resellerId)).toBe(String(resellerId));
+      expect(String(doc.batchId)).toBe(String(batchId));
+    }
+  });
 });
 
 describe('redeemCode', () => {

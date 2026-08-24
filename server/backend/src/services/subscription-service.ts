@@ -303,6 +303,8 @@ export async function generateCodes(opts: {
   prefix?: string;
   codeExpiresInDays?: number | null;
   createdBy?: string | null;
+  resellerId?: string | null;
+  batchId?: string | null;
 }) {
   const plan = await Plan.findById(opts.planId).exec();
   if (!plan) {
@@ -314,6 +316,8 @@ export async function generateCodes(opts: {
   const codeExpiresAt = opts.codeExpiresInDays
     ? new Date(Date.now() + opts.codeExpiresInDays * DAY_MS)
     : null;
+  const resellerId = opts.resellerId ? new mongoose.Types.ObjectId(opts.resellerId) : null;
+  const batchId = opts.batchId ? new mongoose.Types.ObjectId(opts.batchId) : null;
 
   const plainCodes: string[] = [];
   const docs = [];
@@ -335,6 +339,8 @@ export async function generateCodes(opts: {
       status: 'UNUSED',
       codeExpiresAt,
       createdBy: opts.createdBy ? new mongoose.Types.ObjectId(opts.createdBy) : null,
+      resellerId,
+      batchId,
     });
   }
 
