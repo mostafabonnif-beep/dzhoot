@@ -43,6 +43,78 @@ function auditVod(req, action, resourceId, after) {
   });
 }
 
+// Metadata edit support for PATCH /movies/:id and /series/:id. buildMetadataSet
+// validates the provided fields (specs below mirror the Movie/Series models)
+// and returns a $set containing only the provided ones, { empty: true } when
+// the body carried none of them, or { error } on the first invalid value.
+const MOVIE_META_FIELDS = [
+  { name: 'title', type: 'string', max: 200, required: true },
+  { name: 'category', type: 'string', max: 100 },
+  { name: 'poster', type: 'string', max: 1000 },
+  { name: 'backdrop', type: 'string', max: 1000 },
+  { name: 'description', type: 'string', max: 5000 },
+  { name: 'year', type: 'int', min: 1800, max: 2100, allowNull: true },
+  { name: 'duration', type: 'int', min: 1, max: Number.MAX_SAFE_INTEGER, allowNull: true },
+  { name: 'rating', type: 'number', min: 0, max: 10, allowNull: true },
+];
+
+const SERIES_META_FIELDS = [
+  { name: 'title', type: 'string', max: 200, required: true },
+  { name: 'category', type: 'string', max: 100 },
+  { name: 'poster', type: 'string', max: 1000 },
+  { name: 'backdrop', type: 'string', max: 1000 },
+  { name: 'plot', type: 'string', max: 5000 },
+  { name: 'cast', type: 'string', max: 2000 },
+  { name: 'director', type: 'string', max: 200 },
+  { name: 'genre', type: 'string', max: 200 },
+  { name: 'releaseDate', type: 'string', max: 50 },
+  { name: 'rating', type: 'number', min: 0, max: 10, allowNull: true },
+];
+
+function buildMetadataSet(body, fields) {
+  const $set = {};
+  for (const field of fields) {
+    const raw = body?.[field.name];
+    if (raw === undefined) continue;
+
+    if (raw === null) {
+      if (!field.allowNull) return { error: `'${field.name}' must not be null` };
+      $set[field.name] = null;
+      continue;
+    }
+
+    if (field.type === 'string') {
+      if (typeof raw !== 'string') return { error: `'${field.name}' must be a string` };
+      const value = raw.trim();
+      if (field.required && value.length === 0) {
+        return { error: `'${field.name}' must be a non-empty string` };
+      }
+      if (value.length > field.max) {
+        return { error: `'${field.name}' must be at most ${field.max} characters` };
+      }
+      $set[field.name] = value;
+    } else if (field.type === 'int') {
+      if (typeof raw !== 'number' || !Number.isInteger(raw)) {
+        return { error: `'${field.name}' must be an integer` };
+      }
+      if (raw < field.min || raw > field.max) {
+        return { error: `'${field.name}' must be between ${field.min} and ${field.max}` };
+      }
+      $set[field.name] = raw;
+    } else if (field.type === 'number') {
+      if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+        return { error: `'${field.name}' must be a number` };
+      }
+      if (raw < field.min || raw > field.max) {
+        return { error: `'${field.name}' must be between ${field.min} and ${field.max}` };
+      }
+      $set[field.name] = raw;
+    }
+  }
+  if (Object.keys($set).length === 0) return { empty: true };
+  return { $set };
+}
+
 /* ------------------------------- MOVIES ------------------------------- */
 
 // Bulk enable/disable movies by explicit ID list.
@@ -178,34 +250,54 @@ router.delete('/movies/bulk-by-category', async (req, res) => {
   }
 });
 
-// Toggle one movie.
+// Toggle one movie, or update its metadata (title, category, poster, ...).
+// When { isActive } is a boolean this is an enable/disable toggle (disabling
+// still requires { confirmed: true }); otherwise the provided metadata fields
+// are validated and $set — absent fields are left untouched.
 router.patch('/movies/:id', async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return res.status(400).json({ success: false, error: 'Invalid movie id' });
   }
   try {
-    if (typeof req.body?.isActive !== 'boolean') {
-      return res.status(400).json({ success: false, error: 'isActive (boolean) is required' });
+    if (typeof req.body?.isActive === 'boolean') {
+      const isActive = req.body.isActive;
+      if (!isActive && req.body?.confirmed !== true) {
+        return res.status(400).json({
+          success: false,
+          error: 'Disabling a movie requires { "confirmed": true } in request body',
+        });
+      }
+
+      const movie = await Movie.findOneAndUpdate(
+        { _id: req.params.id },
+        { $set: { isActive } },
+        { new: true },
+      ).select('title isActive');
+      if (!movie) {
+        return res.status(404).json({ success: false, error: 'Movie not found' });
+      }
+
+      auditVod(req, isActive ? 'enable_movie' : 'disable_movie', movie.title);
+      return res.json({ success: true, data: { _id: movie._id, title: movie.title, isActive: movie.isActive } });
     }
-    const isActive = req.body.isActive;
-    if (!isActive && req.body?.confirmed !== true) {
-      return res.status(400).json({
-        success: false,
-        error: 'Disabling a movie requires { "confirmed": true } in request body',
-      });
+
+    const parsed = buildMetadataSet(req.body, MOVIE_META_FIELDS);
+    if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
+    if (parsed.empty) {
+      return res.status(400).json({ success: false, error: 'No updatable fields provided' });
     }
 
     const movie = await Movie.findOneAndUpdate(
       { _id: req.params.id },
-      { $set: { isActive } },
+      { $set: parsed.$set },
       { new: true },
-    ).select('title isActive');
+    ).select('title category poster backdrop description year duration rating isActive');
     if (!movie) {
       return res.status(404).json({ success: false, error: 'Movie not found' });
     }
 
-    auditVod(req, isActive ? 'enable_movie' : 'disable_movie', movie.title);
-    return res.json({ success: true, data: { _id: movie._id, title: movie.title, isActive: movie.isActive } });
+    auditVod(req, 'update_movie', movie.title, parsed.$set);
+    return res.json({ success: true, data: movie });
   } catch (error) {
     console.error('Error updating movie:', error);
     return res.status(500).json({ success: false, error: 'Failed to update movie' });
@@ -393,34 +485,54 @@ router.delete('/series/bulk-by-category', async (req, res) => {
   }
 });
 
-// Toggle one series.
+// Toggle one series, or update its metadata (title, category, plot, ...).
+// When { isActive } is a boolean this is an enable/disable toggle (disabling
+// still requires { confirmed: true }); otherwise the provided metadata fields
+// are validated and $set — absent fields are left untouched.
 router.patch('/series/:id', async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     return res.status(400).json({ success: false, error: 'Invalid series id' });
   }
   try {
-    if (typeof req.body?.isActive !== 'boolean') {
-      return res.status(400).json({ success: false, error: 'isActive (boolean) is required' });
+    if (typeof req.body?.isActive === 'boolean') {
+      const isActive = req.body.isActive;
+      if (!isActive && req.body?.confirmed !== true) {
+        return res.status(400).json({
+          success: false,
+          error: 'Disabling a series requires { "confirmed": true } in request body',
+        });
+      }
+
+      const series = await Series.findOneAndUpdate(
+        { _id: req.params.id },
+        { $set: { isActive } },
+        { new: true },
+      ).select('title isActive');
+      if (!series) {
+        return res.status(404).json({ success: false, error: 'Series not found' });
+      }
+
+      auditVod(req, isActive ? 'enable_series' : 'disable_series', series.title);
+      return res.json({ success: true, data: { _id: series._id, title: series.title, isActive: series.isActive } });
     }
-    const isActive = req.body.isActive;
-    if (!isActive && req.body?.confirmed !== true) {
-      return res.status(400).json({
-        success: false,
-        error: 'Disabling a series requires { "confirmed": true } in request body',
-      });
+
+    const parsed = buildMetadataSet(req.body, SERIES_META_FIELDS);
+    if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
+    if (parsed.empty) {
+      return res.status(400).json({ success: false, error: 'No updatable fields provided' });
     }
 
     const series = await Series.findOneAndUpdate(
       { _id: req.params.id },
-      { $set: { isActive } },
+      { $set: parsed.$set },
       { new: true },
-    ).select('title isActive');
+    ).select('title category poster backdrop plot cast director genre releaseDate rating isActive');
     if (!series) {
       return res.status(404).json({ success: false, error: 'Series not found' });
     }
 
-    auditVod(req, isActive ? 'enable_series' : 'disable_series', series.title);
-    return res.json({ success: true, data: { _id: series._id, title: series.title, isActive: series.isActive } });
+    auditVod(req, 'update_series', series.title, parsed.$set);
+    return res.json({ success: true, data: series });
   } catch (error) {
     console.error('Error updating series:', error);
     return res.status(500).json({ success: false, error: 'Failed to update series' });

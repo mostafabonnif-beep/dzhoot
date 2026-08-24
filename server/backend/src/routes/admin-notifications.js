@@ -42,14 +42,15 @@ router.post('/', async (req, res) => {
     if (!title || !body) {
       return res.status(400).json({ success: false, error: 'title and body are required' });
     }
+    const scheduledAtDate = scheduledAt ? new Date(scheduledAt) : null;
     const notification = await Notification.create({
       title: String(title).trim(),
       body: String(body).trim(),
       imageUrl: imageUrl || '',
       deepLink: deepLink || '',
       audience: audience === 'ACTIVE' ? 'ACTIVE' : 'ALL',
-      status: 'DRAFT',
-      scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
+      status: scheduledAtDate && scheduledAtDate.getTime() > Date.now() ? 'SCHEDULED' : 'DRAFT',
+      scheduledAt: scheduledAtDate,
       createdBy: req.user.id,
     });
     audit({ ...reqCtx(req), action: 'NOTIFICATION_CREATE', resource: 'Notification', resourceId: String(notification._id) });

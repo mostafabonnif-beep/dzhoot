@@ -6,6 +6,8 @@ import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/components/locale-provider';
 import Pagination from '@/components/ui/pagination';
+import SearchInput from '@/components/ui/search-input';
+import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 
 interface AdminDevice {
   _id: string;
@@ -36,6 +38,8 @@ export default function DevicesPage() {
   const [devicesTotal, setDevicesTotal] = useState(0);
   const [devicesLoading, setDevicesLoading] = useState(true);
   const [devicesPage, setDevicesPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [stats, setStats] = useState({ active7d: 0, platforms: 0, pendingPairings: 0 });
   const [unpairingId, setUnpairingId] = useState<string | null>(null);
 
   const [pairings, setPairings] = useState<PairingRequest[]>([]);
@@ -49,20 +53,43 @@ export default function DevicesPage() {
 
   const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
 
+  const { search, debouncedSearch, handleSearchChange } = useDebouncedSearch('', 300);
+
+  const handleSearchInputChange = useCallback(
+    (value: string) => {
+      setDevicesPage(1);
+      handleSearchChange(value);
+    },
+    [handleSearchChange],
+  );
+
+  const handleStatusChange = useCallback((value: string) => {
+    setStatusFilter(value);
+    setDevicesPage(1);
+  }, []);
+
   const fetchDevices = useCallback(async () => {
     setDevicesLoading(true);
     try {
-      const res = await api.get('/admin/devices', { params: { page: devicesPage, pageSize: PAGE_SIZE } });
+      const res = await api.get('/admin/devices', {
+        params: {
+          page: devicesPage,
+          pageSize: PAGE_SIZE,
+          ...(debouncedSearch ? { search: debouncedSearch } : {}),
+          ...(statusFilter ? { status: statusFilter } : {}),
+        },
+      });
       const body = res.data;
       setDevices(Array.isArray(body) ? body : body.data || []);
       setDevicesTotal(body.totalCount ?? (Array.isArray(body) ? body.length : 0));
+      if (body.stats) setStats(body.stats);
     } catch {
       setError(L('فشل تحميل الأجهزة', 'Échec du chargement des appareils', 'Failed to load devices'));
     } finally {
       setDevicesLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [devicesPage]);
+  }, [devicesPage, debouncedSearch, statusFilter]);
 
   const fetchPairings = useCallback(async () => {
     setPairingsLoading(true);
@@ -128,8 +155,6 @@ export default function DevicesPage() {
     }
   }
 
-  const pendingCount = pairings.filter((p) => p.status === 'pending').length;
-
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
@@ -163,9 +188,9 @@ export default function DevicesPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 border border-border">
         {[
           { label: L('الإجمالي', 'Total', 'Total'), value: devicesTotal },
-          { label: L('طلبات معلقة', 'Demandes en attente', 'Pending requests'), value: pendingCount },
-          { label: L('الأجهزة النشطة (7 أيام)', 'Actifs (7 j)', 'Active (7d)'), value: devices.filter((d) => d.lastSeenAt && Date.now() - new Date(d.lastSeenAt).getTime() < 7 * 86400000).length },
-          { label: L('المنصات', 'Plateformes', 'Platforms'), value: new Set(devices.map((d) => d.platform || '—')).size },
+          { label: L('طلبات معلقة', 'Demandes en attente', 'Pending requests'), value: stats.pendingPairings },
+          { label: L('الأجهزة النشطة (7 أيام)', 'Actifs (7 j)', 'Active (7d)'), value: stats.active7d },
+          { label: L('المنصات', 'Plateformes', 'Platforms'), value: stats.platforms },
         ].map((m, i) => (
           <div key={m.label} className={`p-4 ${i > 0 ? 'border-l border-border' : ''}`}>
             <dl>
@@ -183,6 +208,28 @@ export default function DevicesPage() {
             {L('الأجهزة المقترنة', 'Appareils associés', 'Registered devices')}
             <span className="ms-2 text-muted-foreground/70">({devicesTotal})</span>
           </h2>
+        </div>
+
+        {/* Search + status filter */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 border-b border-border">
+          <div className="w-full sm:max-w-xs">
+            <SearchInput
+              value={search}
+              onChange={handleSearchInputChange}
+              placeholder={L('بحث بالاسم أو المعرف أو المنصة…', 'Rechercher par nom, ID ou plateforme…', 'Search by name, ID or platform…')}
+              ariaLabel={L('بحث في الأجهزة', 'Rechercher des appareils', 'Search devices')}
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => handleStatusChange(e.target.value)}
+            aria-label={L('حالة الجهاز', 'Statut de l’appareil', 'Device status')}
+            className="h-10 w-full sm:w-48 border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
+          >
+            <option value="">{L('الكل', 'Tous', 'All')}</option>
+            <option value="active">{L('النشطون (7 أيام)', 'Actifs (7 j)', 'Active (7d)')}</option>
+            <option value="stale">{L('خامل', 'Inactifs', 'Stale')}</option>
+          </select>
         </div>
 
         {devicesLoading ? (

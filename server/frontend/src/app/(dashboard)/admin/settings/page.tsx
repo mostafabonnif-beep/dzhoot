@@ -380,7 +380,7 @@ export default function SettingsPage() {
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <input type="password" value={disablePassword} onChange={(event) => setDisablePassword(event.target.value)} placeholder="كلمة المرور الحالية" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="current-password" />
-                <input inputMode="numeric" maxLength={8} value={disableCode} onChange={(event) => setDisableCode(event.target.value.replace(/\\D/g, ''))} placeholder="رمز 2FA الحالي" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
+                <input inputMode="numeric" maxLength={8} value={disableCode} onChange={(event) => setDisableCode(event.target.value.replace(/\D/g, ''))} placeholder="رمز 2FA الحالي" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
               </div>
               <button type="button" onClick={disableTotp} disabled={totpLoading || !disablePassword || disableCode.length < 6} className="inline-flex items-center gap-2 rounded-lg border border-destructive/40 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50">
                 {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />} تعطيل 2FA
@@ -405,7 +405,7 @@ export default function SettingsPage() {
                     <code className="block rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-foreground">{totpSetup.secret}</code>
                   </label>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <input inputMode="numeric" maxLength={8} value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\\D/g, ''))} placeholder="رمز 2FA من 6 أرقام" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
+                    <input inputMode="numeric" maxLength={8} value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, ''))} placeholder="رمز 2FA من 6 أرقام" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
                     <button type="button" onClick={confirmTotp} disabled={totpLoading || totpCode.length < 6} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
                       {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} تأكيد وتفعيل
                     </button>

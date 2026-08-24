@@ -801,14 +801,21 @@ router.get('/devices', async (req, res) => {
       ];
     }
 
-    const [devices, totalCount] = await Promise.all([
+    const [devices, totalCount, active7d, platforms, pendingPairings] = await Promise.all([
       Device.find(filter)
         .sort({ lastSeenAt: -1 })
         .skip((p - 1) * ps)
         .limit(ps)
         .lean(),
       Device.countDocuments(filter),
+      Device.countDocuments({ lastSeenAt: { $gte: new Date(Date.now() - 7 * 86400000) } }),
+      Device.distinct('platform').then(
+        (list) => list.filter((p) => typeof p === 'string' && p.trim() !== '').length,
+      ),
+      PairingRequest.countDocuments({ status: 'pending' }),
     ]);
+
+    const stats = { active7d, platforms, pendingPairings };
 
     const userIds = devices.map((d) => d.userId).filter(Boolean);
     const users = await User.find({ _id: { $in: userIds } })
@@ -834,7 +841,7 @@ router.get('/devices', async (req, res) => {
         : null,
     }));
 
-    res.json({ success: true, count: data.length, totalCount, page: p, pageSize: ps, data });
+    res.json({ success: true, count: data.length, totalCount, page: p, pageSize: ps, data, stats });
   } catch (error) {
     console.error('Error listing devices:', error);
     res.status(500).json({ success: false, error: 'Failed to list devices' });
