@@ -16,6 +16,10 @@ const { ExternalSourceChannel } = require('../models/ExternalSourceCache');
 const { ScheduledTaskRun } = require('../models/ScheduledTaskRun');
 const M3USource = require('../models/M3USource');
 const XtreamSource = require('../models/XtreamSource');
+const Plan = require('../models/Plan');
+const ActivationCode = require('../models/ActivationCode');
+const Subscription = require('../models/Subscription');
+const Reseller = require('../models/Reseller');
 const { epgService } = require('../services/epg-service');
 const { getPlaybackQualityStats } = require('../services/playback-event-service');
 const {
@@ -1494,6 +1498,127 @@ router.get('/stats/scheduler', async (req, res) => {
   } catch (error) {
     console.error('Error fetching scheduler stats:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch scheduler stats' });
+  }
+});
+
+// Business summary: activation codes, subscriptions, revenue, reseller credit.
+// Gives the operator a quick read on sales without leaving the dashboard.
+router.get('/business/summary', async (req, res) => {
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const plans = await Plan.find().select('name durationDays price currency status').lean();
+    const planMap = new Map(plans.map((p) => [String(p._id), p]));
+
+    // Codes activated this month / ever, grouped by plan.
+    const [activatedMonth, activatedTotal, generatedMonth, activeSubscriptions, resellers] = await Promise.all([
+      ActivationCode.aggregate([
+        { $match: { status: 'ACTIVATED', activatedAt: { $gte: monthStart } } },
+        { $group: { _id: '$planId', count: { $sum: 1 } } },
+      ]),
+      ActivationCode.aggregate([
+        { $match: { status: 'ACTIVATED' } },
+        { $group: { _id: '$planId', count: { $sum: 1 } } },
+      ]),
+      ActivationCode.countDocuments({ createdAt: { $gte: monthStart } }),
+      Subscription.countDocuments({ status: 'ACTIVE', expiresAt: { $gt: now } }),
+      Reseller.find().select('credit status').lean(),
+    ]);
+
+    // Remaining code credit per plan across active resellers.
+    const creditByPlan = new Map();
+    for (const r of resellers) {
+      if (r.status !== 'Active') continue;
+      for (const c of r.credit || []) {
+        if (!c || !c.planId) continue;
+        const key = String(c.planId);
+        creditByPlan.set(key, (creditByPlan.get(key) || 0) + (Number(c.quantity) || 0));
+      }
+    }
+    const activeResellers = resellers.filter((r) => r.status === 'Active').length;
+
+    const buildRows = (agg) =>
+      agg
+        .map((a) => {
+          const plan = planMap.get(String(a._id));
+          if (!plan) return null;
+          return {
+            planId: String(a._id),
+            planName: plan.name,
+            count: a.count,
+            price: plan.price || 0,
+            currency: plan.currency || 'DZD',
+            revenue: (plan.price || 0) * a.count,
+          };
+        })
+        .filter(Boolean)
+        .sort((x, y) => y.count - x.count);
+
+    const byPlanThisMonth = buildRows(activatedMonth);
+    const byPlanTotal = buildRows(activatedTotal);
+    const revenueThisMonth = byPlanThisMonth.reduce((s, r) => s + r.revenue, 0);
+    const revenueTotal = byPlanTotal.reduce((s, r) => s + r.revenue, 0);
+    const activatedThisMonth = byPlanThisMonth.reduce((s, r) => s + r.count, 0);
+    const activatedTotalCount = byPlanTotal.reduce((s, r) => s + r.count, 0);
+
+    const creditByPlanRows = [...creditByPlan.entries()]
+      .map(([planId, quantity]) => {
+        const plan = planMap.get(planId);
+        return plan ? { planId, planName: plan.name, quantity } : null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.quantity - a.quantity);
+    const creditRemaining = creditByPlanRows.reduce((s, r) => s + r.quantity, 0);
+
+    // Recent activations (last 10) — masked codes only, never plaintext.
+    const recentActivations = await ActivationCode.find({ status: 'ACTIVATED', activatedAt: { $ne: null } })
+      .sort({ activatedAt: -1 })
+      .limit(10)
+      .select('prefix codeLast4 planId resellerId activatedAt')
+      .lean();
+    const resellerNames = await Reseller.find({
+      _id: { $in: [...new Set(recentActivations.map((c) => c.resellerId).filter(Boolean))] },
+    })
+      .select('name')
+      .lean()
+      .then((rows) => new Map(rows.map((r) => [String(r._id), r.name])));
+
+    const recentData = recentActivations.map((c) => {
+      const plan = planMap.get(String(c.planId));
+      return {
+        code: `${c.prefix}-••••-${c.codeLast4}`,
+        planName: plan?.name || '—',
+        price: plan?.price || 0,
+        currency: plan?.currency || 'DZD',
+        resellerName: c.resellerId ? resellerNames.get(String(c.resellerId)) || null : null,
+        activatedAt: c.activatedAt,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        asOf: now.toISOString(),
+        summary: {
+          activatedThisMonth,
+          activatedTotal: activatedTotalCount,
+          revenueThisMonth,
+          revenueTotal,
+          activeSubscriptions,
+          activeResellers,
+          creditRemaining,
+          codesGeneratedThisMonth: generatedMonth,
+          pricesSet: plans.some((p) => (p.price || 0) > 0),
+        },
+        byPlanThisMonth,
+        byPlanTotal,
+        creditByPlan: creditByPlanRows,
+        recentActivations: recentData,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching business summary:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch business summary' });
   }
 });
 
