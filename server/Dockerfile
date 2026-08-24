@@ -27,7 +27,14 @@ RUN npx tsc --project packages/shared/tsconfig.json && \
 FROM node:20-alpine
 
 ARG APP_VERSION=1.0.1
-ENV APP_VERSION=${APP_VERSION}
+ARG RELEASE_COMMIT=unknown
+ARG RELEASE_BUILT_AT=unknown
+LABEL org.opencontainers.image.version=${APP_VERSION} \
+      org.opencontainers.image.revision=${RELEASE_COMMIT} \
+      org.opencontainers.image.created=${RELEASE_BUILT_AT}
+ENV APP_VERSION=${APP_VERSION} \
+    RELEASE_COMMIT=${RELEASE_COMMIT} \
+    RELEASE_BUILT_AT=${RELEASE_BUILT_AT}
 
 WORKDIR /app
 

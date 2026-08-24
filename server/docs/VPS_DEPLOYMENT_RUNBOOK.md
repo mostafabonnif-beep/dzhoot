@@ -178,13 +178,28 @@ curl --fail --silent --show-error 'https://ld-11.net/health?details=true'
 | --- | --- |
 | `GET https://ld-11.net/health/live` | HTTP 200، و`status: ok`، و`uptime` رقمي |
 | `GET https://ld-11.net/health/ready` | HTTP 200، و`status: ok`، و`mongodb: connected` |
-| `GET https://ld-11.net/health` | HTTP 200، ونسخة التطبيق وMongoDB وRedis |
+| `GET https://ld-11.net/health` | HTTP 200، و`version` و`release.commit` و`release.builtAt` من دون تفاصيل قواعد البيانات |
 | `GET https://ld-11.net/health?details=true` | HTTP 200 وبنية `sources` و`epg` و`scheduler` و`alerting` |
 | الصفحة الرئيسية | تحميل Frontend عبر HTTPS دون mixed content |
 | تسجيل الدخول والتفعيل | نجاح المسار التجاري بحساب اختبار فقط |
 | Live TV | تشغيل قناة مصرّح بها، وظهور EPG أو حالة عدم توفره بوضوح |
 
 نفذ بعد ذلك Smoke تجاريًا محدودًا: تسجيل دخول بحساب اختبار، فتح قائمة القنوات، تشغيل قناة قانونية، اختبار التبديل أو fallback، فتح لوحة الإدارة، اختبار استيراد M3U مصرح به، وفحص إشعارات الخطأ. لا تستخدم حساب super-admin أو مصادر غير مصرح بها في اختبار عام.
+
+### التحقق من هوية الإصدار
+
+عند النشر عبر `stage-release.sh` ثم `atomic-deploy.sh`، يمرر النشر SHA الذي تحقق منه إلى `RELEASE_COMMIT` ووقت البناء إلى `RELEASE_BUILT_AT`. يجب أن يطابق commit الظاهر في health قيمة الإصدار المستهدف، وأن تحمل صور API وfrontend labels OCI نفسها. هذه القيم لا تعد أسراراً، وهي ضرورية للتحقيق والتراجع.
+
+```bash
+curl --fail --silent https://ld-11.net/health
+# تأكد من release.commit = SHA المستهدف وrelease.builtAt = وقت البناء
+
+docker image inspect dzhoof-api:current \
+  --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}'
+tail -n 1 /var/log/dzhoof-deploys.log
+```
+
+إذا لم تتطابق قيمة `release.commit` مع SHA المستهدف، أوقف الإطلاق وطبّق rollback عبر الإصدار السابق؛ لا تفترض أن وسم `:current` يحدد المصدر وحده.
 
 ## 8. النسخ الاحتياطي وسياسة الاستعادة
 

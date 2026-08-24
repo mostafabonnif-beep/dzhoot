@@ -38,6 +38,8 @@ services:
       ALLOW_DIRECT_PLAYBACK: ${ALLOW_DIRECT_PLAYBACK:-false}
       PORT: 3000
       APP_VERSION: ${APP_VERSION:-1.0.1}
+      RELEASE_COMMIT: ${RELEASE_COMMIT:-unknown}
+      RELEASE_BUILT_AT: ${RELEASE_BUILT_AT:-unknown}
       # Audit-remediation-v1: manual EPG triggers execute in the API container,
       # so it needs the same memory hardening as the scheduler service.
       NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first --expose-gc
