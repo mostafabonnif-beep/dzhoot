@@ -15,8 +15,21 @@ function getCooldownMs(): number {
   return Number.isFinite(configured) && configured >= 0 ? configured : DEFAULT_COOLDOWN_MS;
 }
 
+/** Webhook URL: AppSetting (set from the admin panel) with env fallback. */
+async function getWebhookUrl(): Promise<string> {
+  try {
+    const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
+    const doc = await AppSetting.findOne({ key: 'alert_webhook_url' }).lean().exec();
+    const fromDb = doc ? String(doc.value || '').trim() : '';
+    if (fromDb) return fromDb;
+  } catch {
+    // fall through to env
+  }
+  return String(process.env.ALERT_WEBHOOK_URL || '').trim();
+}
+
 export async function sendOperationalAlert(payload: AlertPayload): Promise<boolean> {
-  const webhookUrl = String(process.env.ALERT_WEBHOOK_URL || '').trim();
+  const webhookUrl = await getWebhookUrl();
   if (!webhookUrl) return false;
 
   let parsed: URL;
