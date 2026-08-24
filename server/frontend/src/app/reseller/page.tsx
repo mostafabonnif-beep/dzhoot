@@ -73,6 +73,11 @@ export default function ResellerDashboardPage() {
   const { t } = useLocale();
   const logout = useAuthStore((s) => s.logout);
   const accessToken = useAuthStore((s) => s.accessToken);
+  // Wait for zustand persist to rehydrate from localStorage BEFORE deciding
+  // whether to redirect — otherwise a reseller with a valid saved token gets
+  // kicked to /reseller/login on every page refresh (mobile browsers reload
+  // constantly). Same pattern as hooks/use-auth.ts useRequireAuth.
+  const [hydrated, setHydrated] = useState(false);
   const [me, setMe] = useState<{
     name: string;
     city: string;
@@ -123,20 +128,42 @@ export default function ResellerDashboardPage() {
       setBatches(batchRes.data?.data || []);
       setError('');
     } catch {
-      setError(t('portal.loginError'));
+      setError(t('portal.loadError'));
     } finally {
       setLoading(false);
     }
   }, [t]);
 
   useEffect(() => {
+    if (hydrated) return;
+    let active = true;
+    const finish = () => {
+      if (active) setHydrated(true);
+    };
+    const persistApi = useAuthStore.persist;
+    const unsub = persistApi?.onFinishHydration?.(finish);
+    if (persistApi?.hasHydrated?.()) {
+      finish();
+    } else if (persistApi?.rehydrate) {
+      void Promise.resolve(persistApi.rehydrate()).then(finish, finish);
+    } else {
+      finish();
+    }
+    return () => {
+      active = false;
+      unsub?.();
+    };
+  }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     if (!accessToken) {
       router.replace('/reseller/login');
       return;
     }
     load();
     loadLedger();
-  }, [accessToken, router, load]);
+  }, [hydrated, accessToken, router, load]);
 
   async function loadLedger() {
     setLedgerLoading(true);
@@ -190,7 +217,7 @@ export default function ResellerDashboardPage() {
       const res = await api.get(`/reseller/batches/${batch._id}/codes`);
       setCodes(res.data?.data || []);
     } catch {
-      setError(t('portal.loginError'));
+      setError(t('portal.loadError'));
     } finally {
       setCodesLoading(false);
     }
@@ -237,7 +264,7 @@ export default function ResellerDashboardPage() {
       load(); // refresh credit + batches
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      toast(axiosErr.response?.data?.error || t('portal.loginError'), 'error');
+      toast(axiosErr.response?.data?.error || t('portal.loadError'), 'error');
     } finally {
       setGenerating(false);
     }
@@ -253,7 +280,7 @@ export default function ResellerDashboardPage() {
       a.click();
       URL.revokeObjectURL(url);
     } catch {
-      toast(t('portal.loginError'), 'error');
+      toast(t('portal.loadError'), 'error');
     }
   }
 
@@ -262,7 +289,7 @@ export default function ResellerDashboardPage() {
     router.replace('/reseller/login');
   }
 
-  if (loading) {
+  if (loading || !hydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />

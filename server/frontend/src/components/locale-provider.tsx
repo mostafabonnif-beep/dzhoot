@@ -271,6 +271,7 @@ const common = {
   'portal.login': ['دخول', 'Sign in', 'Connexion'],
   'portal.loginSuccess': ['تم تسجيل الدخول بنجاح', 'Signed in successfully', 'Connexion réussie'],
   'portal.loginError': ['تعذر تسجيل الدخول', 'Login failed', 'Échec de la connexion'],
+  'portal.loadError': ['تعذر تحميل البيانات — تحقق من اتصالك ثم أعد المحاولة', 'Failed to load data — check your connection and retry', 'Échec du chargement des données — vérifiez votre connexion'],
   'portal.logout': ['خروج', 'Sign out', 'Déconnexion'],
   'portal.myCredit': ['رصيد الأكواد', 'Code credit', 'Crédit de codes'],
   'portal.noCredit': ['لا يوجد رصيد — تواصل مع الإدارة لشحن الرصيد', 'No credit — contact the administration to top up', 'Aucun crédit — contactez l\'administration'],
