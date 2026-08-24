@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff, Download, Upload } from 'lucide-react';
+import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff, Download, Upload, BellRing, Mail } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/components/locale-provider';
@@ -36,6 +36,14 @@ export default function SettingsPage() {
   const [disableCode, setDisableCode] = useState('');
   const [totpLoading, setTotpLoading] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [alertWebhook, setAlertWebhook] = useState('');
+  const [brevoUser, setBrevoUser] = useState('');
+  const [brevoPass, setBrevoPass] = useState('');
+  const [mailFrom, setMailFrom] = useState('');
+  const [codeExpiryDays, setCodeExpiryDays] = useState('30');
+  const [alertSaving, setAlertSaving] = useState(false);
+  const [alertTesting, setAlertTesting] = useState(false);
+  const [emailTesting, setEmailTesting] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
   const copyTimeoutRef = useRef<NodeJS.Timeout>();
 
@@ -47,11 +55,18 @@ export default function SettingsPage() {
     const controller = new AbortController();
     async function fetchData() {
       try {
-        const [infoRes, configRes, meRes] = await Promise.all([
+        const [infoRes, configRes, meRes, appSettingsRes] = await Promise.all([
           api.get('/config/info', { signal: controller.signal }).catch(() => null),
           api.get('/config/defaults', { signal: controller.signal }).catch(() => null),
           api.get('/auth/me', { signal: controller.signal }).catch(() => null),
+          api.get('/admin/app-settings', { signal: controller.signal }).catch(() => null),
         ]);
+        const appSettings = appSettingsRes?.data?.data || {};
+        if (appSettings.alert_webhook_url !== undefined) setAlertWebhook(String(appSettings.alert_webhook_url));
+        if (appSettings.brevo_user !== undefined) setBrevoUser(String(appSettings.brevo_user));
+        if (appSettings.brevo_password !== undefined) setBrevoPass(String(appSettings.brevo_password));
+        if (appSettings.mail_from !== undefined) setMailFrom(String(appSettings.mail_from));
+        if (appSettings.code_expiry_days !== undefined) setCodeExpiryDays(String(appSettings.code_expiry_days));
         if (meRes?.data?.user) setTotpEnabled(meRes.data.user.totpEnabled === true);
         if (infoRes) setInfo(infoRes.data.data || infoRes.data);
         const config = configRes?.data?.data || configRes?.data;
@@ -613,6 +628,171 @@ export default function SettingsPage() {
               </div>
             ))
           )}
+        </div>
+      </div>
+      {/* Alerts & notifications (webhook + SMTP) */}
+      <div className="border border-border">
+        <div className="px-4 py-2 bg-muted/50 border-b border-border">
+          <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+            {locale === 'ar' ? 'التنبيهات والإشعارات' : locale === 'fr' ? 'Alertes et notifications' : 'Alerts & notifications'}
+          </h2>
+        </div>
+        <div className="px-4 py-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            {locale === 'ar'
+              ? 'رابط الـ webhook (مثل Discord/Slack) يُرسَل إليه كل تنبيه تشغيلي (فشل مزامنة، انقطاع بث…). بيانات Brevo لتفعيل البريد (تقارير يومية وتنبيهات انتهاء الاشتراك). تُحفظ في القاعدة ولا تُعرض كاملة بعد الحفظ.'
+              : locale === 'fr'
+                ? 'L\'URL du webhook (Discord/Slack…) reçoit chaque alerte opérationnelle. Les identifiants Brevo activent l\'e-mail (rapports quotidiens, alertes d\'expiration).'
+                : 'Webhook URL (Discord/Slack…) receives every operational alert. Brevo credentials enable email (daily reports, expiry alerts).'}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Webhook URL</label>
+              <input
+                dir="ltr"
+                className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
+                placeholder="https://discord.com/api/webhooks/…"
+                value={alertWebhook}
+                onChange={(e) => setAlertWebhook(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Brevo SMTP — المستخدم</label>
+              <input
+                dir="ltr"
+                className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
+                placeholder="login"
+                value={brevoUser}
+                onChange={(e) => setBrevoUser(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Brevo SMTP — كلمة المرور</label>
+              <input
+                dir="ltr"
+                type="password"
+                className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
+                placeholder="••••••••"
+                value={brevoPass}
+                onChange={(e) => setBrevoPass(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">بريد المُرسِل (MAIL_FROM)</label>
+              <input
+                dir="ltr"
+                className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
+                placeholder="no-reply@yourdomain.com"
+                value={mailFrom}
+                onChange={(e) => setMailFrom(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={async () => {
+                setAlertSaving(true);
+                try {
+                  await api.put('/admin/app-settings', {
+                    alert_webhook_url: alertWebhook,
+                    brevo_user: brevoUser,
+                    brevo_password: brevoPass,
+                    mail_from: mailFrom,
+                  });
+                  toast(locale === 'ar' ? 'تم حفظ إعدادات التنبيهات' : locale === 'fr' ? 'Alertes enregistrées' : 'Alert settings saved', 'success');
+                } catch {
+                  toast(locale === 'ar' ? 'فشل حفظ الإعدادات' : 'Échec de l\'enregistrement', 'error');
+                } finally {
+                  setAlertSaving(false);
+                }
+              }}
+              disabled={alertSaving}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {alertSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null} {locale === 'ar' ? 'حفظ الإعدادات' : locale === 'fr' ? 'Enregistrer' : 'Save settings'}
+            </button>
+            <button
+              onClick={async () => {
+                setAlertTesting(true);
+                try {
+                  await api.post('/admin/app-settings/test-alert');
+                  toast(locale === 'ar' ? 'أُرسل تنبيه تجريبي بنجاح ✓' : 'Alerte test envoyée ✓', 'success');
+                } catch (err) {
+                  toast((err as { response?: { data?: { error?: string } } }).response?.data?.error || 'فشل إرسال التنبيه', 'error');
+                } finally {
+                  setAlertTesting(false);
+                }
+              }}
+              disabled={alertTesting}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border-2 border-border bg-card hover:border-primary/40 disabled:opacity-50"
+            >
+              {alertTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
+              {locale === 'ar' ? 'إرسال تنبيه تجريبي' : locale === 'fr' ? 'Alerte test' : 'Send test alert'}
+            </button>
+            <button
+              onClick={async () => {
+                setEmailTesting(true);
+                try {
+                  const res = await api.post('/admin/app-settings/test-email');
+                  toast(`${locale === 'ar' ? 'أُرسل بريد تجريبي إلى' : 'E-mail test envoyé à'} ${res.data?.data?.to || ''} ✓`, 'success');
+                } catch (err) {
+                  toast((err as { response?: { data?: { error?: string } } }).response?.data?.error || 'فشل إرسال البريد', 'error');
+                } finally {
+                  setEmailTesting(false);
+                }
+              }}
+              disabled={emailTesting}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border-2 border-border bg-card hover:border-primary/40 disabled:opacity-50"
+            >
+              {emailTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+              {locale === 'ar' ? 'إرسال بريد تجريبي' : locale === 'fr' ? 'E-mail test' : 'Send test email'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Code expiry window */}
+      <div className="border border-border">
+        <div className="px-4 py-2 bg-muted/50 border-b border-border">
+          <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+            {locale === 'ar' ? 'صلاحية أكواد الموزعين' : locale === 'fr' ? 'Validité des codes' : 'Reseller code expiry'}
+          </h2>
+        </div>
+        <div className="px-4 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            {locale === 'ar'
+              ? 'عدد الأيام قبل انتهاء الكود غير المُفعَّل تلقائيًا وإعادة رصيده للموزع. الأكواد الجديدة فقط.'
+              : locale === 'fr'
+                ? 'Jours avant expiration automatique des codes inutilisés et retour du crédit au revendeur.'
+                : 'Days before unused codes expire automatically and credit returns to the reseller.'}
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={365}
+              className="flex h-10 w-28 border border-border bg-background px-3 py-2 text-sm"
+              value={codeExpiryDays}
+              onChange={(e) => setCodeExpiryDays(e.target.value)}
+            />
+            <button
+              onClick={async () => {
+                setSettingsBusy(true);
+                try {
+                  await api.put('/admin/app-settings', { code_expiry_days: Number(codeExpiryDays) || 30 });
+                  toast(locale === 'ar' ? 'تم حفظ مدة الصلاحية' : 'Validité enregistrée', 'success');
+                } catch {
+                  toast(locale === 'ar' ? 'فشل الحفظ' : 'Échec', 'error');
+                } finally {
+                  setSettingsBusy(false);
+                }
+              }}
+              disabled={settingsBusy}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {locale === 'ar' ? 'حفظ (أيام)' : 'Enregistrer'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -27,18 +27,32 @@ interface SendEmailOptions {
 
 let transporter: Transporter | null = null;
 
-function getSmtpConfig(): SmtpConfig {
+/** Read one operator setting from AppSetting (admin panel) with env fallback. */
+async function getSetting(key: string, envFallback: string): Promise<string> {
+  try {
+    const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
+    const doc = await AppSetting.findOne({ key }).lean().exec();
+    const fromDb = doc ? String(doc.value || '').trim() : '';
+    if (fromDb) return fromDb;
+  } catch {
+    // fall through to env
+  }
+  return String(envFallback || '').trim();
+}
+
+async function getSmtpConfig(): Promise<SmtpConfig> {
   const provider = (process.env.MAIL_PROVIDER || 'mailhog').toLowerCase();
 
   if (provider === 'brevo') {
+    const [user, pass] = await Promise.all([
+      getSetting('brevo_user', process.env.BREVO_USER || ''),
+      getSetting('brevo_password', process.env.BREVO_PASSWORD || ''),
+    ]);
     return {
       host: process.env.BREVO_HOST || 'smtp-relay.brevo.com',
       port: parseInt(process.env.BREVO_PORT || '587', 10),
       secure: false, // STARTTLS
-      auth: {
-        user: process.env.BREVO_USER || '',
-        pass: process.env.BREVO_PASSWORD || '',
-      },
+      auth: { user, pass },
     };
   }
 
@@ -50,9 +64,9 @@ function getSmtpConfig(): SmtpConfig {
   };
 }
 
-function getTransporter(): Transporter {
+async function getTransporter(): Promise<Transporter> {
   if (!transporter) {
-    transporter = nodemailer.createTransport(getSmtpConfig());
+    transporter = nodemailer.createTransport(await getSmtpConfig());
   }
   return transporter;
 }
@@ -88,16 +102,24 @@ function loadTemplate(name: string): HandlebarsTemplateDelegate {
 // Core send function
 // ---------------------------------------------------------------------------
 
-export async function sendEmail(opts: SendEmailOptions): Promise<void> {
-  const template = loadTemplate(opts.template);
-  const html = template(opts.variables);
+export async function sendEmail(opts: SendEmailOptions): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const template = loadTemplate(opts.template);
+    const html = template(opts.variables);
+    const from = await getSetting('mail_from', process.env.MAIL_FROM || 'noreply@dzhoof.local');
 
-  await getTransporter().sendMail({
-    from: process.env.MAIL_FROM || 'noreply@dzhoof.local',
-    to: opts.to,
-    subject: opts.subject,
-    html,
-  });
+    const transporter = await getTransporter();
+    await transporter.sendMail({
+      from,
+      to: opts.to,
+      subject: opts.subject,
+      html,
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error('[email] send failed:', (err as Error).message);
+    return { ok: false, error: (err as Error).message };
+  }
 }
 
 // ---------------------------------------------------------------------------
