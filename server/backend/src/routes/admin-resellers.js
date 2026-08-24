@@ -6,6 +6,7 @@ const ActivationCode = require('../models/ActivationCode');
 const CodeBatch = require('../models/CodeBatch');
 
 const { audit, reqCtx } = require('../services/audit-log');
+const bcrypt = require('bcryptjs');
 
 // Admin-only reseller management: /api/v1/admin/resellers
 const { requireAuth, requireAdmin } = require('./auth');
@@ -90,8 +91,9 @@ router.put('/:id', async (req, res) => {
       if (password && String(password).length < 6) {
         return res.status(400).json({ success: false, error: 'password must be at least 6 characters' });
       }
-      // pre-save hook hashes non-empty values; '' clears the login
-      update.passwordHash = password ? String(password) : '';
+      // findByIdAndUpdate bypasses the pre-save hook, so hash here explicitly.
+      // Empty string clears the portal login.
+      update.passwordHash = password ? await bcrypt.hash(String(password), 12) : '';
     }
     if (name !== undefined) update.name = String(name).trim();
     if (city !== undefined) update.city = String(city).trim();
