@@ -170,6 +170,25 @@ describe('Round 9: reseller prefix & purchase amounts', () => {
     expect(stored.every((c) => c.prefix === 'TLM5')).toBe(true);
   });
 
+  it('generateCodes without codeExpiresInDays leaves codeExpiresAt null', async () => {
+    const plan = await makePlan();
+    const reseller = await makeReseller(plan._id, 0);
+    const gen = await generateCodes({ planId: String(plan._id), quantity: 1, resellerId: String(reseller._id) });
+    expect(gen.ok).toBe(true);
+    const stored = await ActivationCode.findOne({ resellerId: reseller._id }).lean().exec();
+    expect(stored?.codeExpiresAt).toBeNull();
+  });
+
+  it('generateCodes with codeExpiresInDays sets codeExpiresAt in the future', async () => {
+    const plan = await makePlan();
+    const reseller = await makeReseller(plan._id, 0);
+    const gen = await generateCodes({ planId: String(plan._id), quantity: 1, codeExpiresInDays: 30, resellerId: String(reseller._id) });
+    expect(gen.ok).toBe(true);
+    const stored = await ActivationCode.findOne({ resellerId: reseller._id }).lean().exec();
+    expect(stored?.codeExpiresAt).toBeInstanceOf(Date);
+    expect(Number(stored?.codeExpiresAt)).toBeGreaterThan(Date.now());
+  });
+
   it('recordCreditTx stores unitPrice and purchase amount for GRANT rows', async () => {
     const plan = await makePlan();
     const reseller = await makeReseller(plan._id, 0);

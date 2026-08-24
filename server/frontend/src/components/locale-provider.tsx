@@ -290,6 +290,7 @@ const common = {
   'portal.duration': ['المدة', 'Duration', 'Durée'],
   'portal.receiptDate': ['تاريخ الاستلام', 'Receipt date', 'Date de réception'],
   'portal.activatedTotal': ['مفعّل / إجمالي', 'Activated / Total', 'Activé / Total'],
+  'portal.activated': ['مفعّل', 'Activated', 'Activé'],
   'portal.codes': ['الأكواد', 'Codes', 'Codes'],
   'portal.file': ['ملف', 'File', 'Fichier'],
   'portal.emptyCodes': ['لا توجد أكواد في هذه الدفعة', 'No codes in this batch', 'Aucun code dans ce lot'],
