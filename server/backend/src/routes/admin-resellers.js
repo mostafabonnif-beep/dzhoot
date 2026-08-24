@@ -40,16 +40,22 @@ router.get('/', async (req, res) => {
 // POST / — create reseller
 router.post('/', async (req, res) => {
   try {
-    const { name, city, phone, notes, status } = req.body || {};
+    const { name, city, phone, notes, status, prices } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'name is required' });
     }
+    const cleanPrices = Array.isArray(prices)
+      ? prices
+          .filter((p) => p && p.planId && Number.isFinite(Number(p.price)) && Number(p.price) >= 0)
+          .map((p) => ({ planId: p.planId, price: Number(p.price) }))
+      : [];
     const doc = await Reseller.create({
       name: String(name).trim(),
       city: String(city || '').trim(),
       phone: String(phone || '').trim(),
       notes: String(notes || '').trim(),
       status: status === 'Inactive' ? 'Inactive' : 'Active',
+      prices: cleanPrices,
     });
     audit({ ...reqCtx(req), action: 'RESELLER_CREATE', resource: 'Reseller', resourceId: String(doc._id), changes: { after: { name: doc.name, city: doc.city } } });
     res.status(201).json({ success: true, data: doc });
@@ -64,13 +70,20 @@ router.put('/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
-    const { name, city, phone, notes, status } = req.body || {};
+    const { name, city, phone, notes, status, prices } = req.body || {};
     const update = {};
     if (name !== undefined) update.name = String(name).trim();
     if (city !== undefined) update.city = String(city).trim();
     if (phone !== undefined) update.phone = String(phone).trim();
     if (notes !== undefined) update.notes = String(notes).trim();
     if (status !== undefined) update.status = status === 'Inactive' ? 'Inactive' : 'Active';
+    if (prices !== undefined) {
+      update.prices = Array.isArray(prices)
+        ? prices
+            .filter((p) => p && p.planId && Number.isFinite(Number(p.price)) && Number(p.price) >= 0)
+            .map((p) => ({ planId: p.planId, price: Number(p.price) }))
+        : [];
+    }
     if (!update.name) return res.status(400).json({ success: false, error: 'name is required' });
     const doc = await Reseller.findByIdAndUpdate(id, { $set: update }, { new: true }).exec();
     if (!doc) return res.status(404).json({ success: false, error: 'Reseller not found' });
