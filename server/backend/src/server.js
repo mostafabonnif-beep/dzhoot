@@ -565,11 +565,19 @@ app.get('/health', async (req, res) => {
   };
   if (req.query.details === 'true') {
     try {
+      let alertingConfigured = Boolean(String(process.env.ALERT_WEBHOOK_URL || '').trim());
+      try {
+        const AppSetting = require('./models/AppSetting').default || require('./models/AppSetting');
+        const doc = await AppSetting.findOne({ key: 'alert_webhook_url' }).lean().exec();
+        if (doc && String(doc.value || '').trim()) alertingConfigured = true;
+      } catch {
+        // env value already considered above
+      }
       response.details = {
         uptime: process.uptime(),
         mongodb: healthy ? 'connected' : 'disconnected',
         redis: isRedisReady() ? 'connected' : 'disconnected',
-        alertingConfigured: Boolean(String(process.env.ALERT_WEBHOOK_URL || '').trim()),
+        alertingConfigured,
         ...(await collectHealthDetails()),
       };
     } catch (error) {
