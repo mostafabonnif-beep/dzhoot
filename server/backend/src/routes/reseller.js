@@ -4,6 +4,7 @@ const router = express.Router();
 const CodeBatch = require('../models/CodeBatch');
 const Plan = require('../models/Plan');
 const ActivationCode = require('../models/ActivationCode');
+const Reseller = require('../models/Reseller');
 const { decryptSecret } = require('../utils/crypto');
 const { generateCodes } = require('../services/subscription-service');
 const { requireReseller } = require('../middleware/requireReseller');
