@@ -5,6 +5,8 @@ import ActivationCode from '../models/ActivationCode';
 import ActivationRedemption from '../models/ActivationRedemption';
 import Subscription from '../models/Subscription';
 import Device from '../models/Device';
+import Reseller from '../models/Reseller';
+import CreditTransaction from '../models/CreditTransaction';
 import { getRedisClient, isRedisReady } from './redis';
 import {
   normalizeActivationCode,
@@ -377,6 +379,197 @@ export async function expireStaleCodes(): Promise<number> {
   return res.modifiedCount;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Reseller credit: ledger, manual return, auto-expiry with return.   */
+/* ------------------------------------------------------------------ */
+
+/** Code expiry window (days) for reseller-generated codes — admin-configurable. */
+export async function getCodeExpiryDays(): Promise<number> {
+  const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
+  const doc = await AppSetting.findOne({ key: 'code_expiry_days' }).lean().exec();
+  const raw = doc ? Number(doc.value) : Number(process.env.CODE_EXPIRY_DAYS || 30);
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 30;
+}
+
+/** One credit ledger row. balanceAfter is the reseller's remaining credit for that plan after the tx. */
+export async function recordCreditTx(opts: {
+  resellerId: string;
+  planId: string;
+  type: 'GRANT' | 'CONSUME' | 'RETURN' | 'EXPIRE_RETURN';
+  quantity: number;
+  balanceAfter: number;
+  note?: string;
+  createdBy?: string | null;
+}): Promise<void> {
+  try {
+    await CreditTransaction.create({
+      resellerId: new mongoose.Types.ObjectId(opts.resellerId),
+      planId: new mongoose.Types.ObjectId(opts.planId),
+      type: opts.type,
+      quantity: opts.quantity,
+      balanceAfter: Math.max(opts.balanceAfter, 0),
+      note: opts.note || '',
+      createdBy: opts.createdBy ? new mongoose.Types.ObjectId(opts.createdBy) : null,
+    });
+  } catch (err) {
+    console.error('[credit] recordCreditTx error:', (err as Error).message);
+  }
+}
+
+/** Increment (or create) a reseller's credit for a plan and record a GRANT ledger row. */
+export async function addResellerCredit(
+  resellerId: string,
+  planId: string,
+  delta: number,
+  note?: string,
+  createdBy?: string | null,
+): Promise<void> {
+  if (!delta) return;
+  const updated = await Reseller.findOneAndUpdate(
+    { _id: resellerId, 'credit.planId': planId },
+    { $inc: { 'credit.$.quantity': delta } },
+    { new: true },
+  )
+    .select('credit')
+    .lean()
+    .exec();
+  let balanceAfter: number;
+  if (updated) {
+    balanceAfter = (updated.credit || []).find((c) => String(c.planId) === planId)?.quantity || 0;
+  } else {
+    const qty = Math.max(delta, 0);
+    await Reseller.updateOne({ _id: resellerId }, { $push: { credit: { planId: new mongoose.Types.ObjectId(planId), quantity: qty } } }).exec();
+    balanceAfter = qty;
+  }
+  await recordCreditTx({ resellerId, planId, type: 'GRANT', quantity: delta, balanceAfter, note: note || '', createdBy });
+}
+
+/**
+ * Reclaim credit for a reseller's UNUSED codes: mark them REVOKED and restore
+ * the credit per plan (ledger type RETURN). If batchId is given, only that
+ * batch's unused codes are reclaimed; otherwise all unused codes of the reseller
+ * (optionally filtered by planId).
+ */
+export async function returnUnusedCreditForReseller(
+  resellerId: string,
+  opts: { batchId?: string; planId?: string; note?: string; createdBy?: string | null } = {},
+): Promise<{ ok: boolean; revoked: number; restored: Array<{ planId: string; quantity: number }>; error?: string }> {
+  const filter: Record<string, unknown> = { resellerId: new mongoose.Types.ObjectId(resellerId), status: 'UNUSED' };
+  if (opts.batchId) {
+    if (!mongoose.isValidObjectId(opts.batchId)) return { ok: false, revoked: 0, restored: [], error: 'Invalid batch id' };
+    filter.batchId = new mongoose.Types.ObjectId(opts.batchId);
+  }
+  if (opts.planId) {
+    if (!mongoose.isValidObjectId(opts.planId)) return { ok: false, revoked: 0, restored: [], error: 'Invalid plan id' };
+    filter.planId = new mongoose.Types.ObjectId(opts.planId);
+  }
+
+  const codes = await ActivationCode.find(filter).select('planId').lean().exec();
+  if (codes.length === 0) return { ok: true, revoked: 0, restored: [] };
+
+  const byPlan = new Map<string, number>();
+  for (const c of codes) {
+    const key = String(c.planId);
+    byPlan.set(key, (byPlan.get(key) || 0) + 1);
+  }
+
+  await ActivationCode.updateMany({ _id: { $in: codes.map((c) => c._id) } }, { $set: { status: 'REVOKED' } }).exec();
+
+  const restored: Array<{ planId: string; quantity: number }> = [];
+  for (const [planId, qty] of byPlan) {
+    const updated = await Reseller.findOneAndUpdate(
+      { _id: resellerId, 'credit.planId': planId },
+      { $inc: { 'credit.$.quantity': qty } },
+      { new: true },
+    )
+      .select('credit')
+      .lean()
+      .exec();
+    let balanceAfter: number;
+    if (updated) {
+      balanceAfter = (updated.credit || []).find((c) => String(c.planId) === planId)?.quantity || 0;
+    } else {
+      await Reseller.updateOne({ _id: resellerId }, { $push: { credit: { planId: new mongoose.Types.ObjectId(planId), quantity: qty } } }).exec();
+      balanceAfter = qty;
+    }
+    await recordCreditTx({
+      resellerId,
+      planId,
+      type: 'RETURN',
+      quantity: qty,
+      balanceAfter,
+      note: opts.note || `استرجاع ${qty} كود غير مستخدم`,
+      createdBy: opts.createdBy,
+    });
+    restored.push({ planId, quantity: qty });
+  }
+  return { ok: true, revoked: codes.length, restored };
+}
+
+/**
+ * Scheduled daily: expire UNUSED codes past codeExpiresAt and return the credit
+ * to their resellers (ledger type EXPIRE_RETURN). Admin-generated codes without
+ * a reseller are simply marked EXPIRED (no credit involved).
+ */
+export async function expireStaleCodesAndReturnCredit(): Promise<{
+  expired: number;
+  creditReturned: Array<{ resellerId: string; planId: string; quantity: number }>;
+}> {
+  const now = new Date();
+  const stale = await ActivationCode.find({ status: 'UNUSED', codeExpiresAt: { $lt: now } })
+    .select('planId resellerId')
+    .lean()
+    .exec();
+  if (stale.length === 0) return { expired: 0, creditReturned: [] };
+
+  await ActivationCode.updateMany(
+    { _id: { $in: stale.map((c) => c._id) } },
+    { $set: { status: 'EXPIRED' } },
+  ).exec();
+
+  const creditReturned: Array<{ resellerId: string; planId: string; quantity: number }> = [];
+  const byResellerPlan = new Map<string, Map<string, number>>();
+  for (const c of stale) {
+    if (!c.resellerId) continue;
+    const rk = String(c.resellerId);
+    const pk = String(c.planId);
+    if (!byResellerPlan.has(rk)) byResellerPlan.set(rk, new Map());
+    const m = byResellerPlan.get(rk)!;
+    m.set(pk, (m.get(pk) || 0) + 1);
+  }
+
+  for (const [rid, plans] of byResellerPlan) {
+    for (const [planId, qty] of plans) {
+      const updated = await Reseller.findOneAndUpdate(
+        { _id: rid, 'credit.planId': planId },
+        { $inc: { 'credit.$.quantity': qty } },
+        { new: true },
+      )
+        .select('credit')
+        .lean()
+        .exec();
+      let balanceAfter: number;
+      if (updated) {
+        balanceAfter = (updated.credit || []).find((c) => String(c.planId) === planId)?.quantity || 0;
+      } else {
+        await Reseller.updateOne({ _id: rid }, { $push: { credit: { planId: new mongoose.Types.ObjectId(planId), quantity: qty } } }).exec();
+        balanceAfter = qty;
+      }
+      await recordCreditTx({
+        resellerId: rid,
+        planId,
+        type: 'EXPIRE_RETURN',
+        quantity: qty,
+        balanceAfter,
+        note: `انتهت صلاحية ${qty} كود غير مستخدم`,
+      });
+      creditReturned.push({ resellerId: rid, planId, quantity: qty });
+    }
+  }
+
+  return { expired: stale.length, creditReturned };
+}
+
 /** Whether the platform currently gates playback behind an active subscription. */
 export async function isSubscriptionRequired(): Promise<boolean> {
   const envValue = process.env.SUBSCRIPTION_REQUIRED?.trim().toLowerCase();
@@ -431,6 +624,11 @@ module.exports = {
   generateCodes,
   revokeCode,
   expireStaleCodes,
+  expireStaleCodesAndReturnCredit,
+  getCodeExpiryDays,
+  recordCreditTx,
+  addResellerCredit,
+  returnUnusedCreditForReseller,
   isSubscriptionRequired,
   getActiveSubscription,
 };

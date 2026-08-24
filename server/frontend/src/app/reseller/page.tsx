@@ -15,6 +15,7 @@ import {
   Minus,
   Plus,
   BadgeCheck,
+  History,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
@@ -74,6 +75,7 @@ export default function ResellerDashboardPage() {
     city: string;
     stats: { total: number; activated: number; remaining: number };
     credit: CreditItem[];
+    prices?: Array<{ planId: string; price: number; currency: string; plan: { name: string; durationDays: number } }>;
   } | null>(null);
   const [batches, setBatches] = useState<BatchItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +84,14 @@ export default function ResellerDashboardPage() {
   const [codes, setCodes] = useState<CodeItem[]>([]);
   const [codesLoading, setCodesLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Ledger (سجل حركات الرصيد)
+  const [ledger, setLedger] = useState<Array<{ _id: string; type: string; quantity: number; balanceAfter: number; planName: string; note: string; createdAt: string }>>([]);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+
+  // Change password
+  const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '' });
+  const [pwSaving, setPwSaving] = useState(false);
 
   // Generation state
   const [genPlanId, setGenPlanId] = useState('');
@@ -112,7 +122,52 @@ export default function ResellerDashboardPage() {
       return;
     }
     load();
+    loadLedger();
   }, [accessToken, router, load]);
+
+  async function loadLedger() {
+    setLedgerLoading(true);
+    try {
+      const res = await api.get('/reseller/ledger');
+      setLedger(res.data?.data?.rows || []);
+    } catch {
+      // ledger is secondary — ignore failures
+    } finally {
+      setLedgerLoading(false);
+    }
+  }
+
+  async function handleChangePassword() {
+    if (!pwForm.currentPassword || !pwForm.newPassword) {
+      toast(t('portal.pwRequired'), 'error');
+      return;
+    }
+    if (pwForm.newPassword.length < 6) {
+      toast(t('portal.pwMin'), 'error');
+      return;
+    }
+    setPwSaving(true);
+    try {
+      await api.post('/reseller/auth/change-password', pwForm);
+      toast(t('portal.pwChanged'), 'success');
+      setPwForm({ currentPassword: '', newPassword: '' });
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast(axiosErr.response?.data?.error || t('portal.pwError'), 'error');
+    } finally {
+      setPwSaving(false);
+    }
+  }
+
+  function ledgerTypeLabel(type: string) {
+    const map: Record<string, string> = {
+      GRANT: t('portal.txGrant'),
+      CONSUME: t('portal.txConsume'),
+      RETURN: t('portal.txReturn'),
+      EXPIRE_RETURN: t('portal.txExpireReturn'),
+    };
+    return map[type] || type;
+  }
 
   async function openCodes(batch: BatchItem) {
     setOpenBatch(batch);
@@ -275,6 +330,111 @@ export default function ResellerDashboardPage() {
             </div>
           </div>
         )}
+
+        {me?.prices && me.prices.length > 0 && (
+          <section className="border border-border bg-card p-4">
+            <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
+              <Store className="h-4 w-4" /> {t('portal.wholesalePrices')}
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              {me.prices.map((p) => (
+                <div key={p.planId} className="border border-border p-3">
+                  <div className="font-medium text-sm">{p.plan.name}</div>
+                  <div className="text-xs text-muted-foreground mb-2">{p.plan.durationDays} {t('portal.days')}</div>
+                  <div className="text-xl font-semibold">
+                    {Number(p.price || 0).toLocaleString()} <span className="text-sm text-muted-foreground">{p.currency}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section className="border border-border bg-card p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
+            <History className="h-4 w-4" /> {t('portal.myLedger')}
+          </h2>
+          {ledgerLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : ledger.length === 0 ? (
+            <div className="text-sm text-muted-foreground">{t('portal.ledgerEmpty')}</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                    <th className="text-right p-2">{t('portal.ledgerDate')}</th>
+                    <th className="text-right p-2">{t('portal.ledgerType')}</th>
+                    <th className="text-right p-2">{t('portal.ledgerPlan')}</th>
+                    <th className="text-right p-2">{t('portal.ledgerQty')}</th>
+                    <th className="text-right p-2">{t('portal.ledgerBalance')}</th>
+                    <th className="text-right p-2">{t('portal.ledgerNote')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.map((row) => (
+                    <tr key={row._id} className="border-b border-border/50 last:border-0">
+                      <td className="p-2 text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(row.createdAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="p-2">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            row.type === 'CONSUME'
+                              ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                              : row.type === 'GRANT'
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                          }`}
+                        >
+                          {ledgerTypeLabel(row.type)}
+                        </span>
+                      </td>
+                      <td className="p-2">{row.planName}</td>
+                      <td className={`p-2 font-medium tabular-nums ${row.quantity < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        {row.quantity > 0 ? `+${row.quantity}` : row.quantity}
+                      </td>
+                      <td className="p-2 font-medium tabular-nums">{row.balanceAfter}</td>
+                      <td className="p-2 text-xs text-muted-foreground">{row.note || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="border border-border bg-card p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
+            <KeyRound className="h-4 w-4" /> {t('portal.changePassword')}
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <input
+              type="password"
+              className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
+              placeholder={t('portal.currentPassword')}
+              value={pwForm.currentPassword}
+              onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
+            />
+            <input
+              type="password"
+              className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
+              placeholder={t('portal.newPassword')}
+              value={pwForm.newPassword}
+              onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
+            />
+            <button
+              onClick={handleChangePassword}
+              disabled={pwSaving}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {pwSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              {t('portal.savePassword')}
+            </button>
+          </div>
+        </section>
 
         <section>
           <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">

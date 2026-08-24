@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, History, RotateCcw } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import Modal from '@/components/ui/modal';
@@ -177,6 +177,55 @@ export default function ResellersPage() {
     }
   }
 
+  // ---- Credit ledger (سجل حركات الرصيد) ----
+  const [ledgerReseller, setLedgerReseller] = useState<ResellerData | null>(null);
+  const [ledgerRows, setLedgerRows] = useState<Array<{ _id: string; type: string; quantity: number; balanceAfter: number; planName: string; note: string; createdAt: string }>>([]);
+  const [ledgerTotal, setLedgerTotal] = useState(0);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [returning, setReturning] = useState(false);
+
+  async function openLedger(r: ResellerData) {
+    setLedgerReseller(r);
+    setLedgerRows([]);
+    setLedgerLoading(true);
+    try {
+      const res = await api.get(`/admin/resellers/${r._id}/ledger`);
+      setLedgerRows(res.data?.data?.rows || []);
+      setLedgerTotal(res.data?.data?.total || 0);
+    } catch {
+      toast(t('resellers.ledgerError'), 'error');
+    } finally {
+      setLedgerLoading(false);
+    }
+  }
+
+  async function handleReturnCredit() {
+    if (!ledgerReseller) return;
+    setReturning(true);
+    try {
+      const res = await api.post(`/admin/resellers/${ledgerReseller._id}/credit/return`, {});
+      const n = res.data?.data?.revoked ?? 0;
+      toast(n > 0 ? `${t('resellers.returnSuccess')} (${n})` : t('resellers.returnNone'), n > 0 ? 'success' : 'info');
+      await openLedger(ledgerReseller);
+      fetchResellers();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast(axiosErr.response?.data?.error || t('resellers.returnError'), 'error');
+    } finally {
+      setReturning(false);
+    }
+  }
+
+  function ledgerTypeLabel(type: string) {
+    const map: Record<string, string> = {
+      GRANT: t('resellers.txGrant'),
+      CONSUME: t('resellers.txConsume'),
+      RETURN: t('resellers.txReturn'),
+      EXPIRE_RETURN: t('resellers.txExpireReturn'),
+    };
+    return map[type] || type;
+  }
+
   const columns: DataTableColumn<ResellerData>[] = [
     {
       key: 'name',
@@ -274,6 +323,16 @@ export default function ResellersPage() {
             title={t('resellers.edit')}
           >
             <Pencil className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              openLedger(r);
+            }}
+            className="p-1.5 text-muted-foreground hover:text-primary"
+            title={t('resellers.ledger')}
+          >
+            <History className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => {
@@ -523,6 +582,78 @@ export default function ResellersPage() {
               {t('common.cancel')}
             </button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!ledgerReseller}
+        onClose={() => setLedgerReseller(null)}
+        title={`${t('resellers.ledger')} — ${ledgerReseller?.name ?? ''}`}
+      >
+        <div className="p-5 space-y-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              {t('resellers.ledgerHint')} · {ledgerTotal} {t('resellers.txCount')}
+            </p>
+            <button
+              onClick={handleReturnCredit}
+              disabled={returning}
+              className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+            >
+              <RotateCcw className={`h-3.5 w-3.5 ${returning ? 'animate-spin' : ''}`} />
+              {t('resellers.returnUnused')}
+            </button>
+          </div>
+          {ledgerLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : ledgerRows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">{t('resellers.ledgerEmpty')}</p>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/40 text-right text-xs text-muted-foreground">
+                    <th className="px-3 py-2 font-medium">التاريخ</th>
+                    <th className="px-3 py-2 font-medium">{t('resellers.txType')}</th>
+                    <th className="px-3 py-2 font-medium">{t('resellers.txPlan')}</th>
+                    <th className="px-3 py-2 font-medium">{t('resellers.txQty')}</th>
+                    <th className="px-3 py-2 font-medium">{t('resellers.txBalance')}</th>
+                    <th className="px-3 py-2 font-medium">{t('resellers.txNote')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledgerRows.map((row) => (
+                    <tr key={row._id} className="border-b border-border/60 last:border-0">
+                      <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(row.createdAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td className="px-3 py-2">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                            row.type === 'CONSUME'
+                              ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                              : row.type === 'GRANT'
+                                ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                          }`}
+                        >
+                          {ledgerTypeLabel(row.type)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">{row.planName}</td>
+                      <td className={`px-3 py-2 font-medium tabular-nums ${row.quantity < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        {row.quantity > 0 ? `+${row.quantity}` : row.quantity}
+                      </td>
+                      <td className="px-3 py-2 font-medium tabular-nums">{row.balanceAfter}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{row.note || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </Modal>
 
