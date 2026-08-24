@@ -5,7 +5,7 @@ const CodeBatch = require('../models/CodeBatch');
 const Reseller = require('../models/Reseller');
 const Plan = require('../models/Plan');
 const ActivationCode = require('../models/ActivationCode');
-const { generateCodes } = require('../services/subscription-service');
+const { generateCodes, getCodeExpiryDays } = require('../services/subscription-service');
 const { audit, reqCtx } = require('../services/audit-log');
 
 // Admin-only code-batch (deliveries to shops) management: /api/v1/admin/code-batches
@@ -116,10 +116,14 @@ router.post('/', async (req, res) => {
       createdBy: req.user?.id || null,
     });
 
+    // Match the reseller-portal behaviour: codes expire after code_expiry_days
+    // so the daily task can expire stale codes and return their credit.
+    const codeExpiryDays = await getCodeExpiryDays();
     const result = await generateCodes({
       planId: String(planId),
       quantity: qty,
       prefix: prefix || 'DZHF',
+      codeExpiresInDays: codeExpiryDays,
       createdBy: req.user?.id || null,
       resellerId: String(resellerId),
       batchId: String(batch._id),
