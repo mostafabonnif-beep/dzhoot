@@ -9,6 +9,7 @@ import M3USource from '../models/M3USource';
 import { syncXtreamSource, verifyXtreamSource } from './xtream-service';
 import { syncM3USource } from './m3u-service';
 import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
+import { expireStaleCodesAndReturnCredit } from './subscription-service';
 
 export interface SubtaskResult {
   name: string;
@@ -49,6 +50,7 @@ const XTREAM_SYNC_INTERVAL = intervalMs(process.env.XTREAM_SYNC_INTERVAL_MS, 216
 const M3U_SYNC_INTERVAL = intervalMs(process.env.M3U_SYNC_INTERVAL_MS, 21600000);
 const OPS_REPORT_INTERVAL = intervalMs(process.env.OPS_REPORT_INTERVAL_MS, 86400000);
 const EXPIRY_ALERT_INTERVAL = intervalMs(process.env.EXPIRY_ALERT_INTERVAL_MS, 86400000);
+const CODE_EXPIRY_INTERVAL = intervalMs(process.env.CODE_EXPIRY_INTERVAL_MS, 86400000);
 
 /** Daily operations report to admins (codes activated per reseller, new users, …). */
 async function dailyReportHandler(): Promise<TaskResult> {
@@ -80,6 +82,36 @@ async function expiryAlertHandler(): Promise<TaskResult> {
     },
   ];
   return { summary: { ok: result.ok, sent: result.sent }, subtasks };
+}
+
+/** Daily: expire UNUSED reseller codes past their window and return credit. */
+async function codeExpiryHandler(): Promise<TaskResult> {
+  const start = Date.now();
+  try {
+    const result = await expireStaleCodesAndReturnCredit();
+    const subtasks: SubtaskResult[] = [
+      {
+        name: 'code-expiry-check',
+        status: 'completed',
+        durationMs: Date.now() - start,
+        result: { expired: result.expired, creditReturned: result.creditReturned.length },
+      },
+    ];
+    return {
+      summary: { expired: result.expired, creditReturned: result.creditReturned.length },
+      subtasks,
+    };
+  } catch (err: any) {
+    const subtasks: SubtaskResult[] = [
+      {
+        name: 'code-expiry-check',
+        status: 'failed',
+        durationMs: Date.now() - start,
+        error: err?.message || String(err),
+      },
+    ];
+    return { summary: { ok: false, error: err?.message || String(err) }, subtasks };
+  }
 }
 
 async function livenessHandler(): Promise<TaskResult> {
@@ -408,6 +440,13 @@ const tasks: TaskDefinition[] = [
     description: 'Email users whose ACTIVE subscription expires within 3 days',
     intervalMs: EXPIRY_ALERT_INTERVAL,
     handler: expiryAlertHandler,
+  },
+  {
+    name: 'code-expiry-check',
+    displayName: 'Code Expiry & Credit Return',
+    description: 'Expire unused reseller codes past their validity window and return the credit to the reseller',
+    intervalMs: CODE_EXPIRY_INTERVAL,
+    handler: codeExpiryHandler,
   },
 ];
 
