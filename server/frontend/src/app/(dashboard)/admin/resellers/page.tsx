@@ -21,6 +21,7 @@ interface ResellerData {
   username?: string;
   prefix?: string;
   stats?: { total: number; activated: number; remaining: number };
+  purchasedValue?: number;
   createdAt?: string;
 }
 
@@ -320,6 +321,15 @@ export default function ResellersPage() {
           </div>
         );
       },
+    },
+    {
+      key: 'purchasedValue',
+      header: t('resellers.purchasedValue'),
+      cell: (r) => (
+        <span className="tabular-nums whitespace-nowrap" dir="ltr">
+          {(r.purchasedValue || 0).toLocaleString()} <span className="text-xs text-muted-foreground">دج</span>
+        </span>
+      ),
     },
     {
       key: 'actions',

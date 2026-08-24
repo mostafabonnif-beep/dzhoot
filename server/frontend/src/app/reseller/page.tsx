@@ -77,7 +77,7 @@ export default function ResellerDashboardPage() {
     name: string;
     city: string;
     prefix?: string;
-    stats: { total: number; activated: number; remaining: number };
+    stats: { total: number; activated: number; activatedThisMonth: number; remaining: number };
     credit: CreditItem[];
     prices?: Array<{ planId: string; price: number; currency: string; plan: { name: string; durationDays: number } }>;
     account?: { purchasedQty: number; purchasedValue: number; consumedQty: number; returnedQty: number; netQty: number };
@@ -90,6 +90,7 @@ export default function ResellerDashboardPage() {
   const [codes, setCodes] = useState<CodeItem[]>([]);
   const [codesLoading, setCodesLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
 
   // Ledger (سجل حركات الرصيد)
   const [ledger, setLedger] = useState<Array<{ _id: string; type: string; quantity: number; balanceAfter: number; planName: string; note: string; createdAt: string }>>([]);
@@ -98,6 +99,12 @@ export default function ResellerDashboardPage() {
   // Change password
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '' });
   const [pwSaving, setPwSaving] = useState(false);
+
+  // Batch search
+  const [batchSearch, setBatchSearch] = useState('');
+  const filteredBatches = batchSearch.trim()
+    ? batches.filter((b) => String(b.batchNumber).includes(batchSearch.trim()) || (b.plan?.name || '').toLowerCase().includes(batchSearch.trim().toLowerCase()))
+    : batches;
 
   // Generation state
   const [genPlanId, setGenPlanId] = useState('');
@@ -194,6 +201,14 @@ export default function ResellerDashboardPage() {
       setCopied(true);
       toast(t('portal.copied'), 'success');
       setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  function copyOne(code: string, id: string) {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopiedCodeId(id);
+      toast(t('portal.copied'), 'success');
+      setTimeout(() => setCopiedCodeId(null), 1500);
     });
   }
 
@@ -322,7 +337,7 @@ export default function ResellerDashboardPage() {
 
         {me && (
           <>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div className="border border-border bg-card p-4">
                 <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.totalCodes')}</div>
                 <div className="text-2xl font-semibold mt-1">{me.stats.total}</div>
@@ -330,6 +345,10 @@ export default function ResellerDashboardPage() {
               <div className="border border-border bg-card p-4">
                 <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.activated')}</div>
                 <div className="text-2xl font-semibold mt-1 text-emerald-600 dark:text-emerald-400">{me.stats.activated}</div>
+              </div>
+              <div className="border border-border bg-card p-4">
+                <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.monthActivations')}</div>
+                <div className="text-2xl font-semibold mt-1 text-primary">{me.stats.activatedThisMonth ?? 0}</div>
               </div>
               <div className="border border-border bg-card p-4">
                 <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.remainingCredit')}</div>
@@ -481,6 +500,13 @@ export default function ResellerDashboardPage() {
           <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
             <Package className="h-4 w-4" /> {t('portal.myBatches')}
           </h2>
+          <input
+            type="text"
+            className="mb-3 flex h-10 w-full max-w-sm border border-border bg-card px-3 py-2 text-sm"
+            placeholder={t('portal.searchBatches')}
+            value={batchSearch}
+            onChange={(e) => setBatchSearch(e.target.value)}
+          />
           {batches.length === 0 ? (
             <div className="border border-dashed border-border p-8 text-center text-muted-foreground">
               {t('portal.noBatches')}
@@ -499,7 +525,7 @@ export default function ResellerDashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {batches.map((b) => (
+                  {filteredBatches.map((b) => (
                     <tr key={b._id} className="border-b border-border/50 last:border-0">
                       <td className="p-3 font-medium">
                         {t('portal.batch')} {b.batchNumber}
@@ -564,7 +590,16 @@ export default function ResellerDashboardPage() {
                 <div key={c._id} className="border border-border px-3 py-2">
                   <div className="flex items-center justify-between gap-3">
                     <code className="text-sm font-mono" dir="ltr">{c.code}</code>
-                    {statusBadge(c.status)}
+                    <div className="flex items-center gap-2">
+                      {statusBadge(c.status)}
+                      <button
+                        onClick={() => copyOne(c.code, c._id)}
+                        className="p-1 text-muted-foreground hover:text-primary"
+                        title={t('portal.copyCode')}
+                      >
+                        {copiedCodeId === c._id ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
                   </div>
                   {c.status === 'ACTIVATED' && c.subscriptionExpiresAt && (
                     <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-muted-foreground">

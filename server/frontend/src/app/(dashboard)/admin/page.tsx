@@ -61,6 +61,7 @@ interface BusinessData {
   byPlanTotal: Array<{ planId: string; planName: string; count: number; price: number; currency: string; revenue: number }>;
   creditByPlan: Array<{ planId: string; planName: string; quantity: number }>;
   recentActivations: Array<{ code: string; planName: string; price: number; currency: string; resellerName: string | null; activatedAt: string }>;
+  byReseller: Array<{ resellerId: string; name: string; city: string; monthActivations: number; totalActivations: number; purchases: number }>;
 }
 
 const quickActions = [
@@ -385,6 +386,35 @@ export default function AdminDashboard() {
                         <td className="px-4 py-2 text-xs text-muted-foreground">
                           {new Date(a.activatedAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                         </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {business.byReseller.length > 0 && (
+            <div className="border-t border-border">
+              <div className="px-4 py-3">
+                <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-muted-foreground">مبيعات المحلات</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-y border-border bg-muted/40 text-right text-xs text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">المحل</th>
+                      <th className="px-4 py-2 font-medium">تفعيلات الشهر</th>
+                      <th className="px-4 py-2 font-medium">إجمالي التفعيلات</th>
+                      <th className="px-4 py-2 font-medium">قيمة المشتريات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {business.byReseller.map((r) => (
+                      <tr key={r.resellerId} className="border-b border-border/60 last:border-0">
+                        <td className="px-4 py-2 font-medium">{r.name} {r.city ? <span className="text-xs text-muted-foreground">— {r.city}</span> : null}</td>
+                        <td className="px-4 py-2 tabular-nums">{r.monthActivations}</td>
+                        <td className="px-4 py-2 tabular-nums">{r.totalActivations}</td>
+                        <td className="px-4 py-2 tabular-nums" dir="ltr">{fmtMoney(r.purchases)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -46,6 +46,14 @@ router.get('/me', async (req, res) => {
       ActivationCode.countDocuments({ resellerId: r._id, status: 'ACTIVATED' }),
       ActivationCode.countDocuments({ resellerId: r._id, status: 'REVOKED' }),
     ]);
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const activatedThisMonth = await ActivationCode.countDocuments({
+      resellerId: r._id,
+      status: 'ACTIVATED',
+      activatedAt: { $gte: monthStart },
+    });
 
     // Wholesale prices per plan (سعر الجملة) with plan info.
     const pricePlanIds = [...new Set((r.prices || []).map((p) => String(p.planId)))];
@@ -98,6 +106,7 @@ router.get('/me', async (req, res) => {
         stats: {
           total,
           activated,
+          activatedThisMonth,
           remaining: Math.max(total - activated - revoked, 0),
           revoked,
         },

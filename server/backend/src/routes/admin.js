@@ -20,6 +20,7 @@ const Plan = require('../models/Plan');
 const ActivationCode = require('../models/ActivationCode');
 const Subscription = require('../models/Subscription');
 const Reseller = require('../models/Reseller');
+const CreditTransaction = require('../models/CreditTransaction');
 const { epgService } = require('../services/epg-service');
 const { getPlaybackQualityStats } = require('../services/playback-event-service');
 const {
@@ -1595,6 +1596,48 @@ router.get('/business/summary', async (req, res) => {
       };
     });
 
+    // Sales per reseller: activations (this month + total) + purchase value from ledger.
+    const [activByResellerMonth, activByResellerTotal, purchaseByReseller] = await Promise.all([
+      ActivationCode.aggregate([
+        { $match: { status: 'ACTIVATED', activatedAt: { $gte: monthStart }, resellerId: { $ne: null } } },
+        { $group: { _id: '$resellerId', count: { $sum: 1 } } },
+      ]),
+      ActivationCode.aggregate([
+        { $match: { status: 'ACTIVATED', resellerId: { $ne: null } } },
+        { $group: { _id: '$resellerId', count: { $sum: 1 } } },
+      ]),
+      CreditTransaction.aggregate([{ $match: { type: 'GRANT' } }, { $group: { _id: '$resellerId', value: { $sum: '$amount' } } }]),
+    ]);
+    const resellerAgg = new Map();
+    for (const a of activByResellerMonth) {
+      const e = resellerAgg.get(String(a._id)) || { month: 0, total: 0, purchases: 0 };
+      e.month = a.count;
+      resellerAgg.set(String(a._id), e);
+    }
+    for (const a of activByResellerTotal) {
+      const e = resellerAgg.get(String(a._id)) || { month: 0, total: 0, purchases: 0 };
+      e.total = a.count;
+      resellerAgg.set(String(a._id), e);
+    }
+    for (const p of purchaseByReseller) {
+      const e = resellerAgg.get(String(p._id)) || { month: 0, total: 0, purchases: 0 };
+      e.purchases = p.value;
+      resellerAgg.set(String(p._id), e);
+    }
+    const resellerDocs = await Reseller.find({ _id: { $in: [...resellerAgg.keys()] } }).select('name city').lean();
+    const resellerNameMap = new Map(resellerDocs.map((r) => [String(r._id), r]));
+    const byReseller = [...resellerAgg.entries()]
+      .map(([id, s]) => ({
+        resellerId: id,
+        name: resellerNameMap.get(id)?.name || '—',
+        city: resellerNameMap.get(id)?.city || '',
+        monthActivations: s.month,
+        totalActivations: s.total,
+        purchases: s.purchases,
+      }))
+      .sort((a, b) => b.totalActivations - a.totalActivations)
+      .slice(0, 10);
+
     res.json({
       success: true,
       data: {
@@ -1614,6 +1657,7 @@ router.get('/business/summary', async (req, res) => {
         byPlanTotal,
         creditByPlan: creditByPlanRows,
         recentActivations: recentData,
+        byReseller,
       },
     });
   } catch (error) {
