@@ -192,7 +192,7 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <div className="h-screen overflow-y-auto flex">
+    <div className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto flex">
       <div className="hidden lg:flex lg:w-[420px] flex-col justify-between border-r border-border bg-card p-10">
         <div>
           <Link href="/" className="inline-block">

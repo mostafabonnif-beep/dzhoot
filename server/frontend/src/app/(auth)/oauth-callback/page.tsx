@@ -58,7 +58,7 @@ function OAuthCallbackContent() {
 
   if (error) {
     return (
-      <div className="h-screen overflow-y-auto flex items-center justify-center bg-background px-6">
+      <div className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto flex items-center justify-center bg-background px-6">
         <div className="w-full max-w-sm text-center space-y-4">
           <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">
             Authentication Failed
@@ -78,7 +78,7 @@ function OAuthCallbackContent() {
   }
 
   return (
-    <div className="h-screen overflow-y-auto flex items-center justify-center bg-background">
+    <div className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto flex items-center justify-center bg-background">
       <div className="text-center space-y-3">
         <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" />
         <p className="text-sm text-muted-foreground">Completing sign in...</p>
@@ -91,7 +91,7 @@ export default function OAuthCallbackPage() {
   return (
     <Suspense
       fallback={
-        <div className="h-screen overflow-y-auto flex items-center justify-center bg-background">
+        <div className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto flex items-center justify-center bg-background">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       }
