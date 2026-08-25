@@ -41,7 +41,7 @@ interface WizardShellProps {
 }
 
 export function WizardShell({ mode }: WizardShellProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [currentStep, setCurrentStep] = useState(0);
 
   // Step 1
@@ -257,7 +257,7 @@ export function WizardShell({ mode }: WizardShellProps) {
           aria-label={t('quickPick.previousStep')}
           className="inline-flex items-center gap-1.5 px-3 py-2 sm:gap-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-medium border-2 border-border bg-card hover:border-primary/40 uppercase tracking-[0.1em] transition-colors disabled:opacity-30 disabled:pointer-events-none"
         >
-          <ChevronLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> {t('quickPick.back')}
+          {locale === 'ar' ? <ChevronRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> : <ChevronLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" />} {t('quickPick.back')}
         </button>
 
         <span className="text-[10px] sm:text-xs text-muted-foreground" aria-live="polite">
@@ -276,7 +276,7 @@ export function WizardShell({ mode }: WizardShellProps) {
               : currentStep >= 1 && currentStep <= 3
                 ? t('quickPick.nextSkip')
                 : t('quickPick.next')}{' '}
-            <ChevronRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+            {locale === 'ar' ? <ChevronLeft className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> : <ChevronRight className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
           </button>
         ) : (
           <div />

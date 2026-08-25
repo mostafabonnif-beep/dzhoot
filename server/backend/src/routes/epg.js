@@ -155,8 +155,8 @@ router.post('/sources/:key/test', async (req, res) => {
 router.get('/unmatched-channels', async (req, res) => {
   try {
     const { search, page, pageSize } = req.query;
-    const p = parseInt(page, 10) || 1;
-    const ps = Math.min(parseInt(pageSize, 10) || 50, 200);
+    const p = Math.max(parseInt(page, 10) || 1, 1);
+    const ps = Math.min(Math.max(parseInt(pageSize, 10) || 50, 1), 200);
 
     const [programIds, channels] = await Promise.all([
       EpgProgram.distinct('channelEpgId'),

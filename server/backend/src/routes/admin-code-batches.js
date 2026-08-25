@@ -45,7 +45,7 @@ router.get('/', async (req, res) => {
     const resellerIds = [...new Set(batches.map((b) => String(b.resellerId)))];
     const planIds = [...new Set(batches.map((b) => String(b.planId)))];
     const [resellers, plans] = await Promise.all([
-      Reseller.find({ _id: { $in: resellerIds } }).select('name city status').lean(),
+      Reseller.find({ _id: { $in: resellerIds } }).select('name city status prices').lean(),
       Plan.find({ _id: { $in: planIds } }).select('name durationDays').lean(),
     ]);
     const resellerMap = new Map(resellers.map((r) => [String(r._id), r]));

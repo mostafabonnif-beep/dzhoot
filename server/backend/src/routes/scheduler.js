@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const { requireAuth, requireAdmin } = require('./auth');
 const { schedulerService } = require('../services/scheduler-service');
@@ -26,8 +27,8 @@ router.get('/runs', async (req, res) => {
   try {
     const { page, pageSize, taskName } = req.query;
     const result = await schedulerService.getRuns({
-      page: page ? parseInt(page, 10) : 1,
-      pageSize: pageSize ? parseInt(pageSize, 10) : 20,
+      page: Math.max(parseInt(page, 10) || 1, 1),
+      pageSize: Math.min(Math.max(parseInt(pageSize, 10) || 20, 1), 200),
       taskName: taskName || undefined,
     });
     res.json({ success: true, ...result });
@@ -40,6 +41,9 @@ router.get('/runs', async (req, res) => {
 // Single run detail
 router.get('/runs/:id', async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ success: false, error: 'Invalid run id' });
+    }
     const run = await schedulerService.getRunById(req.params.id);
     if (!run) {
       return res.status(404).json({ success: false, error: 'Run not found' });
@@ -123,6 +127,9 @@ router.post('/trigger/:taskName', async (req, res) => {
       runPromise.then((r) => ({ started: true, result: r })),
       new Promise((resolve) => setTimeout(() => resolve({ started: true, pending: true }), 500)),
     ]);
+    // If the 500ms timeout won the race, the task keeps running in background —
+    // swallow any late rejection so it can't surface as an unhandledRejection.
+    runPromise.catch(() => {});
 
     res.json({ success: true, message: `Task '${taskName}' triggered`, data: result });
   } catch (error) {

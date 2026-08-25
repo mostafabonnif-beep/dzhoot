@@ -20,6 +20,9 @@ import {
   HandCoins,
   MessageCircle,
   Trash2,
+  Users,
+  ChevronDown,
+  ChevronUp,
   CheckCheck,
 } from 'lucide-react';
 import api, { decodeTokenRole } from '@/lib/api';
@@ -148,6 +151,22 @@ export default function ResellerDashboardPage() {
   } | null>(null);
   const [statementLoading, setStatementLoading] = useState(false);
 
+  // Clients (عملائي)
+  const [clients, setClients] = useState<Array<{
+    key: string;
+    name: string;
+    phone: string;
+    codeCount: number;
+    activatedCount: number;
+    nextExpiry: string | null;
+    expiringSoon: boolean;
+    codes: Array<{ _id: string; code: string; planName: string; status: string; activatedAt: string | null; expiresAt: string | null; customDurationDays: number | null }>;
+  }>>([]);
+  const [clientsSummary, setClientsSummary] = useState({ totalClients: 0, totalCodes: 0, activatedCodes: 0, expiringSoon: 0 });
+  const [clientsLoading, setClientsLoading] = useState(false);
+  const [clientsSearch, setClientsSearch] = useState('');
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
+
   // Customer debts (ديون الزبائن)
   const [debts, setDebts] = useState<DebtItem[]>([]);
   const [debtsLoading, setDebtsLoading] = useState(false);
@@ -193,6 +212,19 @@ export default function ResellerDashboardPage() {
     }
   }, []);
 
+  const loadClients = useCallback(async () => {
+    setClientsLoading(true);
+    try {
+      const res = await api.get('/reseller/clients');
+      setClients(res.data?.data?.clients || []);
+      setClientsSummary(res.data?.data?.summary || { totalClients: 0, totalCodes: 0, activatedCodes: 0, expiringSoon: 0 });
+    } catch {
+      // clients are secondary — ignore failures
+    } finally {
+      setClientsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (hydrated) return;
     let active = true;
@@ -227,7 +259,8 @@ export default function ResellerDashboardPage() {
     loadLedger();
     loadDebts();
     loadStatement();
-  }, [hydrated, accessToken, router, load, loadStatement]);
+    loadClients();
+  }, [hydrated, accessToken, router, load, loadStatement, loadClients]);
 
   async function loadLedger() {
     setLedgerLoading(true);
@@ -632,9 +665,142 @@ export default function ResellerDashboardPage() {
 
         <section className="border border-border bg-card p-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
-            <History className="h-4 w-4" /> {t('portal.myLedger')}
+            <Users className="h-4 w-4" /> {t('portal.clients')}
           </h2>
-          {ledgerLoading ? (
+          <div className="text-xs text-muted-foreground mb-3">{t('portal.clientsHint')}</div>
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <span className="inline-flex rounded-full bg-primary/10 text-primary px-3 py-1 text-xs font-medium">
+              {t('portal.clientTotal')}: {clientsSummary.totalClients}
+            </span>
+            <span className="inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium">
+              {t('portal.clientCodes')}: {clientsSummary.totalCodes}
+            </span>
+            {clientsSummary.expiringSoon > 0 && (
+              <span className="inline-flex rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 px-3 py-1 text-xs font-medium">
+                ⏰ {t('portal.clientExpiringSoon')}: {clientsSummary.expiringSoon}
+              </span>
+            )}
+            <input
+              className={`${inputClass} max-w-56`}
+              placeholder={t('portal.clientSearch')}
+              value={clientsSearch}
+              onChange={(e) => setClientsSearch(e.target.value)}
+            />
+          </div>
+          {clientsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : clients.length === 0 ? (
+            <div className="text-sm text-muted-foreground">{t('portal.clientNoData')}</div>
+          ) : (
+            <div className="space-y-2">
+              {clients
+                .filter(
+                  (c) =>
+                    !clientsSearch.trim() ||
+                    c.name.toLowerCase().includes(clientsSearch.trim().toLowerCase()) ||
+                    c.phone.includes(clientsSearch.trim().replace(/\D/g, '')),
+                )
+                .map((c) => {
+                  const waPhone = c.phone.replace(/\D/g, '');
+                  const waMsg = t('portal.waRenewMsg').replace('{name}', c.name || '');
+                  return (
+                    <div key={c.key} className="border border-border/70">
+                      <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+                        <button
+                          onClick={() => setExpandedClient(expandedClient === c.key ? null : c.key)}
+                          className="flex-1 min-w-0 text-left"
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-sm">{c.name || t('portal.clientNoName')}</span>
+                            {c.phone && (
+                              <span className="text-xs text-muted-foreground" dir="ltr">
+                                {c.phone}
+                              </span>
+                            )}
+                            <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-[11px]">
+                              {t('portal.clientCodes')}: {c.codeCount}
+                            </span>
+                            {c.activatedCount > 0 && (
+                              <span className="inline-flex rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 px-2 py-0.5 text-[11px]">
+                                {t('portal.activated')}: {c.activatedCount}
+                              </span>
+                            )}
+                            {c.nextExpiry && (
+                              <span
+                                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                                  c.expiringSoon
+                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                                    : 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                                }`}
+                              >
+                                {t('portal.clientNextExpiry')} {new Date(c.nextExpiry).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                        {waPhone && (
+                          <a
+                            href={`https://wa.me/${waPhone}?text=${encodeURIComponent(waMsg)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-emerald-600/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/5"
+                          >
+                            <MessageCircle className="h-3.5 w-3.5" /> {t('portal.whatsappRemind')}
+                          </a>
+                        )}
+                        <button
+                          onClick={() => setExpandedClient(expandedClient === c.key ? null : c.key)}
+                          className="p-1 text-muted-foreground"
+                        >
+                          {expandedClient === c.key ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
+                      </div>
+                      {expandedClient === c.key && (
+                        <div className="border-t border-border/60 overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-border/60 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                                <th className="text-right p-2">{t('portal.codeCol')}</th>
+                                <th className="text-right p-2">{t('portal.ledgerPlan')}</th>
+                                <th className="text-right p-2">{t('portal.ledgerStatus')}</th>
+                                <th className="text-right p-2">{t('portal.clientExpiryCol')}</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {c.codes.map((cd) => (
+                                <tr key={cd._id} className="border-b border-border/40 last:border-0">
+                                  <td className="p-2 font-mono text-xs" dir="ltr">
+                                    {cd.code}
+                                    {cd.customDurationDays ? (
+                                      <span className="mr-1 inline-flex rounded-full bg-primary/10 text-primary px-1.5 py-0.5 text-[10px]">
+                                        {cd.customDurationDays} {t('portal.days')}
+                                      </span>
+                                    ) : null}
+                                  </td>
+                                  <td className="p-2 text-xs">{cd.planName}</td>
+                                  <td className="p-2 text-xs">{statusBadge(cd.status as CodeItem['status'])}</td>
+                                  <td className="p-2 text-xs text-muted-foreground">
+                                    {cd.expiresAt ? new Date(cd.expiresAt).toLocaleDateString() : '—'}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </section>
+
+        <section className="border border-border bg-card p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
+            <History className="h-4 w-4" /> {t('portal.myLedger')}
+          </h2>          {ledgerLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
