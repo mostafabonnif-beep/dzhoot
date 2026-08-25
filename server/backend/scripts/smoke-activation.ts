@@ -238,7 +238,7 @@ async function main() {
   // 13. Stream authorization gate (E2E)
   const ch = await jfetch(
     '/api/v1/admin/channels',
-    { method: 'POST', body: JSON.stringify({ channelId: 'smoke-live-1', channelName: 'Smoke Live', channelUrl: 'http://stream.example/live.m3u8', channelGroup: 'Smoke' }) },
+    { method: 'POST', body: JSON.stringify({ channelId: 'smoke-live-1', channelName: 'Smoke Live', channelUrl: 'https://example.com/live.m3u8', channelGroup: 'Smoke' }) },
     adminHeaders,
   );
   check('admin creates a live channel', ch.status === 201 || ch.status === 200, ch.body);

@@ -5,7 +5,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx } = require('../services/audit-log');
-const { sendNotificationToDevices, notificationStatusFromFcm } = require('../services/fcm-service');
+const { sendNotificationToDevices, pushOutcome } = require('../services/fcm-service');
 
 // Admin-only notifications: /api/v1/admin/notifications
 router.use(requireAuth);
@@ -78,11 +78,13 @@ router.post('/:id/send', async (req, res) => {
       audience: notification.audience,
     });
 
-    // Honest status: SENT only when something was actually delivered.
-    const outcome = notificationStatusFromFcm(fcm);
-    notification.status = outcome.status;
+    // The in-app channel always delivers (users see the notification in the
+    // app), so the status is SENT; push outcome lives in deliveryStats so the
+    // operator can see whether phones actually received a push.
+    const outcome = pushOutcome(fcm);
+    notification.status = 'SENT';
     notification.sentAt = new Date();
-    notification.deliveryStats = { ...fcm, reason: outcome.reason };
+    notification.deliveryStats = { ...fcm, pushDelivered: outcome.pushDelivered, reason: outcome.reason };
     await notification.save();
 
     audit({ ...reqCtx(req), action: 'NOTIFICATION_SEND', resource: 'Notification', resourceId: String(id), metadata: fcm });

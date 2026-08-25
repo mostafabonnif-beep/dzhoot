@@ -104,26 +104,25 @@ export async function sendNotificationToDevices(notification: {
 }
 
 /**
- * Decide an honest notification status from a delivery result. A notification
- * is SENT only when at least one device actually received it; "delivered to
- * nobody" (not configured, no tokens, or all attempts failed) is FAILED so the
- * operator can see the problem instead of a false success.
+ * Push-outcome summary for a delivery result. The notification itself is
+ * ALWAYS marked SENT — the in-app channel delivers regardless of FCM — but
+ * pushDelivered/reason tell the operator whether phones actually got the push.
  */
-export function notificationStatusFromFcm(fcm: {
+export function pushOutcome(fcm: {
   configured: boolean;
   attempted: number;
   sent: number;
   failed: number;
   skipped?: string;
-}): { status: 'SENT' | 'FAILED'; reason: string } {
+}): { pushDelivered: boolean; reason: string } {
   if (fcm.configured === false) {
-    return { status: 'FAILED', reason: fcm.skipped || 'FCM is not configured' };
-  }
-  if (fcm.attempted === 0) {
-    return { status: 'FAILED', reason: 'No registered devices with push tokens' };
+    return { pushDelivered: false, reason: fcm.skipped || 'FCM is not configured' };
   }
   if (fcm.sent > 0) {
-    return { status: 'SENT', reason: '' };
+    return { pushDelivered: true, reason: '' };
   }
-  return { status: 'FAILED', reason: `All ${fcm.failed} delivery attempts failed` };
+  if (fcm.attempted === 0) {
+    return { pushDelivered: false, reason: 'No registered devices with push tokens' };
+  }
+  return { pushDelivered: false, reason: `All ${fcm.failed} push attempts failed (in-app delivery still works)` };
 }

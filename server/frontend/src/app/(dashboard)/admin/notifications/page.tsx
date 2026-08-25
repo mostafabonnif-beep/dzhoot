@@ -18,7 +18,7 @@ interface Notification {
   scheduledAt?: string | null;
   sentAt?: string | null;
   createdAt?: string;
-  deliveryStats?: { configured?: boolean; attempted?: number; sent?: number; failed?: number; skipped?: string; reason?: string } | null;
+  deliveryStats?: { configured?: boolean; attempted?: number; sent?: number; failed?: number; skipped?: string; reason?: string; pushDelivered?: boolean } | null;
 }
 
 export default function NotificationsPage() {
@@ -134,7 +134,14 @@ export default function NotificationsPage() {
           'success',
         );
       } else {
-        toast(L(`لم يُرسل: ${reason || 'لا أجهزة مستهدفة'}`, `Non envoyée: ${reason || 'aucun appareil ciblé'}`, `Not sent: ${reason || 'no targeted devices'}`), 'error');
+        toast(
+          L(
+            `أُرسلت في التطبيق ✓ — لكن الدفع لم يصل: ${reason || 'FCM غير مضبوط'}`,
+            `Envoyée dans l'app ✓ — mais pas de push: ${reason || 'FCM non configuré'}`,
+            `Delivered in-app ✓ — but no push: ${reason || 'FCM not configured'}`,
+          ),
+          'info',
+        );
       }
       await fetchNotifications();
     } catch {
@@ -193,7 +200,6 @@ export default function NotificationsPage() {
             <option value="DRAFT">{L('مسودة', 'Brouillons', 'Drafts')}</option>
             <option value="SCHEDULED">{L('مجدول', 'Programmées', 'Scheduled')}</option>
             <option value="SENT">{L('مُرسَل', 'Envoyées', 'Sent')}</option>
-            <option value="FAILED">{L('فشل', 'Échec', 'Failed')}</option>
           </select>
           <button
             onClick={() => setShowForm((v) => !v)}
@@ -330,6 +336,11 @@ export default function NotificationsPage() {
                           ? L('فشل', 'Échec', 'Failed')
                           : L('مسودة', 'Brouillon', 'Draft')}
                   </span>
+                  {n.status === 'SENT' && n.deliveryStats && n.deliveryStats.pushDelivered === false && (
+                    <span className="shrink-0 text-[10px] px-1.5 py-0.5 border border-signal-amber/40 text-signal-amber">
+                      {L('دون دفع', 'Sans push', 'No push')}
+                    </span>
+                  )}
                   <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                     {n.audience === 'ALL'
                       ? L('الكل', 'Tous', 'All')
@@ -343,13 +354,13 @@ export default function NotificationsPage() {
                     ? ` · ${L('مجدول', 'Programmée le', 'Scheduled')}: ${new Date(n.scheduledAt).toLocaleString()}`
                     : ''}
                   {n.sentAt ? ` · ${L('أُرسل', 'Envoyée le', 'Sent')}: ${new Date(n.sentAt).toLocaleString()}` : ''}
-                  {n.status === 'FAILED' && n.deliveryStats?.reason
-                    ? ` · ${L('السبب', 'Raison', 'Reason')}: ${n.deliveryStats.reason}`
+                  {n.status === 'SENT' && n.deliveryStats && n.deliveryStats.pushDelivered === false && n.deliveryStats.reason
+                    ? ` · ${L('الدَّفع', 'Push', 'Push')}: ${n.deliveryStats.reason}`
                     : ''}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {(n.status === 'DRAFT' || n.status === 'FAILED') && (
+                {(n.status === 'DRAFT' || (n.status === 'SENT' && n.deliveryStats?.pushDelivered === false)) && (
                   <button
                     onClick={() => handleSend(n)}
                     disabled={sendingId === n._id}
@@ -360,8 +371,8 @@ export default function NotificationsPage() {
                     ) : (
                       <Send className="h-3.5 w-3.5" />
                     )}
-                    {n.status === 'FAILED'
-                      ? L('إعادة إرسال', 'Renvoyer', 'Resend')
+                    {n.status === 'SENT'
+                      ? L('إعادة إرسال الدفع', 'Renvoyer le push', 'Resend push')
                       : L('إرسال', 'Envoyer', 'Send')}
                   </button>
                 )}
