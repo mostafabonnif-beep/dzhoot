@@ -9,6 +9,7 @@ const Plan = require('../models/Plan');
 const { audit, reqCtx } = require('../services/audit-log');
 const bcrypt = require('bcryptjs');
 const CreditTransaction = require('../models/CreditTransaction');
+const ResellerCreditDebt = require('../models/ResellerCreditDebt');
 const { recordCreditTx, returnUnusedCreditForReseller } = require('../services/subscription-service');
 
 // Admin-only reseller management: /api/v1/admin/resellers
@@ -19,6 +20,36 @@ router.use(requireAdmin);
 function parseId(id) {
   return mongoose.isValidObjectId(id) ? id : null;
 }
+
+// Auto-create a debt for an unpaid credit grant. amount = Σ positive delta ×
+// wholesale price (same math as the ledger's purchase value). Returns the
+// created debt or null (no positive value / already marked paid).
+async function autoDebtFromGrant(adminId, resellerId, deltasByPlan, priceMap, opts = {}) {
+  const value = deltasByPlan.reduce((sum, { planId, delta }) => {
+    if (delta <= 0) return sum;
+    return sum + delta * (priceMap.get(planId) || 0);
+  }, 0);
+  if (value <= 0) return null;
+  if (opts.creditPaid === true) return null;
+  const debt = await ResellerCreditDebt.create({
+    adminId,
+    resellerId,
+    amount: Math.round(value * 100) / 100,
+    paidAmount: 0,
+    status: 'UNPAID',
+    autoFromGrant: true,
+    note: opts.note || `منح رصيد بقيمة ${Math.round(value)} دج`,
+  });
+  audit({
+    ...reqCtx(opts.req),
+    action: 'RESELLER_CREDIT_DEBT_AUTO',
+    resource: 'ResellerCreditDebt',
+    resourceId: String(debt._id),
+    changes: { after: { resellerId: String(resellerId), amount: debt.amount } },
+  });
+  return debt;
+}
+
 
 /** Clean a credit array: [{planId, quantity}] — merge duplicates by summing, drop invalid. */
 function cleanCredit(raw) {
@@ -111,6 +142,16 @@ router.post('/', async (req, res) => {
         createdBy: req.user?.id || null,
       });
     }
+    // Auto debt: initial credit granted without upfront payment → record what's owed
+    if (credit !== undefined && Array.isArray(credit) && credit.length > 0) {
+      await autoDebtFromGrant(
+        req.user.id,
+        String(doc._id),
+        cleanCredit(credit).map((c) => ({ planId: String(c.planId), delta: Number(c.quantity) || 0 })),
+        priceMap,
+        { req, creditPaid: req.body.creditPaid === true, note: 'رصيد عند إنشاء المحل (غير مسدد)' },
+      );
+    }
     audit({ ...reqCtx(req), action: 'RESELLER_CREATE', resource: 'Reseller', resourceId: String(doc._id), changes: { after: { name: doc.name, city: doc.city } } });
     res.status(201).json({ success: true, data: doc });
   } catch (err) {
@@ -187,6 +228,14 @@ router.put('/:id', async (req, res) => {
           createdBy: req.user?.id || null,
         });
       }
+      // Auto debt: credit increased without upfront payment → record what's owed
+      await autoDebtFromGrant(
+        req.user.id,
+        String(doc._id),
+        [...newMap.keys()].map((planId) => ({ planId, delta: (newMap.get(planId) || 0) - (oldMap.get(planId) || 0) })),
+        priceMap,
+        { req, creditPaid: req.body.creditPaid === true, note: 'زيادة رصيد (غير مسددة)' },
+      );
     }
     audit({ ...reqCtx(req), action: 'RESELLER_UPDATE', resource: 'Reseller', resourceId: String(doc._id) });
     res.json({ success: true, data: doc });
@@ -284,5 +333,7 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
+
+module.exports = router;
 
 module.exports = router;
