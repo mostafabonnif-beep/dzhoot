@@ -205,10 +205,10 @@ export default function VersionsPage() {
           <p className="text-sm text-muted-foreground">{t('common.noData')}</p>
           <p className="text-xs text-muted-foreground mt-1">
             {locale === 'ar'
-              ? 'ارفع ملف APK أو اربط GitHub Releases لإدارة الإصدارات'
+              ? 'الإصدارات تُدار عبر GitHub Releases (workflow release-candidate) أو بوضع ملف APK في مجلد downloads/ على الخادم ثم تسجيل إصدار جديد من هنا'
               : locale === 'fr'
-                ? 'Téléversez un APK ou configurez les versions GitHub Releases pour gérer les versions'
-                : 'Upload an APK or configure GitHub releases to manage versions'}
+                ? 'Les versions sont gérées via les versions GitHub (workflow release-candidate) ou en plaçant un APK dans le dossier downloads/ du serveur, puis en enregistrant une nouvelle version ici'
+                : 'Versions are managed via GitHub Releases (release-candidate workflow) or by placing an APK in the server downloads/ folder, then registering a new version here'}
           </p>
         </div>
       )}
