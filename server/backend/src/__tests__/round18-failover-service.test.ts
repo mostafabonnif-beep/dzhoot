@@ -84,6 +84,24 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     expect(String(target!.source._id)).toBe(String(backup._id));
   });
 
+  it('getFailoverTarget accepts a backup added as Inactive + directPlayback (the planned setup)', async () => {
+    const backup = await XtreamSource.create({
+      name: 'Backup Maghreb (ottstreambox)',
+      serverUrl: 'http://ottstreambox.xyz:80',
+      usernameEncrypted: 'x',
+      passwordEncrypted: 'y',
+      status: 'Inactive', // per the plan: setup must not disturb current streams
+      verificationStatus: 'verified',
+      directPlayback: true,
+    });
+    const channel = await Channel.create({ channelId: 'CH-5', channelName: 'ENTV1', channelUrl: 'http://upstream/x', isActive: true });
+    await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-5', backupSourceId: backup._id, backupChannelName: 'ENTV1', backupStreamId: '31337' });
+
+    const target = await getFailoverTarget(channel);
+    expect(target).not.toBeNull();
+    expect(target!.streamUrl).toContain('/31337.m3u8');
+  });
+
   it('getFailoverTarget refuses an Inactive or unhealthy backup', async () => {
     const channel = await Channel.create({ channelId: 'CH-2', channelName: 'X', channelUrl: 'http://upstream/x', isActive: true });
     const inactive = await XtreamSource.create({ name: 'B1', serverUrl: 'http://b', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Inactive', verificationStatus: 'verified' });
