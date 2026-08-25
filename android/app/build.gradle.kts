@@ -31,17 +31,26 @@ android {
         applicationId = "com.dzhoof.iptv"
         minSdk = 28
         targetSdk = 34
-        // Official release line. Keep the code greater than legacy builds so
-        // tested production updates can install cleanly on existing devices.
-        // Bumped 10009 → 10010 for the 1.0.10 release (fixes the update path:
-        // the previous GitHub "latest" release shipped a debug-signed APK that
-        // Android rejected over release-signed installs).
-        versionCode = 10010
-        versionName = if (project.hasProperty("versionName")) {
+        // versionCode is DERIVED from versionName (major*10000 + minor*100 + patch)
+        // so release builds always advertise the code the server expects.
+        // It was previously hardcoded (10010): a v1.0.11 APK still advertised
+        // 10010, so after installing the update the app kept re-prompting
+        // (server latest 10011 > installed 10010) — an infinite update loop.
+        val buildVersionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
             "1.0.10"
         }
+        val buildVersionParts = buildVersionName
+            .trim()
+            .removePrefix("v")
+            .split("-")[0] // drop suffixes like "-rc.1" / "-staging"
+            .split(".")
+            .map { it.toIntOrNull() ?: 0 }
+        versionCode = buildVersionParts.getOrElse(0) { 0 } * 10000 +
+                buildVersionParts.getOrElse(1) { 0 } * 100 +
+                buildVersionParts.getOrElse(2) { 0 }
+        versionName = buildVersionName
         
         // API Base URL configuration — overridable at build time via the
         // `dzhoofApiUrl` Gradle property or the DZHOOF_API_URL env var so real
