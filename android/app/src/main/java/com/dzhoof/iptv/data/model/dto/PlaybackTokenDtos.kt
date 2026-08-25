@@ -25,6 +25,8 @@ data class PlaybackTokenResponse(
 data class PlaybackTokenData(
     @SerializedName("playbackUrl")
     val playbackUrl: String,
+    @SerializedName("proxyPlaybackUrl")
+    val proxyPlaybackUrl: String? = null,
     @SerializedName("mimeType")
     val mimeType: String? = null,
     @SerializedName("expiresAt")
