@@ -155,7 +155,7 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
         {/* Sidebar Footer / Collapse Toggle */}
         <div className="border-t border-border/70 p-3 hidden lg:flex items-center justify-between">
           {!sidebarCollapsed && (
-            <span className="text-xs text-muted-foreground px-2">DZ HOOF IPTV · 1.0.0</span>
+            <span className="text-xs text-muted-foreground px-2">DZ HOOF IPTV · 1.0.1</span>
           )}
           <button
             onClick={toggleSidebar}

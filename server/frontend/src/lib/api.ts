@@ -1,6 +1,20 @@
 import axios from 'axios';
 import { useAuthStore } from '@/store/auth-store';
 
+/** Decode a JWT payload (base64url) without verification — used only to route
+ * 401s to the right login (user/admin vs reseller portal). */
+export function decodeTokenRole(token: string | null | undefined): string | null {
+  if (!token) return null;
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    return typeof json?.role === 'string' ? json.role : null;
+  } catch {
+    return null;
+  }
+}
+
 const api = axios.create({
   baseURL: '/api/v1',
   headers: {
@@ -35,6 +49,7 @@ api.interceptors.response.use(
       if (
         typeof window !== 'undefined' &&
         !window.location.pathname.startsWith('/login') &&
+        !window.location.pathname.startsWith('/reseller/login') &&
         !window.location.pathname.startsWith('/register') &&
         !window.location.pathname.startsWith('/verify-email') &&
         !window.location.pathname.startsWith('/pair')
@@ -43,11 +58,22 @@ api.interceptors.response.use(
         // so concurrent 401s see the flag and bail out, and 401s on auth
         // pages don't permanently disarm the interceptor.
         isRedirecting = true;
+        // Resellers carry a JWT with role 'reseller' — send them to the
+        // reseller login, never the user/admin login (their portal shares
+        // the same store, so the token alone can't tell the two apart).
+        const tokenRole = decodeTokenRole(useAuthStore.getState().accessToken);
+        const onResellerPath = window.location.pathname.startsWith('/reseller');
+        const isReseller = tokenRole === 'reseller' || onResellerPath;
         // Clear both Zustand store and raw localStorage keys in one call
         useAuthStore.getState().logout();
         const data = error.response?.data;
         const isInactive = data?.error === 'User account is inactive';
-        if (isInactive) {
+        if (isReseller) {
+          // Same intentional pattern as the /login redirect below: this
+          // interceptor runs outside React components, so no router hook.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+          window.location.href = '/reseller/login';
+        } else if (isInactive) {
           const email = data?.adminEmail;
           window.location.href = email
             ? `/login?message=account_disabled&admin_email=${encodeURIComponent(email)}`

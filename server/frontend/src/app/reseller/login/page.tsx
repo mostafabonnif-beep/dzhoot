@@ -26,7 +26,13 @@ export default function ResellerLoginPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.post('/reseller/auth/login', { username: username.trim(), password });
+      // Wrong credentials return 401 — skip the interceptor redirect so the
+      // error message below actually shows instead of a page reload.
+      const res = await api.post(
+        '/reseller/auth/login',
+        { username: username.trim(), password },
+        { headers: { 'X-Skip-Auth-Redirect': '1' } },
+      );
       const data = res.data?.data;
       if (!data?.token) throw new Error('no token');
       // Clear any admin session, then store the reseller JWT (api client sends Bearer)

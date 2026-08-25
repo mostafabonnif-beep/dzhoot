@@ -35,12 +35,19 @@ function sanitize(key, value) {
   return value;
 }
 
-// GET / — all settings
+// GET / — all settings (SMTP password never returned; only a configured flag)
 router.get('/', async (req, res) => {
   try {
     const settings = await AppSetting.find().lean();
     const out = {};
-    for (const s of settings) out[s.key] = s.value;
+    for (const s of settings) {
+      if (s.key === 'brevo_password') {
+        out.brevo_configured = Boolean(String(s.value || '').trim());
+        continue;
+      }
+      out[s.key] = s.value;
+    }
+    if (out.brevo_configured === undefined) out.brevo_configured = false;
     return res.json({ success: true, data: out });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
@@ -50,7 +57,11 @@ router.get('/', async (req, res) => {
 // PUT / — upsert one or more settings
 router.put('/', async (req, res) => {
   try {
-    const body = req.body || {};
+    const body = { ...(req.body || {}) };
+    // Empty password means "keep the existing one" — never overwrite with ''.
+    if (body.brevo_password === '' || body.brevo_password === undefined) {
+      delete body.brevo_password;
+    }
     const keys = Object.keys(body).filter((k) => KNOWN_KEYS.has(k));
     if (keys.length === 0) {
       return res.status(400).json({ success: false, error: 'No valid settings provided' });

@@ -110,6 +110,8 @@ router.post('/', async (req, res) => {
       planId,
       batchNumber,
       quantity: qty,
+      wholesalePrice: wholesalePrice !== null ? wholesalePrice : null,
+      wholesaleTotal: wholesaleTotal !== null ? wholesaleTotal : null,
       receiptDate: receipt,
       notes: String(notes || '').trim(),
       status: 'delivered',

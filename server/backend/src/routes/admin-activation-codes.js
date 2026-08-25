@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const ActivationCode = require('../models/ActivationCode');
 const Plan = require('../models/Plan');
 const { requireAuth, requireAdmin } = require('./auth');
+const { escapeRegex } = require('../utils/escapeRegex');
 const { audit, reqCtx } = require('../services/audit-log');
 const { decryptSecret } = require('../utils/crypto');
 const {
@@ -23,14 +24,16 @@ function parseId(id) {
 // GET / — list codes with filters (planId, status, search by last4, pagination)
 router.get('/', async (req, res) => {
   try {
-    const { planId, status, search, page = 1, pageSize = 50, resellerId, batchId } = req.query;
+    const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(String(req.query.pageSize || '50'), 10) || 50, 1), 200);
+    const { planId, status, search, resellerId, batchId } = req.query;
     const query = {};
 
     if (planId && parseId(planId)) query.planId = parseId(planId);
     if (status && status !== 'ALL') query.status = status;
     if (resellerId && parseId(resellerId)) query.resellerId = parseId(resellerId);
     if (batchId && parseId(batchId)) query.batchId = parseId(batchId);
-    if (search) query.codeLast4 = { $regex: String(search).toUpperCase(), $options: 'i' };
+    if (search) query.codeLast4 = { $regex: escapeRegex(String(search).toUpperCase()), $options: 'i' };
 
     // Flip stale UNUSED codes to EXPIRED so the list is honest.
     await expireStaleCodes();
@@ -38,8 +41,8 @@ router.get('/', async (req, res) => {
     const totalCount = await ActivationCode.countDocuments(query);
     const codes = await ActivationCode.find(query)
       .sort({ createdAt: -1 })
-      .skip((Number(page) - 1) * Number(pageSize))
-      .limit(Number(pageSize))
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
       .populate('planId', 'name durationDays maxDevices')
       .populate('activatedBy', 'username email')
       .populate('resellerId', 'name city')
@@ -139,7 +142,7 @@ router.get('/export/csv', async (req, res) => {
     const query = {};
     if (planId && parseId(planId)) query.planId = parseId(planId);
     if (status && status !== 'ALL') query.status = status;
-    if (search) query.codeLast4 = { $regex: String(search).toUpperCase(), $options: 'i' };
+    if (search) query.codeLast4 = { $regex: escapeRegex(String(search).toUpperCase()), $options: 'i' };
 
     await expireStaleCodes();
 

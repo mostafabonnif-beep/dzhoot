@@ -11,7 +11,7 @@ import { syncXtreamSource, verifyXtreamSource } from './xtream-service';
 import { syncM3USource } from './m3u-service';
 import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
 import { expireStaleCodesAndReturnCredit } from './subscription-service';
-import { sendNotificationToDevices } from './fcm-service';
+import { sendNotificationToDevices, notificationStatusFromFcm } from './fcm-service';
 
 export interface SubtaskResult {
   name: string;
@@ -154,29 +154,32 @@ async function notificationDispatcherHandler(): Promise<TaskResult> {
         deepLink: notification.deepLink,
         audience: notification.audience,
       });
-      // Mark SENT even when FCM is unconfigured — matches the manual-send path.
-      // A throw above leaves it SCHEDULED so it retries on the next tick.
+      // Honest status: SENT only when at least one device received it; a throw
+      // above leaves it SCHEDULED so it retries on the next tick.
+      const outcome = notificationStatusFromFcm(fcm);
       await Notification.updateOne(
         { _id: notification._id },
-        { $set: { status: 'SENT', sentAt: new Date() } },
+        {
+          $set: {
+            status: outcome.status,
+            sentAt: new Date(),
+            deliveryStats: { ...fcm, reason: outcome.reason },
+          },
+        },
       ).exec();
       if (fcm.configured === false) {
         skippedNotConfigured += 1;
-        subtasks.push({
-          name,
-          status: 'completed',
-          durationMs: Date.now() - subStart,
-          result: fcm,
-        });
-      } else {
+      } else if (outcome.status === 'SENT') {
         sent += 1;
-        subtasks.push({
-          name,
-          status: 'completed',
-          durationMs: Date.now() - subStart,
-          result: fcm,
-        });
+      } else {
+        failed += 1;
       }
+      subtasks.push({
+        name,
+        status: 'completed',
+        durationMs: Date.now() - subStart,
+        result: { ...fcm, outcome },
+      });
     } catch (err: any) {
       failed += 1;
       subtasks.push({

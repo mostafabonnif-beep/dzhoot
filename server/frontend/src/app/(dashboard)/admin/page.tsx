@@ -51,6 +51,14 @@ interface BusinessData {
     activatedTotal: number;
     revenueThisMonth: number;
     revenueTotal: number;
+    revenueBreakdown?: {
+      creditPurchasesThisMonth: number;
+      creditPurchasesTotal: number;
+      batchDeliveriesThisMonth: number;
+      batchDeliveriesTotal: number;
+      activationsThisMonth: number;
+      activationsTotal: number;
+    };
     activeSubscriptions: number;
     activeResellers: number;
     creditRemaining: number;
@@ -369,22 +377,29 @@ export default function AdminDashboard() {
             )}
           </div>
           <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              { label: 'تفعيلات هذا الشهر', value: business.summary.activatedThisMonth, sub: `${business.summary.activatedTotal} إجمالي`, href: '/admin/codes' },
-              { label: 'إيراد هذا الشهر', value: fmtMoney(business.summary.revenueThisMonth), sub: `${fmtMoney(business.summary.revenueTotal)} إجمالي`, href: '/admin/plans' },
-              { label: 'اشتراكات نشطة', value: business.summary.activeSubscriptions, sub: `${business.summary.codesGeneratedThisMonth} كود وُلّد هذا الشهر`, href: '/admin/users' },
-              { label: 'رصيد أكواد المحلات', value: business.summary.creditRemaining, sub: `${business.summary.activeResellers} محل نشط`, href: '/admin/resellers' },
-            ].map((m, i) => (
-              <Link
-                key={m.label}
-                href={m.href}
-                className={`bg-card p-4 transition-colors hover:bg-primary/[0.03] ${i > 0 ? 'border-l border-border' : ''}`}
-              >
-                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{m.label}</p>
-                <p className="mt-1.5 text-2xl font-display font-bold tabular-nums">{m.value}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{m.sub}</p>
-              </Link>
-            ))}
+            {(() => {
+              const rb = business.summary.revenueBreakdown;
+              const revenueSub = rb
+                ? `${fmtMoney(business.summary.revenueTotal)} إجمالي · مشتريات المحلات ${fmtMoney(rb.creditPurchasesTotal + rb.batchDeliveriesTotal)}`
+                : `${fmtMoney(business.summary.revenueTotal)} إجمالي`;
+              const cards = [
+                { label: 'تفعيلات هذا الشهر', value: business.summary.activatedThisMonth, sub: `${business.summary.activatedTotal} إجمالي`, href: '/admin/codes' },
+                { label: 'إيراد هذا الشهر', value: fmtMoney(business.summary.revenueThisMonth), sub: revenueSub, href: '/admin/resellers' },
+                { label: 'اشتراكات نشطة', value: business.summary.activeSubscriptions, sub: `${business.summary.codesGeneratedThisMonth} كود وُلّد هذا الشهر`, href: '/admin/users' },
+                { label: 'رصيد أكواد المحلات', value: business.summary.creditRemaining, sub: `${business.summary.activeResellers} محل نشط`, href: '/admin/resellers' },
+              ];
+              return cards.map((m, i) => (
+                <Link
+                  key={m.label}
+                  href={m.href}
+                  className={`bg-card p-4 transition-colors hover:bg-primary/[0.03] ${i > 0 ? 'border-l border-border' : ''}`}
+                >
+                  <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{m.label}</p>
+                  <p className="mt-1.5 text-2xl font-display font-bold tabular-nums">{m.value}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{m.sub}</p>
+                </Link>
+              ));
+            })()}
           </div>
           {business.recentActivations.length > 0 && (
             <div className="border-t border-border">

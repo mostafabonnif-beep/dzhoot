@@ -5,7 +5,8 @@ import Subscription from '../models/Subscription';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const FCM_SCOPE = 'https://www.googleapis.com/auth/firebase.messaging';
-const MAX_TOKENS_PER_SEND = 5000;
+/** Fire-and-forget per-token sends are capped in flight to avoid hammering FCM. */
+const SEND_CONCURRENCY = 25;
 
 function getConfig() {
   const projectId = process.env.FCM_PROJECT_ID?.trim();
@@ -56,7 +57,6 @@ export async function sendNotificationToDevices(notification: {
 
   const devices = await Device.find(filter)
     .select('+pushToken')
-    .limit(MAX_TOKENS_PER_SEND)
     .lean()
     .exec();
   const tokens = devices.map((device: any) => device.pushToken).filter(Boolean);
@@ -67,28 +67,63 @@ export async function sendNotificationToDevices(notification: {
 
   let sent = 0;
   let failed = 0;
-  for (const token of tokens) {
-    try {
-      await axios.post(
-        `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.projectId)}/messages:send`,
-        {
-          message: {
-            token,
-            notification: {
-              title: notification.title,
-              body: notification.body,
-              ...(notification.imageUrl ? { image: notification.imageUrl } : {}),
+  // Send to ALL registered tokens (previously capped at MAX_TOKENS_PER_SEND,
+  // silently dropping devices beyond the first batch). Bound concurrency so a
+  // large device table doesn't spawn thousands of simultaneous requests.
+  for (let offset = 0; offset < tokens.length; offset += SEND_CONCURRENCY) {
+    const chunk = tokens.slice(offset, offset + SEND_CONCURRENCY);
+    const results = await Promise.allSettled(
+      chunk.map((token) =>
+        axios.post(
+          `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(config.projectId)}/messages:send`,
+          {
+            message: {
+              token,
+              notification: {
+                title: notification.title,
+                body: notification.body,
+                ...(notification.imageUrl ? { image: notification.imageUrl } : {}),
+              },
+              data: notification.deepLink ? { deepLink: notification.deepLink } : undefined,
             },
-            data: notification.deepLink ? { deepLink: notification.deepLink } : undefined,
           },
-        },
-        { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, timeout: 10000 },
-      );
-      sent += 1;
-    } catch (error) {
-      failed += 1;
-      console.warn('[fcm] failed to send notification to one device:', error instanceof Error ? error.message : error);
+          { headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, timeout: 10000 },
+        ),
+      ),
+    );
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        sent += 1;
+      } else {
+        failed += 1;
+        console.warn('[fcm] failed to send notification to one device:', r.reason instanceof Error ? r.reason.message : r.reason);
+      }
     }
   }
   return { configured: true, attempted: tokens.length, sent, failed };
+}
+
+/**
+ * Decide an honest notification status from a delivery result. A notification
+ * is SENT only when at least one device actually received it; "delivered to
+ * nobody" (not configured, no tokens, or all attempts failed) is FAILED so the
+ * operator can see the problem instead of a false success.
+ */
+export function notificationStatusFromFcm(fcm: {
+  configured: boolean;
+  attempted: number;
+  sent: number;
+  failed: number;
+  skipped?: string;
+}): { status: 'SENT' | 'FAILED'; reason: string } {
+  if (fcm.configured === false) {
+    return { status: 'FAILED', reason: fcm.skipped || 'FCM is not configured' };
+  }
+  if (fcm.attempted === 0) {
+    return { status: 'FAILED', reason: 'No registered devices with push tokens' };
+  }
+  if (fcm.sent > 0) {
+    return { status: 'SENT', reason: '' };
+  }
+  return { status: 'FAILED', reason: `All ${fcm.failed} delivery attempts failed` };
 }
