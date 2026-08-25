@@ -11,6 +11,7 @@ const CreditTransaction = require('../models/CreditTransaction');
 const ActivationRedemption = require('../models/ActivationRedemption');
 const Subscription = require('../models/Subscription');
 const { requireReseller } = require('../middleware/requireReseller');
+const { audit, reqCtx } = require('../services/audit-log');
 
 // Reseller portal (بوابة الموزعين): /api/v1/reseller/*
 router.use(requireReseller);
@@ -399,6 +400,202 @@ router.get('/batches/:id/export', async (req, res) => {
   } catch (err) {
     console.error('[reseller] export error:', err);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+module.exports = router;
+// ─── Customer debts (ديون الزبائن) ─────────────────────────────
+// Lets a reseller record credit given to customers who haven't paid yet,
+// see who owes him (oldest unpaid first), settle debts, and jump to a
+// WhatsApp reminder. Self-service, reseller-scoped only.
+const ResellerDebt = require('../models/ResellerDebt');
+
+function parseDebtId(id) {
+  return mongoose.isValidObjectId(id) ? id : null;
+}
+
+function parseDebtAmount(value) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+}
+
+// GET /debts — list (UNPAID first, then newest) + summary of what's still owed
+router.get('/debts', async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = { resellerId: req.reseller._id };
+    if (['UNPAID', 'PARTIAL', 'PAID'].includes(status)) filter.status = status;
+
+    const [debts, summary] = await Promise.all([
+      ResellerDebt.find(filter)
+        .sort({ status: 1, createdAt: -1 })
+        .limit(300)
+        .lean()
+        .exec(),
+      ResellerDebt.aggregate([
+        { $match: { resellerId: req.reseller._id } },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+            remaining: {
+              $sum: { $subtract: ['$amount', { $ifNull: ['$paidAmount', 0] }] },
+            },
+          },
+        },
+      ]).exec(),
+    ]);
+
+    const byStatus = Object.fromEntries(summary.map((s) => [s._id, s]));
+    const outstanding = (byStatus.UNPAID?.remaining || 0) + (byStatus.PARTIAL?.remaining || 0);
+    const unpaidCount = (byStatus.UNPAID?.count || 0) + (byStatus.PARTIAL?.count || 0);
+
+    const data = debts.map((d) => ({
+      _id: String(d._id),
+      customerName: d.customerName,
+      customerPhone: d.customerPhone || '',
+      amount: d.amount,
+      paidAmount: d.paidAmount || 0,
+      remaining: Math.round((d.amount - (d.paidAmount || 0)) * 100) / 100,
+      quantity: d.quantity ?? null,
+      planName: d.planName || '',
+      status: d.status,
+      note: d.note || '',
+      paidAt: d.paidAt ? new Date(d.paidAt).toISOString() : null,
+      createdAt: d.createdAt ? new Date(d.createdAt).toISOString() : null,
+    }));
+
+    return res.json({
+      success: true,
+      data,
+      summary: { outstanding, unpaidCount, totalDebts: debts.length },
+    });
+  } catch (err) {
+    console.error('[reseller] list debts error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /debts — record a new unpaid debt
+router.post('/debts', async (req, res) => {
+  try {
+    const { customerName, customerPhone, amount, quantity, planName, note } = req.body || {};
+    const name = String(customerName || '').trim();
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'customerName is required' });
+    }
+    const amt = parseDebtAmount(amount);
+    if (amt === null) {
+      return res.status(400).json({ success: false, error: 'amount must be a non-negative number' });
+    }
+    const debt = await ResellerDebt.create({
+      resellerId: req.reseller._id,
+      customerName: name.slice(0, 100),
+      customerPhone: String(customerPhone || '').trim().slice(0, 30),
+      amount: amt,
+      paidAmount: 0,
+      quantity: quantity !== undefined && quantity !== null && quantity !== '' ? Number(quantity) || null : null,
+      planName: String(planName || '').trim().slice(0, 100),
+      note: String(note || '').trim().slice(0, 500),
+      status: 'UNPAID',
+    });
+    audit({ ...reqCtx(req), action: 'RESELLER_DEBT_CREATE', resource: 'ResellerDebt', resourceId: String(debt._id), changes: { after: { customerName: debt.customerName, amount: debt.amount } } });
+    return res.status(201).json({ success: true, data: debt });
+  } catch (err) {
+    console.error('[reseller] create debt error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// PATCH /debts/:id — settle (full/partial) or edit
+router.patch('/debts/:id', async (req, res) => {
+  try {
+    const id = parseDebtId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid debt id' });
+    const debt = await ResellerDebt.findOne({ _id: id, resellerId: req.reseller._id }).exec();
+    if (!debt) return res.status(404).json({ success: false, error: 'Debt not found' });
+
+    const $set = {};
+    if (req.body.customerName !== undefined) {
+      const v = String(req.body.customerName).trim();
+      if (!v) return res.status(400).json({ success: false, error: 'customerName cannot be empty' });
+      $set.customerName = v.slice(0, 100);
+    }
+    if (req.body.customerPhone !== undefined) $set.customerPhone = String(req.body.customerPhone).trim().slice(0, 30);
+    if (req.body.amount !== undefined) {
+      const v = parseDebtAmount(req.body.amount);
+      if (v === null) return res.status(400).json({ success: false, error: 'amount must be a non-negative number' });
+      $set.amount = v;
+    }
+    if (req.body.note !== undefined) $set.note = String(req.body.note).trim().slice(0, 500);
+    if (req.body.planName !== undefined) $set.planName = String(req.body.planName).trim().slice(0, 100);
+
+    if (req.body.status !== undefined) {
+      const status = String(req.body.status);
+      if (!['UNPAID', 'PARTIAL', 'PAID'].includes(status)) {
+        return res.status(400).json({ success: false, error: 'status must be UNPAID, PARTIAL or PAID' });
+      }
+      $set.status = status;
+      if (status === 'PAID') {
+        $set.paidAmount = debt.amount;
+        $set.paidAt = new Date();
+      } else if (status === 'UNPAID') {
+        $set.paidAmount = 0;
+        $set.paidAt = null;
+      } else {
+        // PARTIAL: paidAmount defaults to current (or explicit)
+        const v = parseDebtAmount(req.body.paidAmount);
+        if (v === null || v > debt.amount) {
+          return res.status(400).json({ success: false, error: 'paidAmount must be between 0 and amount' });
+        }
+        $set.paidAmount = v;
+        $set.paidAt = v > 0 ? new Date() : null;
+      }
+    } else if (req.body.paidAmount !== undefined) {
+      const v = parseDebtAmount(req.body.paidAmount);
+      if (v === null || v > debt.amount) {
+        return res.status(400).json({ success: false, error: 'paidAmount must be between 0 and amount' });
+      }
+      $set.paidAmount = v;
+      $set.status = v >= debt.amount ? 'PAID' : v > 0 ? 'PARTIAL' : 'UNPAID';
+      $set.paidAt = v > 0 ? new Date() : null;
+    }
+
+    if (Object.keys($set).length === 0) {
+      return res.status(400).json({ success: false, error: 'No updatable fields provided' });
+    }
+    const updated = await ResellerDebt.findOneAndUpdate({ _id: id, resellerId: req.reseller._id }, { $set }, { new: true }).lean().exec();
+    audit({ ...reqCtx(req), action: 'RESELLER_DEBT_UPDATE', resource: 'ResellerDebt', resourceId: String(id), changes: { after: $set } });
+    return res.json({
+      success: true,
+      data: {
+        _id: String(updated._id),
+        customerName: updated.customerName,
+        amount: updated.amount,
+        paidAmount: updated.paidAmount,
+        remaining: Math.round((updated.amount - updated.paidAmount) * 100) / 100,
+        status: updated.status,
+        paidAt: updated.paidAt ? new Date(updated.paidAt).toISOString() : null,
+      },
+    });
+  } catch (err) {
+    console.error('[reseller] update debt error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// DELETE /debts/:id
+router.delete('/debts/:id', async (req, res) => {
+  try {
+    const id = parseDebtId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid debt id' });
+    const r = await ResellerDebt.deleteOne({ _id: id, resellerId: req.reseller._id }).exec();
+    if (r.deletedCount === 0) return res.status(404).json({ success: false, error: 'Debt not found' });
+    audit({ ...reqCtx(req), action: 'RESELLER_DEBT_DELETE', resource: 'ResellerDebt', resourceId: String(id) });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[reseller] delete debt error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
