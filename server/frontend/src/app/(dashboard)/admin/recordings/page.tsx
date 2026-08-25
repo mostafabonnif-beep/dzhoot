@@ -78,12 +78,11 @@ export default function RecordingsPage() {
 
   useEffect(() => {
     load();
-    const hasActive = () => recordings.some((r) => r.status === 'recording');
-    const t = setInterval(() => {
-      if (hasActive()) load();
-    }, 15000);
+    // Poll while the page is open; the previous dependency on `recordings`
+    // caused an endless refetch loop (load() → setRecordings → effect re-run).
+    const t = setInterval(() => load(), 15000);
     return () => clearInterval(t);
-  }, [load, recordings]);
+  }, [load]);
 
   const doSearch = useCallback(async () => {
     const q = search.trim();

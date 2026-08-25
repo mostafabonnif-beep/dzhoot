@@ -113,6 +113,13 @@ export default function DevicesPage() {
     fetchPairings();
   }, [fetchPairings]);
 
+  // Clamp the page after an unpair shrinks the list (avoids an empty page
+  // with a broken "301–300 of 300" range).
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(devicesTotal / PAGE_SIZE));
+    if (devicesPage > maxPage) setDevicesPage(maxPage);
+  }, [devicesTotal, devicesPage]);
+
   async function handleUnpair(device: AdminDevice) {
     const confirmed = window.confirm(
       L(

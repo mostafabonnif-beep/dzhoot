@@ -117,16 +117,38 @@ export default function PlansPage() {
   }
 
   async function handleSave() {
+    // Numeric validation the HTML inputs can't enforce (the button is not a
+    // form submit, so `min` attributes never fire).
+    const days = Number(form.durationDays);
+    const devices = Number(form.maxDevices);
+    const streams = Number(form.maxConcurrentStreams);
+    const price = Number(form.price);
+    if (!Number.isInteger(days) || days < 1) {
+      setFormError('مدة الاشتراك يجب أن تكون عددًا صحيحًا ≥ 1');
+      return;
+    }
+    if (!Number.isInteger(devices) || devices < 1) {
+      setFormError('عدد الأجهزة يجب أن يكون عددًا صحيحًا ≥ 1');
+      return;
+    }
+    if (!Number.isInteger(streams) || streams < 1 || streams > 100) {
+      setFormError('عدد البث المتزامن يجب أن يكون بين 1 و100');
+      return;
+    }
+    if (!Number.isFinite(price) || price < 0) {
+      setFormError('السعر يجب أن يكون رقمًا غير سالب');
+      return;
+    }
     setSaving(true);
     setFormError('');
     try {
       const payload = {
         name: form.name.trim(),
         description: form.description,
-        durationDays: Number(form.durationDays),
-        maxDevices: Number(form.maxDevices) || 1,
-        maxConcurrentStreams: Number(form.maxConcurrentStreams) || 1,
-        price: Number(form.price) || 0,
+        durationDays: days,
+        maxDevices: devices,
+        maxConcurrentStreams: streams,
+        price,
         currency: form.currency.toUpperCase(),
         status: form.status,
       };
@@ -459,7 +481,7 @@ export default function PlansPage() {
               disabled={saving || !form.name.trim()}
               className="inline-flex items-center px-6 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none"
             >
-              {saving ? t('common.loading') : t('common.save')}
+              {saving ? t('common.saving') : t('common.save')}
             </button>
             <button
               onClick={() => setFormOpen(false)}

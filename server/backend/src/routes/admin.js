@@ -390,6 +390,9 @@ router.delete('/channels/bulk', async (req, res) => {
 // Delete channel
 router.delete('/channels/:id', async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, error: 'Invalid channel id' });
+    }
     // Admins can delete catalog channels only — never a user's private channel.
     const channel = await Channel.findOneAndDelete({ _id: req.params.id, ownerId: null });
 
@@ -745,8 +748,8 @@ router.get('/channels', async (req, res) => {
       filter.$or = [{ channelName: regex }, { channelGroup: regex }];
     }
 
-    const p = parseInt(page, 10) || 1;
-    const ps = Math.min(parseInt(pageSize, 10) || 50, 200);
+    const p = Math.max(parseInt(page, 10) || 1, 1);
+    const ps = Math.min(Math.max(parseInt(pageSize, 10) || 50, 1), 200);
 
     // countDocuments on the catalog is expensive and identical across pages of the same
     // filter — cache it (short TTL, busted on catalog mutations) and run it alongside the find.
@@ -812,8 +815,8 @@ router.get('/channels', async (req, res) => {
 router.get('/devices', async (req, res) => {
   try {
     const { search, page, pageSize, status } = req.query;
-    const p = parseInt(page, 10) || 1;
-    const ps = Math.min(parseInt(pageSize, 10) || 50, 200);
+    const p = Math.max(parseInt(page, 10) || 1, 1);
+    const ps = Math.min(Math.max(parseInt(pageSize, 10) || 50, 1), 200);
     const filter = {};
     if (search) {
       const regex = new RegExp(escapeRegex(search), 'i');
@@ -912,8 +915,8 @@ router.delete('/devices/:id', async (req, res) => {
 router.get('/pairing-requests', async (req, res) => {
   try {
     const { page, pageSize, status } = req.query;
-    const p = parseInt(page, 10) || 1;
-    const ps = Math.min(parseInt(pageSize, 10) || 50, 200);
+    const p = Math.max(parseInt(page, 10) || 1, 1);
+    const ps = Math.min(Math.max(parseInt(pageSize, 10) || 50, 1), 200);
     const filter = {};
     if (status && status !== 'ALL') filter.status = status;
 
