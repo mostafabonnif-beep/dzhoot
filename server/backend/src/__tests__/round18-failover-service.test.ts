@@ -57,7 +57,7 @@ jest.mock('../services/alert-notifier', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const svc = require('../services/source-failover-service');
 
-const { buildFailoverStreamUrl, getSourceHealth, isSourceDown, getFailoverTarget, runSourceWatchdog, autoMatchFailoverMaps, channelCanonicalKey, nameMatchScore, channelVariantRank } = svc;
+const { buildFailoverStreamUrl, getSourceHealth, isSourceDown, getFailoverTarget, runSourceWatchdog, autoMatchFailoverMaps, channelCanonicalKey, nameMatchScore, channelVariantRank, isForeignCatalogChannel } = svc;
 const fuzzyAccepted = svc.fuzzyAccepted;
 const { testXtreamConnection } = require('../services/xtream-service');
 const { probeStream } = require('../services/stream-prober');
@@ -224,6 +224,35 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     // No shared identity tokens: rejected.
     expect(nameMatchScore('some unrelated channel', 'ennahar tv')).toBe(0);
     expect(fuzzyAccepted('some unrelated channel', 'ennahar tv')).toBe(false);
+  });
+
+  it('isForeignCatalogChannel guards against European channels matching Maghreb backups', () => {
+    expect(isForeignCatalogChannel('FI: Yle TV1 ᴴᴰ')).toBe(true);
+    expect(isForeignCatalogChannel('UK: ITV 4 ᴴᴰ')).toBe(true);
+    expect(isForeignCatalogChannel('SE: TV6 ᴴᴰ')).toBe(true);
+    expect(isForeignCatalogChannel('BR: GLOBO TV BAHIA')).toBe(true);
+    expect(isForeignCatalogChannel('AR: Ennahar TV')).toBe(false);
+    expect(isForeignCatalogChannel('AR: Echourouk TV ᴴᴰ')).toBe(false);
+    expect(isForeignCatalogChannel('AL24 News')).toBe(false);
+  });
+
+  it('auto-match never maps a foreign-prefixed catalog channel', async () => {
+    const backup = await XtreamSource.create({
+      name: 'Backup Maghreb',
+      serverUrl: 'http://ottstreambox.xyz:80',
+      usernameEncrypted: 'x',
+      passwordEncrypted: 'y',
+      status: 'Inactive',
+      verificationStatus: 'pending',
+    });
+    await Channel.create({ channelId: 'CH-YLE', channelName: 'FI: Yle TV1 ᴴᴰ', channelUrl: 'http://upstream/yle', isActive: true });
+    await Channel.create({ channelId: 'CH-E1', channelName: 'AR: Algerie EN TV 1', channelUrl: 'http://upstream/e1', isActive: true });
+
+    const result = await autoMatchFailoverMaps(String(backup._id), {});
+    const maps = await ChannelFailoverMap.find({ backupSourceId: backup._id }).lean().exec();
+    const refs = maps.map((m) => m.channelRef);
+    expect(refs).not.toContain('CH-YLE');
+    expect(refs).toContain('CH-E1');
   });
 
   it('channelVariantRank prefers base/HD over +6H/LQ clones', () => {
