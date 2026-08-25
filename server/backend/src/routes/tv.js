@@ -24,6 +24,7 @@ const { epgCache } = require('../services/cache');
 const { decryptSecret } = require('../utils/crypto');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
+const { isSourceDown, getFailoverTarget } = require('../services/source-failover-service');
 
 async function getVerifiedXtreamSourceIds() {
   // Sources that passed live playback verification (and are Active), OR that the
@@ -415,16 +416,25 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
 
     let xtreamDirectPlayback = false;
-    if (channel.metadata?.source === 'xtream') {
-      const source = await XtreamSource.findOne({
-        _id: channel.metadata.xtreamSourceId,
-        $or: [
-          { status: 'Active', verificationStatus: 'verified' },
-          { directPlayback: true },
-        ],
-      }).lean();
-      if (!source) return res.status(404).json({ success: false, error: 'Channel source is not verified', code: 'SOURCE_NOT_VERIFIED' });
-      xtreamDirectPlayback = source.directPlayback === true;
+    let failoverTarget = null;
+    if (channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId) {
+      const source = await XtreamSource.findById(channel.metadata.xtreamSourceId).lean();
+      const sourceEligible = !!source && (
+        (source.status === 'Active' && source.verificationStatus === 'verified') ||
+        source.directPlayback === true
+      );
+      // Watchdog says the primary is down → look for a verified backup mapping
+      // (catch-up NEVER fails over — the backup has no catch-up support).
+      const sourceDown = source ? await isSourceDown(String(source._id)) : false;
+      if (source && sourceDown && catchupStartMs === 0) {
+        failoverTarget = await getFailoverTarget(channel, source._id);
+      }
+      if (!sourceEligible && !failoverTarget) {
+        return res.status(404).json({ success: false, error: 'Channel source is not verified', code: 'SOURCE_NOT_VERIFIED' });
+      }
+      xtreamDirectPlayback = failoverTarget
+        ? failoverTarget.source.directPlayback === true
+        : (source && source.directPlayback === true);
     }
 
     const isCatalogUser = user.role === 'Admin' || user.allCatalog === true;
@@ -482,6 +492,12 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         return res.status(status).json({ success: false, error: built.error, code: built.code });
       }
       streamUrl = built.url;
+    }
+    // Primary source is down and a verified backup mapping exists: serve the
+    // backup stream (primary slot only — an explicit alternate slot the user
+    // picked stays as-is).
+    if (failoverTarget && slot === 0) {
+      streamUrl = failoverTarget.streamUrl;
     }
     if (!streamUrl) return res.status(404).json({ success: false, error: 'Stream slot not found' });
 
@@ -541,6 +557,9 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         expiresAt,
         slot,
         streamLimit: { max: session.max, active: session.active },
+        // Tells the operator (and future clients) whether this token was
+        // served from the backup source because the primary was down.
+        ...(failoverTarget ? { source: 'backup', failoverSourceId: String(failoverTarget.source._id) } : {}),
         // Present only when direct playback is enabled for the source: the
         // client may retry through the server relay if the direct URL fails.
         ...(proxyPlaybackUrl ? { proxyPlaybackUrl } : {}),
