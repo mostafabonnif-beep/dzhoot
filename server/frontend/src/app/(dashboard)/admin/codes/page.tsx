@@ -37,6 +37,9 @@ interface CodeData {
   activatedBy?: { _id: string; username: string } | null;
   codeExpiresAt?: string | null;
   notes?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customDurationDays?: number | null;
   createdAt?: string;
 }
 
@@ -573,6 +576,33 @@ export default function CodesPage() {
       cell: (c) =>
         c.codeExpiresAt ? (
           <span className="text-xs">{new Date(c.codeExpiresAt).toLocaleDateString()}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      key: 'customer',
+      mobileHidden: true,
+      header: t('codes.customer'),
+      cell: (c) =>
+        c.customerName || c.customerPhone ? (
+          <span className="text-xs">
+            {c.customerName || '—'}
+            {c.customerPhone && <span className="text-muted-foreground" dir="ltr"> ({c.customerPhone})</span>}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
+    },
+    {
+      key: 'customDuration',
+      mobileHidden: true,
+      header: t('codes.customDuration'),
+      cell: (c) =>
+        c.customDurationDays ? (
+          <span className="inline-flex rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium">
+            {c.customDurationDays} {t('portal.days')}
+          </span>
         ) : (
           <span className="text-muted-foreground">—</span>
         ),

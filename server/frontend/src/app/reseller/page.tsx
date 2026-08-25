@@ -31,7 +31,7 @@ import { useLocale } from '@/components/locale-provider';
 interface CreditItem {
   planId: string;
   quantity: number;
-  plan: { name: string; durationDays: number };
+  plan: { name: string; durationDays: number; allowCustomDuration?: boolean };
 }
 
 interface BatchItem {
@@ -133,9 +133,20 @@ export default function ResellerDashboardPage() {
   // Generation state
   const [genPlanId, setGenPlanId] = useState('');
   const [genQty, setGenQty] = useState(1);
+  const [genCustomerName, setGenCustomerName] = useState('');
+  const [genCustomerPhone, setGenCustomerPhone] = useState('');
+  const [genCustomDays, setGenCustomDays] = useState('');
   const [generating, setGenerating] = useState(false);
   const [genResult, setGenResult] = useState<{ batchNumber: number; planName: string; codes: string[] } | null>(null);
   const [genCopied, setGenCopied] = useState(false);
+
+  // Statement (كشف حساب)
+  const [statement, setStatement] = useState<{
+    summary: { granted: number; consumed: number; returned: number; purchaseValue: number; netCodes: number };
+    rows: Array<{ _id: string; type: string; quantity: number; unitPrice: number; amount: number; balanceAfter: number; planName: string; note: string; createdAt: string }>;
+    total: number;
+  } | null>(null);
+  const [statementLoading, setStatementLoading] = useState(false);
 
   // Customer debts (ديون الزبائن)
   const [debts, setDebts] = useState<DebtItem[]>([]);
@@ -170,6 +181,18 @@ export default function ResellerDashboardPage() {
     }
   }, [t]);
 
+  const loadStatement = useCallback(async () => {
+    setStatementLoading(true);
+    try {
+      const res = await api.get('/reseller/statement');
+      setStatement(res.data?.data || null);
+    } catch {
+      // statement is secondary — ignore failures
+    } finally {
+      setStatementLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (hydrated) return;
     let active = true;
@@ -203,7 +226,8 @@ export default function ResellerDashboardPage() {
     load();
     loadLedger();
     loadDebts();
-  }, [hydrated, accessToken, router, load]);
+    loadStatement();
+  }, [hydrated, accessToken, router, load, loadStatement]);
 
   async function loadLedger() {
     setLedgerLoading(true);
@@ -397,7 +421,13 @@ export default function ResellerDashboardPage() {
     if (!genPlanId || genQty < 1) return;
     setGenerating(true);
     try {
-      const res = await api.post('/reseller/codes/generate', { planId: genPlanId, quantity: genQty });
+      const res = await api.post('/reseller/codes/generate', {
+        planId: genPlanId,
+        quantity: genQty,
+        customerName: genCustomerName.trim() || undefined,
+        customerPhone: genCustomerPhone.trim() || undefined,
+        customDays: genCustomDays.trim() ? Number(genCustomDays) : undefined,
+      });
       const data = res.data?.data;
       setGenResult({
         batchNumber: data.batch.batchNumber,
@@ -406,12 +436,29 @@ export default function ResellerDashboardPage() {
       });
       toast(t('portal.generatedSuccess'), 'success');
       setGenQty(1);
+      setGenCustomerName('');
+      setGenCustomerPhone('');
+      setGenCustomDays('');
       load(); // refresh credit + batches
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
       toast(axiosErr.response?.data?.error || t('portal.loadError'), 'error');
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function downloadStatement() {
+    try {
+      const res = await api.get('/reseller/statement', { params: { format: 'csv' }, responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'dzhoof-statement.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast(t('portal.loadError'), 'error');
     }
   }
 
@@ -636,6 +683,97 @@ export default function ResellerDashboardPage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </section>
+
+        <section className="border border-border bg-card p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
+            <HandCoins className="h-4 w-4" /> {t('portal.statement')}
+          </h2>
+          {statementLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : statement ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="border border-border p-3">
+                  <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.statementGranted')}</div>
+                  <div className="text-xl font-semibold mt-1 text-emerald-600 dark:text-emerald-400">{statement.summary.granted}</div>
+                </div>
+                <div className="border border-border p-3">
+                  <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.statementConsumed')}</div>
+                  <div className="text-xl font-semibold mt-1 text-sky-600 dark:text-sky-400">{statement.summary.consumed}</div>
+                </div>
+                <div className="border border-border p-3">
+                  <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.statementReturned')}</div>
+                  <div className="text-xl font-semibold mt-1 text-amber-600 dark:text-amber-400">{statement.summary.returned}</div>
+                </div>
+                <div className="border border-border p-3">
+                  <div className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{t('portal.statementValue')}</div>
+                  <div className="text-xl font-semibold mt-1">{statement.summary.purchaseValue.toLocaleString()} DZD</div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">
+                  {t('portal.statementCount')} {statement.total}
+                </span>
+                <button
+                  onClick={downloadStatement}
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-border hover:bg-muted"
+                >
+                  <Download className="h-3.5 w-3.5" /> CSV
+                </button>
+              </div>
+              <div className="overflow-x-auto max-h-80 overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-card">
+                    <tr className="border-b border-border text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                      <th className="text-right p-2">{t('portal.ledgerDate')}</th>
+                      <th className="text-right p-2">{t('portal.ledgerType')}</th>
+                      <th className="text-right p-2">{t('portal.ledgerPlan')}</th>
+                      <th className="text-right p-2">{t('portal.ledgerQty')}</th>
+                      <th className="text-right p-2">{t('portal.statementAmount')}</th>
+                      <th className="text-right p-2">{t('portal.ledgerBalance')}</th>
+                      <th className="text-right p-2">{t('portal.ledgerNote')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {statement.rows.map((row) => (
+                      <tr key={row._id} className="border-b border-border/50 last:border-0">
+                        <td className="p-2 text-xs text-muted-foreground whitespace-nowrap">
+                          {new Date(row.createdAt).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className="p-2">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              row.type === 'CONSUME'
+                                ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                                : row.type === 'GRANT'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                  : 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                            }`}
+                          >
+                            {ledgerTypeLabel(row.type)}
+                          </span>
+                        </td>
+                        <td className="p-2">{row.planName}</td>
+                        <td className={`p-2 font-medium tabular-nums ${row.quantity < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                          {row.quantity > 0 ? `+${row.quantity}` : row.quantity}
+                        </td>
+                        <td className="p-2 font-medium tabular-nums">
+                          {row.amount > 0 ? `${row.amount.toLocaleString()} DZD` : '—'}
+                        </td>
+                        <td className="p-2 font-medium tabular-nums">{row.balanceAfter}</td>
+                        <td className="p-2 text-xs text-muted-foreground">{row.note || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">{t('portal.ledgerEmpty')}</div>
           )}
         </section>
 
@@ -1064,6 +1202,49 @@ export default function ResellerDashboardPage() {
           </div>
         ) : (
           <div className="space-y-4">
+            <div className="text-xs text-muted-foreground">
+              {(() => {
+                const selected = me?.credit?.find((c) => c.planId === genPlanId);
+                return selected ? `${selected.plan.name} — ${selected.plan.durationDays} ${t('portal.days')}` : '';
+              })()}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                {t('portal.customerName')}
+                <input
+                  className={inputClass}
+                  value={genCustomerName}
+                  onChange={(e) => setGenCustomerName(e.target.value)}
+                  maxLength={100}
+                />
+              </label>
+              <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                {t('portal.customerPhone')}
+                <input
+                  className={inputClass}
+                  value={genCustomerPhone}
+                  onChange={(e) => setGenCustomerPhone(e.target.value)}
+                  placeholder="05XXXXXXXX"
+                  dir="ltr"
+                  maxLength={30}
+                />
+              </label>
+            </div>
+            {me?.credit?.find((c) => c.planId === genPlanId)?.plan?.allowCustomDuration && (
+              <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+                {t('portal.customDays')}
+                <input
+                  type="number"
+                  min={1}
+                  max={730}
+                  className={inputClass}
+                  value={genCustomDays}
+                  onChange={(e) => setGenCustomDays(e.target.value)}
+                  placeholder={String(me?.credit?.find((c) => c.planId === genPlanId)?.plan?.durationDays ?? '')}
+                  dir="ltr"
+                />
+              </label>
+            )}
             <div className="flex items-center gap-2">
               <span className="text-sm">العدد</span>
               <button
