@@ -300,7 +300,8 @@ export default function ResellerDashboardPage() {
   const credit = me?.credit || [];
 
   return (
-    <div className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto bg-background" dir="rtl">
+    <div className="flex h-screen supports-[height:100dvh]:h-dvh overflow-hidden bg-background" dir="rtl">
+      <div className="flex flex-1 flex-col overflow-hidden">
       <header className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -323,7 +324,7 @@ export default function ResellerDashboardPage() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      <main className="flex-1 overflow-y-auto w-full max-w-5xl mx-auto px-4 py-6 space-y-6">
         {error && <div className="text-sm text-destructive">{error}</div>}
 
         {/* Credit + self-service generation */}
@@ -719,6 +720,7 @@ export default function ResellerDashboardPage() {
           </div>
         )}
       </Modal>
+      </div>
     </div>
   );
 }
