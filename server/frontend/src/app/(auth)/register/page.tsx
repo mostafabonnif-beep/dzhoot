@@ -398,7 +398,7 @@ function RegisterContent() {
 
 export default function RegisterPage() {
   return (
-    <div className="h-screen overflow-y-auto flex">
+    <div className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto flex">
       <AuthSidePanel footer="أنشئ حسابًا للوصول إلى أدوات إدارة البث وربط الأجهزة." />
 
       <div className="flex-1 flex items-center justify-center px-6 bg-background">

@@ -134,6 +134,7 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
                     <Link
                       key={link.href}
                       href={link.href}
+                      onClick={() => setMobileSidebarOpen(false)}
                       title={sidebarCollapsed ? t(link.labelKey) : undefined}
                       className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
                         isActive

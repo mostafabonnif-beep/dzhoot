@@ -209,7 +209,7 @@ function PairContent() {
 
 export default function PairPage() {
   return (
-    <div className="h-screen overflow-y-auto flex items-center justify-center px-6 bg-background">
+    <div className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto flex items-center justify-center px-6 bg-background">
       <Suspense
         fallback={
           <div className="text-center space-y-3">

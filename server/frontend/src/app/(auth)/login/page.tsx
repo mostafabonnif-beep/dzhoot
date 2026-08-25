@@ -365,7 +365,7 @@ function LoginContent() {
 
 export default function LoginPage() {
   return (
-    <div className="flex h-screen overflow-y-auto login-shell">
+    <div className="flex h-screen supports-[height:100dvh]:h-dvh overflow-y-auto login-shell">
       <AuthSidePanel footer="وصول آمن إلى إدارة القنوات وربط الأجهزة والمحتوى في منصتك الذاتية." />
 
       <div className="relative flex-1 overflow-y-auto bg-gradient-to-br from-background via-background to-primary/5 px-4 py-8 sm:px-8 lg:px-12">
