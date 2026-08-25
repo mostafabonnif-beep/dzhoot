@@ -262,7 +262,9 @@ userSchema.methods.generateUserPlaylist = async function (
       userId: String(this._id),
       channelListCode: this.channelListCode,
       streamUrl: sourceUrl,
-      direct: isDirectSource || undefined,
+      // Same master switch as the API: without ALLOW_DIRECT_PLAYBACK=true the
+      // playlist only ever emits server-relayed URLs (our sources stay hidden).
+      direct: isDirectSource && process.env.ALLOW_DIRECT_PLAYBACK === 'true' ? true : undefined,
     });
     const playbackUrl = `${baseUrl || ''}/api/v1/tv/playback/${token}.m3u8`;
     m3uContent += `${channel.toM3U().replace(channel.channelUrl, playbackUrl)}\n\n`;
