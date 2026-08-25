@@ -134,6 +134,16 @@ export function nameMatchScore(aCleaned: string, bCleaned: string): number {
 
 const FUZZY_MATCH_THRESHOLD = 0.6;
 
+// Catalog channels prefixed with a foreign country code (FI:, SE:, UK:, BR:,
+// FR:, …) are never Maghreb/Arabic channels — the backup panel is a Maghreb
+// catalog, so matching them would produce wrong failover targets (e.g. the
+// Finnish 'Yle TV1' matching 'ENTV 1').
+const FOREIGN_CATALOG_PREFIX = /^(fi|se|uk|br|fr|us|de|it|es|pt|ru|tr|gr|nl|pl|dk|no|cz|hu|ro|bg|rs|hr|sk|at|ch|ie|cn|jp|kr|in|pk|th|vn|id|mx)\b/;
+
+function isForeignCatalogChannel(name: string): boolean {
+  return FOREIGN_CATALOG_PREFIX.test(cleanChannelName(name));
+}
+
 /** Accept a fuzzy match: strong multi-token overlap, or a single significant
  *  token that is an identity match after typo tolerance. */
 function fuzzyAccepted(aCleaned: string, bCleaned: string): boolean {
@@ -464,6 +474,7 @@ export async function autoMatchFailoverMaps(
   const byCanonicalKey = new Map<string, any[]>();
   const catalogTokenIndex = new Map<string, Array<{ cleanedName: string; chans: any[] }>>();
   for (const ch of catalog) {
+    if (isForeignCatalogChannel(ch.channelName || '')) continue;
     const ck = channelCanonicalKey(ch.channelName || '');
     if (ck) {
       if (!byCanonicalKey.has(ck)) byCanonicalKey.set(ck, []);
@@ -558,4 +569,5 @@ module.exports = {
   channelVariantRank,
   nameMatchScore,
   fuzzyAccepted,
+  isForeignCatalogChannel,
 };
