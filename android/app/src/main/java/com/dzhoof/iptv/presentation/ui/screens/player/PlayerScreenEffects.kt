@@ -73,7 +73,9 @@ internal suspend fun prepareChannelStream(
             val slots = slotTargets.mapIndexed { index, playbackTarget ->
                 ErrorRecoveryManager.StreamSlot(
                     directUrl = playbackTarget.url,
-                    proxyUrl = null,
+                    // Server-relayed fallback for direct-mode sources: the
+                    // recovery manager retries through it after direct fails.
+                    proxyUrl = playbackTarget.proxyUrl,
                     isPrimary = index == 0,
                     mimeType = playbackTarget.mimeType,
                 )
