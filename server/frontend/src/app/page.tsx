@@ -125,7 +125,7 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen bg-background relative flex flex-col">
+    <main className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto bg-background relative flex flex-col">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
