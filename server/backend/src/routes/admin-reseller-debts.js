@@ -23,11 +23,6 @@ function parseDebtAmount(value) {
 // The admin gives resellers code credit; when a grant isn't paid upfront a
 // debt is auto-created. These routes list/settle/edit/delete them.
 
-function parseDebtAmount(value) {
-  const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
-}
-
 // GET /reseller-debts — list (UNPAID first, oldest first) + outstanding summary
 router.get('/', async (req, res) => {
   try {
