@@ -71,10 +71,15 @@ router.post('/', async (req, res) => {
     } catch {
       return res.status(400).json({ success: false, error: 'serverUrl must be a valid URL' });
     }
+    if (!/^https?:$/.test(url.protocol)) {
+      return res.status(400).json({ success: false, error: 'serverUrl must use http or https' });
+    }
 
     const source = await XtreamSource.create({
       name: String(name).trim(),
-      serverUrl: url.origin,
+      // Keep the full normalized URL — some panels are served under a subpath
+      // (http://host:8080/iptv/) and url.origin would silently break player_api.
+      serverUrl: url.toString().replace(/\/+$/, ''),
       usernameEncrypted: encryptSecret(String(username)),
       passwordEncrypted: encryptSecret(String(password)),
       status: 'Inactive',
@@ -139,7 +144,8 @@ router.post('/:id/diagnostics', async (req, res) => {
     const source = await XtreamSource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    const result = await verifyXtreamSource(String(id), Number(req.body?.sampleLimit) || 3);
+    const sample = Math.min(Math.max(Number(req.body?.sampleLimit) || 3, 1), 20);
+    const result = await verifyXtreamSource(String(id), sample);
 
     audit({
       ...reqCtx(req),
@@ -321,8 +327,23 @@ router.patch('/:id', async (req, res) => {
     const source = await XtreamSource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    const { name, status, username, password, customerVisible, directPlayback } = req.body || {};
+    const { name, status, serverUrl, username, password, customerVisible, directPlayback } = req.body || {};
     if (name !== undefined) source.name = String(name).trim();
+    if (serverUrl !== undefined) {
+      if (!serverUrl) return res.status(400).json({ success: false, error: 'serverUrl cannot be empty' });
+      let url;
+      try {
+        url = new URL(serverUrl);
+      } catch {
+        return res.status(400).json({ success: false, error: 'serverUrl must be a valid URL' });
+      }
+      if (!/^https?:$/.test(url.protocol)) {
+        return res.status(400).json({ success: false, error: 'serverUrl must use http or https' });
+      }
+      // Keep the full normalized URL — panels served under a subpath (e.g.
+      // http://host:8080/iptv/) would break if we stored only url.origin.
+      source.serverUrl = url.toString().replace(/\/+$/, '');
+    }
     if (customerVisible !== undefined) {
       source.customerVisible = customerVisible === true;
       // Explicit operator decision — audit it so the choice is traceable.

@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type ActivationCodeStatus = 'UNUSED' | 'ACTIVATED' | 'REVOKED' | 'EXPIRED';
+export type ActivationCodeStatus = 'UNUSED' | 'ACTIVATING' | 'ACTIVATED' | 'REVOKED' | 'EXPIRED';
 
 export interface IActivationCodeDocument extends Document {
   codeHash: string;
@@ -59,7 +59,7 @@ const activationCodeSchema = new Schema<IActivationCodeDocument>(
     },
     status: {
       type: String,
-      enum: ['UNUSED', 'ACTIVATED', 'REVOKED', 'EXPIRED'],
+      enum: ['UNUSED', 'ACTIVATING', 'ACTIVATED', 'REVOKED', 'EXPIRED'],
       default: 'UNUSED',
       index: true,
     },
@@ -108,6 +108,10 @@ const activationCodeSchema = new Schema<IActivationCodeDocument>(
 
 activationCodeSchema.index({ planId: 1, status: 1 });
 activationCodeSchema.index({ status: 1, createdAt: -1 });
+// Business summaries (revenue, activations) and the daily ops report filter by
+// { status: 'ACTIVATED', activatedAt: { $gte: ... } } — indexed so dashboard
+// loads don't scan the whole codes collection.
+activationCodeSchema.index({ status: 1, activatedAt: -1 });
 
 const ActivationCode = mongoose.model<IActivationCodeDocument>(
   'ActivationCode',

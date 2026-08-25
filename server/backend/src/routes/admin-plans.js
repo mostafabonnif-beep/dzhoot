@@ -19,7 +19,9 @@ function parseId(id) {
 // GET / — list plans with code/subscription counts
 router.get('/', async (req, res) => {
   try {
-    const { status, search, page = 1, pageSize = 100 } = req.query;
+    const { status, search } = req.query;
+    const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(String(req.query.pageSize || '100'), 10) || 100, 1), 200);
     const query = {};
     if (status) query.status = status;
     if (search) query.name = { $regex: escapeRegex(String(search)), $options: 'i' };
@@ -27,8 +29,8 @@ router.get('/', async (req, res) => {
     const totalCount = await Plan.countDocuments(query);
     const plans = await Plan.find(query)
       .sort({ createdAt: -1 })
-      .skip((Number(page) - 1) * Number(pageSize))
-      .limit(Number(pageSize))
+      .skip((page - 1) * pageSize)
+      .limit(pageSize)
       .lean();
 
     const withCounts = await Promise.all(
@@ -66,6 +68,10 @@ router.post('/', async (req, res) => {
     if (maxConcurrentStreams !== undefined && (!Number.isInteger(streams) || streams < 1 || streams > 100)) {
       return res.status(400).json({ success: false, error: 'maxConcurrentStreams must be an integer between 1 and 100' });
     }
+    const priceNum = price === undefined || price === null || price === '' ? 0 : Number(price);
+    if (!Number.isFinite(priceNum) || priceNum < 0) {
+      return res.status(400).json({ success: false, error: 'price must be a non-negative number' });
+    }
 
     const plan = await Plan.create({
       name: String(name).trim(),
@@ -73,7 +79,7 @@ router.post('/', async (req, res) => {
       durationDays: days,
       maxDevices: Math.max(1, Number(maxDevices) || 1),
       maxConcurrentStreams: maxConcurrentStreams !== undefined ? streams : 1,
-      price: Number(price) || 0,
+      price: priceNum,
       currency: currency || 'DZD',
       status: status === 'Inactive' ? 'Inactive' : 'Active',
       features: features || {},
@@ -117,7 +123,13 @@ router.patch('/:id', async (req, res) => {
       }
       plan.maxConcurrentStreams = streams;
     }
-    if (price !== undefined) plan.price = Number(price) || 0;
+    if (price !== undefined && price !== null && price !== '') {
+      const priceNum = Number(price);
+      if (!Number.isFinite(priceNum) || priceNum < 0) {
+        return res.status(400).json({ success: false, error: 'price must be a non-negative number' });
+      }
+      plan.price = priceNum;
+    }
     if (currency !== undefined) plan.currency = String(currency).toUpperCase();
     if (status !== undefined) plan.status = status === 'Inactive' ? 'Inactive' : 'Active';
     if (features !== undefined) plan.features = features;

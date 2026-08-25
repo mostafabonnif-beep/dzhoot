@@ -78,6 +78,12 @@ router.put('/', async (req, res) => {
       saved[key] = doc.value;
     }
 
+    // Never echo the SMTP password back — same masking rule as GET /.
+    if ('brevo_password' in saved) {
+      saved.brevo_configured = Boolean(String(saved.brevo_password || '').trim());
+      delete saved.brevo_password;
+    }
+
     audit({ ...reqCtx(req), action: 'APP_SETTINGS_UPDATE', resource: 'AppSetting', changes: { after: saved } });
     return res.json({ success: true, data: saved });
   } catch (err) {
@@ -100,6 +106,12 @@ router.get('/export', async (req, res) => {
     const out = {};
     for (const s of settings) {
       if (s.key.startsWith(EXCLUDED_PREFIX) || EXCLUDED_KEYS.has(s.key)) continue;
+      // The SMTP password never leaves the server — even in a settings backup
+      // the operator may share with someone or store off-box. Export a flag.
+      if (s.key === 'brevo_password') {
+        out.brevo_configured = Boolean(String(s.value || '').trim());
+        continue;
+      }
       out[s.key] = s.value;
     }
     audit({ ...reqCtx(req), action: 'APP_SETTINGS_EXPORT', resource: 'AppSetting', changes: { after: { keys: Object.keys(out) } } });

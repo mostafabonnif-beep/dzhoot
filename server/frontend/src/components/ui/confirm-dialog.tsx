@@ -1,6 +1,7 @@
 'use client';
 
 import Modal from './modal';
+import { useLocale } from '@/components/locale-provider';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -17,12 +18,13 @@ export default function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   variant = 'default',
   loading = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useLocale();
   const btnClass =
     variant === 'destructive'
       ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
@@ -47,14 +49,14 @@ export default function ConfirmDialog({
             disabled={loading}
             className={`inline-flex items-center px-6 py-2.5 text-sm font-medium uppercase tracking-[0.1em] transition-colors disabled:opacity-50 disabled:pointer-events-none ${btnClass}`}
           >
-            {loading ? 'Processing...' : confirmLabel}
+            {loading ? t('common.processing') : confirmLabel ?? t('common.confirm')}
           </button>
           <button
             onClick={onCancel}
             disabled={loading}
             className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground transition-colors hover:text-foreground hover:border-foreground/20 disabled:opacity-50"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       </div>

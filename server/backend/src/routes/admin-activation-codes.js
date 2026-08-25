@@ -21,6 +21,20 @@ function parseId(id) {
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
 }
 
+// expireStaleCodes() flips stale UNUSED codes to EXPIRED so lists/stats are
+// honest — but running it on EVERY page view writes across the whole stale set
+// repeatedly. The daily expiry task covers correctness; throttle the read-path
+// call to once a minute.
+let lastStaleExpire = 0;
+const STALE_EXPIRE_THROTTLE_MS = 60 * 1000;
+
+async function expireStaleThrottled() {
+  const now = Date.now();
+  if (now - lastStaleExpire < STALE_EXPIRE_THROTTLE_MS) return;
+  lastStaleExpire = now;
+  await expireStaleThrottled();
+}
+
 // GET / — list codes with filters (planId, status, search by last4, pagination)
 router.get('/', async (req, res) => {
   try {
@@ -36,7 +50,7 @@ router.get('/', async (req, res) => {
     if (search) query.codeLast4 = { $regex: escapeRegex(String(search).toUpperCase()), $options: 'i' };
 
     // Flip stale UNUSED codes to EXPIRED so the list is honest.
-    await expireStaleCodes();
+    await expireStaleThrottled();
 
     const totalCount = await ActivationCode.countDocuments(query);
     const codes = await ActivationCode.find(query)
@@ -59,7 +73,7 @@ router.get('/', async (req, res) => {
 // GET /stats — counts by status and per plan
 router.get('/stats', async (req, res) => {
   try {
-    await expireStaleCodes();
+    await expireStaleThrottled();
     const [byStatus, byPlan] = await Promise.all([
       ActivationCode.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
       ActivationCode.aggregate([
@@ -144,7 +158,7 @@ router.get('/export/csv', async (req, res) => {
     if (status && status !== 'ALL') query.status = status;
     if (search) query.codeLast4 = { $regex: escapeRegex(String(search).toUpperCase()), $options: 'i' };
 
-    await expireStaleCodes();
+    await expireStaleThrottled();
 
     const codes = await ActivationCode.find(query)
       .select('+codeEnc')

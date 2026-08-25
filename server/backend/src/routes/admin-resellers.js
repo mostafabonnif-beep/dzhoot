@@ -204,8 +204,13 @@ router.put('/:id', async (req, res) => {
             .map((p) => ({ planId: p.planId, price: Number(p.price) }))
         : [];
     }
+    // Only require a name when the client is actually setting one — a pure
+    // credit top-up or status toggle must not need to resend the whole doc.
+    if (req.body.name !== undefined && (!req.body.name || !String(req.body.name).trim())) {
+      return res.status(400).json({ success: false, error: 'name is required' });
+    }
+    if (update.name) update.name = String(update.name).trim();
     if (credit !== undefined) update.credit = cleanCredit(credit);
-    if (!update.name) return res.status(400).json({ success: false, error: 'name is required' });
     const prev = await Reseller.findById(id).select('credit').lean().exec();
     const doc = await Reseller.findByIdAndUpdate(id, { $set: update }, { new: true }).exec();
     if (!doc) return res.status(404).json({ success: false, error: 'Reseller not found' });
@@ -327,6 +332,18 @@ router.delete('/:id', async (req, res) => {
     const linked = await ActivationCode.countDocuments({ resellerId: id }).exec();
     if (linked > 0) {
       return res.status(400).json({ success: false, error: `Cannot delete: ${linked} activation code(s) reference this reseller` });
+    }
+    // Never allow deleting a shop that still owes money — the debt records
+    // would lose their subject and the receivable silently disappears.
+    const unpaidDebts = await ResellerCreditDebt.countDocuments({
+      resellerId: id,
+      status: { $in: ['UNPAID', 'PARTIAL'] },
+    }).exec();
+    if (unpaidDebts > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `Cannot delete: ${unpaidDebts} unpaid debt record(s) reference this reseller — settle the debts first`,
+      });
     }
     const doc = await Reseller.findByIdAndDelete(id).exec();
     if (!doc) return res.status(404).json({ success: false, error: 'Reseller not found' });
