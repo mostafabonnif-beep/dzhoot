@@ -19,6 +19,7 @@ interface PlanData {
   price?: number;
   currency?: string;
   status: 'Active' | 'Inactive';
+  allowCustomDuration?: boolean;
   codeCount?: number;
   usedCodeCount?: number;
   activeSubs?: number;
@@ -34,6 +35,7 @@ interface PlanForm {
   price: string;
   currency: string;
   status: 'Active' | 'Inactive';
+  allowCustomDuration: boolean;
 }
 
 const emptyForm: PlanForm = {
@@ -45,6 +47,7 @@ const emptyForm: PlanForm = {
   price: '0',
   currency: 'DZD',
   status: 'Active',
+  allowCustomDuration: false,
 };
 
 const inputClass =
@@ -111,6 +114,7 @@ export default function PlansPage() {
       price: String(plan.price ?? 0),
       currency: plan.currency || 'DZD',
       status: plan.status,
+      allowCustomDuration: Boolean(plan.allowCustomDuration),
     });
     setFormError('');
     setFormOpen(true);
@@ -151,6 +155,7 @@ export default function PlansPage() {
         price,
         currency: form.currency.toUpperCase(),
         status: form.status,
+        allowCustomDuration: form.allowCustomDuration,
       };
       if (editingId) {
         await api.patch(`/admin/plans/${editingId}`, payload);
@@ -224,6 +229,11 @@ export default function PlansPage() {
       cell: (p) => (
         <span>
           {p.durationDays} {locale === 'ar' ? 'يوم' : locale === 'fr' ? 'jours' : 'days'}
+          {p.allowCustomDuration && (
+            <span className="mr-2 inline-flex rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium">
+              {locale === 'ar' ? 'مدة مخصصة' : locale === 'fr' ? 'Durée libre' : 'Custom'}
+            </span>
+          )}
         </span>
       ),
     },
@@ -475,6 +485,17 @@ export default function PlansPage() {
               <option value="Inactive">غير نشطة</option>
             </select>
           </div>
+          <label className="flex items-center gap-2 text-sm cursor-pointer pt-1">
+            <input
+              type="checkbox"
+              checked={form.allowCustomDuration}
+              onChange={(e) => setForm({ ...form, allowCustomDuration: e.target.checked })}
+              className="h-4 w-4"
+            />
+            <span>
+              السماح للموزعين بتوليد أكواد بمدة مخصصة (تتجاوز مدة الباقة الثابتة)
+            </span>
+          </label>
           <div className="flex items-center gap-3 pt-2">
             <button
               onClick={handleSave}

@@ -54,7 +54,7 @@ router.get('/', async (req, res) => {
 // POST / — create a plan
 router.post('/', async (req, res) => {
   try {
-    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, features } =
+    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features } =
       req.body || {};
 
     if (!name || typeof name !== 'string') {
@@ -81,6 +81,7 @@ router.post('/', async (req, res) => {
       maxConcurrentStreams: maxConcurrentStreams !== undefined ? streams : 1,
       price: priceNum,
       currency: currency || 'DZD',
+      allowCustomDuration: allowCustomDuration === true,
       status: status === 'Inactive' ? 'Inactive' : 'Active',
       features: features || {},
     });
@@ -103,7 +104,7 @@ router.patch('/:id', async (req, res) => {
     if (!plan) return res.status(404).json({ success: false, error: 'Plan not found' });
 
     const before = plan.toObject();
-    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, features } =
+    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features } =
       req.body || {};
 
     if (name !== undefined) plan.name = String(name).trim();
@@ -131,6 +132,7 @@ router.patch('/:id', async (req, res) => {
       plan.price = priceNum;
     }
     if (currency !== undefined) plan.currency = String(currency).toUpperCase();
+    if (allowCustomDuration !== undefined) plan.allowCustomDuration = allowCustomDuration === true;
     if (status !== undefined) plan.status = status === 'Inactive' ? 'Inactive' : 'Active';
     if (features !== undefined) plan.features = features;
 
