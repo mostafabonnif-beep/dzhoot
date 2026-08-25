@@ -195,7 +195,8 @@ export async function redeemCode(
 
     if (subscription) {
       const base = subscription.expiresAt.getTime() > now.getTime() ? subscription.expiresAt : now;
-      const extendedUntil = new Date(base.getTime() + plan.durationDays * DAY_MS);
+      const durationDays = code.customDurationDays || plan.durationDays;
+      const extendedUntil = new Date(base.getTime() + durationDays * DAY_MS);
       subscription.expiresAt = extendedUntil;
       subscription.startsAt = now;
       subscription.planId = plan._id;
@@ -208,7 +209,7 @@ export async function redeemCode(
         activationCodeId: code._id,
         status: 'ACTIVE',
         startsAt: now,
-        expiresAt: new Date(now.getTime() + plan.durationDays * DAY_MS),
+        expiresAt: new Date(now.getTime() + (code.customDurationDays || plan.durationDays) * DAY_MS),
       });
     }
 
@@ -345,6 +346,9 @@ export async function generateCodes(opts: {
   createdBy?: string | null;
   resellerId?: string | null;
   batchId?: string | null;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customDurationDays?: number | null;
 }) {
   const plan = await Plan.findById(opts.planId).exec();
   if (!plan) {
@@ -358,6 +362,10 @@ export async function generateCodes(opts: {
     : null;
   const resellerId = opts.resellerId ? new mongoose.Types.ObjectId(opts.resellerId) : null;
   const batchId = opts.batchId ? new mongoose.Types.ObjectId(opts.batchId) : null;
+  const customDurationDays =
+    Number.isInteger(opts.customDurationDays) && opts.customDurationDays! > 0
+      ? Math.min(Math.floor(opts.customDurationDays!), 3650)
+      : null;
 
   const plainCodes: string[] = [];
   const docs = [];
@@ -378,6 +386,9 @@ export async function generateCodes(opts: {
       planId: plan._id,
       status: 'UNUSED',
       codeExpiresAt,
+      customerName: opts.customerName ? String(opts.customerName).trim().slice(0, 100) : null,
+      customerPhone: opts.customerPhone ? String(opts.customerPhone).trim().slice(0, 30) : null,
+      customDurationDays,
       createdBy: opts.createdBy ? new mongoose.Types.ObjectId(opts.createdBy) : null,
       resellerId,
       batchId,
