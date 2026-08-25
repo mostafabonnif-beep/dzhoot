@@ -36,6 +36,10 @@ const HEALTH_CACHE_TTL_MS = 60 * 1000;
 
 const healthCache = new Map<string, HealthCacheEntry>();
 const lastAlertedHealth = new Map<string, SourceHealth>();
+// Recovery hysteresis: a source must pass TWO consecutive verified probes before
+// it is allowed back from degraded/blocked — one flaky probe must not flap the
+// whole catalog between primary and backup.
+const consecutiveVerified = new Map<string, number>();
 
 /** Build the HLS live URL for a stream on a given Xtream source. */
 export function buildFailoverStreamUrl(
@@ -266,43 +270,53 @@ export async function getFailoverTarget(
  */
 async function probeSource(source: any): Promise<{ health: SourceHealth; error: string | null; latencyMs: number }> {
   const started = Date.now();
+  let error: string | null = null;
 
   if (source.directPlayback === true) {
-    let probeUrl: string | null = null;
+    let probeUrls: string[] = [];
     const map = await ChannelFailoverMap.findOne({
       backupSourceId: source._id,
       enabled: true,
       backupStreamId: { $exists: true, $ne: '' },
     }).lean().exec();
     if (map) {
-      const creds = getSourceCreds(source);
-      probeUrl = buildFailoverStreamUrl(creds, map.backupStreamId);
+      probeUrls.push(buildFailoverStreamUrl(getSourceCreds(source), map.backupStreamId));
     } else {
-      const ch = await Channel.findOne({
+      // Primary source: sample a few catalog channels — a single flaky channel
+      // must not mark the whole source down.
+      const chs = await Channel.find({
         isActive: { $ne: false },
         'metadata.source': 'xtream',
         'metadata.xtreamSourceId': source._id,
         channelUrl: { $exists: true, $ne: '' },
       })
         .select('channelUrl')
+        .limit(3)
         .lean()
         .exec();
-      probeUrl = ch?.channelUrl || null;
+      probeUrls = chs.map((c) => String(c.channelUrl || '')).filter(Boolean);
     }
 
-    if (!probeUrl) {
+    if (probeUrls.length === 0) {
       // No stream to probe yet (backup before any maps) — API check as a
       // fallback so the source at least reports auth health.
       return probeApiOnly(source, started);
     }
 
-    const manifestOk = await probeManifest(probeUrl);
-    if (manifestOk.ok) {
-      return { health: 'verified', error: null, latencyMs: Date.now() - started };
+    // Any live sample ⇒ the source serves customers.
+    for (const probeUrl of probeUrls) {
+      const manifestOk = await probeManifest(probeUrl);
+      if (manifestOk.ok) {
+        return { health: 'verified', error: null, latencyMs: Date.now() - started };
+      }
+      if (manifestOk.error) {
+        // keep the last error for diagnostics
+        error = manifestOk.error;
+      }
     }
     return {
       health: 'degraded',
-      error: manifestOk.error || 'Direct stream probe failed',
+      error: error || 'Direct stream probe failed',
       latencyMs: Date.now() - started,
     };
   }
@@ -396,6 +410,20 @@ export async function runSourceWatchdog(): Promise<{
     } catch (err: any) {
       next = 'blocked';
       error = String(err?.message || 'Watchdog probe failed');
+    }
+
+    // Hysteresis on RECOVERY only: going down applies immediately (fast
+    // failover); coming back requires two consecutive verified probes.
+    if (next === 'verified' && prev !== 'verified') {
+      const streak = (consecutiveVerified.get(key) || 0) + 1;
+      consecutiveVerified.set(key, streak);
+      if (streak < 2) {
+        next = prev; // not yet — keep the source marked down
+      }
+    } else if (next === 'verified') {
+      consecutiveVerified.set(key, 0);
+    } else {
+      consecutiveVerified.set(key, 0);
     }
 
     // Persist only when something actually changed (avoid write churn every 60s).

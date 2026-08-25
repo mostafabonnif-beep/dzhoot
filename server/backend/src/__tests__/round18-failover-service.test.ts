@@ -192,12 +192,39 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
       metadata: { source: 'xtream', xtreamSourceId: String(neo._id) },
     });
 
-    const res = await runSourceWatchdog();
-    expect(res.states[0].health).toBe('verified');
-    const fresh = await XtreamSource.findById(neo._id).lean().exec();
+    // First run: probe is healthy but recovery hysteresis needs TWO consecutive
+    // verified probes before a blocked source is allowed back.
+    const res1 = await runSourceWatchdog();
+    expect(res1.states[0].health).toBe('blocked');
+    let fresh = await XtreamSource.findById(neo._id).lean().exec();
+    expect(fresh!.verificationStatus).toBe('blocked');
+
+    const res2 = await runSourceWatchdog();
+    expect(res2.states[0].health).toBe('verified');
+    fresh = await XtreamSource.findById(neo._id).lean().exec();
     expect(fresh!.verificationStatus).toBe('verified');
     const { get: axiosGet } = require('axios');
     expect(axiosGet).toHaveBeenCalledWith('https://cf.business-cloud-neo.ru/live/u/p/262849.m3u8', expect.anything());
+  });
+
+  it('watchdog samples up to 3 catalog channels and verifies if ANY is alive', async () => {
+    (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('API unreachable'));
+    const { get: axiosGet } = require('axios');
+    // First two sampled channels dead, third alive → verified.
+    (axiosGet as jest.Mock)
+      .mockRejectedValueOnce(new Error('dead channel 1'))
+      .mockRejectedValueOnce(new Error('dead channel 2'));
+    const neo = await XtreamSource.create({
+      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true,
+    });
+    await Channel.create({ channelId: 'CH-N1', channelName: 'A', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/1.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(neo._id) } });
+    await Channel.create({ channelId: 'CH-N2', channelName: 'B', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/2.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(neo._id) } });
+    await Channel.create({ channelId: 'CH-N3', channelName: 'C', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/3.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(neo._id) } });
+
+    const res = await runSourceWatchdog();
+    // prev is verified → no hysteresis on the down direction... but probe found a live sample → verified.
+    expect(res.states[0].health).toBe('verified');
   });
 
   it('channelCanonicalKey maps the messy Maghreb naming to shared keys', () => {
