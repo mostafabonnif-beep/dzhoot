@@ -155,6 +155,10 @@ router.post('/', async (req, res) => {
     audit({ ...reqCtx(req), action: 'RESELLER_CREATE', resource: 'Reseller', resourceId: String(doc._id), changes: { after: { name: doc.name, city: doc.city } } });
     res.status(201).json({ success: true, data: doc });
   } catch (err) {
+    // Unique index on username/prefix — surface as a clear 400, not a 500.
+    if (err && err.code === 11000) {
+      return res.status(400).json({ success: false, error: 'Duplicate reseller — username or prefix already in use' });
+    }
     console.error('[admin-resellers] create error:', err);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }

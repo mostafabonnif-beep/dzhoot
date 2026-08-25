@@ -22,7 +22,7 @@ import {
   Trash2,
   CheckCheck,
 } from 'lucide-react';
-import api from '@/lib/api';
+import api, { decodeTokenRole } from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
 import { useToast } from '@/hooks/use-toast';
 import Modal from '@/components/ui/modal';
@@ -193,7 +193,10 @@ export default function ResellerDashboardPage() {
 
   useEffect(() => {
     if (!hydrated) return;
-    if (!accessToken) {
+    // The portal shares localStorage with the admin panel. Only a JWT with
+    // role 'reseller' may render this dashboard — a user/admin token would
+    // otherwise produce a permanently broken page.
+    if (!accessToken || decodeTokenRole(accessToken) !== 'reseller') {
       router.replace('/reseller/login');
       return;
     }

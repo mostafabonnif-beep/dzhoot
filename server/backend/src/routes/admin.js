@@ -21,6 +21,7 @@ const ActivationCode = require('../models/ActivationCode');
 const Subscription = require('../models/Subscription');
 const Reseller = require('../models/Reseller');
 const CreditTransaction = require('../models/CreditTransaction');
+const CodeBatch = require('../models/CodeBatch');
 const { epgService } = require('../services/epg-service');
 const { getPlaybackQualityStats } = require('../services/playback-event-service');
 const {
@@ -67,6 +68,20 @@ router.post('/channels', async (req, res) => {
       isActive,
       metadata,
     } = req.body;
+    // Same SSRF guard used by the M3U import path: only http(s) URLs may be
+    // stored as stream sources (admin-only endpoint, but defense in depth).
+    if (channelUrl) {
+      const check = await validateUrlForSSRF(channelUrl);
+      if (!check.safe) {
+        return res.status(400).json({ success: false, error: `channelUrl: ${check.reason}` });
+      }
+    }
+    if (channelImg) {
+      const check = await validateUrlForSSRF(channelImg);
+      if (!check.safe) {
+        return res.status(400).json({ success: false, error: `channelImg: ${check.reason}` });
+      }
+    }
     const channel = new Channel({
       channelId,
       channelName,
@@ -127,8 +142,20 @@ router.put('/channels/:id', async (req, res) => {
     const allowedUpdates = {};
     if (channelId !== undefined) allowedUpdates.channelId = channelId;
     if (channelName !== undefined) allowedUpdates.channelName = channelName;
-    if (channelUrl !== undefined) allowedUpdates.channelUrl = channelUrl;
-    if (channelImg !== undefined) allowedUpdates.channelImg = channelImg;
+    if (channelUrl !== undefined) {
+      const check = await validateUrlForSSRF(channelUrl);
+      if (!check.safe) {
+        return res.status(400).json({ success: false, error: `channelUrl: ${check.reason}` });
+      }
+      allowedUpdates.channelUrl = channelUrl;
+    }
+    if (channelImg !== undefined) {
+      const check = await validateUrlForSSRF(channelImg);
+      if (!check.safe) {
+        return res.status(400).json({ success: false, error: `channelImg: ${check.reason}` });
+      }
+      allowedUpdates.channelImg = channelImg;
+    }
     if (tvgLogo !== undefined) allowedUpdates.tvgLogo = tvgLogo;
     if (tvgName !== undefined) allowedUpdates.tvgName = tvgName;
     if (tvgId !== undefined) allowedUpdates.tvgId = tvgId;
@@ -1518,20 +1545,42 @@ router.get('/business/summary', async (req, res) => {
     const plans = await Plan.find().select('name durationDays price currency status').lean();
     const planMap = new Map(plans.map((p) => [String(p._id), p]));
 
-    // Codes activated this month / ever, grouped by plan.
-    const [activatedMonth, activatedTotal, generatedMonth, activeSubscriptions, resellers] = await Promise.all([
-      ActivationCode.aggregate([
-        { $match: { status: 'ACTIVATED', activatedAt: { $gte: monthStart } } },
-        { $group: { _id: '$planId', count: { $sum: 1 } } },
-      ]),
-      ActivationCode.aggregate([
-        { $match: { status: 'ACTIVATED' } },
-        { $group: { _id: '$planId', count: { $sum: 1 } } },
-      ]),
-      ActivationCode.countDocuments({ createdAt: { $gte: monthStart } }),
-      Subscription.countDocuments({ status: 'ACTIVE', expiresAt: { $gt: now } }),
-      Reseller.find().select('credit status').lean(),
-    ]);
+    // Codes activated this month / ever, grouped by plan. Revenue is counted
+    // ONLY for operator-issued codes (resellerId null): reseller-issued codes
+    // are paid via credit purchases / batch deliveries, so counting their
+    // activations again would double-count operator income.
+    const [activatedMonth, activatedTotal, generatedMonth, activeSubscriptions, resellers, purchasesMonth, purchasesTotal, adminActivatedMonth, adminActivatedTotal] =
+      await Promise.all([
+        ActivationCode.aggregate([
+          { $match: { status: 'ACTIVATED', activatedAt: { $gte: monthStart } } },
+          { $group: { _id: '$planId', count: { $sum: 1 } } },
+        ]),
+        ActivationCode.aggregate([
+          { $match: { status: 'ACTIVATED' } },
+          { $group: { _id: '$planId', count: { $sum: 1 } } },
+        ]),
+        ActivationCode.countDocuments({ createdAt: { $gte: monthStart } }),
+        Subscription.countDocuments({ status: 'ACTIVE', expiresAt: { $gt: now } }),
+        Reseller.find().select('credit status').lean(),
+        // Credit top-ups actually paid by resellers (GRANT rows with positive
+        // quantity — clawbacks/adjustments are negative and must NOT add money).
+        CreditTransaction.aggregate([
+          { $match: { type: 'GRANT', quantity: { $gt: 0 }, createdAt: { $gte: monthStart } } },
+          { $group: { _id: null, value: { $sum: '$amount' } } },
+        ]),
+        CreditTransaction.aggregate([
+          { $match: { type: 'GRANT', quantity: { $gt: 0 } } },
+          { $group: { _id: null, value: { $sum: '$amount' } } },
+        ]),
+        ActivationCode.aggregate([
+          { $match: { status: 'ACTIVATED', activatedAt: { $gte: monthStart }, resellerId: null } },
+          { $group: { _id: '$planId', count: { $sum: 1 } } },
+        ]),
+        ActivationCode.aggregate([
+          { $match: { status: 'ACTIVATED', resellerId: null } },
+          { $group: { _id: '$planId', count: { $sum: 1 } } },
+        ]),
+      ]);
 
     // Remaining code credit per plan across active resellers.
     const creditByPlan = new Map();
@@ -1562,12 +1611,65 @@ router.get('/business/summary', async (req, res) => {
         .filter(Boolean)
         .sort((x, y) => y.count - x.count);
 
-    const byPlanThisMonth = buildRows(activatedMonth);
-    const byPlanTotal = buildRows(activatedTotal);
-    const revenueThisMonth = byPlanThisMonth.reduce((s, r) => s + r.revenue, 0);
-    const revenueTotal = byPlanTotal.reduce((s, r) => s + r.revenue, 0);
-    const activatedThisMonth = byPlanThisMonth.reduce((s, r) => s + r.count, 0);
-    const activatedTotalCount = byPlanTotal.reduce((s, r) => s + r.count, 0);
+    // byPlan rows cover the same revenue-generating activations as the
+    // headline number: operator-issued codes only (reseller activations are
+    // the reseller's retail income, not the operator's). The activations
+    // cards keep the raw count of ALL activations.
+    const byPlanThisMonth = buildRows(adminActivatedMonth);
+    const byPlanTotal = buildRows(adminActivatedTotal);
+    const activatedThisMonth = activatedMonth.reduce((s, a) => s + a.count, 0);
+    const activatedTotalCount = activatedTotal.reduce((s, a) => s + a.count, 0);
+
+    // Operator revenue = credit top-ups + batch deliveries + activations of
+    // operator-issued codes (reseller-issued activations are the reseller's
+    // retail income, not the operator's).
+    const creditPurchasesThisMonth = purchasesMonth[0]?.value || 0;
+    const creditPurchasesTotal = purchasesTotal[0]?.value || 0;
+
+    // Batch deliveries (wholesale). Old batches may lack wholesaleTotal — fall
+    // back to the reseller's current wholesale price for the plan.
+    const [batches, deliveryResellers] = await Promise.all([
+      CodeBatch.find({ status: 'delivered' })
+        .select('resellerId planId quantity receiptDate wholesalePrice wholesaleTotal')
+        .lean()
+        .exec(),
+      Reseller.find().select('prices').lean().exec(),
+    ]);
+    const priceByResellerPlan = new Map(
+      deliveryResellers.map((r) => [
+        String(r._id),
+        new Map((r.prices || []).map((p) => [String(p.planId), Number(p.price) || 0])),
+      ]),
+    );
+    const batchValue = (b) => {
+      if (b.wholesaleTotal !== null && b.wholesaleTotal !== undefined && Number.isFinite(Number(b.wholesaleTotal))) {
+        return Number(b.wholesaleTotal) || 0;
+      }
+      const price = priceByResellerPlan.get(String(b.resellerId))?.get(String(b.planId)) || 0;
+      return price * (Number(b.quantity) || 0);
+    };
+    let deliveriesThisMonth = 0;
+    let deliveriesTotal = 0;
+    const deliveryValueByReseller = new Map();
+    for (const b of batches) {
+      const value = batchValue(b);
+      deliveriesTotal += value;
+      const key = String(b.resellerId);
+      deliveryValueByReseller.set(key, (deliveryValueByReseller.get(key) || 0) + value);
+      const receipt = b.receiptDate ? new Date(b.receiptDate) : null;
+      if (receipt && receipt >= monthStart) deliveriesThisMonth += value;
+    }
+
+    const adminActivationRevenue = (agg) =>
+      agg.reduce((s, a) => {
+        const plan = planMap.get(String(a._id));
+        return s + (plan ? (plan.price || 0) * a.count : 0);
+      }, 0);
+    const adminActivationRevenueThisMonth = adminActivationRevenue(adminActivatedMonth);
+    const adminActivationRevenueTotal = adminActivationRevenue(adminActivatedTotal);
+
+    const revenueThisMonthTotal = creditPurchasesThisMonth + deliveriesThisMonth + adminActivationRevenueThisMonth;
+    const revenueTotalAll = creditPurchasesTotal + deliveriesTotal + adminActivationRevenueTotal;
 
     const creditByPlanRows = [...creditByPlan.entries()]
       .map(([planId, quantity]) => {
@@ -1603,7 +1705,8 @@ router.get('/business/summary', async (req, res) => {
       };
     });
 
-    // Sales per reseller: activations (this month + total) + purchase value from ledger.
+    // Sales per reseller: activations (this month + total) + purchase value from ledger
+    // (positive GRANT top-ups only) + wholesale batch deliveries.
     const [activByResellerMonth, activByResellerTotal, purchaseByReseller] = await Promise.all([
       ActivationCode.aggregate([
         { $match: { status: 'ACTIVATED', activatedAt: { $gte: monthStart }, resellerId: { $ne: null } } },
@@ -1613,7 +1716,10 @@ router.get('/business/summary', async (req, res) => {
         { $match: { status: 'ACTIVATED', resellerId: { $ne: null } } },
         { $group: { _id: '$resellerId', count: { $sum: 1 } } },
       ]),
-      CreditTransaction.aggregate([{ $match: { type: 'GRANT' } }, { $group: { _id: '$resellerId', value: { $sum: '$amount' } } }]),
+      CreditTransaction.aggregate([
+        { $match: { type: 'GRANT', quantity: { $gt: 0 } } },
+        { $group: { _id: '$resellerId', value: { $sum: '$amount' } } },
+      ]),
     ]);
     const resellerAgg = new Map();
     for (const a of activByResellerMonth) {
@@ -1628,8 +1734,13 @@ router.get('/business/summary', async (req, res) => {
     }
     for (const p of purchaseByReseller) {
       const e = resellerAgg.get(String(p._id)) || { month: 0, total: 0, purchases: 0 };
-      e.purchases = p.value;
+      e.purchases += p.value;
       resellerAgg.set(String(p._id), e);
+    }
+    for (const [resellerId, value] of deliveryValueByReseller) {
+      const e = resellerAgg.get(resellerId) || { month: 0, total: 0, purchases: 0 };
+      e.purchases += value;
+      resellerAgg.set(resellerId, e);
     }
     const resellerDocs = await Reseller.find({ _id: { $in: [...resellerAgg.keys()] } }).select('name city').lean();
     const resellerNameMap = new Map(resellerDocs.map((r) => [String(r._id), r]));
@@ -1652,8 +1763,16 @@ router.get('/business/summary', async (req, res) => {
         summary: {
           activatedThisMonth,
           activatedTotal: activatedTotalCount,
-          revenueThisMonth,
-          revenueTotal,
+          revenueThisMonth: revenueThisMonthTotal,
+          revenueTotal: revenueTotalAll,
+          revenueBreakdown: {
+            creditPurchasesThisMonth,
+            creditPurchasesTotal,
+            batchDeliveriesThisMonth: deliveriesThisMonth,
+            batchDeliveriesTotal: deliveriesTotal,
+            activationsThisMonth: adminActivationRevenueThisMonth,
+            activationsTotal: adminActivationRevenueTotal,
+          },
           activeSubscriptions,
           activeResellers,
           creditRemaining,

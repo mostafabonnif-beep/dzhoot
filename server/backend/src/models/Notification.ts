@@ -6,7 +6,9 @@ export interface INotificationDocument extends Document {
   imageUrl?: string;
   deepLink?: string;
   audience: 'ALL' | 'ACTIVE';
-  status: 'DRAFT' | 'SCHEDULED' | 'SENT';
+  status: 'DRAFT' | 'SCHEDULED' | 'SENT' | 'FAILED';
+  /** Honest delivery outcome: { configured, attempted, sent, failed, skipped }. */
+  deliveryStats?: Record<string, unknown> | null;
   scheduledAt?: Date | null;
   sentAt?: Date | null;
   createdBy?: mongoose.Types.ObjectId | null;
@@ -21,9 +23,10 @@ const notificationSchema = new Schema<INotificationDocument>(
     imageUrl: { type: String, default: '' },
     deepLink: { type: String, default: '' },
     audience: { type: String, enum: ['ALL', 'ACTIVE'], default: 'ALL', index: true },
-    status: { type: String, enum: ['DRAFT', 'SCHEDULED', 'SENT'], default: 'DRAFT', index: true },
+    status: { type: String, enum: ['DRAFT', 'SCHEDULED', 'SENT', 'FAILED'], default: 'DRAFT', index: true },
     scheduledAt: { type: Date, default: null },
     sentAt: { type: Date, default: null },
+    deliveryStats: { type: Schema.Types.Mixed, default: null },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },

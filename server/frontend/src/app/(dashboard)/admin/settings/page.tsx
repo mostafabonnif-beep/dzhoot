@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff, Download, Upload, BellRing, Mail } from 'lucide-react';
+import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff, Download, Upload, BellRing, Mail, KeyRound } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/components/locale-provider';
@@ -36,6 +36,12 @@ export default function SettingsPage() {
   const [disableCode, setDisableCode] = useState('');
   const [totpLoading, setTotpLoading] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  // Change-password (admins have no other self-service path — /user is User-only).
+  const [pwCurrent, setPwCurrent] = useState('');
+  const [pwNew, setPwNew] = useState('');
+  const [pwConfirm, setPwConfirm] = useState('');
+  const [pwLoading, setPwLoading] = useState(false);
+  const [brevoConfigured, setBrevoConfigured] = useState(false);
   const [alertWebhook, setAlertWebhook] = useState('');
   const [brevoUser, setBrevoUser] = useState('');
   const [brevoPass, setBrevoPass] = useState('');
@@ -64,7 +70,9 @@ export default function SettingsPage() {
         const appSettings = appSettingsRes?.data?.data || {};
         if (appSettings.alert_webhook_url !== undefined) setAlertWebhook(String(appSettings.alert_webhook_url));
         if (appSettings.brevo_user !== undefined) setBrevoUser(String(appSettings.brevo_user));
-        if (appSettings.brevo_password !== undefined) setBrevoPass(String(appSettings.brevo_password));
+        // The API never returns the SMTP password — only whether it's set.
+        setBrevoConfigured(appSettings.brevo_configured === true);
+        setBrevoPass('');
         if (appSettings.mail_from !== undefined) setMailFrom(String(appSettings.mail_from));
         if (appSettings.code_expiry_days !== undefined) setCodeExpiryDays(String(appSettings.code_expiry_days));
         if (meRes?.data?.user) setTotpEnabled(meRes.data.user.totpEnabled === true);
@@ -152,6 +160,36 @@ export default function SettingsPage() {
       toast('تعذر تعطيل 2FA. تحقق من كلمة المرور والرمز.', 'error');
     } finally {
       setTotpLoading(false);
+    }
+  }
+
+  async function changeAdminPassword() {
+    if (pwNew.length < 8) {
+      toast('كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل', 'error');
+      return;
+    }
+    if (pwNew !== pwConfirm) {
+      toast('كلمتا المرور غير متطابقتين', 'error');
+      return;
+    }
+    setPwLoading(true);
+    try {
+      // Wrong current password returns 401 — the interceptor would otherwise
+      // treat it as session expiry and log the admin out.
+      const res = await api.post(
+        '/auth/change-password',
+        { currentPassword: pwCurrent, newPassword: pwNew },
+        { headers: { 'X-Skip-Auth-Redirect': '1' } },
+      );
+      toast(res.data?.message || 'تم تغيير كلمة المرور بنجاح', 'success');
+      setPwCurrent('');
+      setPwNew('');
+      setPwConfirm('');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast(axiosErr.response?.data?.error || 'فشل تغيير كلمة المرور', 'error');
+    } finally {
+      setPwLoading(false);
     }
   }
 
@@ -417,6 +455,31 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Change password (admin self-service rotation) */}
+      <div className="border border-border">
+        <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2">
+          <div>
+            <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">تغيير كلمة المرور</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              غيّر كلمة مرور حساب المشرف الحالي. تُسجَّل الخروج من جميع الجلسات الأخرى تلقائيًا.
+            </p>
+          </div>
+          <KeyRound className="h-5 w-5 text-muted-foreground" />
+        </div>
+        <div className="space-y-3 px-4 py-4">
+          <div className="grid gap-3 md:grid-cols-3">
+            <input type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} placeholder="كلمة المرور الحالية" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="current-password" />
+            <input type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)} placeholder="كلمة المرور الجديدة (8+ أحرف)" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="new-password" />
+            <input type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)} placeholder="تأكيد كلمة المرور الجديدة" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="new-password" />
+          </div>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={changeAdminPassword} disabled={pwLoading || !pwCurrent || !pwNew || !pwConfirm} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+              {pwLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} تغيير كلمة المرور
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Session Management */}
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border">
@@ -672,10 +735,13 @@ export default function SettingsPage() {
                 dir="ltr"
                 type="password"
                 className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
-                placeholder="••••••••"
+                placeholder={brevoConfigured ? '•••••••• (اتركه فارغًا للإبقاء عليه)' : 'لم تُضبط بعد'}
                 value={brevoPass}
                 onChange={(e) => setBrevoPass(e.target.value)}
               />
+              {brevoConfigured ? (
+                <p className="text-xs text-signal-green">✓ كلمة المرور مضبوطة — اترك الحقل فارغًا عند الحفظ للإبقاء عليها.</p>
+              ) : null}
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">بريد المُرسِل (MAIL_FROM)</label>
@@ -693,12 +759,17 @@ export default function SettingsPage() {
               onClick={async () => {
                 setAlertSaving(true);
                 try {
-                  await api.put('/admin/app-settings', {
+                  const payload: Record<string, unknown> = {
                     alert_webhook_url: alertWebhook,
                     brevo_user: brevoUser,
-                    brevo_password: brevoPass,
                     mail_from: mailFrom,
-                  });
+                  };
+                  if (brevoPass) payload.brevo_password = brevoPass;
+                  await api.put('/admin/app-settings', payload);
+                  const newlySet = Boolean(brevoPass);
+                  setBrevoPass('');
+                  // Configured stays true if it was already set and we kept it.
+                  setBrevoConfigured((prev) => prev || newlySet);
                   toast(locale === 'ar' ? 'تم حفظ إعدادات التنبيهات' : locale === 'fr' ? 'Alertes enregistrées' : 'Alert settings saved', 'success');
                 } catch {
                   toast(locale === 'ar' ? 'فشل حفظ الإعدادات' : 'Échec de l\'enregistrement', 'error');

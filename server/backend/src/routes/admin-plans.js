@@ -5,6 +5,7 @@ const Plan = require('../models/Plan');
 const ActivationCode = require('../models/ActivationCode');
 const Subscription = require('../models/Subscription');
 const { requireAuth, requireAdmin } = require('./auth');
+const { escapeRegex } = require('../utils/escapeRegex');
 const { audit, reqCtx } = require('../services/audit-log');
 
 // Admin-only plan management: /api/v1/admin/plans
@@ -21,7 +22,7 @@ router.get('/', async (req, res) => {
     const { status, search, page = 1, pageSize = 100 } = req.query;
     const query = {};
     if (status) query.status = status;
-    if (search) query.name = { $regex: String(search), $options: 'i' };
+    if (search) query.name = { $regex: escapeRegex(String(search)), $options: 'i' };
 
     const totalCount = await Plan.countDocuments(query);
     const plans = await Plan.find(query)
@@ -51,7 +52,7 @@ router.get('/', async (req, res) => {
 // POST / — create a plan
 router.post('/', async (req, res) => {
   try {
-    const { name, description, durationDays, maxDevices, price, currency, status, features } =
+    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, features } =
       req.body || {};
 
     if (!name || typeof name !== 'string') {
@@ -61,12 +62,17 @@ router.post('/', async (req, res) => {
     if (!Number.isInteger(days) || days < 1 || days > 3650) {
       return res.status(400).json({ success: false, error: 'durationDays must be an integer >= 1' });
     }
+    const streams = Number(maxConcurrentStreams);
+    if (maxConcurrentStreams !== undefined && (!Number.isInteger(streams) || streams < 1 || streams > 100)) {
+      return res.status(400).json({ success: false, error: 'maxConcurrentStreams must be an integer between 1 and 100' });
+    }
 
     const plan = await Plan.create({
       name: String(name).trim(),
       description: description || '',
       durationDays: days,
       maxDevices: Math.max(1, Number(maxDevices) || 1),
+      maxConcurrentStreams: maxConcurrentStreams !== undefined ? streams : 1,
       price: Number(price) || 0,
       currency: currency || 'DZD',
       status: status === 'Inactive' ? 'Inactive' : 'Active',
@@ -91,7 +97,7 @@ router.patch('/:id', async (req, res) => {
     if (!plan) return res.status(404).json({ success: false, error: 'Plan not found' });
 
     const before = plan.toObject();
-    const { name, description, durationDays, maxDevices, price, currency, status, features } =
+    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, features } =
       req.body || {};
 
     if (name !== undefined) plan.name = String(name).trim();
@@ -104,6 +110,13 @@ router.patch('/:id', async (req, res) => {
       plan.durationDays = days;
     }
     if (maxDevices !== undefined) plan.maxDevices = Math.max(1, Number(maxDevices) || 1);
+    if (maxConcurrentStreams !== undefined) {
+      const streams = Number(maxConcurrentStreams);
+      if (!Number.isInteger(streams) || streams < 1 || streams > 100) {
+        return res.status(400).json({ success: false, error: 'maxConcurrentStreams must be an integer between 1 and 100' });
+      }
+      plan.maxConcurrentStreams = streams;
+    }
     if (price !== undefined) plan.price = Number(price) || 0;
     if (currency !== undefined) plan.currency = String(currency).toUpperCase();
     if (status !== undefined) plan.status = status === 'Inactive' ? 'Inactive' : 'Active';

@@ -5,7 +5,7 @@ const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx } = require('../services/audit-log');
-const { sendNotificationToDevices } = require('../services/fcm-service');
+const { sendNotificationToDevices, notificationStatusFromFcm } = require('../services/fcm-service');
 
 // Admin-only notifications: /api/v1/admin/notifications
 router.use(requireAuth);
@@ -18,15 +18,17 @@ function parseId(id) {
 // GET / — list notifications
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, pageSize = 50, status } = req.query;
+    const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(String(req.query.pageSize || '50'), 10) || 50, 1), 200);
+    const { status } = req.query;
     const filter = {};
     if (status) filter.status = status;
     const [totalCount, data] = await Promise.all([
       Notification.countDocuments(filter),
       Notification.find(filter)
         .sort({ createdAt: -1 })
-        .skip((Number(page) - 1) * Number(pageSize))
-        .limit(Number(pageSize))
+        .skip((page - 1) * pageSize)
+        .limit(pageSize)
         .lean(),
     ]);
     return res.json({ success: true, data, totalCount });
@@ -76,12 +78,15 @@ router.post('/:id/send', async (req, res) => {
       audience: notification.audience,
     });
 
-    notification.status = 'SENT';
+    // Honest status: SENT only when something was actually delivered.
+    const outcome = notificationStatusFromFcm(fcm);
+    notification.status = outcome.status;
     notification.sentAt = new Date();
+    notification.deliveryStats = { ...fcm, reason: outcome.reason };
     await notification.save();
 
     audit({ ...reqCtx(req), action: 'NOTIFICATION_SEND', resource: 'Notification', resourceId: String(id), metadata: fcm });
-    return res.json({ success: true, data: notification, fcm });
+    return res.json({ success: true, data: notification, fcm, reason: outcome.reason });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }

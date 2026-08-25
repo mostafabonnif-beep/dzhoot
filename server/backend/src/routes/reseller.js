@@ -81,8 +81,19 @@ router.get('/me', async (req, res) => {
         $group: {
           _id: null,
           grantedQty: { $sum: { $cond: [{ $eq: ['$type', 'GRANT'] }, '$quantity', 0] } },
-          grantedValue: { $sum: { $cond: [{ $eq: ['$type', 'GRANT'] }, '$amount', 0] } },
-          consumedQty: { $sum: { $cond: [{ $eq: ['$type', 'CONSUME'] }, -'$quantity', 0] } },
+          // Purchases value counts only real top-ups (positive GRANT). Negative
+          // GRANT rows are admin clawbacks/adjustments — they reduce credit and
+          // must NOT inflate what the reseller paid.
+          grantedValue: {
+            $sum: {
+              $cond: [{ $and: [{ $eq: ['$type', 'GRANT'] }, { $gt: ['$quantity', 0] }] }, '$amount', 0],
+            },
+          },
+          consumedQty: {
+            $sum: {
+              $cond: [{ $eq: ['$type', 'CONSUME'] }, { $subtract: [0, '$quantity'] }, 0],
+            },
+          },
           returnedQty: { $sum: { $cond: [{ $in: ['$type', ['RETURN', 'EXPIRE_RETURN']] }, '$quantity', 0] } },
         },
       },
@@ -118,7 +129,8 @@ router.get('/me', async (req, res) => {
           purchasedValue: acc.grantedValue,
           consumedQty: acc.consumedQty,
           returnedQty: acc.returnedQty,
-          netQty: acc.grantedQty - acc.consumedQty - acc.returnedQty,
+          // RETURN/EXPIRE_RETURN restore credit — they ADD to the balance.
+          netQty: acc.grantedQty - acc.consumedQty + acc.returnedQty,
         },
         expiringSoon,
       },
@@ -403,7 +415,6 @@ router.get('/batches/:id/export', async (req, res) => {
   }
 });
 
-module.exports = router;
 // ─── Customer debts (ديون الزبائن) ─────────────────────────────
 // Lets a reseller record credit given to customers who haven't paid yet,
 // see who owes him (oldest unpaid first), settle debts, and jump to a
@@ -416,7 +427,14 @@ function parseDebtId(id) {
 
 function parseDebtAmount(value) {
   const n = Number(value);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : null;
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+}
+
+function parseDebtQuantity(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 1 || n > 100000) return null;
+  return n;
 }
 
 // GET /debts — list (UNPAID first, then newest) + summary of what's still owed
@@ -426,12 +444,27 @@ router.get('/debts', async (req, res) => {
     const filter = { resellerId: req.reseller._id };
     if (['UNPAID', 'PARTIAL', 'PAID'].includes(status)) filter.status = status;
 
-    const [debts, summary] = await Promise.all([
-      ResellerDebt.find(filter)
-        .sort({ status: 1, createdAt: -1 })
-        .limit(300)
-        .lean()
-        .exec(),
+    const [debts, summary, totalDebts] = await Promise.all([
+      // UNPAID first (oldest first), then PARTIAL, then PAID — computed on the
+      // server so the cap never cuts the debts the reseller must see first.
+      ResellerDebt.aggregate([
+        { $match: filter },
+        {
+          $addFields: {
+            statusOrder: {
+              $switch: {
+                branches: [
+                  { case: { $eq: ['$status', 'UNPAID'] }, then: 0 },
+                  { case: { $eq: ['$status', 'PARTIAL'] }, then: 1 },
+                ],
+                default: 2,
+              },
+            },
+          },
+        },
+        { $sort: { statusOrder: 1, createdAt: 1 } },
+        { $limit: 1000 },
+      ]).exec(),
       ResellerDebt.aggregate([
         { $match: { resellerId: req.reseller._id } },
         {
@@ -444,6 +477,7 @@ router.get('/debts', async (req, res) => {
           },
         },
       ]).exec(),
+      ResellerDebt.countDocuments({ resellerId: req.reseller._id }).exec(),
     ]);
 
     const byStatus = Object.fromEntries(summary.map((s) => [s._id, s]));
@@ -468,7 +502,7 @@ router.get('/debts', async (req, res) => {
     return res.json({
       success: true,
       data,
-      summary: { outstanding, unpaidCount, totalDebts: debts.length },
+      summary: { outstanding, unpaidCount, totalDebts },
     });
   } catch (err) {
     console.error('[reseller] list debts error:', err);
@@ -486,7 +520,11 @@ router.post('/debts', async (req, res) => {
     }
     const amt = parseDebtAmount(amount);
     if (amt === null) {
-      return res.status(400).json({ success: false, error: 'amount must be a non-negative number' });
+      return res.status(400).json({ success: false, error: 'amount must be a positive number' });
+    }
+    const qty = parseDebtQuantity(quantity);
+    if (qty === null && quantity !== undefined && quantity !== null && quantity !== '') {
+      return res.status(400).json({ success: false, error: 'quantity must be a positive integer' });
     }
     const debt = await ResellerDebt.create({
       resellerId: req.reseller._id,
@@ -494,7 +532,7 @@ router.post('/debts', async (req, res) => {
       customerPhone: String(customerPhone || '').trim().slice(0, 30),
       amount: amt,
       paidAmount: 0,
-      quantity: quantity !== undefined && quantity !== null && quantity !== '' ? Number(quantity) || null : null,
+      quantity: qty,
       planName: String(planName || '').trim().slice(0, 100),
       note: String(note || '').trim().slice(0, 500),
       status: 'UNPAID',

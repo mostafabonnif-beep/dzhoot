@@ -14,10 +14,11 @@ interface Notification {
   imageUrl?: string;
   deepLink?: string;
   audience: 'ALL' | 'ACTIVE';
-  status: 'DRAFT' | 'SCHEDULED' | 'SENT';
+  status: 'DRAFT' | 'SCHEDULED' | 'SENT' | 'FAILED';
   scheduledAt?: string | null;
   sentAt?: string | null;
   createdAt?: string;
+  deliveryStats?: { configured?: boolean; attempted?: number; sent?: number; failed?: number; skipped?: string; reason?: string } | null;
 }
 
 export default function NotificationsPage() {
@@ -121,14 +122,20 @@ export default function NotificationsPage() {
       const res = await api.post(`/admin/notifications/${n._id}/send`);
       const fcm = res.data?.fcm;
       const sent = fcm?.successCount ?? fcm?.sent ?? 0;
-      toast(
-        L(
-          sent > 0 ? `تم الإرسال إلى ${sent} جهاز` : 'تم وضع علامة مُرسَل (لا أجهزة مستهدفة)',
-          sent > 0 ? `Envoyée à ${sent} appareils` : 'Marquée envoyée (aucun appareil ciblé)',
-          sent > 0 ? `Sent to ${sent} devices` : 'Marked sent (no targeted devices)',
-        ),
-        'success',
-      );
+      const reason = res.data?.reason;
+      const failed = fcm?.failed ?? 0;
+      if (sent > 0) {
+        toast(
+          L(
+            `تم الإرسال إلى ${sent} جهاز${failed > 0 ? ` (فشل ${failed})` : ''}`,
+            `Envoyée à ${sent} appareils${failed > 0 ? ` (${failed} échecs)` : ''}`,
+            `Sent to ${sent} devices${failed > 0 ? ` (${failed} failed)` : ''}`,
+          ),
+          'success',
+        );
+      } else {
+        toast(L(`لم يُرسل: ${reason || 'لا أجهزة مستهدفة'}`, `Non envoyée: ${reason || 'aucun appareil ciblé'}`, `Not sent: ${reason || 'no targeted devices'}`), 'error');
+      }
       await fetchNotifications();
     } catch {
       toast(L('فشل إرسال الإشعار', 'Échec de l’envoi', 'Failed to send notification'), 'error');
@@ -186,6 +193,7 @@ export default function NotificationsPage() {
             <option value="DRAFT">{L('مسودة', 'Brouillons', 'Drafts')}</option>
             <option value="SCHEDULED">{L('مجدول', 'Programmées', 'Scheduled')}</option>
             <option value="SENT">{L('مُرسَل', 'Envoyées', 'Sent')}</option>
+            <option value="FAILED">{L('فشل', 'Échec', 'Failed')}</option>
           </select>
           <button
             onClick={() => setShowForm((v) => !v)}
@@ -309,14 +317,18 @@ export default function NotificationsPage() {
                         ? 'border-signal-green/30 text-signal-green'
                         : n.status === 'SCHEDULED'
                           ? 'border-signal-blue/40 text-signal-blue'
-                          : 'border-signal-amber/40 text-signal-amber'
+                          : n.status === 'FAILED'
+                            ? 'border-destructive/40 text-destructive'
+                            : 'border-signal-amber/40 text-signal-amber'
                     }`}
                   >
                     {n.status === 'SENT'
                       ? L('مُرسَل', 'Envoyée', 'Sent')
                       : n.status === 'SCHEDULED'
                         ? L('مجدول', 'Programmée', 'Scheduled')
-                        : L('مسودة', 'Brouillon', 'Draft')}
+                        : n.status === 'FAILED'
+                          ? L('فشل', 'Échec', 'Failed')
+                          : L('مسودة', 'Brouillon', 'Draft')}
                   </span>
                   <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
                     {n.audience === 'ALL'
@@ -331,10 +343,13 @@ export default function NotificationsPage() {
                     ? ` · ${L('مجدول', 'Programmée le', 'Scheduled')}: ${new Date(n.scheduledAt).toLocaleString()}`
                     : ''}
                   {n.sentAt ? ` · ${L('أُرسل', 'Envoyée le', 'Sent')}: ${new Date(n.sentAt).toLocaleString()}` : ''}
+                  {n.status === 'FAILED' && n.deliveryStats?.reason
+                    ? ` · ${L('السبب', 'Raison', 'Reason')}: ${n.deliveryStats.reason}`
+                    : ''}
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {n.status === 'DRAFT' && (
+                {(n.status === 'DRAFT' || n.status === 'FAILED') && (
                   <button
                     onClick={() => handleSend(n)}
                     disabled={sendingId === n._id}
@@ -345,7 +360,9 @@ export default function NotificationsPage() {
                     ) : (
                       <Send className="h-3.5 w-3.5" />
                     )}
-                    {L('إرسال', 'Envoyer', 'Send')}
+                    {n.status === 'FAILED'
+                      ? L('إعادة إرسال', 'Renvoyer', 'Resend')
+                      : L('إرسال', 'Envoyer', 'Send')}
                   </button>
                 )}
                 <button

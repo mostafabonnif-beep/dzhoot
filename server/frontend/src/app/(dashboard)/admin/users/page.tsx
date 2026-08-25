@@ -60,6 +60,7 @@ export default function UsersPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; username: string } | null>(null);
+  const [toggleConfirm, setToggleConfirm] = useState<{ id: string; username: string; isActive: boolean } | null>(null);
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
   const pageSize = 50;
@@ -235,11 +236,17 @@ export default function UsersPage() {
 
   async function handleToggleActive(e: React.MouseEvent, user: UserData) {
     e.stopPropagation();
+    // Toggling off kills the user's active sessions immediately — confirm first.
+    setToggleConfirm({ id: user._id, username: user.username, isActive: user.isActive });
+  }
+
+  async function confirmToggleActive() {
+    if (!toggleConfirm) return;
+    const { id, isActive } = toggleConfirm;
+    setToggleConfirm(null);
     try {
-      await api.put(`/users/${user._id}`, { isActive: !user.isActive });
-      setUsers((prev) =>
-        prev.map((u) => (u._id === user._id ? { ...u, isActive: !user.isActive } : u)),
-      );
+      await api.put(`/users/${id}`, { isActive: !isActive });
+      setUsers((prev) => prev.map((u) => (u._id === id ? { ...u, isActive: !isActive } : u)));
     } catch {
       toast('فشل تحديث حالة المستخدم', 'error');
     }
@@ -744,6 +751,20 @@ export default function UsersPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={toggleConfirm !== null}
+        onCancel={() => setToggleConfirm(null)}
+        onConfirm={confirmToggleActive}
+        title={toggleConfirm?.isActive ? 'تعطيل المستخدم' : 'تفعيل المستخدم'}
+        message={
+          toggleConfirm?.isActive
+            ? `سيتم تعطيل "${toggleConfirm?.username}" فورًا وإنهاء جميع جلساته النشطة. هل تريد المتابعة؟`
+            : `سيتم إعادة تفعيل "${toggleConfirm?.username}" والسماح له بتسجيل الدخول. هل تريد المتابعة؟`
+        }
+        confirmLabel={toggleConfirm?.isActive ? 'تعطيل' : 'تفعيل'}
+        variant={toggleConfirm?.isActive ? 'destructive' : 'default'}
+      />
 
       <ConfirmDialog
         open={deleteConfirm !== null}

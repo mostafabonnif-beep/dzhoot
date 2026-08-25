@@ -11,6 +11,10 @@ export interface ICodeBatchDocument extends Document {
   batchNumber: number;
   /** Number of codes in this delivery. */
   quantity: number;
+  /** Wholesale unit price per code at delivery time (سعر الجملة للكود الواحد). */
+  wholesalePrice?: number | null;
+  /** Wholesale total for the delivery: unit price × quantity (قيمة التسليم). */
+  wholesaleTotal?: number | null;
   /** Date the shop physically received the codes (تاريخ الاستلام). */
   receiptDate: Date;
   notes?: string;
@@ -43,6 +47,14 @@ const codeBatchSchema = new Schema<ICodeBatchDocument>(
       required: true,
       min: 1,
       max: 10000,
+    },
+    wholesalePrice: {
+      type: Number,
+      default: null,
+    },
+    wholesaleTotal: {
+      type: Number,
+      default: null,
     },
     receiptDate: {
       type: Date,
