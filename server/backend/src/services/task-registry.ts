@@ -11,7 +11,7 @@ import { syncXtreamSource, verifyXtreamSource } from './xtream-service';
 import { syncM3USource } from './m3u-service';
 import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
 import { expireStaleCodesAndReturnCredit } from './subscription-service';
-import { sendNotificationToDevices, notificationStatusFromFcm } from './fcm-service';
+import { sendNotificationToDevices, pushOutcome } from './fcm-service';
 
 export interface SubtaskResult {
   name: string;
@@ -154,22 +154,22 @@ async function notificationDispatcherHandler(): Promise<TaskResult> {
         deepLink: notification.deepLink,
         audience: notification.audience,
       });
-      // Honest status: SENT only when at least one device received it; a throw
-      // above leaves it SCHEDULED so it retries on the next tick.
-      const outcome = notificationStatusFromFcm(fcm);
+      // The in-app channel always delivers, so status is SENT; push outcome
+      // is recorded in deliveryStats. A throw leaves it SCHEDULED to retry.
+      const outcome = pushOutcome(fcm);
       await Notification.updateOne(
         { _id: notification._id },
         {
           $set: {
-            status: outcome.status,
+            status: 'SENT',
             sentAt: new Date(),
-            deliveryStats: { ...fcm, reason: outcome.reason },
+            deliveryStats: { ...fcm, pushDelivered: outcome.pushDelivered, reason: outcome.reason },
           },
         },
       ).exec();
       if (fcm.configured === false) {
         skippedNotConfigured += 1;
-      } else if (outcome.status === 'SENT') {
+      } else if (outcome.pushDelivered) {
         sent += 1;
       } else {
         failed += 1;

@@ -254,25 +254,25 @@ describe('Round 15 — plans: maxConcurrentStreams persisted', () => {
   });
 });
 
-describe('Round 15 — notifications: honest delivery status', () => {
-  it('marks FAILED when FCM is not configured and SENT when delivered', async () => {
-    const { notificationStatusFromFcm } = require('../services/fcm-service');
+describe('Round 15 — notifications: delivery stats stay honest while status stays SENT', () => {
+  it('pushOutcome reports push failure without changing the in-app SENT status', async () => {
+    const { pushOutcome } = require('../services/fcm-service');
 
-    expect(notificationStatusFromFcm({ configured: false, attempted: 0, sent: 0, failed: 0, skipped: 'FCM is not configured' })).toEqual({
-      status: 'FAILED',
+    expect(pushOutcome({ configured: false, attempted: 0, sent: 0, failed: 0, skipped: 'FCM is not configured' })).toEqual({
+      pushDelivered: false,
       reason: 'FCM is not configured',
     });
-    expect(notificationStatusFromFcm({ configured: true, attempted: 0, sent: 0, failed: 0 })).toEqual({
-      status: 'FAILED',
+    expect(pushOutcome({ configured: true, attempted: 0, sent: 0, failed: 0 })).toEqual({
+      pushDelivered: false,
       reason: 'No registered devices with push tokens',
     });
-    expect(notificationStatusFromFcm({ configured: true, attempted: 3, sent: 2, failed: 1 })).toEqual({
-      status: 'SENT',
+    expect(pushOutcome({ configured: true, attempted: 3, sent: 2, failed: 1 })).toEqual({
+      pushDelivered: true,
       reason: '',
     });
-    expect(notificationStatusFromFcm({ configured: true, attempted: 3, sent: 0, failed: 3 })).toEqual({
-      status: 'FAILED',
-      reason: 'All 3 delivery attempts failed',
+    expect(pushOutcome({ configured: true, attempted: 3, sent: 0, failed: 3 })).toEqual({
+      pushDelivered: false,
+      reason: 'All 3 push attempts failed (in-app delivery still works)',
     });
   });
 });
