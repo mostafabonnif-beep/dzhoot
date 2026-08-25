@@ -8,6 +8,8 @@ export interface IPlanDocument extends Document {
   maxConcurrentStreams: number;
   price?: number;
   currency?: string;
+  /** When true, resellers may generate codes with a custom duration override. */
+  allowCustomDuration?: boolean;
   status: 'Active' | 'Inactive';
   features?: Record<string, unknown>;
   createdAt: Date;
@@ -56,6 +58,10 @@ const planSchema = new Schema<IPlanDocument>(
       uppercase: true,
       trim: true,
       maxlength: 10,
+    },
+    allowCustomDuration: {
+      type: Boolean,
+      default: false,
     },
     status: {
       type: String,
