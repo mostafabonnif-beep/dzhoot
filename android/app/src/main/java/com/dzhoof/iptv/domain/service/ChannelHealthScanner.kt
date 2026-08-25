@@ -281,6 +281,22 @@ class ChannelHealthScanner @Inject constructor(
                 errorMessage = null,
             )
         }
+        // Paired-server mode: the catalog sends tokenized proxy URLs
+        // (…/api/v1/tv/playback/<token>.m3u8). Those tokens expire quickly and
+        // the upstream is only reachable through the server, so probing them
+        // from the device would 401 and falsely mark every channel OFFLINE
+        // ("all channels down" + "source provider problem" everywhere). The
+        // server owns real health (watchdog + playback reports) — treat
+        // tokenized URLs as UNKNOWN, never OFFLINE.
+        if (streamUrl.contains("/api/v1/tv/playback/", ignoreCase = true)) {
+            return ChannelHealthEntity(
+                channelId = channelId,
+                status = ChannelHealthStatus.UNKNOWN.name,
+                lastCheckedAt = System.currentTimeMillis(),
+                responseTimeMs = null,
+                errorMessage = null,
+            )
+        }
         if (!streamUrl.startsWith("http", ignoreCase = true)) {
             return ChannelHealthEntity(
                 channelId = channelId,
