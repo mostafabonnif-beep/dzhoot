@@ -45,9 +45,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ success: false, error: 'title and body are required' });
     }
     const scheduledAtDate = scheduledAt ? new Date(scheduledAt) : null;
+    if (scheduledAtDate && Number.isNaN(scheduledAtDate.getTime())) {
+      return res.status(400).json({ success: false, error: 'scheduledAt must be a valid date' });
+    }
     const notification = await Notification.create({
-      title: String(title).trim(),
-      body: String(body).trim(),
+      title: String(title).trim().slice(0, 200),
+      body: String(body).trim().slice(0, 2000),
       imageUrl: imageUrl || '',
       deepLink: deepLink || '',
       audience: audience === 'ACTIVE' ? 'ACTIVE' : 'ALL',
@@ -67,13 +70,30 @@ router.post('/:id/send', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid notification id' });
-    const notification = await Notification.findById(id).exec();
-    if (!notification) return res.status(404).json({ success: false, error: 'Notification not found' });
-
-    // Guard against accidental duplicate sends: a notification that was already
-    // delivered (in-app SENT + push delivered) must not go out again. A SENT
-    // notification whose push FAILED may still be re-sent from the panel.
-    if (notification.status === 'SENT' && notification.deliveryStats?.pushDelivered) {
+    // Atomic claim: exactly one concurrent /send request may proceed. The
+    // delivered-guard is part of the filter, so a notification that already
+    // went out (SENT + push delivered) can't be claimed, and a racing second
+    // request (which would see the transitional SENDING status) also can't.
+    // A SENT notification whose push FAILED stays claimable (re-send allowed).
+    const notification = await Notification.findOneAndUpdate(
+      {
+        _id: id,
+        status: { $in: ['DRAFT', 'SCHEDULED', 'SENT', 'FAILED'] },
+        $or: [
+          { status: { $in: ['DRAFT', 'FAILED'] } },
+          { status: 'SCHEDULED', scheduledAt: { $gt: new Date() } },
+          { status: 'SENT', 'deliveryStats.pushDelivered': { $ne: true } },
+        ],
+      },
+      { $set: { status: 'SENDING' } },
+      { new: true },
+    ).exec();
+    if (!notification) {
+      const existing = await Notification.findById(id).select('status deliveryStats.pushDelivered').lean().exec();
+      if (!existing) return res.status(404).json({ success: false, error: 'Notification not found' });
+      if (existing.status === 'SENDING') {
+        return res.status(409).json({ success: false, error: 'This notification is already being sent' });
+      }
       return res.status(409).json({ success: false, error: 'This notification was already sent and delivered' });
     }
 
