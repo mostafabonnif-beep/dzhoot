@@ -34,11 +34,8 @@ interface HealthCacheEntry {
 }
 
 const HEALTH_CACHE_TTL_MS = 60 * 1000;
-const LIVE_PROBE_INTERVAL_MS = 5 * 60 * 1000;
-const API_PROBE_TIMEOUT_MS = 8000;
 
 const healthCache = new Map<string, HealthCacheEntry>();
-const lastLiveProbeAt = new Map<string, number>();
 const lastAlertedHealth = new Map<string, SourceHealth>();
 
 /** Build the HLS live URL for a stream on a given Xtream source. */
@@ -106,73 +103,96 @@ export async function getFailoverTarget(
   const health = await getSourceHealth(String(source._id));
   if (health !== 'verified') return null;
 
-  const creds = {
-    serverUrl: source.serverUrl,
-    username: decryptSecret(source.usernameEncrypted),
-    password: decryptSecret(source.passwordEncrypted),
-  };
   return {
-    streamUrl: buildFailoverStreamUrl(creds, map.backupStreamId),
+    streamUrl: buildFailoverStreamUrl(getSourceCreds(source), map.backupStreamId),
     source,
   };
 }
 
 /**
- * Light probe for one source: player_api auth check always; a live-stream
- * probe at most once per LIVE_PROBE_INTERVAL_MS (only when a mapped stream
- * exists, so we never hammer the provider).
+ * Light probe for one source.
+ *
+ * Direct-playback sources (NEO primary, ottstreambox backup) are judged by the
+ * STREAM customers actually use — the primary probes one of its own catalog
+ * channels, the backup probes a mapped stream. The server-side API reachability
+ * is NOT customer-relevant for direct playback (NEO's API is unreachable from
+ * this server while its CDN streams work fine — a TLS block on the API domain).
+ *
+ * Proxy-mode sources relay playback through the server, so their API
+ * reachability IS the customer-relevant signal and is probed directly.
  */
 async function probeSource(source: any): Promise<{ health: SourceHealth; error: string | null; latencyMs: number }> {
-  const key = String(source._id);
-  const creds = {
+  const started = Date.now();
+
+  if (source.directPlayback === true) {
+    let probeUrl: string | null = null;
+    const map = await ChannelFailoverMap.findOne({ backupSourceId: source._id, enabled: true }).lean().exec();
+    if (map) {
+      const creds = getSourceCreds(source);
+      probeUrl = buildFailoverStreamUrl(creds, map.backupStreamId);
+    } else {
+      const ch = await Channel.findOne({
+        isActive: { $ne: false },
+        'metadata.source': 'xtream',
+        'metadata.xtreamSourceId': source._id,
+        channelUrl: { $exists: true, $ne: '' },
+      })
+        .select('channelUrl')
+        .lean()
+        .exec();
+      probeUrl = ch?.channelUrl || null;
+    }
+
+    if (!probeUrl) {
+      // No stream to probe yet (backup before any maps) — API check as a
+      // fallback so the source at least reports auth health.
+      return probeApiOnly(source, started);
+    }
+
+    try {
+      const probe = await probeStream(probeUrl, { timeout: 5000 });
+      if (probe.status === 'alive') {
+        return { health: 'verified', error: null, latencyMs: Date.now() - started };
+      }
+      return {
+        health: 'degraded',
+        error: probe.error || 'Direct stream probe failed',
+        latencyMs: Date.now() - started,
+      };
+    } catch (err: any) {
+      return {
+        health: 'degraded',
+        error: String(err?.message || 'Direct stream probe failed'),
+        latencyMs: Date.now() - started,
+      };
+    }
+  }
+
+  return probeApiOnly(source, started);
+}
+
+function getSourceCreds(source: any): { serverUrl: string; username: string; password: string } {
+  return {
     serverUrl: source.serverUrl,
     username: decryptSecret(source.usernameEncrypted),
     password: decryptSecret(source.passwordEncrypted),
   };
-  const started = Date.now();
+}
 
-  let apiOk = false;
-  let apiError: string | null = null;
+async function probeApiOnly(source: any, started: number): Promise<{ health: SourceHealth; error: string | null; latencyMs: number }> {
   try {
-    const auth = await testXtreamConnection(creds);
-    apiOk = auth.ok;
-    if (!auth.ok) apiError = auth.error || 'Authentication failed';
+    const auth = await testXtreamConnection(getSourceCreds(source));
+    if (!auth.ok) {
+      return { health: 'blocked', error: auth.error || 'Authentication failed', latencyMs: Date.now() - started };
+    }
+    return { health: 'verified', error: null, latencyMs: Date.now() - started };
   } catch (err: any) {
-    apiError = err?.response?.status ? `HTTP ${err.response.status}` : String(err?.message || 'API probe failed');
+    return {
+      health: 'blocked',
+      error: err?.response?.status ? `HTTP ${err.response.status}` : String(err?.message || 'API probe failed'),
+      latencyMs: Date.now() - started,
+    };
   }
-
-  if (!apiOk) {
-    return { health: 'blocked', error: apiError, latencyMs: Date.now() - started };
-  }
-
-  // Live probe (throttled): use a mapped stream so the probe is representative
-  // of what failover would actually serve.
-  const now = Date.now();
-  const lastLive = lastLiveProbeAt.get(key) || 0;
-  if (now - lastLive >= LIVE_PROBE_INTERVAL_MS) {
-    const map = await ChannelFailoverMap.findOne({ backupSourceId: source._id, enabled: true }).lean().exec();
-    if (map) {
-      lastLiveProbeAt.set(key, now);
-      const liveUrl = buildFailoverStreamUrl(creds, map.backupStreamId);
-      try {
-        const probe = await probeStream(liveUrl, { timeout: 5000 });
-        if (probe.status !== 'alive') {
-          return { health: 'degraded', error: probe.error || 'Live stream probe failed', latencyMs: Date.now() - started };
-        }
-      } catch (err: any) {
-        return { health: 'degraded', error: String(err?.message || 'Live probe failed'), latencyMs: Date.now() - started };
-      }
-    }
-  } else {
-    // Not due for a live probe: carry the previous live state instead of
-    // flipping a degraded source back to verified on API-up alone.
-    const prev = source.verificationStatus;
-    if (prev === 'degraded' || prev === 'blocked') {
-      return { health: prev, error: null, latencyMs: Date.now() - started };
-    }
-  }
-
-  return { health: 'verified', error: null, latencyMs: Date.now() - started };
 }
 
 /**
