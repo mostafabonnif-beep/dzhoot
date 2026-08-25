@@ -16,6 +16,9 @@ const {
   rollbackSyncSnapshot,
   listSyncSnapshots,
 } = require('../services/sync-snapshot-service');
+const ChannelFailoverMap = require('../models/ChannelFailoverMap');
+const Channel = require('../models/Channel');
+const { autoMatchFailoverMaps, getSourceHealth, runSourceWatchdog } = require('../services/source-failover-service');
 
 // Admin-only Xtream source management: /api/v1/admin/xtream-sources
 router.use(requireAuth);
@@ -400,6 +403,164 @@ router.delete('/:id', async (req, res) => {
     return res.json({ success: true });
   } catch (err) {
     console.error('[xtream] delete error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// ── Backup-source failover maps ──────────────────────────────────────────────
+// The backup source (e.g. ottstreambox) is added as an XtreamSource with
+// status Inactive + directPlayback true. These routes manage the side map that
+// lets the playback-token flow serve a catalog channel from the backup when the
+// primary source is down.
+
+// GET /:id/failover-maps — list this source's failover mappings
+router.get('/:id/failover-maps', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const maps = await ChannelFailoverMap.find({ backupSourceId: id })
+      .sort({ updatedAt: -1 })
+      .limit(500)
+      .populate('channelId', 'channelName channelGroup')
+      .lean()
+      .exec();
+    return res.json({ success: true, data: maps, totalCount: maps.length });
+  } catch (err) {
+    console.error('[xtream] failover maps list error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /:id/failover-maps — create one mapping { channelRef | channelId, backupStreamId, backupChannelName }
+router.post('/:id/failover-maps', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const source = await XtreamSource.findById(id).lean().exec();
+    if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+
+    const { channelRef, channelId, backupStreamId, backupChannelName, enabled } = req.body || {};
+    const streamId = String(backupStreamId || '').trim();
+    const name = String(backupChannelName || '').trim();
+    if (!streamId || !name) {
+      return res.status(400).json({ success: false, error: 'backupStreamId and backupChannelName are required' });
+    }
+
+    let channelDoc = null;
+    let ref = String(channelRef || '').trim();
+    if (channelId && mongoose.isValidObjectId(channelId)) {
+      channelDoc = await Channel.findById(channelId).select('channelId channelName').lean().exec();
+      if (channelDoc) ref = String(channelDoc.channelId);
+    }
+    if (!ref) return res.status(400).json({ success: false, error: 'channelRef or channelId is required' });
+    if (!channelDoc) channelDoc = await Channel.findOne({ channelId: ref }).select('channelId channelName').lean().exec();
+    if (!channelDoc) return res.status(404).json({ success: false, error: 'Catalog channel not found' });
+
+    const map = await ChannelFailoverMap.findOneAndUpdate(
+      { channelRef: ref, backupSourceId: id },
+      {
+        $set: {
+          channelId: channelDoc._id,
+          backupChannelName: name,
+          backupStreamId: streamId,
+          enabled: enabled !== false,
+          matchedBy: 'manual',
+        },
+      },
+      { upsert: true, new: true },
+    ).exec();
+
+    audit({
+      ...reqCtx(req),
+      action: 'FAILOVER_MAP_CREATE',
+      resource: 'ChannelFailoverMap',
+      resourceId: String(map._id),
+      changes: { after: { channelRef: ref, backupStreamId: streamId, backupSourceId: String(id) } },
+    });
+    return res.status(201).json({ success: true, data: map });
+  } catch (err) {
+    console.error('[xtream] failover map create error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// DELETE /:id/failover-maps/:mapId — remove one mapping
+router.delete('/:id/failover-maps/:mapId', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    const mapId = parseId(req.params.mapId);
+    if (!id || !mapId) return res.status(400).json({ success: false, error: 'Invalid id' });
+    const map = await ChannelFailoverMap.findOneAndDelete({ _id: mapId, backupSourceId: id }).exec();
+    if (!map) return res.status(404).json({ success: false, error: 'Failover map not found' });
+    audit({ ...reqCtx(req), action: 'FAILOVER_MAP_DELETE', resource: 'ChannelFailoverMap', resourceId: String(mapId) });
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[xtream] failover map delete error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /:id/failover-maps/auto-match — match backup live streams to catalog
+// channels by normalized name and bulk-create maps (never imports 115k raw).
+router.post('/:id/failover-maps/auto-match', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const source = await XtreamSource.findById(id).lean().exec();
+    if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+
+    const { limit, nameContains } = req.body || {};
+    const result = await autoMatchFailoverMaps(String(id), {
+      limit: limit ? Number(limit) : undefined,
+      nameContains: nameContains ? String(nameContains) : undefined,
+    });
+    audit({
+      ...reqCtx(req),
+      action: 'FAILOVER_MAP_AUTO_MATCH',
+      resource: 'ChannelFailoverMap',
+      changes: { after: result },
+    });
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[xtream] failover auto-match error:', err);
+    return res.status(500).json({ success: false, error: `Auto-match failed: ${err?.message || 'Internal Error'}` });
+  }
+});
+
+// GET /:id/health — cached watchdog health of one source
+router.get('/:id/health', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
+    const source = await XtreamSource.findById(id).lean().exec();
+    if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+    const health = await getSourceHealth(String(id));
+    return res.json({
+      success: true,
+      data: {
+        sourceId: String(id),
+        health,
+        verificationStatus: source.verificationStatus,
+        status: source.status,
+        lastError: source.lastError,
+        lastDiagnosticsAt: source.lastDiagnosticsAt,
+        mappedChannels: await ChannelFailoverMap.countDocuments({ backupSourceId: id, enabled: true }),
+      },
+    });
+  } catch (err) {
+    console.error('[xtream] health error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /watchdog/run — manually trigger the source watchdog (admin)
+router.post('/watchdog/run', async (req, res) => {
+  try {
+    const result = await runSourceWatchdog();
+    audit({ ...reqCtx(req), action: 'SOURCE_WATCHDOG_RUN', resource: 'XtreamSource', changes: { after: result } });
+    return res.json({ success: true, data: result });
+  } catch (err) {
+    console.error('[xtream] watchdog run error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
