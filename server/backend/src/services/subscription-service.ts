@@ -117,22 +117,48 @@ export async function redeemCode(
   }
 
   const codeHash = hashActivationCode(normalized);
-  const code = await ActivationCode.findOne({ codeHash }).exec();
 
-  if (!code) {
-    await recordRedemption(null, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'INVALID_CODE');
-    return { success: false, error: 'Invalid code', code: 'INVALID_CODE' };
-  }
+  /**
+   * Atomic claim: flip UNUSED → ACTIVATING in one update so two concurrent
+   * redeems of the same code can never both mint a subscription. The winner
+   * proceeds; the loser falls through to the status checks below and gets a
+   * clean error. A crash mid-flight leaves the code ACTIVATING; the daily
+   * expiry task resets stale ACTIVATING rows back to UNUSED.
+   */
+  const code = await ActivationCode.findOneAndUpdate(
+    { codeHash, status: 'UNUSED' },
+    { $set: { status: 'ACTIVATING' } },
+    { new: true },
+  ).exec();
 
   const now = new Date();
 
-  if (code.status === 'REVOKED') {
-    await recordRedemption(code, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'CODE_REVOKED');
-    return { success: false, error: 'This code has been revoked', code: 'CODE_REVOKED' };
-  }
-
-  if (code.status === 'ACTIVATED') {
-    await recordRedemption(code, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'CODE_ALREADY_USED');
+  if (!code) {
+    // Someone else owns this code now (or it never existed). Read it to give
+    // the caller the right error instead of a generic one.
+    const existing = await ActivationCode.findOne({ codeHash }).exec();
+    if (!existing) {
+      await recordRedemption(null, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'INVALID_CODE');
+      return { success: false, error: 'Invalid code', code: 'INVALID_CODE' };
+    }
+    if (existing.status === 'REVOKED') {
+      await recordRedemption(existing, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'CODE_REVOKED');
+      return { success: false, error: 'This code has been revoked', code: 'CODE_REVOKED' };
+    }
+    if (existing.status === 'ACTIVATED' || existing.status === 'ACTIVATING') {
+      await recordRedemption(existing, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'CODE_ALREADY_USED');
+      return {
+        success: false,
+        error: existing.status === 'ACTIVATING' ? 'This code is being activated' : 'This code has already been used',
+        code: 'CODE_ALREADY_USED',
+      };
+    }
+    if (existing.codeExpiresAt && existing.codeExpiresAt < now) {
+      await recordRedemption(existing, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'CODE_EXPIRED');
+      return { success: false, error: 'This code has expired', code: 'CODE_EXPIRED' };
+    }
+    // UNUSED here is a lost race after a concurrent expiry — treat as used.
+    await recordRedemption(existing, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'CODE_ALREADY_USED');
     return { success: false, error: 'This code has already been used', code: 'CODE_ALREADY_USED' };
   }
 
@@ -145,58 +171,70 @@ export async function redeemCode(
 
   const plan = await Plan.findById(code.planId).lean().exec();
   if (!plan || plan.status !== 'Active') {
+    // Release the claim — the code stays usable for a later redemption.
+    await code.updateOne({ $set: { status: 'UNUSED' } }).exec();
     await recordRedemption(code, userId, deviceInfo?.deviceId, null, ip, 'FAILURE', 'PLAN_UNAVAILABLE');
     return { success: false, error: 'This subscription plan is no longer available', code: 'PLAN_UNAVAILABLE' };
   }
 
-  // Register the device (respecting the plan's device cap) — only when the
-  // client supplied one. Registration never blocks an extension redemption.
-  if (deviceInfo?.deviceId) {
-    const registered = await registerDevice(userId, deviceInfo, plan.maxDevices);
-    if (!registered.ok) {
-      await recordRedemption(code, userId, deviceInfo.deviceId, null, ip, 'FAILURE', registered.error);
-      return { success: false, error: registered.message, code: registered.error };
+  try {
+    // Register the device (respecting the plan's device cap) — only when the
+    // client supplied one. Registration never blocks an extension redemption.
+    if (deviceInfo?.deviceId) {
+      const registered = await registerDevice(userId, deviceInfo, plan.maxDevices);
+      if (!registered.ok) {
+        await code.updateOne({ $set: { status: 'UNUSED' } }).exec();
+        await recordRedemption(code, userId, deviceInfo.deviceId, null, ip, 'FAILURE', registered.error);
+        return { success: false, error: registered.message, code: registered.error };
+      }
     }
+
+    // Create or extend the active subscription. An already-expired row is
+    // treated as new: the new duration starts from now, not the stale expiry.
+    let subscription = await Subscription.findOne({ userId, status: 'ACTIVE' }).exec();
+
+    if (subscription) {
+      const base = subscription.expiresAt.getTime() > now.getTime() ? subscription.expiresAt : now;
+      const extendedUntil = new Date(base.getTime() + plan.durationDays * DAY_MS);
+      subscription.expiresAt = extendedUntil;
+      subscription.startsAt = now;
+      subscription.planId = plan._id;
+      subscription.activationCodeId = code._id;
+      await subscription.save();
+    } else {
+      subscription = await Subscription.create({
+        userId,
+        planId: plan._id,
+        activationCodeId: code._id,
+        status: 'ACTIVE',
+        startsAt: now,
+        expiresAt: new Date(now.getTime() + plan.durationDays * DAY_MS),
+      });
+    }
+
+    code.status = 'ACTIVATED';
+    code.activatedAt = now;
+    code.activatedBy = new mongoose.Types.ObjectId(userId);
+    await code.save();
+
+    await recordRedemption(code, userId, deviceInfo?.deviceId, subscription._id, ip, 'SUCCESS');
+
+    const devicesUsed = await Device.countDocuments({ userId }).exec();
+    return {
+      success: true,
+      subscription,
+      plan,
+      devicesUsed,
+      maxDevices: plan.maxDevices,
+    };
+  } catch (err) {
+    // Any failure after the claim must not burn a paid code — hand it back to
+    // the pool so the customer can retry.
+    await code
+      .updateOne({ _id: code._id, status: 'ACTIVATING' }, { $set: { status: 'UNUSED' } })
+      .catch((restoreErr) => console.error('[redeemCode] failed to restore claimed code:', restoreErr));
+    throw err;
   }
-
-  // Create or extend the active subscription. An already-expired row is
-  // treated as new: the new duration starts from now, not the stale expiry.
-  let subscription = await Subscription.findOne({ userId, status: 'ACTIVE' }).exec();
-
-  if (subscription) {
-    const base = subscription.expiresAt.getTime() > now.getTime() ? subscription.expiresAt : now;
-    const extendedUntil = new Date(base.getTime() + plan.durationDays * DAY_MS);
-    subscription.expiresAt = extendedUntil;
-    subscription.startsAt = now;
-    subscription.planId = plan._id;
-    subscription.activationCodeId = code._id;
-    await subscription.save();
-  } else {
-    subscription = await Subscription.create({
-      userId,
-      planId: plan._id,
-      activationCodeId: code._id,
-      status: 'ACTIVE',
-      startsAt: now,
-      expiresAt: new Date(now.getTime() + plan.durationDays * DAY_MS),
-    });
-  }
-
-  code.status = 'ACTIVATED';
-  code.activatedAt = now;
-  code.activatedBy = new mongoose.Types.ObjectId(userId);
-  await code.save();
-
-  await recordRedemption(code, userId, deviceInfo?.deviceId, subscription._id, ip, 'SUCCESS');
-
-  const devicesUsed = await Device.countDocuments({ userId }).exec();
-  return {
-    success: true,
-    subscription,
-    plan,
-    devicesUsed,
-    maxDevices: plan.maxDevices,
-  };
 }
 
 /** Current active subscription with its plan, plus device usage. */
@@ -472,13 +510,29 @@ export async function returnUnusedCreditForReseller(
   const codes = await ActivationCode.find(filter).select('planId').lean().exec();
   if (codes.length === 0) return { ok: true, revoked: 0, restored: [] };
 
+  const ids = codes.map((c) => c._id);
+
+  // Guarded write: only flip codes that are STILL unused. A code activated
+  // between the read above and this write must not be revoked, and its credit
+  // must not be restored to the reseller (that would double-pay the operator).
+  await ActivationCode.updateMany(
+    { _id: { $in: ids }, status: 'UNUSED' },
+    { $set: { status: 'REVOKED' } },
+  ).exec();
+
+  // Count and plan-breakdown from the codes that were ACTUALLY revoked —
+  // never from the pre-read snapshot.
+  const revokedDocs = await ActivationCode.find({ _id: { $in: ids }, status: 'REVOKED' })
+    .select('planId')
+    .lean()
+    .exec();
+  if (revokedDocs.length === 0) return { ok: true, revoked: 0, restored: [] };
+
   const byPlan = new Map<string, number>();
-  for (const c of codes) {
+  for (const c of revokedDocs) {
     const key = String(c.planId);
     byPlan.set(key, (byPlan.get(key) || 0) + 1);
   }
-
-  await ActivationCode.updateMany({ _id: { $in: codes.map((c) => c._id) } }, { $set: { status: 'REVOKED' } }).exec();
 
   const restored: Array<{ planId: string; quantity: number }> = [];
   for (const [planId, qty] of byPlan) {
@@ -508,7 +562,7 @@ export async function returnUnusedCreditForReseller(
     });
     restored.push({ planId, quantity: qty });
   }
-  return { ok: true, revoked: codes.length, restored };
+  return { ok: true, revoked: revokedDocs.length, restored };
 }
 
 /**
@@ -521,20 +575,39 @@ export async function expireStaleCodesAndReturnCredit(): Promise<{
   creditReturned: Array<{ resellerId: string; planId: string; quantity: number }>;
 }> {
   const now = new Date();
+
+  // Recover codes stuck in ACTIVATING (a process died mid-claim): hand them
+  // back to the pool so they can be redeemed normally.
+  await ActivationCode.updateMany(
+    { status: 'ACTIVATING', updatedAt: { $lt: new Date(now.getTime() - 15 * 60 * 1000) } },
+    { $set: { status: 'UNUSED' } },
+  ).exec();
+
   const stale = await ActivationCode.find({ status: 'UNUSED', codeExpiresAt: { $lt: now } })
     .select('planId resellerId')
     .lean()
     .exec();
   if (stale.length === 0) return { expired: 0, creditReturned: [] };
 
+  const ids = stale.map((c) => c._id);
+
+  // Guarded write: only expire codes that are STILL unused. A code activated
+  // between the read above and this write must not be expired, and its credit
+  // must not be returned to the reseller.
   await ActivationCode.updateMany(
-    { _id: { $in: stale.map((c) => c._id) } },
+    { _id: { $in: ids }, status: 'UNUSED' },
     { $set: { status: 'EXPIRED' } },
   ).exec();
 
+  // Plan/reseller breakdown from the codes that were ACTUALLY expired.
+  const expiredDocs = await ActivationCode.find({ _id: { $in: ids }, status: 'EXPIRED' })
+    .select('planId resellerId')
+    .lean()
+    .exec();
+
   const creditReturned: Array<{ resellerId: string; planId: string; quantity: number }> = [];
   const byResellerPlan = new Map<string, Map<string, number>>();
-  for (const c of stale) {
+  for (const c of expiredDocs) {
     if (!c.resellerId) continue;
     const rk = String(c.resellerId);
     const pk = String(c.planId);
@@ -572,7 +645,7 @@ export async function expireStaleCodesAndReturnCredit(): Promise<{
     }
   }
 
-  return { expired: stale.length, creditReturned };
+  return { expired: expiredDocs.length, creditReturned };
 }
 
 /** Whether the platform currently gates playback behind an active subscription. */

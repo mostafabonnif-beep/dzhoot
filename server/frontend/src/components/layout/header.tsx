@@ -57,7 +57,7 @@ export function Header() {
       >
         <Menu className="h-5 w-5" />
       </button>
-      <div className="relative inline-flex items-center gap-1.5 ml-auto">
+      <div className="relative inline-flex items-center gap-1.5 ms-auto">
           <button
             onClick={() => setSearchOpen(true)}
             className="flex h-10 items-center gap-1.5 rounded-xl px-2.5 text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"

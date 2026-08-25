@@ -628,7 +628,9 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       if (!window.confirm(t('channels.confirmDelete'))) return;
       try {
         await api.delete(`/admin/channels/${id}`);
-        setChannels((prev) => prev.filter((c) => c._id !== id));
+        // Refetch so totalCount/health/pagination stay accurate after a delete
+        // (locally filtering leaves stale totals behind).
+        await fetchChannels();
       } catch {
         toast(t('channels.deleteFailed'), 'error');
       }
@@ -978,6 +980,11 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     setTestingAll(true);
     setTestResults(null);
     try {
+      // The endpoint tests at most 500 channels per run — say so upfront so a
+      // "complete" result is not mistaken for the whole catalog.
+      if (totalCount > 500) {
+        toast(t('channels.testAllLimit').replace('{count}', '500'), 'info');
+      }
       const res = await api.post('/test/test-all', { limit: 500, skip: 0 });
       const data = res.data;
       setTestResults({ working: data.working || 0, failed: data.notWorking || 0 });

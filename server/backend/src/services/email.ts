@@ -22,10 +22,24 @@ interface SendEmailOptions {
 }
 
 // ---------------------------------------------------------------------------
-// SMTP transporter (singleton)
+// SMTP transporter (cached per config — rebuilt whenever settings change)
 // ---------------------------------------------------------------------------
 
 let transporter: Transporter | null = null;
+let transporterConfigKey = '';
+
+async function getTransporter(): Promise<Transporter> {
+  const config = await getSmtpConfig();
+  const key = JSON.stringify(config);
+  // The panel can change brevo_user/brevo_password at runtime; a singleton
+  // built from the first send would keep using stale credentials until the
+  // process restarts. Rebuild whenever the resolved config actually changed.
+  if (!transporter || key !== transporterConfigKey) {
+    transporter = nodemailer.createTransport(config);
+    transporterConfigKey = key;
+  }
+  return transporter;
+}
 
 /** Read one operator setting from AppSetting (admin panel) with env fallback. */
 async function getSetting(key: string, envFallback: string): Promise<string> {
@@ -62,13 +76,6 @@ async function getSmtpConfig(): Promise<SmtpConfig> {
     port: parseInt(process.env.MAILHOG_PORT || '1025', 10),
     secure: false,
   };
-}
-
-async function getTransporter(): Promise<Transporter> {
-  if (!transporter) {
-    transporter = nodemailer.createTransport(await getSmtpConfig());
-  }
-  return transporter;
 }
 
 // ---------------------------------------------------------------------------

@@ -202,6 +202,12 @@ export default function CodesPage() {
     setPage(1);
   }, [statusFilter, planFilter, resellerFilter, debouncedSearch]);
 
+  // Clamp the page after deletions shrink the list (avoids "301–300 of 300").
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(totalCount / pageSize));
+    if (page > maxPage) setPage(maxPage);
+  }, [totalCount, page, pageSize]);
+
   function copyText(text: string) {
     navigator.clipboard.writeText(text).catch(() => {});
     setCopiedCode(text);
@@ -386,6 +392,7 @@ export default function CodesPage() {
       const params = new URLSearchParams();
       if (statusFilter !== 'ALL') params.set('status', statusFilter);
       if (planFilter !== 'ALL') params.set('planId', planFilter);
+      if (resellerFilter !== 'ALL') params.set('resellerId', resellerFilter);
       if (debouncedSearch) params.set('search', debouncedSearch);
       const res = await api.get(`/admin/activation-codes/export/csv?${params.toString()}`, {
         responseType: 'blob',

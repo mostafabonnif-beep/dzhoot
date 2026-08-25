@@ -11,22 +11,40 @@ const RATE_LIMIT = new Map();
 const MAX_ATTEMPTS = 8;
 const WINDOW_MS = 15 * 60 * 1000;
 
+/**
+ * Sliding-window rate limiter keyed by a composite string (e.g. `user|ip`).
+ * Keying by username alone lets an attacker lock any reseller out (DoS) and
+ * bypass per-IP limits; keying by IP alone would throttle a shared café IP for
+ * everyone. Composite gives both protections. Only FAILED attempts count, so
+ * a reseller who logs in successfully as often as they like is never locked out.
+ */
+function isRateLimited(key) {
+  const now = Date.now();
+  const attempts = (RATE_LIMIT.get(key) || []).filter((t) => now - t < WINDOW_MS);
+  return attempts.length >= MAX_ATTEMPTS;
+}
+
+function recordFailure(key) {
+  const now = Date.now();
+  const attempts = (RATE_LIMIT.get(key) || []).filter((t) => now - t < WINDOW_MS);
+  RATE_LIMIT.set(key, [...attempts, now]);
+}
+
 router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body || {};
     if (!username || !password) {
       return res.status(400).json({ success: false, error: 'username and password are required' });
     }
-    const key = String(username).trim().toLowerCase();
-    const now = Date.now();
-    const attempts = (RATE_LIMIT.get(key) || []).filter((t) => now - t < WINDOW_MS);
-    if (attempts.length >= MAX_ATTEMPTS) {
+    const usernameKey = String(username).trim().toLowerCase();
+    const rateKey = `${usernameKey}|${req.ip || 'unknown'}`;
+    if (isRateLimited(rateKey)) {
       return res.status(429).json({ success: false, error: 'Too many attempts. Try again later.' });
     }
 
-    const reseller = await Reseller.findOne({ username: key }).select('+passwordHash').exec();
+    const reseller = await Reseller.findOne({ username: usernameKey }).select('+passwordHash').exec();
     if (!reseller || !reseller.passwordHash || !(await reseller.comparePassword(String(password)))) {
-      RATE_LIMIT.set(key, [...attempts, now]);
+      recordFailure(rateKey);
       return res.status(401).json({ success: false, error: 'Invalid username or password' });
     }
     if (reseller.status !== 'Active') {
@@ -74,6 +92,20 @@ router.post('/login', async (req, res) => {
 
 // POST /change-password — reseller self-service password change.
 // Body: { currentPassword, newPassword } (Bearer token auth).
+// Rate-limited per reseller+IP: a stolen token shouldn't allow unlimited
+// guessing of the current password.
+const CHANGE_PW_LIMIT = new Map();
+const CHANGE_PW_MAX = 5;
+const CHANGE_PW_WINDOW_MS = 15 * 60 * 1000;
+
+function changePwLimited(key) {
+  const now = Date.now();
+  const attempts = (CHANGE_PW_LIMIT.get(key) || []).filter((t) => now - t < CHANGE_PW_WINDOW_MS);
+  if (attempts.length >= CHANGE_PW_MAX) return true;
+  CHANGE_PW_LIMIT.set(key, [...attempts, now]);
+  return false;
+}
+
 router.post('/change-password', async (req, res) => {
   try {
     const auth = req.headers.authorization || '';
@@ -86,6 +118,11 @@ router.post('/change-password', async (req, res) => {
     const payload = jwt.verify(token, ACCESS_SECRET, { algorithms: ['HS256'] });
     if (!payload || payload.role !== 'reseller' || !payload.sub) {
       return res.status(403).json({ success: false, error: 'Not a reseller account' });
+    }
+
+    const rateKey = `${payload.sub}|${req.ip || 'unknown'}`;
+    if (changePwLimited(rateKey)) {
+      return res.status(429).json({ success: false, error: 'Too many attempts. Try again later.' });
     }
 
     const { currentPassword, newPassword } = req.body || {};

@@ -305,7 +305,7 @@ export default function ActivityPage() {
                     <time dateTime={log.timestamp}>
                       <span className="font-medium">{formatTime(log.timestamp)}</span>
                     </time>
-                    <time dateTime={log.timestamp} className="ml-1.5 text-muted-foreground/60">
+                    <time dateTime={log.timestamp} className="ms-1.5 text-muted-foreground/60">
                       {formatDate(log.timestamp, locale)}
                     </time>
                   </div>

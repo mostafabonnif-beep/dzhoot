@@ -109,6 +109,8 @@ export default function UserDetailPage() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+  const [toggleConfirmActive, setToggleConfirmActive] = useState(false);
+  const [toggleBusy, setToggleBusy] = useState(false);
   const copyTimeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
@@ -179,6 +181,20 @@ export default function UserDetailPage() {
       toast('فشل إعادة توليد الكود', 'error');
     } finally {
       setShowRegenerateConfirm(false);
+    }
+  }
+
+  async function handleToggleActive() {
+    if (!user) return;
+    setToggleBusy(true);
+    try {
+      await api.put(`/users/${params.id}`, { isActive: !user.isActive });
+      setUser((prev) => (prev ? { ...prev, isActive: !prev.isActive } : prev));
+    } catch {
+      toast('فشل تحديث الحالة', 'error');
+    } finally {
+      setToggleBusy(false);
+      setToggleConfirmActive(false);
     }
   }
 
@@ -387,14 +403,7 @@ export default function UserDetailPage() {
                   </span>
                 </div>
                 <button
-                  onClick={async () => {
-                    try {
-                      await api.put(`/users/${params.id}`, { isActive: !user.isActive });
-                      setUser((prev) => (prev ? { ...prev, isActive: !prev.isActive } : prev));
-                    } catch {
-                      toast('فشل تحديث الحالة', 'error');
-                    }
-                  }}
+                  onClick={() => setToggleConfirmActive(true)}
                   className="text-xs uppercase tracking-[0.1em] text-primary hover:text-primary/80 transition-colors font-medium"
                 >
                   {user.isActive
@@ -605,7 +614,7 @@ export default function UserDetailPage() {
             )}
             <button
               onClick={() => setShowRegenerateConfirm(true)}
-              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors ml-2"
+              className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors ms-2"
             >
               <RefreshCw className="h-4 w-4" /> {locale === 'ar' ? 'إعادة توليد' : locale === 'fr' ? 'Régénérer' : 'Regenerate'}
             </button>
@@ -763,6 +772,53 @@ export default function UserDetailPage() {
               : 'Regenerate channel list code? The old code will stop working.'
         }
         confirmLabel={locale === 'ar' ? 'إعادة توليد' : locale === 'fr' ? 'Régénérer' : 'Regenerate'}
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        open={toggleConfirmActive}
+        onCancel={() => setToggleConfirmActive(false)}
+        onConfirm={handleToggleActive}
+        loading={toggleBusy}
+        title={
+          user?.isActive
+            ? locale === 'ar'
+              ? 'تعطيل المستخدم'
+              : locale === 'fr'
+                ? 'Désactiver l’utilisateur'
+                : 'Deactivate user'
+            : locale === 'ar'
+              ? 'تفعيل المستخدم'
+              : locale === 'fr'
+                ? 'Activer l’utilisateur'
+                : 'Activate user'
+        }
+        message={
+          user?.isActive
+            ? locale === 'ar'
+              ? 'سيتم تعطيل المستخدم وإنهاء جميع جلساته النشطة فورًا. هل تريد المتابعة؟'
+              : locale === 'fr'
+                ? 'L’utilisateur sera désactivé et toutes ses sessions actives seront terminées. Continuer ?'
+                : 'The user will be deactivated and all their active sessions will end immediately. Continue?'
+            : locale === 'ar'
+              ? 'سيتم تفعيل حساب المستخدم. هل تريد المتابعة؟'
+              : locale === 'fr'
+                ? 'Le compte de l’utilisateur sera activé. Continuer ?'
+                : 'The user account will be activated. Continue?'
+        }
+        confirmLabel={
+          user?.isActive
+            ? locale === 'ar'
+              ? 'تعطيل'
+              : locale === 'fr'
+                ? 'Désactiver'
+                : 'Deactivate'
+            : locale === 'ar'
+              ? 'تفعيل'
+              : locale === 'fr'
+                ? 'Activer'
+                : 'Activate'
+        }
         variant="destructive"
       />
     </div>
