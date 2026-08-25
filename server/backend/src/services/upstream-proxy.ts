@@ -7,19 +7,73 @@ import { redactSensitiveText } from './audit-log';
 
 const MAX_MANIFEST_SIZE = 10 * 1024 * 1024;
 
-// Short-lived cache of upstream media playlists used to resolve segment URLs
-// by absolute media sequence (normalized /playback/:token/segments/:seq path).
-// Keyed by upstream manifest URL; entries live 3s — long enough to serve the
-// window's segments, short enough to never serve a stale window.
+// Cache of upstream media playlists used to resolve segment URLs by absolute
+// media sequence (normalized /playback/:token/segments/:seq path).
+//
+// Keyed by the per-client ROOT TOKEN (snapshot the client's playlist was built
+// from) with the upstream manifest URL as fallback. A client's segment
+// requests MUST resolve against the exact playlist that client received: the
+// live window rotates between playlist delivery and segment requests, and
+// re-fetching the live playlist per segment made playback intermittently fail
+// with 404 "Segment not found in current window". Snapshots live 60s — long
+// enough for the client's playlist lifetime (HLS reloads every ~segment),
+// short enough to never serve a stale window to a refreshing client.
 const segmentManifestCache = new Map<string, { at: number; text: string; finalUrl: string }>();
-const SEGMENT_MANIFEST_TTL_MS = 3_000;
-const SEGMENT_MANIFEST_MAX_ENTRIES = 500;
+const SEGMENT_MANIFEST_TTL_MS = 60_000;
+const SEGMENT_MANIFEST_MAX_ENTRIES = 2_000;
+
+/** Resolve an absolute media sequence to its upstream URL within a playlist snapshot. */
+function lookupSequenceInPlaylist(
+  text: string,
+  finalUrl: string,
+  seq: number,
+): string | null {
+  let mediaSequence = 0;
+  let sawSequence = false;
+  let position = 0;
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const seqMatch = line.match(/^#EXT-X-MEDIA-SEQUENCE:\s*(\d+)/);
+    if (seqMatch) {
+      mediaSequence = parseInt(seqMatch[1], 10);
+      sawSequence = true;
+      continue;
+    }
+    if (line.startsWith('#')) continue;
+    const absoluteSeq = sawSequence ? mediaSequence + position : position;
+    position += 1;
+    if (absoluteSeq === seq) {
+      try {
+        return new URL(line, finalUrl).toString();
+      } catch {
+        return line;
+      }
+    }
+  }
+  return null;
+}
 
 export async function resolveSegmentUrlBySequence(
   manifestUrl: string,
   seq: number,
   upstreamHeaders?: UpstreamHeaders,
+  snapshotKey?: string,
 ): Promise<string | null> {
+  // Preferred path: resolve against the exact playlist snapshot this client's
+  // media playlist was built from (root-token-keyed). The live window may have
+  // rotated past `seq` by the time the client asks for it — the snapshot the
+  // client holds is the source of truth for its own segments.
+  if (snapshotKey) {
+    const snap = segmentManifestCache.get(snapshotKey);
+    if (snap && Date.now() - snap.at <= SEGMENT_MANIFEST_TTL_MS) {
+      const resolved = lookupSequenceInPlaylist(snap.text, snap.finalUrl, seq);
+      if (resolved) return resolved;
+      // Not in the client's snapshot (snapshot older than the live window) —
+      // fall through to the fresh-fetch fallback below.
+    }
+  }
+
   const key = String(manifestUrl || '');
   if (!key) return null;
   let cached = segmentManifestCache.get(key);
@@ -46,35 +100,15 @@ export async function resolveSegmentUrlBySequence(
       response.request?.res?.responseUrl || response.request?.responseURL || manifestUrl;
     cached = { at: Date.now(), text: String(response.data || ''), finalUrl };
     segmentManifestCache.set(key, cached);
+    // Mirror the snapshot under the client key too, so a client that missed
+    // the playlist-delivery prime still resolves against a coherent window.
+    if (snapshotKey) segmentManifestCache.set(snapshotKey, cached);
     if (segmentManifestCache.size > SEGMENT_MANIFEST_MAX_ENTRIES) {
       const oldestKey = segmentManifestCache.keys().next().value as string;
       segmentManifestCache.delete(oldestKey);
     }
   }
-  let mediaSequence = 0;
-  let sawSequence = false;
-  let position = 0;
-  for (const rawLine of cached.text.split('\n')) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    const seqMatch = line.match(/^#EXT-X-MEDIA-SEQUENCE:\s*(\d+)/);
-    if (seqMatch) {
-      mediaSequence = parseInt(seqMatch[1], 10);
-      sawSequence = true;
-      continue;
-    }
-    if (line.startsWith('#')) continue;
-    const absoluteSeq = sawSequence ? mediaSequence + position : position;
-    position += 1;
-    if (absoluteSeq === seq) {
-      try {
-        return new URL(line, cached.finalUrl).toString();
-      } catch {
-        return line;
-      }
-    }
-  }
-  return null;
+  return lookupSequenceInPlaylist(cached.text, cached.finalUrl, seq);
 }
 
 export interface ProxyTokenContext {
@@ -285,6 +319,17 @@ export async function proxyUpstreamStream(
             position += 1;
             return `/api/v1/tv/playback/${tokenContext.rootToken}/segments/${absoluteSeq}.ts`;
           });
+          // Prime the per-client snapshot so this client's segment requests
+          // resolve against the exact window it just received (the live window
+          // rotates between this delivery and the client's segment requests).
+          if (tokenContext.rootToken) {
+            const snapKey = `root:${tokenContext.rootToken}`;
+            segmentManifestCache.set(snapKey, { at: Date.now(), text: data, finalUrl });
+            if (segmentManifestCache.size > SEGMENT_MANIFEST_MAX_ENTRIES) {
+              const oldestKey = segmentManifestCache.keys().next().value as string;
+              segmentManifestCache.delete(oldestKey);
+            }
+          }
           res.send(rewrittenLines.join('\n'));
           return;
         }

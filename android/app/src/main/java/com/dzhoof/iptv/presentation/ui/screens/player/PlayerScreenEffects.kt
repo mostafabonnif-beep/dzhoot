@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.source.MediaSource
 import com.dzhoof.iptv.domain.model.PlaybackTarget
 import androidx.media3.common.Player
@@ -81,11 +82,27 @@ internal suspend fun prepareChannelStream(
                 )
             }
             errorRecoveryManager.setStreamSlots(slots)
-            // Explicit HLS source: server playback always serves a normalized
-            // HLS playlist; inferring the container from mimeType is fragile
-            // (falls back to progressive parsing and fails with
-            // ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED).
-            exoPlayer.setMediaSource(buildHlsMediaSource(primaryTarget.url))
+            // Server playback serves a normalized HLS media playlist for HLS
+            // upstreams, but relays progressive MPEG-TS upstreams (e.g. the
+            // backup source) as a raw TS stream. Force an explicit HLS source
+            // only for HLS/null mime; otherwise hand the TS stream to the
+            // progressive extractor via the server's mimeType hint. Forcing
+            // HLS on a TS passthrough fails with
+            // ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ("تنسيق البث غير
+            // متوافق") because HlsMediaSource never fetches a segment.
+            val primaryMime = primaryTarget.mimeType
+            if (primaryMime.isNullOrBlank() ||
+                primaryMime.equals(MimeTypes.APPLICATION_M3U8, ignoreCase = true)
+            ) {
+                exoPlayer.setMediaSource(buildHlsMediaSource(primaryTarget.url))
+            } else {
+                exoPlayer.setMediaItem(
+                    MediaItem.Builder()
+                        .setUri(primaryTarget.url)
+                        .setMimeType(primaryMime)
+                        .build(),
+                )
+            }
         }
         exoPlayer.prepare()
         return true
