@@ -5,7 +5,6 @@ import ChannelFailoverMap from '../models/ChannelFailoverMap';
 import Channel from '../models/Channel';
 import { decryptSecret } from '../utils/crypto';
 import { testXtreamConnection, buildXtreamApiUrl } from './xtream-service';
-import { probeStream } from './stream-prober';
 import { sendOperationalAlert } from './alert-notifier';
 import { normalizeChannelName } from './channel-identity-service';
 
@@ -270,7 +269,11 @@ async function probeSource(source: any): Promise<{ health: SourceHealth; error: 
 
   if (source.directPlayback === true) {
     let probeUrl: string | null = null;
-    const map = await ChannelFailoverMap.findOne({ backupSourceId: source._id, enabled: true }).lean().exec();
+    const map = await ChannelFailoverMap.findOne({
+      backupSourceId: source._id,
+      enabled: true,
+      backupStreamId: { $exists: true, $ne: '' },
+    }).lean().exec();
     if (map) {
       const creds = getSourceCreds(source);
       probeUrl = buildFailoverStreamUrl(creds, map.backupStreamId);
@@ -293,26 +296,48 @@ async function probeSource(source: any): Promise<{ health: SourceHealth; error: 
       return probeApiOnly(source, started);
     }
 
-    try {
-      const probe = await probeStream(probeUrl, { timeout: 5000 });
-      if (probe.status === 'alive') {
-        return { health: 'verified', error: null, latencyMs: Date.now() - started };
-      }
-      return {
-        health: 'degraded',
-        error: probe.error || 'Direct stream probe failed',
-        latencyMs: Date.now() - started,
-      };
-    } catch (err: any) {
-      return {
-        health: 'degraded',
-        error: String(err?.message || 'Direct stream probe failed'),
-        latencyMs: Date.now() - started,
-      };
+    const manifestOk = await probeManifest(probeUrl);
+    if (manifestOk.ok) {
+      return { health: 'verified', error: null, latencyMs: Date.now() - started };
     }
+    return {
+      health: 'degraded',
+      error: manifestOk.error || 'Direct stream probe failed',
+      latencyMs: Date.now() - started,
+    };
   }
 
   return probeApiOnly(source, started);
+}
+
+/**
+ * Lightweight liveness probe for a direct stream: follow redirects, expect an
+ * HLS manifest (HTTP 200-399 + #EXTM3U marker). Deliberately NOT the deep
+ * probeStream segment check — some panels (ottstreambox) return manifests with
+ * RELATIVE segment paths after a 302 to a signed CDN host, so resolving the
+ * first segment against the ORIGINAL URL always fails even though playback
+ * works fine for customers.
+ */
+async function probeManifest(url: string): Promise<{ ok: boolean; error: string | null }> {
+  try {
+    const res = await axios.get(url, {
+      timeout: 6000,
+      maxRedirects: 5,
+      validateStatus: (s) => s >= 200 && s < 500,
+      maxContentLength: 512 * 1024,
+      responseType: 'text',
+      headers: { 'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18', Accept: '*/*' },
+    });
+    const httpOk = res.status >= 200 && res.status < 400;
+    if (!httpOk) return { ok: false, error: `HTTP ${res.status}` };
+    const body = String(res.data || '');
+    if (!body.includes('#EXTM3U') && !body.includes('#EXT-X-')) {
+      return { ok: false, error: 'Invalid HLS manifest' };
+    }
+    return { ok: true, error: null };
+  } catch (err: any) {
+    return { ok: false, error: err?.response?.status ? `HTTP ${err.response.status}` : String(err?.message || 'Manifest probe failed') };
+  }
 }
 
 function getSourceCreds(source: any): { serverUrl: string; username: string; password: string } {
@@ -495,7 +520,11 @@ export async function autoMatchFailoverMaps(
   const seen = new Set<string>();
   for (const item of streams) {
     const name = String(item?.name || '').trim();
-    if (!name) continue;
+    const streamId = String(item?.stream_id ?? '').trim();
+    if (!name || !streamId) {
+      skipped += 1;
+      continue;
+    }
     if (opts.nameContains && !name.toLowerCase().includes(String(opts.nameContains).toLowerCase())) continue;
 
     // 1) Curated dictionary match (handles the messy Maghreb naming: 'Dz|ENTV 1
@@ -541,7 +570,7 @@ export async function autoMatchFailoverMaps(
           $set: {
             channelId: ch._id,
             backupChannelName: name,
-            backupStreamId: String(item.stream_id ?? ''),
+            backupStreamId: streamId,
             matchedBy: 'name',
             enabled: true,
           },
