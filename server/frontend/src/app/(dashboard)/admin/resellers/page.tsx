@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, Pencil, Trash2, History, RotateCcw, HandCoins, MessageCircle, CheckCheck, AlertTriangle } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, History, RotateCcw, HandCoins, MessageCircle, CheckCheck, AlertTriangle, QrCode } from 'lucide-react';
+import ShopQrCard from '@/components/shop-qr-card';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import Modal from '@/components/ui/modal';
@@ -83,6 +84,7 @@ export default function ResellersPage() {
   const [formError, setFormError] = useState('');
 
   const [deleteTarget, setDeleteTarget] = useState<ResellerData | null>(null);
+  const [qrTarget, setQrTarget] = useState<ResellerData | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [plans, setPlans] = useState<{ _id: string; name: string; durationDays: number }[]>([]);
 
@@ -486,6 +488,16 @@ export default function ResellersPage() {
             title={t('resellers.ledger')}
           >
             <History className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setQrTarget(r);
+            }}
+            className="p-1.5 text-muted-foreground hover:text-primary"
+            title="بطاقة QR للمحل"
+          >
+            <QrCode className="h-4 w-4" />
           </button>
           <button
             onClick={(e) => {
@@ -1018,6 +1030,13 @@ export default function ResellersPage() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+      {qrTarget && (
+        <ShopQrCard
+          reseller={{ _id: qrTarget._id, name: qrTarget.name, phone: qrTarget.phone }}
+          open
+          onClose={() => setQrTarget(null)}
+        />
+      )}
     </div>
   );
 }
