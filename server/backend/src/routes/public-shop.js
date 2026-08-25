@@ -22,7 +22,7 @@ async function appSetting(key, fallback) {
 router.get('/plans', async (req, res) => {
   try {
     const [plans, brand, whatsapp] = await Promise.all([
-      Plan.find({ status: 'Active' })
+      Plan.find({ status: 'Active', price: { $gt: 0 } })
         .sort({ price: 1 })
         .select('name durationDays price')
         .lean(),
@@ -39,7 +39,7 @@ router.get('/plans', async (req, res) => {
 
     const shopId = req.query.shop ? String(req.query.shop).trim() : '';
     if (shopId && mongoose.Types.ObjectId.isValid(shopId)) {
-      const reseller = await Reseller.findOne({ _id: shopId, isActive: true })
+      const reseller = await Reseller.findOne({ _id: shopId, status: 'Active' })
         .select('name phone')
         .lean();
       if (reseller) {
