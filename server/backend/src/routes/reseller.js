@@ -26,7 +26,7 @@ async function resellerCredit(resellerId) {
   const credit = reseller?.credit || [];
   const planIds = [...new Set(credit.map((c) => String(c.planId)))];
   const plans = planIds.length
-    ? await Plan.find({ _id: { $in: planIds } }).select('name durationDays status').lean()
+    ? await Plan.find({ _id: { $in: planIds } }).select('name durationDays status allowCustomDuration').lean()
     : [];
   const planMap = new Map(plans.map((p) => [String(p._id), p]));
   return credit
@@ -34,7 +34,11 @@ async function resellerCredit(resellerId) {
     .map((c) => ({
       planId: String(c.planId),
       quantity: c.quantity,
-      plan: { name: planMap.get(String(c.planId)).name, durationDays: planMap.get(String(c.planId)).durationDays },
+      plan: {
+        name: planMap.get(String(c.planId)).name,
+        durationDays: planMap.get(String(c.planId)).durationDays,
+        allowCustomDuration: Boolean(planMap.get(String(c.planId)).allowCustomDuration),
+      },
     }));
 }
 
@@ -176,6 +180,66 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
+// GET /statement — this reseller's financial statement (كشف حساب):
+// purchase value, consumption, returns, running balance + CSV export.
+router.get('/statement', async (req, res) => {
+  try {
+    const rows = await CreditTransaction.find({ resellerId: req.reseller._id })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+    const planIds = [...new Set(rows.map((r) => String(r.planId)))];
+    const plans = planIds.length ? await Plan.find({ _id: { $in: planIds } }).select('name').lean() : [];
+    const planMap = new Map(plans.map((p) => [String(p._id), p.name]));
+
+    const data = rows.map((r) => ({
+      _id: r._id,
+      type: r.type,
+      quantity: r.quantity,
+      unitPrice: r.unitPrice || 0,
+      amount: r.amount || 0,
+      balanceAfter: r.balanceAfter,
+      planName: planMap.get(String(r.planId)) || '—',
+      note: r.note || '',
+      createdAt: r.createdAt,
+    }));
+
+    const summary = {
+      granted: data.filter((r) => r.type === 'GRANT').reduce((s, r) => s + r.quantity, 0),
+      consumed: Math.abs(data.filter((r) => r.type === 'CONSUME').reduce((s, r) => s + r.quantity, 0)),
+      returned: Math.abs(data.filter((r) => r.type === 'RETURN' || r.type === 'EXPIRE_RETURN').reduce((s, r) => s + r.quantity, 0)),
+      purchaseValue: data.reduce((s, r) => s + (r.type === 'GRANT' ? r.amount : 0), 0),
+      netCodes: data.reduce((s, r) => s + r.quantity, 0),
+    };
+
+    if (String(req.query.format).toLowerCase() === 'csv') {
+      const head = 'date,type,plan,quantity,unit_price,amount,balance_after,note';
+      const body = data
+        .map((r) =>
+          [
+            new Date(r.createdAt).toISOString(),
+            r.type,
+            `"${String(r.planName).replace(/"/g, '""')}"`,
+            r.quantity,
+            r.unitPrice,
+            r.amount,
+            r.balanceAfter,
+            `"${String(r.note).replace(/"/g, '""')}"`,
+          ].join(','),
+        )
+        .join('\n');
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="dzhoof-statement-${String(req.reseller._id).slice(-6)}.csv"`);
+      return res.send(`${head}\n${body}`);
+    }
+
+    res.json({ success: true, data: { summary, rows: data, total: data.length } });
+  } catch (err) {
+    console.error('[reseller] statement error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
 // GET /credit — this reseller's remaining code credit per plan
 router.get('/credit', async (req, res) => {
   try {
@@ -206,9 +270,35 @@ router.post('/codes/generate', async (req, res) => {
     }
     if (!parseId(planId)) return res.status(400).json({ success: false, error: 'planId is required' });
 
+    // Optional customer details captured at generation time (MIBOX-style).
+    const customerName =
+      body.customerName !== undefined && body.customerName !== null && String(body.customerName).trim() !== ''
+        ? String(body.customerName).trim().slice(0, 100)
+        : null;
+    const customerPhone =
+      body.customerPhone !== undefined && body.customerPhone !== null && String(body.customerPhone).trim() !== ''
+        ? String(body.customerPhone).trim().slice(0, 30)
+        : null;
+
+    // Optional custom duration override — only allowed on plans explicitly
+    // configured with allowCustomDuration (protects the wholesale price model).
+    let customDurationDays = null;
+    if (body.customDays !== undefined && body.customDays !== null && body.customDays !== '') {
+      const days = Number(body.customDays);
+      if (!Number.isInteger(days) || days < 1 || days > 730) {
+        return res.status(400).json({ success: false, error: 'customDays must be an integer between 1 and 730' });
+      }
+      customDurationDays = days;
+    }
+
     const plan = await Plan.findById(planId).lean().exec();
     if (!plan || plan.status !== 'Active') {
       return res.status(400).json({ success: false, error: 'Plan not found or inactive' });
+    }
+    if (customDurationDays !== null && !plan.allowCustomDuration) {
+      return res
+        .status(400)
+        .json({ success: false, error: 'This plan does not allow custom durations', code: 'CUSTOM_DURATION_NOT_ALLOWED' });
     }
 
     // Atomic credit deduction: only succeeds if enough credit remains for this plan.
@@ -272,6 +362,9 @@ router.post('/codes/generate', async (req, res) => {
       codeExpiresInDays: codeExpiryDays,
       resellerId: String(req.reseller._id),
       batchId: String(batch._id),
+      customerName,
+      customerPhone,
+      customDurationDays,
     });
 
     if (!result.ok) {
@@ -433,7 +526,7 @@ router.get('/batches/:id/export', async (req, res) => {
     if (!batch) return res.status(404).json({ success: false, error: 'Batch not found' });
     const [plan, codes] = await Promise.all([
       Plan.findById(batch.planId).lean().exec(),
-      ActivationCode.find({ batchId: id }).select('codeEnc prefix codeLast4 status').lean().exec(),
+      ActivationCode.find({ batchId: id }).select('codeEnc prefix codeLast4 status customerName customerPhone customDurationDays').lean().exec(),
     ]);
     const lines = [];
     lines.push('==============================================');
@@ -446,7 +539,12 @@ router.get('/batches/:id/export', async (req, res) => {
     codes.forEach((c, i) => {
       const plain = c.codeEnc ? decryptSecret(c.codeEnc) : `${c.prefix}-••••-••••-${c.codeLast4}`;
       const statusMark = c.status === 'ACTIVATED' ? ' [مفعّل]' : c.status === 'REVOKED' ? ' [ملغي]' : '';
-      lines.push(`${String(i + 1).padStart(3)}. ${plain}${statusMark}`);
+      const customer =
+        c.customerName || c.customerPhone
+          ? `  —  ${c.customerName || ''}${c.customerPhone ? ` (${c.customerPhone})` : ''}`
+          : '';
+      const customDur = c.customDurationDays ? `  [${c.customDurationDays} يوم]` : '';
+      lines.push(`${String(i + 1).padStart(3)}. ${plain}${statusMark}${customer}${customDur}`);
     });
     lines.push('----------------------------------------------');
     lines.push('كل كود يُفعّل مرة واحدة على جهاز واحد.');
