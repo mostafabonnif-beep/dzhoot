@@ -103,6 +103,7 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [debtSummary, setDebtSummary] = useState<{ outstanding: number; unpaidCount: number } | null>(null);
   const [error, setError] = useState('');
 
   function copyCode(text: string) {
@@ -177,6 +178,21 @@ export default function AdminDashboard() {
       .catch(() => setError('تعذر تحديث بيانات لوحة التحكم'))
       .finally(() => setRefreshing(false));
   }
+
+  useEffect(() => {
+    let active = true;
+    api
+      .get('/admin/reseller-debts')
+      .then((res) => {
+        if (active) setDebtSummary(res.data?.summary || null);
+      })
+      .catch(() => {
+        /* secondary — ignore */
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -264,6 +280,14 @@ export default function AdminDashboard() {
       severity: 'amber',
       text: `${channelOperations.channels.failing} قناة معطلة في الكتالوج تحتاج تنظيفًا أو بديلًا.`,
       href: '/admin/channels',
+    });
+  }
+  if (debtSummary && debtSummary.unpaidCount > 0) {
+    alerts.push({
+      key: 'reseller-debts',
+      severity: 'amber',
+      text: `ديون غير مسددة على المحلات: ${debtSummary.unpaidCount} — ${Number(debtSummary.outstanding).toLocaleString()} دج`,
+      href: '/admin/resellers',
     });
   }
 
