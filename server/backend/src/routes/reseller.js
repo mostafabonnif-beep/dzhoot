@@ -240,6 +240,93 @@ router.get('/statement', async (req, res) => {
   }
 });
 
+// GET /clients — this reseller's customers. Codes generated WITH customer
+// info (name/phone — Round 19) are aggregated per customer, enriched with
+// subscription expiry, and sorted so expiring-soon customers surface first.
+router.get('/clients', async (req, res) => {
+  try {
+    const search = String(req.query.search || '').trim().toLowerCase();
+    const codes = await ActivationCode.find({
+      resellerId: req.reseller._id,
+      $or: [{ customerName: { $nin: [null, ''] } }, { customerPhone: { $nin: [null, ''] } }],
+    })
+      .select('codeEnc prefix codeLast4 customerName customerPhone customDurationDays status activatedAt codeExpiresAt planId createdAt')
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+
+    const planIds = [...new Set(codes.map((c) => String(c.planId)))];
+    const plans = planIds.length ? await Plan.find({ _id: { $in: planIds } }).select('name').lean() : [];
+    const planMap = new Map(plans.map((p) => [String(p._id), p.name]));
+
+    // Subscription expiry per activated code (active subscriptions only).
+    const activatedIds = codes.filter((c) => c.status === 'ACTIVATED').map((c) => c._id);
+    const subs = activatedIds.length
+      ? await Subscription.find({ activationCodeId: { $in: activatedIds }, status: 'ACTIVE' })
+          .select('activationCodeId expiresAt')
+          .lean()
+          .exec()
+      : [];
+    const expiryByCode = new Map(subs.map((s) => [String(s.activationCodeId), s.expiresAt]));
+
+    // Group by phone (digits) when present, else by normalized name.
+    const clients = new Map();
+    for (const c of codes) {
+      const phone = String(c.customerPhone || '').replace(/\D/g, '');
+      const name = String(c.customerName || '').trim();
+      const key = phone || name.toLowerCase();
+      if (!key) continue;
+      let client = clients.get(key);
+      if (!client) {
+        client = { key, name, phone, codes: [] };
+        clients.set(key, client);
+      }
+      if (!client.name && name) client.name = name;
+      if (!client.phone && phone) client.phone = phone;
+      client.codes.push({
+        _id: c._id,
+        code: c.codeEnc ? decryptSecret(c.codeEnc) : `${c.prefix}-••••-••••-${c.codeLast4}`,
+        planName: planMap.get(String(c.planId)) || '—',
+        status: c.status,
+        activatedAt: c.activatedAt || null,
+        expiresAt: expiryByCode.get(String(c._id)) || null,
+        customDurationDays: c.customDurationDays || null,
+      });
+    }
+
+    const now = Date.now();
+    const soon = now + 7 * 24 * 60 * 60 * 1000;
+    const list = [];
+    for (const cl of clients.values()) {
+      cl.codeCount = cl.codes.length;
+      cl.activatedCount = cl.codes.filter((x) => x.status === 'ACTIVATED').length;
+      const expiries = cl.codes.map((x) => x.expiresAt).filter(Boolean).map((d) => new Date(d).getTime());
+      cl.nextExpiry = expiries.length ? new Date(Math.max(...expiries)).toISOString() : null;
+      cl.expiringSoon = Boolean(cl.nextExpiry) && new Date(cl.nextExpiry).getTime() <= soon;
+      if (search && !(cl.name.toLowerCase().includes(search) || cl.phone.includes(search))) continue;
+      list.push(cl);
+    }
+    list.sort((a, b) => {
+      if (a.expiringSoon !== b.expiringSoon) return a.expiringSoon ? -1 : 1;
+      if (a.nextExpiry && b.nextExpiry) return new Date(a.nextExpiry).getTime() - new Date(b.nextExpiry).getTime();
+      if (a.nextExpiry) return -1;
+      if (b.nextExpiry) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+    const summary = {
+      totalClients: list.length,
+      totalCodes: list.reduce((s, c) => s + c.codeCount, 0),
+      activatedCodes: list.reduce((s, c) => s + c.activatedCount, 0),
+      expiringSoon: list.filter((c) => c.expiringSoon).length,
+    };
+    res.json({ success: true, data: { summary, clients: list.slice(0, 500) } });
+  } catch (err) {
+    console.error('[reseller] clients error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
 // GET /credit — this reseller's remaining code credit per plan
 router.get('/credit', async (req, res) => {
   try {
