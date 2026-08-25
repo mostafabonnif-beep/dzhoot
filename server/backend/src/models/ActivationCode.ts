@@ -14,6 +14,12 @@ export interface IActivationCodeDocument extends Document {
   activatedBy?: mongoose.Types.ObjectId | null;
   codeExpiresAt?: Date | null;
   notes?: string | null;
+  /** Customer name captured at generation time (بوابة الموزعين). */
+  customerName?: string | null;
+  /** Customer phone captured at generation time (بوابة الموزعين). */
+  customerPhone?: string | null;
+  /** Optional duration override (days) set at generation; overrides the plan duration on redeem. */
+  customDurationDays?: number | null;
   createdBy?: mongoose.Types.ObjectId | null;
   resellerId?: mongoose.Types.ObjectId | null;
   batchId?: mongoose.Types.ObjectId | null;
@@ -82,6 +88,29 @@ const activationCodeSchema = new Schema<IActivationCodeDocument>(
       default: null,
       trim: true,
       maxlength: 500,
+    },
+    // Customer details captured at generation time (reseller portal). Optional
+    // so existing codes and admin-generated codes keep working unchanged.
+    customerName: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 100,
+    },
+    customerPhone: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 30,
+    },
+    // Duration override in days. When set, redeem uses it instead of the
+    // plan's durationDays (e.g. a reseller sells a 45-day code from a plan
+    // that allows custom durations).
+    customDurationDays: {
+      type: Number,
+      default: null,
+      min: 1,
+      max: 3650,
     },
     createdBy: {
       type: Schema.Types.ObjectId,
