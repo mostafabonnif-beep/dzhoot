@@ -1,11 +1,65 @@
 import http from 'http';
 import https from 'https';
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import { issuePlaybackToken } from './playback-token';
 import { createPinnedLookup, isPrivateIP, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
 
 const MAX_MANIFEST_SIZE = 10 * 1024 * 1024;
+
+// Transient upstream failures (proxy auth challenges, rate limits, 5xx,
+// timeouts, DNS hiccups) — retried with a short backoff because the Upstream CDN
+// intermittently answers 407/509 to server-side fetches even though the same
+// URL succeeds a moment later (edge/load dependent). A retry re-follows the
+// redirect chain and almost always lands on a healthy edge.
+const MAX_UPSTREAM_RETRIES = 2;
+
+function isTransientUpstreamError(error: any): boolean {
+  const status = error?.response?.status;
+  if (status) {
+    return (
+      status === 407 ||
+      status === 408 ||
+      status === 425 ||
+      status === 429 ||
+      status === 500 ||
+      status === 502 ||
+      status === 503 ||
+      status === 504 ||
+      status >= 509
+    );
+  }
+  const code = error?.code;
+  return (
+    code === 'ECONNABORTED' ||
+    code === 'ECONNRESET' ||
+    code === 'ETIMEDOUT' ||
+    code === 'EAI_AGAIN' ||
+    code === 'EPIPE' ||
+    code === 'ECONNREFUSED'
+  );
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchUpstreamWithRetry(
+  url: string,
+  options: AxiosRequestConfig,
+): Promise<any> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= MAX_UPSTREAM_RETRIES; attempt++) {
+    try {
+      return await axios.get(url, options);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientUpstreamError(error) || attempt >= MAX_UPSTREAM_RETRIES) {
+        throw error;
+      }
+      await sleep(250 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
 
 // Cache of upstream media playlists used to resolve segment URLs by absolute
 // media sequence (normalized /playback/:token/segments/:seq path).
@@ -83,7 +137,7 @@ export async function resolveSegmentUrlBySequence(
     const pinnedLookup = createPinnedLookup(ssrfCheck.resolvedAddresses);
     const httpAgent = new http.Agent({ lookup: pinnedLookup });
     const httpsAgent = new https.Agent({ lookup: pinnedLookup });
-    const response = await axios.get(manifestUrl, {
+    const response = await fetchUpstreamWithRetry(manifestUrl, {
       responseType: 'text',
       timeout: 15_000,
       httpAgent,
@@ -175,7 +229,7 @@ export async function proxyUpstreamStream(
     const httpAgent = new http.Agent({ lookup: pinnedLookup });
     const httpsAgent = new https.Agent({ lookup: pinnedLookup });
     const requestedRange = typeof req.headers?.range === 'string' ? req.headers.range : undefined;
-    const response = await axios.get(url, {
+    const response = await fetchUpstreamWithRetry(url, {
       responseType: 'stream',
       timeout: 30_000,
       httpAgent,
