@@ -487,17 +487,30 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
 
     const selectedAlternate = slot > 0 ? viableAlternates[slot - 1] : null;
     const rootSessionId = crypto.randomBytes(16).toString('hex');
-    const { token, expiresAt } = issuePlaybackToken({
+    const tokenOpts = {
       userId: String(user.id),
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
-      direct: xtreamDirectPlayback || undefined,
       sessionId: rootSessionId,
       upstreamHeaders: {
         userAgent: slot === 0 ? channel.activeUserAgent : selectedAlternate?.userAgent,
         referrer: slot === 0 ? channel.activeReferrer : selectedAlternate?.referrer,
       },
+    };
+    const { token, expiresAt } = issuePlaybackToken({
+      ...tokenOpts,
+      direct: xtreamDirectPlayback || undefined,
     });
+
+    // Direct mode is opt-in. When it's on, also mint a PROXY token over the
+    // same session so clients can fall back to server-relayed playback when
+    // the direct provider URL fails from their network (ISP blocks, geo, etc).
+    // Both tokens share rootSessionId — one concurrent-stream slot, not two.
+    let proxyPlaybackUrl;
+    if (xtreamDirectPlayback && process.env.ALLOW_DIRECT_PLAYBACK === 'true') {
+      const proxyToken = issuePlaybackToken({ ...tokenOpts, direct: false });
+      proxyPlaybackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${proxyToken.token}.m3u8`;
+    }
 
     // Enforce the per-user concurrent stream limit (oldest session is evicted
     // when exceeded; no-op when Redis is not configured).
@@ -528,6 +541,9 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         expiresAt,
         slot,
         streamLimit: { max: session.max, active: session.active },
+        // Present only when direct playback is enabled for the source: the
+        // client may retry through the server relay if the direct URL fails.
+        ...(proxyPlaybackUrl ? { proxyPlaybackUrl } : {}),
       },
     });
   } catch (error) {

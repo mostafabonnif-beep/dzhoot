@@ -125,7 +125,13 @@ class PlayerViewModel @Inject constructor(
             )
             val body = response.body()
             if (response.isSuccessful && body?.success == true) {
-                body.data?.let { PlaybackTarget(url = it.playbackUrl, mimeType = it.mimeType) }
+                body.data?.let {
+                    PlaybackTarget(
+                        url = it.playbackUrl,
+                        proxyUrl = it.proxyPlaybackUrl,
+                        mimeType = it.mimeType,
+                    )
+                }
             } else {
                 // Alternate slots are optional. A channel with no alternates correctly
                 // returns 404 for slots 1..3; that must not replace a working primary
