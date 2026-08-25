@@ -185,6 +185,9 @@ describe('Round 15 — business summary: real operator revenue', () => {
       wholesaleTotal: 3000,
       receiptDate: new Date(),
       status: 'delivered',
+      // Admin-delivered batch (createdBy set) — self-generated batches
+      // (createdBy unset) are excluded from delivery revenue since round 19.
+      createdBy: new mongoose.Types.ObjectId(),
     });
     // 4) Admin-issued activation (no reseller) → 1000 revenue.
     await ActivationCode.create({ prefix: 'DZ', codeHash: 'admin1', codeEnc: 'enc', codeLast4: '9001', planId: plan._id, status: 'ACTIVATED', activatedAt: new Date() });
