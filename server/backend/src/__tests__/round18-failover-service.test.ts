@@ -27,6 +27,8 @@ jest.mock('axios', () => ({
     return Promise.resolve({
       data: [
         { name: 'ENTV1', stream_id: 101, container_extension: 'm3u8' },
+        { name: 'Dz| Algerie SD [ ENTV 1 ] ✦', stream_id: 104 },
+        { name: 'ALG: Echorouk TV ᴴᴱⱽᶜ 720p', stream_id: 105 },
         { name: 'beIN SPORTS 1', stream_id: 202 },
         { name: 'قناة لا وجود لها في الكتالوج', stream_id: 303 },
       ],
@@ -55,7 +57,8 @@ jest.mock('../services/alert-notifier', () => ({
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const svc = require('../services/source-failover-service');
 
-const { buildFailoverStreamUrl, getSourceHealth, isSourceDown, getFailoverTarget, runSourceWatchdog, autoMatchFailoverMaps } = svc;
+const { buildFailoverStreamUrl, getSourceHealth, isSourceDown, getFailoverTarget, runSourceWatchdog, autoMatchFailoverMaps, channelCanonicalKey, nameMatchScore, channelVariantRank } = svc;
+const fuzzyAccepted = svc.fuzzyAccepted;
 const { testXtreamConnection } = require('../services/xtream-service');
 const { probeStream } = require('../services/stream-prober');
 
@@ -196,6 +199,61 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     const fresh = await XtreamSource.findById(neo._id).lean().exec();
     expect(fresh!.verificationStatus).toBe('verified');
     expect(probeStream).toHaveBeenCalledWith('https://cf.business-cloud-neo.ru/live/u/p/262849.m3u8', expect.anything());
+  });
+
+  it('channelCanonicalKey maps the messy Maghreb naming to shared keys', () => {
+    expect(channelCanonicalKey('Dz|ENTV 1 FULL HD')).toBe('entv1');
+    expect(channelCanonicalKey('AR: Algerie EN TV 1')).toBe('entv1');
+    expect(channelCanonicalKey('ALG: Programe National ᴴᴱⱽᶜ 720p')).toBe('entv1');
+    expect(channelCanonicalKey('Dz| Echorouk TV ✦')).toBe('echourouk');
+    expect(channelCanonicalKey('AR: Echourouk TV ᴿᴬᵂ')).toBe('echourouk');
+    expect(channelCanonicalKey('ALG: Ennahar TV ᴴᴱⱽᶜ 720p')).toBe('ennahar');
+    expect(channelCanonicalKey('AR: Ennahar TV')).toBe('ennahar');
+    expect(channelCanonicalKey('ALG: Al24 News ᴴᴱⱽᶜ 720p')).toBe('al24');
+    expect(channelCanonicalKey('AL24 News')).toBe('al24');
+    expect(channelCanonicalKey('Dz| Algerie Tamazight TV4 ✦')).toBe('tamazight');
+    expect(channelCanonicalKey('AR: Algerie Tamazight TV 4')).toBe('tamazight');
+    expect(channelCanonicalKey('Dz| El Bilad TV ✦')).toBe('el-bilad');
+    expect(channelCanonicalKey('AR: El Bilad')).toBe('el-bilad');
+    expect(channelCanonicalKey('BEIN SPORT AR')).toBe('beinsports');
+  });
+
+  it('nameMatchScore tolerates typos and ignores junk tokens', () => {
+    // Single-significant-token identity after typo tolerance: accepted.
+    expect(fuzzyAccepted('dz echorouk tv', 'ar echourouk tv raw')).toBe(true);
+    // No shared identity tokens: rejected.
+    expect(nameMatchScore('some unrelated channel', 'ennahar tv')).toBe(0);
+    expect(fuzzyAccepted('some unrelated channel', 'ennahar tv')).toBe(false);
+  });
+
+  it('channelVariantRank prefers base/HD over +6H/LQ clones', () => {
+    expect(channelVariantRank('ENNAHAR TV +6H')).toBeGreaterThan(channelVariantRank('Ennahar TV HD'));
+    expect(channelVariantRank('ENNAHAR TV LQ')).toBeGreaterThan(channelVariantRank('Ennahar TV'));
+  });
+
+  it('auto-match resolves the messy Maghreb naming via the canonical dictionary', async () => {
+    const backup = await XtreamSource.create({
+      name: 'Backup Maghreb',
+      serverUrl: 'http://ottstreambox.xyz:80',
+      usernameEncrypted: 'x',
+      passwordEncrypted: 'y',
+      status: 'Inactive',
+      verificationStatus: 'pending',
+    });
+    await Channel.create({ channelId: 'CH-E1', channelName: 'AR: Algerie EN TV 1', channelUrl: 'http://neo/e1', isActive: true });
+    await Channel.create({ channelId: 'CH-ECH', channelName: 'AR: Echourouk TV ᴿᴬᵂ', channelUrl: 'http://neo/ech', isActive: true });
+
+    const result = await autoMatchFailoverMaps(String(backup._id), {});
+    // ENTV1 (via dictionary) + Echorouk (via dictionary) — the unknown and the
+    // duplicate ENTV variant collapse into the same maps.
+    expect(result.created).toBeGreaterThanOrEqual(2);
+    const maps = await ChannelFailoverMap.find({ backupSourceId: backup._id }).lean().exec();
+    const refs = maps.map((m) => m.channelRef).sort();
+    expect(refs).toContain('CH-E1');
+    expect(refs).toContain('CH-ECH');
+    // The duplicate ENTV variant is deduped (first matching backup stream wins).
+    const entv = maps.find((m) => m.channelRef === 'CH-E1');
+    expect(entv!.backupStreamId).toBe('101');
   });
 
   it('auto-match respects the categories filter (fetches only those categories)', async () => {

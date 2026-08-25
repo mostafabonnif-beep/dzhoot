@@ -53,6 +53,140 @@ function mapDbStatusToHealth(status: string | undefined | null): SourceHealth {
   return 'unknown';
 }
 
+// ---------------------------------------------------------------------------
+// Channel-name matching helpers (auto-match)
+//
+// Maghreb panels name channels very differently from the catalog
+// ('Dz|ENTV 1 FULL HD ✦' vs 'AR: Algerie EN TV 1', 'Echorouk' vs 'Echourouk').
+// Two layers: a curated canonical-key dictionary for the important Arabic/
+// Algerian channels, and a typo-tolerant token-Jaccard fallback for the rest.
+// ---------------------------------------------------------------------------
+
+/** NFKC-decorated, lowercased, junk-token-stripped channel name. */
+export function cleanChannelName(value: unknown): string {
+  return String(value || '')
+    .normalize('NFKC')
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Tokens that say nothing about identity: source prefixes, quality, formats.
+const JUNK_TOKENS = new Set([
+  'dz', 'alg', 'algerie', 'algeria', 'ar', 'fr', 'hd', 'hdtv', 'fhd', 'uhd', '4k', '8k',
+  'sd', 'lq', 'hq', 'raw', 'full', '720', '720p', '1080', '1080p', '2160', '2160p',
+  'h265', 'hevc', 'x265', 'h264', 'avc', 'web', 'ts', 'm3u8', 'mpegts', '6h', '+6h',
+  'tv', 'ch', 'channel', 'chaîne', 'canal', 'قناة', 'بث', 'تدفق',
+]);
+
+function tokenize(cleaned: string): string[] {
+  return cleaned.split(' ').filter((t) => t.length >= 3 && !JUNK_TOKENS.has(t));
+}
+
+function levenshtein(a: string, b: string): number {
+  if (a === b) return 0;
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+/** Do two tokens count as the same identity token? (typo-tolerant) */
+function tokensMatch(t1: string, t2: string): boolean {
+  if (t1 === t2) return true;
+  if (t1.length >= 5 && t2.length >= 5) {
+    if (levenshtein(t1, t2) <= 1) return true; // echorouk ~ echourouk
+    if (t1.startsWith(t2) || t2.startsWith(t1)) return true; // entv1 ~ entv
+  }
+  return false;
+}
+
+/** Jaccard over token sets with typo-tolerant per-token matching. */
+export function nameMatchScore(aCleaned: string, bCleaned: string): number {
+  const ta = tokenize(aCleaned);
+  const tb = tokenize(bCleaned);
+  if (ta.length === 0 || tb.length === 0) return 0;
+  const used = new Set<number>();
+  let inter = 0;
+  for (const t of ta) {
+    for (let i = 0; i < tb.length; i++) {
+      if (used.has(i)) continue;
+      if (tokensMatch(t, tb[i])) {
+        inter += 1;
+        used.add(i);
+        break;
+      }
+    }
+  }
+  const union = new Set([...ta, ...tb]).size;
+  return union === 0 ? 0 : inter / union;
+}
+
+const FUZZY_MATCH_THRESHOLD = 0.6;
+
+/** Accept a fuzzy match: strong multi-token overlap, or a single significant
+ *  token that is an identity match after typo tolerance. */
+function fuzzyAccepted(aCleaned: string, bCleaned: string): boolean {
+  const ta = tokenize(aCleaned);
+  const tb = tokenize(bCleaned);
+  if (ta.length === 0 || tb.length === 0) return false;
+  if (nameMatchScore(aCleaned, bCleaned) >= FUZZY_MATCH_THRESHOLD) return true;
+  if (ta.length === 1 && tb.length === 1 && tokensMatch(ta[0], tb[0])) return true;
+  return false;
+}
+
+/**
+ * Curated canonical key for important Arabic/Algerian channels — both the
+ * catalog and the backup get mapped to the same key, which defeats the
+ * 'Dz|ENTV 1 FULL HD' vs 'AR: Algerie EN TV 1' naming gap.
+ */
+export function channelCanonicalKey(name: string): string | null {
+  const n = cleanChannelName(name);
+  if (!n) return null;
+  const has = (re: RegExp) => re.test(n);
+  if (has(/entv\s*1|en\s*tv\s*1|algerie\s*(premiere|première|1(ere|ère)?)\b|programe? national|tv1\b|a1\b/)) return 'entv1';
+  if (has(/canal\s*algerie|algerie\s*2\b|algerie\s*deux/)) return 'canal-algerie';
+  if (has(/algerie\s*3\b|a3\b|algerie\s*trois/)) return 'algerie-3';
+  if (has(/tamazight|algerie\s*4\b|tv\s*4\b/)) return 'tamazight';
+  if (has(/coran|quran|algerie\s*5\b/)) return 'quran-algerie';
+  if (has(/algerie\s*6\b|tv\s*6\b/)) return 'algerie-6';
+  if (has(/el\s*maarifa|maarifa|algerie\s*7\b/)) return 'el-maarifa';
+  if (has(/edhakira|algerie\s*8\b/)) return 'edhakira';
+  if (has(/ech.*rouk/)) return 'echourouk';
+  if (has(/ennahar|ennahaar/)) return 'ennahar';
+  if (has(/el\s*bilad|elbilad/)) return 'el-bilad';
+  if (has(/djazairia|djazairia/)) return 'el-djazairia';
+  if (has(/al\s*24\b|al24/)) return 'al24';
+  if (has(/heddaf/)) return 'el-heddaf';
+  if (has(/el?\s*hayat/)) return 'el-hayat';
+  if (has(/watania/)) return 'el-watania';
+  if (has(/bahia/)) return 'el-bahia';
+  if (has(/be\s*in\s*sports?|beinsports?/)) return 'beinsports';
+  if (has(/be\s*in\b/)) return 'bein';
+  return null;
+}
+
+/** Lower = better variant to map (base/HD over +6H/LQ/RAW/SD clones). */
+export function channelVariantRank(name: string): number {
+  const n = cleanChannelName(name);
+  if (/\+?\s*6h|6\s*heures/.test(n)) return 100;
+  if (/\blq\b/.test(n)) return 90;
+  if (/\braw\b/.test(n)) return 80;
+  if (/\bsd\b/.test(n)) return 70;
+  if (/\bhd\b|\bfhd\b|\buhd\b|\b4k\b/.test(n)) return 10;
+  return 50;
+}
+
 /** Cached health of a source (falls back to the persisted verificationStatus). */
 export async function getSourceHealth(sourceId: string): Promise<SourceHealth> {
   const key = String(sourceId);
@@ -324,12 +458,24 @@ export async function autoMatchFailoverMaps(
     .limit(20000)
     .lean()
     .exec();
-  const byName = new Map<string, any[]>();
+  // Index catalog channels by canonical key (curated dictionary) and by cleaned
+  // name (fuzzy fallback via an inverted token index — the catalog is ~16k rows,
+  // scoring each row per backup stream would be far too slow).
+  const byCanonicalKey = new Map<string, any[]>();
+  const catalogTokenIndex = new Map<string, Array<{ cleanedName: string; chans: any[] }>>();
   for (const ch of catalog) {
+    const ck = channelCanonicalKey(ch.channelName || '');
+    if (ck) {
+      if (!byCanonicalKey.has(ck)) byCanonicalKey.set(ck, []);
+      byCanonicalKey.get(ck)!.push(ch);
+    }
     const key = normalizeChannelName(ch.channelName || '');
     if (!key) continue;
-    if (!byName.has(key)) byName.set(key, []);
-    byName.get(key)!.push(ch);
+    const toks = new Set(tokenize(cleanChannelName(ch.channelName || '')));
+    for (const t of toks) {
+      if (!catalogTokenIndex.has(t)) catalogTokenIndex.set(t, []);
+      catalogTokenIndex.get(t)!.push({ cleanedName: cleanChannelName(ch.channelName || ''), chans: [ch] });
+    }
   }
 
   let created = 0;
@@ -340,13 +486,40 @@ export async function autoMatchFailoverMaps(
     const name = String(item?.name || '').trim();
     if (!name) continue;
     if (opts.nameContains && !name.toLowerCase().includes(String(opts.nameContains).toLowerCase())) continue;
-    const key = normalizeChannelName(name);
-    const matches = key ? byName.get(key) : undefined;
+
+    // 1) Curated dictionary match (handles the messy Maghreb naming: 'Dz|ENTV 1
+    //    FULL HD' vs 'AR: Algerie EN TV 1', 'Echorouk' vs 'Echourouk', …).
+    const ck = channelCanonicalKey(name);
+    let matches: any[] | undefined = ck ? byCanonicalKey.get(ck) : undefined;
+    // 2) Fuzzy fallback: cleaned-token Jaccard with a typo-tolerant token match,
+    //    restricted to catalog channels sharing at least one token.
+    if (!matches || matches.length === 0) {
+      const cleaned = cleanChannelName(name);
+      const tokens = tokenize(cleaned);
+      const candidateChans = new Map<string, any[]>();
+      for (const t of tokens) {
+        for (const cand of catalogTokenIndex.get(t) || []) {
+          if (!candidateChans.has(cand.cleanedName)) candidateChans.set(cand.cleanedName, cand.chans);
+        }
+      }
+      let best: any[] | undefined;
+      let bestScore = 0;
+      for (const [catalogName, chans] of candidateChans) {
+        const score = nameMatchScore(cleaned, catalogName);
+        if (score > bestScore) {
+          bestScore = score;
+          best = chans;
+        }
+      }
+      if (best && fuzzyAccepted(cleaned, best[0]?.channelName ? cleanChannelName(best[0].channelName) : '')) matches = best;
+    }
+
     if (!matches || matches.length === 0) {
       skipped += 1;
       continue;
     }
-    const ch = matches[0];
+    // Prefer the base variant over +6H / LQ / RAW / SD clones.
+    const ch = matches.sort((a, b) => channelVariantRank(a.channelName || '') - channelVariantRank(b.channelName || ''))[0];
     const mapKey = `${String(ch.channelId)}:${backupSourceId}`;
     if (seen.has(mapKey)) continue;
     seen.add(mapKey);
@@ -380,4 +553,9 @@ module.exports = {
   getFailoverTarget,
   runSourceWatchdog,
   autoMatchFailoverMaps,
+  cleanChannelName,
+  channelCanonicalKey,
+  channelVariantRank,
+  nameMatchScore,
+  fuzzyAccepted,
 };
