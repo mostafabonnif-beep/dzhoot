@@ -300,7 +300,7 @@ export default function ResellerDashboardPage() {
   const credit = me?.credit || [];
 
   return (
-    <div className="min-h-screen bg-background" dir="rtl">
+    <div className="h-screen supports-[height:100dvh]:h-dvh overflow-y-auto bg-background" dir="rtl">
       <header className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
