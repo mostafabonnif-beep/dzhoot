@@ -18,6 +18,12 @@ jest.mock('../middleware/requireTvOrSessionAuth', () => ({
       isActive: true,
       allCatalog: true,
     };
+    // v2 playback tokens are device-bound; the authenticated TV middleware
+    // supplies this internal context after validating X-Device-Token.
+    req.deviceAuth = {
+      deviceId: '507f1f77bcf86cd799439011',
+      issuedAt: new Date('2026-08-25T00:00:00.000Z'),
+    };
     next();
   },
 }));
@@ -28,7 +34,11 @@ jest.mock('../services/subscription-service', () => ({
 }));
 
 jest.mock('../services/playback-access-service', () => ({
-  checkPlaybackSubscription: jest.fn().mockResolvedValue({ plan: null }),
+  checkPlaybackSubscription: jest.fn().mockResolvedValue({
+    allowed: true,
+    required: true,
+    plan: null,
+  }),
 }));
 
 jest.mock('../services/stream-session-service', () => ({
