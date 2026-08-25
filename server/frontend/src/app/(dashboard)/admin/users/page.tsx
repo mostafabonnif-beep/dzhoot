@@ -257,6 +257,13 @@ export default function UsersPage() {
     setPage(1);
   }, [debouncedSearch, selectedRoles, selectedStatuses, sortBy, sortOrder]);
 
+  // After a delete shrinks the list, clamp the page so we never sit on a page
+  // past the end (Pagination would render "301–300 of 300" with no way forward).
+  useEffect(() => {
+    const maxPage = Math.max(1, Math.ceil(totalCount / pageSize));
+    if (page > maxPage) setPage(maxPage);
+  }, [totalCount, page, pageSize]);
+
   function handleSort(column: string) {
     if (sortBy === column) {
       if (sortOrder === 'desc') {

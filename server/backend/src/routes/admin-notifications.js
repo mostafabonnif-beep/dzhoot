@@ -70,6 +70,13 @@ router.post('/:id/send', async (req, res) => {
     const notification = await Notification.findById(id).exec();
     if (!notification) return res.status(404).json({ success: false, error: 'Notification not found' });
 
+    // Guard against accidental duplicate sends: a notification that was already
+    // delivered (in-app SENT + push delivered) must not go out again. A SENT
+    // notification whose push FAILED may still be re-sent from the panel.
+    if (notification.status === 'SENT' && notification.deliveryStats?.pushDelivered) {
+      return res.status(409).json({ success: false, error: 'This notification was already sent and delivered' });
+    }
+
     const fcm = await sendNotificationToDevices({
       title: notification.title,
       body: notification.body,
