@@ -147,12 +147,33 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
   it('watchdog marks a source degraded when the mapped live stream fails', async () => {
     (testXtreamConnection as jest.Mock).mockResolvedValue({ ok: true, userInfo: { auth: 1 } });
     (probeStream as jest.Mock).mockResolvedValue({ status: 'dead', statusCode: 404, error: 'Not found', responseTimeMs: 100 });
-    const backup = await XtreamSource.create({ name: 'Backup', serverUrl: 'http://b', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
+    const backup = await XtreamSource.create({ name: 'Backup', serverUrl: 'http://b', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified', directPlayback: true });
     const channel = await Channel.create({ channelId: 'CH-4', channelName: 'Z', channelUrl: 'http://upstream/z', isActive: true });
     await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-4', backupSourceId: backup._id, backupChannelName: 'Z', backupStreamId: '77' });
 
     const res = await runSourceWatchdog();
     expect(res.states[0].health).toBe('degraded');
+  });
+
+  it('watchdog verifies a direct-playback primary by its real stream even when its API is unreachable', async () => {
+    // The Upstream case: the server cannot reach the source API (TLS block) but the
+    // CDN streams the customers use are alive — the source must stay verified.
+    (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('Client network socket disconnected before secure TLS connection was established'));
+    (probeStream as jest.Mock).mockResolvedValue({ status: 'alive', statusCode: 200, error: null, responseTimeMs: 200 });
+    const upstream = await XtreamSource.create({
+      name: 'Primary Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'x', passwordEncrypted: 'y',
+      status: 'Inactive', verificationStatus: 'blocked', directPlayback: true,
+    });
+    await Channel.create({
+      channelId: 'CH-Upstream', channelName: 'قناة Upstream', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/262849.m3u8', isActive: true,
+      metadata: { source: 'xtream', xtreamSourceId: String(upstream._id) },
+    });
+
+    const res = await runSourceWatchdog();
+    expect(res.states[0].health).toBe('verified');
+    const fresh = await XtreamSource.findById(upstream._id).lean().exec();
+    expect(fresh!.verificationStatus).toBe('verified');
+    expect(probeStream).toHaveBeenCalledWith('https://cf.upstream-host-redacted/live/u/p/262849.m3u8', expect.anything());
   });
 
   it('auto-match creates maps by normalized name and skips unknowns', async () => {
