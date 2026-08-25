@@ -94,7 +94,12 @@ export async function getFailoverTarget(
   const map = await ChannelFailoverMap.findOne(mapFilter).sort({ updatedAt: -1 }).lean().exec();
   if (!map) return null;
 
-  const source = await XtreamSource.findOne({ _id: map.backupSourceId, status: 'Active' }).lean().exec();
+  // Backup sources are added with status Inactive + directPlayback true (so the
+  // setup never disturbs live streams) — eligible via the same rule as above.
+  const source = await XtreamSource.findOne({
+    _id: map.backupSourceId,
+    $or: [{ status: 'Active' }, { directPlayback: true }],
+  }).lean().exec();
   if (!source) return null;
 
   // Never fail over to a backup that is itself down.
@@ -178,7 +183,15 @@ export async function runSourceWatchdog(): Promise<{
   checked: number;
   states: Array<{ sourceId: string; name: string; health: SourceHealth }>;
 }> {
-  const sources = await XtreamSource.find({ status: 'Active' }).select('name serverUrl usernameEncrypted passwordEncrypted verificationStatus').lean().exec();
+  // Probe every source that can serve playback: Active ones AND direct-playback
+  // ones. The backup source is deliberately added with status Inactive +
+  // directPlayback true (no impact on current streams while it is set up), so
+  // an Active-only query would never probe it — and NEO itself may be Inactive
+  // while its direct URLs still work.
+  const sources = await XtreamSource.find({ $or: [{ status: 'Active' }, { directPlayback: true }] })
+    .select('name serverUrl usernameEncrypted passwordEncrypted verificationStatus directPlayback')
+    .lean()
+    .exec();
   const states: Array<{ sourceId: string; name: string; health: SourceHealth }> = [];
 
   for (const source of sources) {
