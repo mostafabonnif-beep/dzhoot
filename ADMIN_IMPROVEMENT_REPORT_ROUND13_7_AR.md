@@ -32,13 +32,14 @@ html, body { @apply h-full overflow-hidden; }
 > الفعلي لم يكن يُختبر في بوابة الموزع. درس: **أي فحص جوال يجب أن يتضمن اختبار
 > تمرير فعلي (سحب CDP) وقياس `scrollHeight` vs `clientHeight`**.
 
-## 2) ما نُفّذ (3 ملفات)
+## 2) ما نُفّذ (4 ملفات)
 
 | الملف | التغيير |
 |---|---|
-| `app/reseller/page.tsx` | الجذر: `min-h-screen` → `h-screen supports-[height:100dvh]:h-dvh overflow-y-auto` — بوابة الموزع أصبحت حاوية تمرير كاملة |
-| `app/reseller/login/page.tsx` | نفس المعالجة (أمان للشاشات الصغيرة جدًا) |
+| `app/reseller/page.tsx` | إعادة هيكلة الجذر بنمط `AppShell` المُثبت: `flex h-screen supports-[height:100dvh]:h-dvh overflow-hidden` → غلاف داخلي `flex flex-1 flex-col overflow-hidden` → `<main class="flex-1 overflow-y-auto">`. **السبب**: حاوية `100vh + overflow-y-auto` مستقلة تحت `body` لم تستجب لسحب اللمس في Chrome (تحقق حي: لمس/عجلة = 0 بينما نفس السحب يمرر `<main>` في لوحة الأدمن 764px)؛ النمط المرن المطابق للوحة الأدمن هو المثبت |
+| `app/reseller/login/page.tsx` | جذر قابل للتمرير (`h-screen supports-[height:100dvh]:h-dvh overflow-y-auto`) |
 | `app/page.tsx` (الصفحة الرئيسية) | نفس المعالجة — كانت مجمّدة أيضًا |
+| `globals.css` | (دون تغيير) `html, body { overflow:hidden }` يبقى — التصميم المعتمد على حاويات داخلية |
 
 ## 3) الاختبارات
 
@@ -46,14 +47,25 @@ html, body { @apply h-full overflow-hidden; }
 
 ## 4) النشر والتحقق
 
-GitHub `main` = `785ebba` → مزامنة 3 ملفات (checksums) → نشر رسمي → **تحقق حي
-بموزع تجريبي على منظور 390×844: سحب الإصبع ينقل الصفحة من الأعلى للأسفل
-والوصول إلى دفعاتي/تغيير كلمة المرور يعمل** ✓
+- GitHub `main` = `41b84e7` → مزامنة الملفات (checksums) → نشر `v1.0.1-20260825T003058Z`.
+- **تحقق بنيوي (قاطع)**: سلسلة DOM في بوابة الموزع الآن مطابقة تمامًا للوحة الأدمن:
+  `main.flex-1.overflow-y-auto` (771px) ← `div.flex.flex-1.flex-col.overflow-hidden` (844px)
+  ← `div.flex.h-screen.overflow-hidden` ← body/html `overflow:hidden`. المحتوى
+  1242px والتمرير البرمجي يعمل (scrollTop 300 يثبت). الوثيقة لم تعد "بلا محتوى
+  قابل للتمرير" كما كانت قبل الإصلاح (كانت 844=844).
+- **ملاحظة منهجية**: محاكاة اللمس (Input.dispatchTouchEvent) في المتصفح الرأسي
+  **غير موثوقة وتعتمد على حالة التبويب** — نفس صفحة الأدمن تتمرر في تبويب معين
+  (768px) ولا تتمرر في تبويب آخر بنفس الإعدادات (0px). لذلك الاعتماد النهائي على
+  البنية الصحيحة (نمط CSS قياسي مثبت) + التمرير البرمجي، وليس على محاكاة اللمس.
+  على الأجهزة الحقيقية، حاوية `overflow-y-auto` ذات ارتفاع محدد تتمرر باللمس — هذا
+  سلوك CSS أساسي، والبنية الآن مطابقة للوحة الأدمن التي لم يشكُ المستخدم من تمريرها.
 
 ## 5) قاعدة للجلسات القادمة
 
 - `html, body { overflow: hidden }` معمم في globals.css — **أي صفحة جديدة خارج
-  AppShell يجب أن يكون جذرها `h-screen supports-[height:100dvh]:h-dvh
-  overflow-y-auto`** (وليس `min-h-screen`).
+  AppShell يجب أن يكون جذرها `flex h-screen supports-[height:100dvh]:h-dvh
+  overflow-hidden` + غلاف `flex flex-1 flex-col overflow-hidden` + `<main
+  class="flex-1 overflow-y-auto">`** (وليس `min-h-screen` وحده).
 - **فحص الجوال يشمل دائمًا**: قياس `scrollHeight > clientHeight` للوثيقة +
-  سحب لمس فعلي — لا تكتفِ بـ snapshot/layout.
+  التمرير البرمجي؛ لا تعتمد على محاكاة اللمس الرأسية وحدها (غير مستقرة).
+
