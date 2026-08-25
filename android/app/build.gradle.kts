@@ -33,11 +33,14 @@ android {
         targetSdk = 34
         // Official release line. Keep the code greater than legacy builds so
         // tested production updates can install cleanly on existing devices.
-        versionCode = 10009
+        // Bumped 10009 → 10010 for the 1.0.10 release (fixes the update path:
+        // the previous GitHub "latest" release shipped a debug-signed APK that
+        // Android rejected over release-signed installs).
+        versionCode = 10010
         versionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
-            "1.0.8"
+            "1.0.10"
         }
         
         // API Base URL configuration — overridable at build time via the
