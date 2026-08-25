@@ -1,7 +1,11 @@
 import crypto from 'crypto';
 
 const TOKEN_VERSION = 'pt1';
-const DEFAULT_TTL_MS = 5 * 60 * 1000;
+// Playlist channel URLs carry playback tokens; the app caches the channel list
+// (sync every 6h) and its health scanner probes those URLs every 30 min. A
+// short TTL made every probe hit an expired token (401) and falsely marked
+// every channel OFFLINE ("all channels down"). 6h covers the sync interval.
+const DEFAULT_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_STREAM_URL_LENGTH = 8192;
 
 export interface PlaybackTokenPayload {
@@ -90,7 +94,7 @@ export function issuePlaybackToken(input: {
 }): { token: string; expiresAt: number } {
   const now = Date.now();
   const configuredTtl = Number.parseInt(process.env.PLAYBACK_TOKEN_TTL_MS || '', 10) || DEFAULT_TTL_MS;
-  const ttlMs = Math.min(Math.max(Number(input.ttlMs) || configuredTtl, 30_000), 15 * 60 * 1000);
+  const ttlMs = Math.min(Math.max(Number(input.ttlMs) || configuredTtl, 30_000), 12 * 60 * 60 * 1000);
   const payload: PlaybackTokenPayload = {
     v: 1,
     userId: String(input.userId),
