@@ -515,7 +515,12 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     };
     const { token, expiresAt } = issuePlaybackToken({
       ...tokenOpts,
-      direct: xtreamDirectPlayback || undefined,
+      // Direct playback is a MASTER-SWITCHED capability: it hands the client a
+      // provider URL (with the panel credentials embedded) via a 302 — customers
+      // and resellers must never see our sources. When ALLOW_DIRECT_PLAYBACK is
+      // not 'true', every token is server-relayed and the only URL a client ever
+      // sees is iptv.ld-11.net.
+      direct: xtreamDirectPlayback && process.env.ALLOW_DIRECT_PLAYBACK === 'true' ? true : undefined,
     });
 
     // Direct mode is opt-in. When it's on, also mint a PROXY token over the

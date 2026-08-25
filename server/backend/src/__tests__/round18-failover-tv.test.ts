@@ -89,6 +89,30 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     });
   }
 
+  it('source-hiding: without ALLOW_DIRECT_PLAYBACK a direct-enabled source still yields a relayed token', async () => {
+    process.env.ALLOW_DIRECT_PLAYBACK = 'false';
+    const source = await XtreamSource.create({
+      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true,
+    });
+    await seedChannel(source);
+    (isSourceDown as jest.Mock).mockResolvedValue(false);
+
+    const res = await request(buildApp()).post('/api/v1/tv/playback-token').send({ channelId: 'CH-LIVE', slot: 0 });
+    expect(res.status).toBe(200);
+    const data = res.body.data;
+    // The client only ever sees OUR server URL — the provider host/credentials
+    // must never appear in anything client-visible.
+    expect(data.playbackUrl).toContain('/api/v1/tv/playback/');
+    expect(data.playbackUrl).not.toContain('neo.test');
+    const payload = verifyPlaybackToken(tokenFromUrl(data.playbackUrl));
+    expect(payload?.direct).not.toBe(true);
+    expect(payload?.streamUrl).toContain('neo.test');
+    // No direct token, so no direct→proxy pair is minted either.
+    expect(data.proxyPlaybackUrl).toBeUndefined();
+    process.env.ALLOW_DIRECT_PLAYBACK = 'true';
+  });
+
   it('healthy primary → normal token, no failover', async () => {
     const source = await XtreamSource.create({
       name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
