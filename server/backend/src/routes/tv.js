@@ -708,6 +708,10 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
       payload.streamUrl,
       seq,
       payload.upstreamHeaders,
+      // Resolve against the exact playlist snapshot this client received
+      // (primed when its media playlist was served) — not a fresh re-fetch,
+      // whose live window may have already rotated past this sequence.
+      `root:${token}`,
     );
     if (!segUrl) return res.status(404).send('Segment not found in current window');
 
