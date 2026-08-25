@@ -5,6 +5,8 @@ import Channel from '../models/Channel';
 import XtreamSource from '../models/XtreamSource';
 import ChannelFailoverMap from '../models/ChannelFailoverMap';
 import { verifyPlaybackToken } from '../services/playback-token';
+import User from '../models/User';
+import { proxyLogoUrl } from '../utils/logo-proxy';
 
 // Same harness as tv-playback-proxy-fallback.test.ts (Round 16).
 jest.mock('../middleware/requireTvOrSessionAuth', () => ({
@@ -28,7 +30,7 @@ jest.mock('../services/subscription-service', () => ({
 }));
 
 jest.mock('../services/playback-access-service', () => ({
-  checkPlaybackSubscription: jest.fn().mockResolvedValue({ plan: null }),
+  checkPlaybackSubscription: jest.fn().mockResolvedValue({ allowed: true, plan: null }),
 }));
 
 jest.mock('../services/stream-session-service', () => ({
@@ -66,6 +68,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     await Channel.deleteMany({});
     await XtreamSource.deleteMany({});
     await ChannelFailoverMap.deleteMany({});
+    await User.deleteMany({});
     process.env.ALLOW_DIRECT_PLAYBACK = 'true';
     process.env.PLAYBACK_TOKEN_SECRET = 'round18-test-secret-for-playback-tokens';
     (isSourceDown as jest.Mock).mockReset();
@@ -111,6 +114,37 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     // No direct token, so no direct→proxy pair is minted either.
     expect(data.proxyPlaybackUrl).toBeUndefined();
     process.env.ALLOW_DIRECT_PLAYBACK = 'true';
+  });
+
+  it('proxyLogoUrl rewrites provider logo hosts to our relay endpoint', () => {
+    const out = proxyLogoUrl('https://iptv.ld-11.net', 'http://51.158.145.100/picons/logos/x.png');
+    expect(out).toBe('https://iptv.ld-11.net/api/v1/tv/logo?url=' + encodeURIComponent('http://51.158.145.100/picons/logos/x.png'));
+    expect(proxyLogoUrl('https://iptv.ld-11.net', 'data:image/png;base64,AAA')).toBe('data:image/png;base64,AAA');
+    expect(proxyLogoUrl('https://iptv.ld-11.net', '')).toBe('');
+  });
+
+  it('JSON playlist never leaks provider hosts — logos are relayed, stream URLs are ours', async () => {
+    const source = await XtreamSource.create({
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true,
+    });
+    await Channel.create({
+      channelId: 'CH-LOGO', channelName: 'قناة', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/1.m3u8',
+      channelImg: 'http://51.158.145.100/picons/logos/x.png', isActive: true,
+      metadata: { source: 'xtream', xtreamSourceId: String(source._id) },
+    });
+    await User.create({ username: 'tvuser', password: 'password123', email: 'tv@example.com', channelListCode: 'TVTEST', allCatalog: true, role: 'User' });
+
+    const res = await request(buildApp()).get('/api/v1/tv/playlist/TVTEST/json');
+    expect(res.status).toBe(200);
+    const body = JSON.stringify(res.body);
+    // No RAW provider URL may appear — the provider host only survives as an
+    // encoded query parameter of OUR logo relay endpoint.
+    expect(body).not.toContain('http://51.158.145.100');
+    expect(body).not.toContain('https://cf.upstream-host-redacted');
+    expect(body).toContain('/api/v1/tv/logo?url=http%3A%2F%2F51.158.145.100');
+    expect(body).toContain('/api/v1/tv/logo?url=');
+    expect(body).toContain('/api/v1/tv/playback/');
   });
 
   it('healthy primary → normal token, no failover', async () => {
