@@ -509,10 +509,11 @@ router.post('/:id/failover-maps/auto-match', async (req, res) => {
     const source = await XtreamSource.findById(id).lean().exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    const { limit, nameContains } = req.body || {};
+    const { limit, nameContains, categories } = req.body || {};
     const result = await autoMatchFailoverMaps(String(id), {
       limit: limit ? Number(limit) : undefined,
       nameContains: nameContains ? String(nameContains) : undefined,
+      categories: Array.isArray(categories) ? categories.map((c) => String(c)) : undefined,
     });
     audit({
       ...reqCtx(req),

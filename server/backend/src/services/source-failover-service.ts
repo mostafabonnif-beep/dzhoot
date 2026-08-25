@@ -285,7 +285,7 @@ export async function runSourceWatchdog(): Promise<{
  */
 export async function autoMatchFailoverMaps(
   backupSourceId: string,
-  opts: { limit?: number; nameContains?: string } = {},
+  opts: { limit?: number; nameContains?: string; categories?: string[] } = {},
 ): Promise<{ created: number; skipped: number; errors: number }> {
   const source = await XtreamSource.findById(backupSourceId).lean().exec();
   if (!source) throw new Error('Source not found');
@@ -295,9 +295,28 @@ export async function autoMatchFailoverMaps(
     username: decryptSecret(source.usernameEncrypted),
     password: decryptSecret(source.passwordEncrypted),
   };
-  const url = buildXtreamApiUrl(creds, 'get_live_streams');
-  const res = await axios.get(url, { timeout: 20000 });
-  const streams = Array.isArray(res.data) ? res.data : [];
+
+  // A Maghreb panel can list 100k+ streams — fetching them all in one call is
+  // slow and wasteful. When category names are given, resolve them to ids and
+  // fetch only those categories' streams (the feasibility report's own plan:
+  // «لا تستورد 115k كما هي — فلتر الفئات المغاربية أولًا»).
+  let streams: any[] = [];
+  const wantedCategories = (opts.categories || []).map((c) => String(c).trim().toLowerCase()).filter(Boolean);
+  if (wantedCategories.length > 0) {
+    const catRes = await axios.get(buildXtreamApiUrl(creds, 'get_live_categories'), { timeout: 60000 });
+    const cats = Array.isArray(catRes.data) ? catRes.data : [];
+    const catIds = cats
+      .filter((c: any) => wantedCategories.some((w) => String(c?.category_name || '').toLowerCase().includes(w)))
+      .map((c: any) => String(c?.category_id || ''))
+      .filter(Boolean);
+    for (const catId of catIds) {
+      const sRes = await axios.get(buildXtreamApiUrl(creds, 'get_live_streams', { category_id: catId }), { timeout: 90000 });
+      if (Array.isArray(sRes.data)) streams.push(...sRes.data);
+    }
+  } else {
+    const res = await axios.get(buildXtreamApiUrl(creds, 'get_live_streams'), { timeout: 120000 });
+    streams = Array.isArray(res.data) ? res.data : [];
+  }
   const limit = Math.min(Math.max(opts.limit || 500, 1), 2000);
 
   const catalog = await Channel.find({ isActive: { $ne: false } })

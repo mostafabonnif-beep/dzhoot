@@ -8,18 +8,40 @@ jest.mock('../utils/crypto', () => ({
 }));
 
 jest.mock('axios', () => ({
-  get: jest.fn().mockResolvedValue({
-    data: [
-      { name: 'ENTV1', stream_id: 101, container_extension: 'm3u8' },
-      { name: 'beIN SPORTS 1', stream_id: 202 },
-      { name: 'قناة لا وجود لها في الكتالوج', stream_id: 303 },
-    ],
+  get: jest.fn().mockImplementation((url: string) => {
+    if (String(url).includes('get_live_categories')) {
+      return Promise.resolve({
+        data: [
+          { category_id: '10', category_name: '~ ALGERIE ~' },
+          { category_id: '20', category_name: '~ MAROC ~' },
+          { category_id: '30', category_name: 'SPORTS' },
+        ],
+      });
+    }
+    if (String(url).includes('category_id=10')) {
+      return Promise.resolve({ data: [{ name: 'ENTV1', stream_id: 101 }] });
+    }
+    if (String(url).includes('category_id=30')) {
+      return Promise.resolve({ data: [{ name: 'beIN SPORTS 1', stream_id: 202 }] });
+    }
+    return Promise.resolve({
+      data: [
+        { name: 'ENTV1', stream_id: 101, container_extension: 'm3u8' },
+        { name: 'beIN SPORTS 1', stream_id: 202 },
+        { name: 'قناة لا وجود لها في الكتالوج', stream_id: 303 },
+      ],
+    });
   }),
 }));
 
 jest.mock('../services/xtream-service', () => ({
   testXtreamConnection: jest.fn(),
-  buildXtreamApiUrl: jest.fn().mockReturnValue('http://backup.test/player_api.php'),
+  buildXtreamApiUrl: jest.fn().mockImplementation((_creds: any, action?: string, extra: any = {}) => {
+    let url = 'http://backup.test/player_api.php';
+    if (action) url += `?action=${action}`;
+    if (extra?.category_id) url += `&category_id=${extra.category_id}`;
+    return url;
+  }),
 }));
 
 jest.mock('../services/stream-prober', () => ({
@@ -174,6 +196,25 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     const fresh = await XtreamSource.findById(upstream._id).lean().exec();
     expect(fresh!.verificationStatus).toBe('verified');
     expect(probeStream).toHaveBeenCalledWith('https://cf.upstream-host-redacted/live/u/p/262849.m3u8', expect.anything());
+  });
+
+  it('auto-match respects the categories filter (fetches only those categories)', async () => {
+    const backup = await XtreamSource.create({
+      name: 'Backup Maghreb',
+      serverUrl: 'http://ottstreambox.xyz:80',
+      usernameEncrypted: 'x',
+      passwordEncrypted: 'y',
+      status: 'Inactive',
+      verificationStatus: 'pending',
+    });
+    await Channel.create({ channelId: 'CH-A', channelName: 'ENTV1', channelUrl: 'http://upstream/a', isActive: true });
+    await Channel.create({ channelId: 'CH-B', channelName: 'beIN SPORTS 1', channelUrl: 'http://upstream/b', isActive: true });
+
+    const result = await autoMatchFailoverMaps(String(backup._id), { categories: ['ALGERIE'] });
+    expect(result.created).toBe(1); // only ENTV1 (ALGERIE category); beIN is in SPORTS
+    const maps = await ChannelFailoverMap.find({ backupSourceId: backup._id }).lean().exec();
+    expect(maps).toHaveLength(1);
+    expect(maps[0].backupStreamId).toBe('101');
   });
 
   it('auto-match creates maps by normalized name and skips unknowns', async () => {
