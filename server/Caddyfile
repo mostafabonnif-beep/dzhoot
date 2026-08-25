@@ -8,7 +8,7 @@
             roll_size 50MiB
             roll_keep 3
         }
-        format single_field common_log
+        format json
     }
 
     @api path /api/* /health /health/* /ready /ready/*
