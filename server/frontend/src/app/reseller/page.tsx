@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2,
@@ -17,6 +17,10 @@ import {
   BadgeCheck,
   History,
   AlertTriangle,
+  HandCoins,
+  MessageCircle,
+  Trash2,
+  CheckCheck,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
@@ -46,6 +50,21 @@ interface CodeItem {
   activatedAt?: string | null;
   subscriptionStartsAt?: string | null;
   subscriptionExpiresAt?: string | null;
+}
+
+interface DebtItem {
+  _id: string;
+  customerName: string;
+  customerPhone: string;
+  amount: number;
+  paidAmount: number;
+  remaining: number;
+  quantity: number | null;
+  planName: string;
+  status: 'UNPAID' | 'PARTIAL' | 'PAID';
+  note: string;
+  paidAt?: string | null;
+  createdAt?: string | null;
 }
 
 const inputClass =
@@ -118,6 +137,23 @@ export default function ResellerDashboardPage() {
   const [genResult, setGenResult] = useState<{ batchNumber: number; planName: string; codes: string[] } | null>(null);
   const [genCopied, setGenCopied] = useState(false);
 
+  // Customer debts (ديون الزبائن)
+  const [debts, setDebts] = useState<DebtItem[]>([]);
+  const [debtsLoading, setDebtsLoading] = useState(false);
+  const [debtsSummary, setDebtsSummary] = useState({ outstanding: 0, unpaidCount: 0 });
+  const [showDebtForm, setShowDebtForm] = useState(false);
+  const [debtForm, setDebtForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    amount: '',
+    quantity: '',
+    planName: '',
+    note: '',
+  });
+  const [savingDebt, setSavingDebt] = useState(false);
+  const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [deletingDebtId, setDeletingDebtId] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     try {
       const [meRes, batchRes] = await Promise.all([
@@ -163,6 +199,7 @@ export default function ResellerDashboardPage() {
     }
     load();
     loadLedger();
+    loadDebts();
   }, [hydrated, accessToken, router, load]);
 
   async function loadLedger() {
@@ -176,6 +213,111 @@ export default function ResellerDashboardPage() {
       setLedgerLoading(false);
     }
   }
+
+  async function loadDebts() {
+    setDebtsLoading(true);
+    try {
+      const res = await api.get('/reseller/debts');
+      setDebts(res.data?.data || []);
+      setDebtsSummary(res.data?.summary || { outstanding: 0, unpaidCount: 0 });
+    } catch {
+      // debts are secondary — ignore failures
+    } finally {
+      setDebtsLoading(false);
+    }
+  }
+
+  async function handleAddDebt(e: React.FormEvent) {
+    e.preventDefault();
+    if (!debtForm.customerName.trim()) {
+      toast(t('portal.customerName') + ' *', 'error');
+      return;
+    }
+    if (debtForm.amount === '' || Number(debtForm.amount) < 0 || !Number.isFinite(Number(debtForm.amount))) {
+      toast(t('portal.debtAmount') + ' *', 'error');
+      return;
+    }
+    setSavingDebt(true);
+    try {
+      await api.post('/reseller/debts', {
+        customerName: debtForm.customerName.trim(),
+        customerPhone: debtForm.customerPhone.trim(),
+        amount: Number(debtForm.amount),
+        quantity: debtForm.quantity ? Number(debtForm.quantity) : undefined,
+        planName: debtForm.planName.trim(),
+        note: debtForm.note.trim(),
+      });
+      toast(t('portal.debtCreated'), 'success');
+      setShowDebtForm(false);
+      setDebtForm({ customerName: '', customerPhone: '', amount: '', quantity: '', planName: '', note: '' });
+      await loadDebts();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast(axiosErr.response?.data?.error || t('portal.loadError'), 'error');
+    } finally {
+      setSavingDebt(false);
+    }
+  }
+
+  async function handleSettleDebt(d: DebtItem) {
+    if (!window.confirm(t('portal.settleConfirm').replace('{name}', d.customerName))) return;
+    setSettlingId(d._id);
+    try {
+      await api.patch(`/reseller/debts/${d._id}`, { status: 'PAID' });
+      toast(t('portal.debtSettled'), 'success');
+      await loadDebts();
+    } catch {
+      toast(t('portal.loadError'), 'error');
+    } finally {
+      setSettlingId(null);
+    }
+  }
+
+  async function handleDeleteDebt(d: DebtItem) {
+    if (!window.confirm(t('portal.confirmDeleteDebt').replace('{name}', d.customerName))) return;
+    setDeletingDebtId(d._id);
+    try {
+      await api.delete(`/reseller/debts/${d._id}`);
+      toast(t('portal.debtDeleted'), 'success');
+      await loadDebts();
+    } catch {
+      toast(t('portal.loadError'), 'error');
+    } finally {
+      setDeletingDebtId(null);
+    }
+  }
+
+  function waLink(d: DebtItem): string | null {
+    const phone = d.customerPhone.replace(/\D/g, '');
+    if (!phone) return null;
+    const msg = t('portal.waReminderMsg')
+      .replace('{name}', d.customerName)
+      .replace('{amount}', String(Math.round(d.remaining)));
+    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  }
+
+  function daysAgo(iso?: string | null): number | null {
+    if (!iso) return null;
+    return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+  }
+
+  const debtStatusLabel: Record<DebtItem['status'], string> = {
+    UNPAID: t('portal.debtUnpaid'),
+    PARTIAL: t('portal.debtPartial'),
+    PAID: t('portal.debtPaid'),
+  };
+
+  // Sort: unpaid (oldest first — the forgotten ones surface), then partial, then paid (newest first)
+  const sortedDebts = useMemo(() => {
+    const priority: Record<DebtItem['status'], number> = { UNPAID: 0, PARTIAL: 1, PAID: 2 };
+    return [...debts].sort((a, b) => {
+      const p = priority[a.status] - priority[b.status];
+      if (p !== 0) return p;
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return a.status === 'PAID' ? tb - ta : ta - tb;
+    });
+  }, [debts]);
 
   async function handleChangePassword() {
     if (!pwForm.currentPassword || !pwForm.newPassword) {
@@ -524,6 +666,153 @@ export default function ResellerDashboardPage() {
           </div>
         </section>
 
+        {/* Customer debts (ديون الزبائن) */}
+        <section className="border border-border bg-card p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground">
+                <HandCoins className="h-4 w-4" /> {t('portal.debts')}
+              </h2>
+              <p className="text-xs text-muted-foreground/80 mt-1">{t('portal.debtsHint')}</p>
+            </div>
+            <button
+              onClick={() => setShowDebtForm(true)}
+              className="inline-flex items-center gap-1.5 text-xs px-3 py-2 border border-primary/40 text-primary hover:bg-primary/5 transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" /> {t('portal.addDebt')}
+            </button>
+          </div>
+
+          {debtsSummary.unpaidCount > 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 mb-3">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {t('portal.debtsSummary')
+                .replace('{count}', String(debtsSummary.unpaidCount))
+                .replace('{total}', Number(debtsSummary.outstanding).toLocaleString())}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-400 mb-3">
+              <CheckCheck className="h-4 w-4 shrink-0" />
+              {t('portal.debtsAllSettled')}
+            </div>
+          )}
+
+          {debtsLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : sortedDebts.length === 0 ? (
+            <div className="text-sm text-muted-foreground">{t('portal.debtEmpty')}</div>
+          ) : (
+            <div className="space-y-2">
+              {sortedDebts.map((d) => {
+                const days = daysAgo(d.createdAt);
+                const isOld = d.status !== 'PAID' && days !== null && days >= 14;
+                const wa = waLink(d);
+                return (
+                  <div
+                    key={d._id}
+                    className={`border p-3 ${isOld ? 'border-red-400/50 bg-red-500/5' : 'border-border'}`}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{d.customerName}</span>
+                          {d.status === 'UNPAID' && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] font-medium bg-red-500/15 text-red-600 dark:text-red-400">
+                              {debtStatusLabel.UNPAID}
+                            </span>
+                          )}
+                          {d.status === 'PARTIAL' && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                              {debtStatusLabel.PARTIAL}
+                            </span>
+                          )}
+                          {d.status === 'PAID' && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                              {debtStatusLabel.PAID}
+                            </span>
+                          )}
+                          {isOld && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] font-medium bg-red-600/20 text-red-700 dark:text-red-300">
+                              {t('portal.debtOld')}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                          {d.customerPhone && (
+                            <span dir="ltr">{d.customerPhone}</span>
+                          )}
+                          {d.planName && <span>{d.planName}</span>}
+                          {d.quantity != null && (
+                            <span>
+                              {d.quantity} {t('portal.debtQty').split('(')[0].trim() || ''}
+                            </span>
+                          )}
+                          {days !== null && (
+                            <span>
+                              {days === 0 ? t('portal.debtToday') : t('portal.debtDaysAgo').replace('{days}', String(days))}
+                            </span>
+                          )}
+                        </div>
+                        {d.note && <p className="text-xs text-muted-foreground/80 mt-1 line-clamp-2">{d.note}</p>}
+                      </div>
+                      <div className="text-left shrink-0">
+                        <div className="text-lg font-semibold tabular-nums" dir="ltr">
+                          {Number(d.remaining).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">DZD</span>
+                        </div>
+                        {d.status === 'PARTIAL' && (
+                          <div className="text-[11px] text-muted-foreground line-through tabular-nums" dir="ltr">
+                            {Number(d.amount).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {wa && (
+                        <a
+                          href={wa}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5 transition-colors"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                          {t('portal.whatsappRemind')}
+                        </a>
+                      )}
+                      {d.status !== 'PAID' && (
+                        <button
+                          onClick={() => handleSettleDebt(d)}
+                          disabled={settlingId === d._id}
+                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-signal-green/40 text-signal-green hover:bg-signal-green/5 disabled:opacity-50 transition-colors"
+                        >
+                          {settlingId === d._id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <CheckCheck className="h-3.5 w-3.5" />
+                          )}
+                          {t('portal.settleDebt')}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteDebt(d)}
+                        disabled={deletingDebtId === d._id}
+                        className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-destructive/40 text-destructive hover:bg-destructive/5 disabled:opacity-50 transition-colors"
+                      >
+                        {deletingDebtId === d._id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         <section>
           <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.15em] text-muted-foreground mb-3">
             <Package className="h-4 w-4" /> {t('portal.myBatches')}
@@ -643,6 +932,94 @@ export default function ResellerDashboardPage() {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Add debt modal */}
+      <Modal open={showDebtForm} onClose={() => setShowDebtForm(false)} title={t('portal.addDebt')}>
+        <form onSubmit={handleAddDebt} className="space-y-3">
+          <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+            {t('portal.customerName')} *
+            <input
+              className={inputClass}
+              value={debtForm.customerName}
+              onChange={(e) => setDebtForm({ ...debtForm, customerName: e.target.value })}
+              maxLength={100}
+            />
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+              {t('portal.customerPhone')}
+              <input
+                className={inputClass}
+                value={debtForm.customerPhone}
+                onChange={(e) => setDebtForm({ ...debtForm, customerPhone: e.target.value })}
+                placeholder="05XXXXXXXX"
+                dir="ltr"
+                maxLength={30}
+              />
+            </label>
+            <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+              {t('portal.debtAmount')} *
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={debtForm.amount}
+                onChange={(e) => setDebtForm({ ...debtForm, amount: e.target.value })}
+                dir="ltr"
+              />
+            </label>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+              {t('portal.debtQty')}
+              <input
+                type="number"
+                min={1}
+                className={inputClass}
+                value={debtForm.quantity}
+                onChange={(e) => setDebtForm({ ...debtForm, quantity: e.target.value })}
+                dir="ltr"
+              />
+            </label>
+            <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+              {t('portal.debtPlan')}
+              <input
+                className={inputClass}
+                value={debtForm.planName}
+                onChange={(e) => setDebtForm({ ...debtForm, planName: e.target.value })}
+                maxLength={100}
+              />
+            </label>
+          </div>
+          <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+            {t('portal.debtNote')}
+            <textarea
+              rows={2}
+              className="w-full px-3 py-2 border border-border bg-background text-sm focus-visible:outline-none focus-visible:border-primary"
+              value={debtForm.note}
+              onChange={(e) => setDebtForm({ ...debtForm, note: e.target.value })}
+              maxLength={500}
+            />
+          </label>
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="submit"
+              disabled={savingDebt}
+              className="inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {savingDebt ? <Loader2 className="h-4 w-4 animate-spin" /> : <HandCoins className="h-4 w-4" />}
+              {t('portal.saveDebt')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowDebtForm(false)}
+              className="h-10 px-4 text-sm font-medium border border-border text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {'إلغاء'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       {/* Generation modal */}
