@@ -2,6 +2,15 @@
     encode gzip zstd
     tls {$ACME_EMAIL}
 
+    # File access log → watched by fail2ban (dzhoof-http jail: 401 floods).
+    log {
+        output file /data/access.log {
+            roll_size 50MiB
+            roll_keep 3
+        }
+        format single_field common_log
+    }
+
     @api path /api/* /health /health/* /ready /ready/*
     handle @api {
         reverse_proxy api:3000
