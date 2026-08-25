@@ -29,7 +29,6 @@ import {
   CartesianGrid,
 } from 'recharts';
 import api from '@/lib/api';
-import { ResellerDebtsAlert } from '@/components/reseller-debts-alert';
 import { useLocale, type Locale } from '@/components/locale-provider';
 
 interface RecentUser {
@@ -528,7 +527,6 @@ export default function StatsPage() {
         </p>
       </div>
 
-      <ResellerDebtsAlert />
 
       {/* Overview cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
