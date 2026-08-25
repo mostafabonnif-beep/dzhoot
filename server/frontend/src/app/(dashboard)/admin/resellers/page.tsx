@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, Pencil, Trash2, History, RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Loader2, Plus, Pencil, Trash2, History, RotateCcw, HandCoins, MessageCircle, CheckCheck, AlertTriangle } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import Modal from '@/components/ui/modal';
@@ -50,6 +50,21 @@ const emptyForm: ResellerForm = {
   password: '',
   prefix: '',
 };
+
+interface CreditDebtItem {
+  _id: string;
+  resellerId: string;
+  resellerName: string;
+  resellerPhone: string;
+  amount: number;
+  paidAmount: number;
+  remaining: number;
+  status: 'UNPAID' | 'PARTIAL' | 'PAID';
+  note: string;
+  autoFromGrant: boolean;
+  paidAt?: string | null;
+  createdAt?: string | null;
+}
 
 const inputClass =
   'flex h-10 w-full border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary';
@@ -103,12 +118,15 @@ export default function ResellersPage() {
     setForm(emptyForm);
     setFormError('');
     setFormOpen(true);
+   setCreditPaid(false);
   }
+
 
   function openEdit(r: ResellerData) {
     setEditingId(r._id);
     const existing = (r.prices || []).map((p) => ({ planId: String(p.planId), price: String(p.price) }));
     const existingCredit = (r.credit || []).map((c) => ({ planId: String(c.planId), quantity: String(c.quantity) }));
+    setCreditPaid(false);
     setForm({
       name: r.name,
       city: r.city || '',
@@ -144,6 +162,7 @@ export default function ResellersPage() {
         username: form.username.trim() || undefined,
         password: form.password || undefined,
         prefix: form.prefix.trim() ? form.prefix.trim().toUpperCase() : undefined,
+        creditPaid,
       };
       if (editingId) {
         await api.put(`/admin/resellers/${editingId}`, payload);
@@ -154,6 +173,7 @@ export default function ResellersPage() {
       }
       setFormOpen(false);
       fetchResellers();
+      fetchDebts();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
       setFormError(axiosErr.response?.data?.error || t('resellers.saveError'));
@@ -161,6 +181,113 @@ export default function ResellersPage() {
       setSaving(false);
     }
   }
+
+  // Reseller credit debts (ديون المحلات عليهم)
+  const [debts, setDebts] = useState<CreditDebtItem[]>([]);
+  const [debtsSummary, setDebtsSummary] = useState({ outstanding: 0, unpaidCount: 0 });
+  const [settlingDebtId, setSettlingDebtId] = useState<string | null>(null);
+  const [deletingDebtId, setDeletingDebtId] = useState<string | null>(null);
+  const [debtFormOpen, setDebtFormOpen] = useState(false);
+  const [debtForm, setDebtForm] = useState({ resellerId: '', amount: '', note: '' });
+  const [savingDebt, setSavingDebt] = useState(false);
+  const [creditPaid, setCreditPaid] = useState(false);
+
+  // ─── Reseller credit debts (ديون المحلات عليهم) ───────────
+  const fetchDebts = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/reseller-debts');
+      setDebts(res.data?.data || []);
+      setDebtsSummary(res.data?.summary || { outstanding: 0, unpaidCount: 0 });
+    } catch {
+      // secondary — ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDebts();
+  }, [fetchDebts]);
+
+  async function handleAddDebt(e: React.FormEvent) {
+    e.preventDefault();
+    if (!debtForm.resellerId) {
+      toast(t('resellers.debtSelectReseller'), 'error');
+      return;
+    }
+    if (debtForm.amount === '' || Number(debtForm.amount) < 0 || !Number.isFinite(Number(debtForm.amount))) {
+      toast(t('resellers.debtAmount') + ' *', 'error');
+      return;
+    }
+    setSavingDebt(true);
+    try {
+      await api.post('/admin/reseller-debts', {
+        resellerId: debtForm.resellerId,
+        amount: Number(debtForm.amount),
+        note: debtForm.note.trim(),
+      });
+      toast(t('resellers.debtCreated'), 'success');
+      setDebtFormOpen(false);
+      setDebtForm({ resellerId: '', amount: '', note: '' });
+      await fetchDebts();
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast(axiosErr.response?.data?.error || t('resellers.saveError'), 'error');
+    } finally {
+      setSavingDebt(false);
+    }
+  }
+
+  async function handleSettleDebt(d: CreditDebtItem) {
+    if (!window.confirm(t('resellers.debtSettleConfirm').replace('{name}', d.resellerName))) return;
+    setSettlingDebtId(d._id);
+    try {
+      await api.patch(`/admin/reseller-debts/${d._id}`, { status: 'PAID' });
+      toast(t('resellers.debtSettled'), 'success');
+      await fetchDebts();
+    } catch {
+      toast(t('resellers.saveError'), 'error');
+    } finally {
+      setSettlingDebtId(null);
+    }
+  }
+
+  async function handleDeleteDebt(d: CreditDebtItem) {
+    if (!window.confirm(t('resellers.debtDeleteConfirm').replace('{name}', d.resellerName))) return;
+    setDeletingDebtId(d._id);
+    try {
+      await api.delete(`/admin/reseller-debts/${d._id}`);
+      toast(t('resellers.debtDeleted'), 'success');
+      await fetchDebts();
+    } catch {
+      toast(t('resellers.saveError'), 'error');
+    } finally {
+      setDeletingDebtId(null);
+    }
+  }
+
+  function debtWaLink(d: CreditDebtItem): string | null {
+    const phone = d.resellerPhone.replace(/\D/g, '');
+    if (!phone) return null;
+    const msg = t('resellers.debtWaMsg')
+      .replace('{name}', d.resellerName)
+      .replace('{amount}', String(Math.round(d.remaining)));
+    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  }
+
+  function debtDaysAgo(iso?: string | null): number | null {
+    if (!iso) return null;
+    return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+  }
+
+  const sortedDebts = useMemo(() => {
+    const priority: Record<CreditDebtItem['status'], number> = { UNPAID: 0, PARTIAL: 1, PAID: 2 };
+    return [...debts].sort((a, b) => {
+      const p = priority[a.status] - priority[b.status];
+      if (p !== 0) return p;
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return a.status === 'PAID' ? tb - ta : ta - tb;
+    });
+  }, [debts]);
 
   async function handleDelete() {
     if (!deleteTarget) return;
@@ -187,6 +314,8 @@ export default function ResellersPage() {
   const [ledgerReseller, setLedgerReseller] = useState<ResellerData | null>(null);
   const [ledgerRows, setLedgerRows] = useState<Array<{ _id: string; type: string; quantity: number; balanceAfter: number; planName: string; note: string; createdAt: string }>>([]);
   const [ledgerTotal, setLedgerTotal] = useState(0);
+
+
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [returning, setReturning] = useState(false);
 
@@ -407,6 +536,116 @@ export default function ResellersPage() {
         </div>
       )}
 
+      {/* Reseller credit debts (ديون المحلات عليهم) */}
+      <div className="border border-border bg-card">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2.5 bg-muted/50">
+          <h2 className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+            <HandCoins className="h-4 w-4" /> {t('resellers.debtsTitle')}
+          </h2>
+          <button
+            onClick={() => setDebtFormOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-primary/40 text-primary hover:bg-primary/5 transition-colors"
+          >
+            <Plus className="h-3.5 w-3.5" /> {t('resellers.addDebt')}
+          </button>
+        </div>
+        <div className="p-4">
+          {debtsSummary.unpaidCount > 0 ? (
+            <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400 mb-3">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {t('resellers.debtsSummary')
+                .replace('{count}', String(debtsSummary.unpaidCount))
+                .replace('{total}', Number(debtsSummary.outstanding).toLocaleString())}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400 mb-3">
+              <CheckCheck className="h-4 w-4 shrink-0" />
+              {t('resellers.debtsAllSettled')}
+            </div>
+          )}
+          {sortedDebts.length === 0 ? (
+            <div className="text-sm text-muted-foreground">{t('resellers.debtsEmpty')}</div>
+          ) : (
+            <div className="space-y-2">
+              {sortedDebts.map((d) => {
+                const days = debtDaysAgo(d.createdAt);
+                const wa = debtWaLink(d);
+                return (
+                  <div key={d._id} className={`border p-3 ${d.status !== 'PAID' && days !== null && days >= 14 ? 'border-red-400/50 bg-red-500/5' : 'border-border'}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm">{d.resellerName}</span>
+                          {d.status === 'UNPAID' && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] font-medium bg-red-500/15 text-red-600 dark:text-red-400">{t('resellers.debtUnpaid')}</span>
+                          )}
+                          {d.status === 'PARTIAL' && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400">{t('resellers.debtPartial')}</span>
+                          )}
+                          {d.status === 'PAID' && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">{t('resellers.debtPaid')}</span>
+                          )}
+                          {d.status !== 'PAID' && days !== null && days >= 14 && (
+                            <span className="inline-flex px-2 py-0.5 text-[11px] font-medium bg-red-600/20 text-red-700 dark:text-red-300">{t('resellers.debtOld')}</span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                          {d.resellerPhone && <span dir="ltr">{d.resellerPhone}</span>}
+                          {days !== null && (
+                            <span>{days === 0 ? t('resellers.debtToday') : t('resellers.debtDaysAgo').replace('{days}', String(days))}</span>
+                          )}
+                          {d.autoFromGrant && <span className="text-[11px] text-primary/70">↳ {t('resellers.debtAuto')}</span>}
+                        </div>
+                        {d.note && <p className="text-xs text-muted-foreground/80 mt-1 line-clamp-2">{d.note}</p>}
+                      </div>
+                      <div className="text-left shrink-0">
+                        <div className="text-lg font-semibold tabular-nums" dir="ltr">
+                          {Number(d.remaining).toLocaleString()} <span className="text-xs font-normal text-muted-foreground">دج</span>
+                        </div>
+                        {d.status === 'PARTIAL' && (
+                          <div className="text-[11px] text-muted-foreground line-through tabular-nums" dir="ltr">
+                            {Number(d.amount).toLocaleString()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      {wa && (
+                        <a
+                          href={wa}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5 transition-colors"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" /> {t('resellers.whatsappRemind')}
+                        </a>
+                      )}
+                      {d.status !== 'PAID' && (
+                        <button
+                          onClick={() => handleSettleDebt(d)}
+                          disabled={settlingDebtId === d._id}
+                          className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-signal-green/40 text-signal-green hover:bg-signal-green/5 disabled:opacity-50 transition-colors"
+                        >
+                          {settlingDebtId === d._id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCheck className="h-3.5 w-3.5" />}
+                          {t('resellers.settleDebt')}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteDebt(d)}
+                        disabled={deletingDebtId === d._id}
+                        className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 border border-destructive/40 text-destructive hover:bg-destructive/5 disabled:opacity-50 transition-colors"
+                      >
+                        {deletingDebtId === d._id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
       <DataTable
         columns={columns}
         data={resellers}
@@ -603,6 +842,20 @@ export default function ResellersPage() {
                 );
               })}
             </div>
+            <label className="flex items-center gap-2 mt-2 text-xs cursor-pointer select-none border border-border p-3 bg-muted/40">
+              <input
+                type="checkbox"
+                checked={creditPaid}
+                onChange={(e) => setCreditPaid(e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              <span>
+                {t('resellers.creditPaid')}
+                <span className="block text-[11px] text-muted-foreground mt-0.5">
+                  {t('resellers.creditPaidHint')}
+                </span>
+              </span>
+            </label>
           </div>
           <div className="flex items-center gap-3 pt-2">
             <button
@@ -693,6 +946,66 @@ export default function ResellersPage() {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Add reseller debt modal */}
+      <Modal open={debtFormOpen} onClose={() => setDebtFormOpen(false)} title={t('resellers.addDebt')}>
+        <form onSubmit={handleAddDebt} className="space-y-3 p-5">
+          <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+            {t('resellers.debtReseller')} *
+            <select
+              className={inputClass}
+              value={debtForm.resellerId}
+              onChange={(e) => setDebtForm({ ...debtForm, resellerId: e.target.value })}
+            >
+              <option value="">—</option>
+              {resellers.map((r) => (
+                <option key={r._id} value={r._id}>
+                  {r.name} {r.city ? `— ${r.city}` : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+              {t('resellers.debtAmount')} *
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={debtForm.amount}
+                onChange={(e) => setDebtForm({ ...debtForm, amount: e.target.value })}
+                dir="ltr"
+              />
+            </label>
+            <label className="block space-y-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground">
+              {t('resellers.debtNote')}
+              <input
+                className={inputClass}
+                value={debtForm.note}
+                onChange={(e) => setDebtForm({ ...debtForm, note: e.target.value })}
+                maxLength={200}
+              />
+            </label>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="submit"
+              disabled={savingDebt}
+              className="inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {savingDebt ? <Loader2 className="h-4 w-4 animate-spin" /> : <HandCoins className="h-4 w-4" />}
+              {t('resellers.saveDebt')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDebtFormOpen(false)}
+              className="h-10 px-4 text-sm font-medium border border-border text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {'إلغاء'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       <ConfirmDialog
