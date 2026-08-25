@@ -152,6 +152,12 @@ router.post('/import', async (req, res) => {
       saved[key] = doc.value;
     }
 
+    // Never echo or audit-log the SMTP password (same masking as PUT /)
+    if ('brevo_password' in saved) {
+      saved.brevo_configured = Boolean(String(saved.brevo_password || '').trim());
+      delete saved.brevo_password;
+    }
+
     audit({ ...reqCtx(req), action: 'APP_SETTINGS_IMPORT', resource: 'AppSetting', changes: { after: saved } });
     return res.json({ success: true, data: saved, importedKeys: keys });
   } catch (err) {

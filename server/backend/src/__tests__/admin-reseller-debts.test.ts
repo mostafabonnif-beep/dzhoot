@@ -132,4 +132,27 @@ describe('Admin reseller credit debts (ديون المحلات)', () => {
     expect(del.status).toBe(200);
     expect(await ResellerCreditDebt.countDocuments({})).toBe(0);
   });
+
+  it('PATCH amount + status:PAID in one request stores paidAmount = NEW amount (round 19)', async () => {
+    const app = buildApp();
+    const reseller = await makeReseller(new mongoose.Types.ObjectId());
+    const debt = await ResellerCreditDebt.create({
+      adminId: ADMIN_ID,
+      resellerId: reseller._id,
+      amount: 3000,
+      status: 'UNPAID',
+      note: 'تسوية مع تعديل',
+    });
+
+    const res = await request(app)
+      .patch(`/api/v1/admin/reseller-debts/${String(debt._id)}`)
+      .send({ amount: 1800, status: 'PAID' });
+    expect(res.status).toBe(200);
+
+    const stored = await ResellerCreditDebt.findById(debt._id).lean().exec();
+    expect(stored?.status).toBe('PAID');
+    expect(stored?.amount).toBe(1800);
+    // Was 3000 before the fix (old amount) → phantom remaining -1200
+    expect(stored?.paidAmount).toBe(1800);
+  });
 });

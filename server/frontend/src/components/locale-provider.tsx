@@ -565,6 +565,22 @@ const common = {
   'quickPick.nextSkip': ['التالي / تخطي', 'Next / Skip', 'Suivant / Ignorer'],
   'quickPick.review': ['مراجعة', 'Review', 'Vérifier'],
   'quickPick.stepOf': ['الخطوة {current} من {total}', 'Step {current} of {total}', 'Étape {current} sur {total}'],
+  'quickPick.stepSources': ['المصادر', 'Sources', 'Sources'],
+  'quickPick.stepCountry': ['الدولة', 'Country', 'Pays'],
+  'quickPick.stepLanguage': ['اللغة', 'Language', 'Langue'],
+  'quickPick.stepCategory': ['الفئة', 'Category', 'Catégorie'],
+  'quickPick.stepChannels': ['القنوات', 'Channels', 'Chaînes'],
+  'quickPick.stepConfirm': ['التأكيد', 'Confirm', 'Confirmer'],
+  'quickPick.stepLabel': ['الخطوة {n}: {label}', 'Step {n}: {label}', 'Étape {n} : {label}'],
+  'quickPick.fetchingFromSources': ['جارٍ جلب القنوات من {n} مصدر...', 'Fetching channels from {n} source(s)...', 'Récupération des chaînes depuis {n} source(s)...'],
+  'quickPick.step5': ['الخطوة 5', 'Step 5', 'Étape 5'],
+  'quickPick.selectYourChannels': ['اختر قنواتك', 'Select Your Channels', 'Sélectionnez vos chaînes'],
+  'quickPick.channelsFoundSelected': ['{found} قناة · {selected} محددة', '{found} channels found · {selected} selected', '{found} chaînes trouvées · {selected} sélectionnées'],
+  'quickPick.noChannelsAdjustFilters': ['لم يتم العثور على قنوات. عدّل عوامل التصفية.', 'No channels found. Try adjusting your filters.', 'Aucune chaîne trouvée. Ajustez vos filtres.'],
+  'quickPick.channelsAdded': ['تمت إضافة القنوات!', 'Channels Added!', 'Chaînes ajoutées !'],
+  'quickPick.addedToList': ['أُضيفت {n} قناة إلى قائمتك!', 'Successfully added {n} channel(s) to your list!', '{n} chaîne(s) ajoutée(s) à votre liste !'],
+  'quickPick.addedToSystem': ['أُضيفت {n} قناة إلى النظام!', 'Successfully added {n} channel(s) to the system!', '{n} chaîne(s) ajoutée(s) au système !'],
+  'quickPick.importFailed': ['فشل استيراد القنوات. حاول مرة أخرى.', 'Failed to import channels. Please try again.', 'Échec de l’importation des chaînes. Réessayez.'],
 } as const;
 
 const navigation: Dictionary = {

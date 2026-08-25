@@ -5,6 +5,7 @@ import { Loader2, Play, Zap } from 'lucide-react';
 import api from '@/lib/api';
 import { useStreamPlayer } from '@/components/stream-player-context';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
+import { useLocale } from '@/components/locale-provider';
 import SearchInput from '@/components/ui/search-input';
 import ChannelLogo from '@/components/ui/channel-logo';
 import StatusDot from '@/components/ui/status-dot';
@@ -53,6 +54,7 @@ export function RecommendationsStep({
   onSelectAll,
   onDeselectAll,
 }: RecommendationsStepProps) {
+  const { t } = useLocale();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { search, debouncedSearch, handleSearchChange } = useDebouncedSearch();
@@ -277,7 +279,7 @@ export function RecommendationsStep({
 
       onSetFetchedChannels(filtered);
       if (filtered.length === 0) {
-        setError('No channels found. Try adjusting your filters.');
+        setError(t('quickPick.noChannelsAdjustFilters'));
       }
       setLoading(false);
     }
@@ -377,9 +379,8 @@ export function RecommendationsStep({
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">
-          Fetching channels from {selectedSources.length} source
-          {selectedSources.length !== 1 ? 's' : ''}...
+        <span className="ms-2 text-sm text-muted-foreground">
+          {t('quickPick.fetchingFromSources').replace('{n}', String(selectedSources.length))}
         </span>
       </div>
     );
@@ -388,12 +389,14 @@ export function RecommendationsStep({
   return (
     <div className="space-y-4 ">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">Step 5</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">{t('quickPick.step5')}</p>
         <h2 className="text-base font-display font-bold uppercase tracking-[0.08em]">
-          Select Your Channels
+          {t('quickPick.selectYourChannels')}
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          {fetchedChannels.length} channels found &middot; {selectedChannelIds.size} selected
+          {t('quickPick.channelsFoundSelected')
+            .replace('{found}', String(fetchedChannels.length))
+            .replace('{selected}', String(selectedChannelIds.size))}
         </p>
       </div>
 

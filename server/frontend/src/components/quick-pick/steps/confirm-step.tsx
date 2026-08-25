@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { Loader2, CheckCircle, ArrowRight, RotateCcw } from 'lucide-react';
 import { proxyImageUrl } from '@/lib/image-proxy';
+import { useLocale } from '@/components/locale-provider';
 import api from '@/lib/api';
 import type { WizardChannel } from '../wizard-shell';
 
@@ -25,6 +26,7 @@ export function ConfirmStep({
   mode,
   onReset,
 }: ConfirmStepProps) {
+  const { t } = useLocale();
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -78,7 +80,8 @@ export function ConfirmStep({
             language: ch.language,
           }));
           const res = await api.post('/iptv-org/import', { channels: payload });
-          totalAdded += res.data.importedCount || 0;
+          // iptv-org returns { imported, skipped } while other importers return importedCount
+          totalAdded += res.data.importedCount ?? res.data.imported ?? 0;
         }
       }
 
@@ -105,12 +108,12 @@ export function ConfirmStep({
 
       setResult({
         success: true,
-        message: `Successfully added ${totalAdded} channel${totalAdded !== 1 ? 's' : ''} to your ${mode === 'user' ? 'list' : 'system'}!`,
+        message: (mode === 'user' ? t('quickPick.addedToList') : t('quickPick.addedToSystem')).replace('{n}', String(totalAdded)),
       });
     } catch {
       setResult({
         success: false,
-        message: 'Failed to import channels. Please try again.',
+        message: t('quickPick.importFailed'),
       });
     } finally {
       setImporting(false);
@@ -123,7 +126,7 @@ export function ConfirmStep({
       <div className="flex flex-col items-center justify-center py-12 gap-4">
         <CheckCircle className="h-12 w-12 text-primary" />
         <h2 className="text-base font-display font-bold uppercase tracking-[0.08em]">
-          Channels Added!
+          {t('quickPick.channelsAdded')}
         </h2>
         <p className="text-sm text-muted-foreground text-center max-w-md">{result.message}</p>
         <div className="flex items-center gap-3 mt-4">

@@ -1631,8 +1631,11 @@ router.get('/business/summary', async (req, res) => {
 
     // Batch deliveries (wholesale). Old batches may lack wholesaleTotal — fall
     // back to the reseller's current wholesale price for the plan.
+    // Self-generated batches (reseller portal, createdBy unset) are EXCLUDED:
+    // their cost is credit already counted as a GRANT purchase — counting them
+    // again as a "delivery" would double-count the revenue.
     const [batches, deliveryResellers] = await Promise.all([
-      CodeBatch.find({ status: 'delivered' })
+      CodeBatch.find({ status: 'delivered', createdBy: { $ne: null } })
         .select('resellerId planId quantity receiptDate wholesalePrice wholesaleTotal')
         .lean()
         .exec(),

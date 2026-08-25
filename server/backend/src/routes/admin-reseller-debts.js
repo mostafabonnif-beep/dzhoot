@@ -127,7 +127,9 @@ router.patch('/:id', async (req, res) => {
       }
       $set.status = status;
       if (status === 'PAID') {
-        $set.paidAmount = debt.amount;
+        // Use the NEW amount when the same request also edits it — otherwise a
+        // PAID debt ends up with paidAmount ≠ amount (phantom remaining).
+        $set.paidAmount = $set.amount !== undefined ? $set.amount : debt.amount;
         $set.paidAt = new Date();
       } else if (status === 'UNPAID') {
         $set.paidAmount = 0;
