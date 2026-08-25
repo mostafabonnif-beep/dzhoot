@@ -32,7 +32,7 @@ async function expireStaleThrottled() {
   const now = Date.now();
   if (now - lastStaleExpire < STALE_EXPIRE_THROTTLE_MS) return;
   lastStaleExpire = now;
-  await expireStaleThrottled();
+  await expireStaleCodes();
 }
 
 // GET / — list codes with filters (planId, status, search by last4, pagination)
