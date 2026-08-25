@@ -25,6 +25,60 @@ const { decryptSecret } = require('../utils/crypto');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
 const { isSourceDown, getFailoverTarget } = require('../services/source-failover-service');
+const { proxyLogoUrl } = require('../utils/logo-proxy');
+
+// GET /logo?url=… — relay channel logos through OUR server so customers and
+// resellers never see the upstream providers' image hosts. SSRF-guarded and
+// cached (the catalog shares logo URLs across channels, so the cache hits a lot).
+const LOGO_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const logoCache = new Map();
+router.get('/logo', async (req, res) => {
+  try {
+    const raw = String(req.query.url || '').trim();
+    if (!raw || !/^https?:\/\//i.test(raw)) {
+      return res.status(400).json({ success: false, error: 'url must be an http(s) URL' });
+    }
+    const cacheKey = raw;
+    const cached = logoCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < LOGO_CACHE_TTL_MS) {
+      res.setHeader('Content-Type', cached.type);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.send(cached.body);
+    }
+
+    // SSRF guard: logos must not be a gateway to internal network fetches.
+    const { validateUrlForSSRF } = require('../utils/ssrf-guard');
+    const ssrf = await validateUrlForSSRF(raw);
+    if (!ssrf.safe) {
+      return res.status(400).json({ success: false, error: `Logo URL blocked: ${ssrf.reason}` });
+    }
+    const axios = require('axios');
+    const upstream = await axios.get(raw, {
+      timeout: 6000,
+      maxRedirects: 3,
+      responseType: 'arraybuffer',
+      maxContentLength: 300 * 1024,
+      validateStatus: (s) => s >= 200 && s < 400,
+      headers: { 'User-Agent': 'Mozilla/5.0 DZ-HOOF', Accept: 'image/*' },
+    });
+    const contentType = String(upstream.headers['content-type'] || 'image/png').split(';')[0].trim();
+    if (!/^image\//.test(contentType)) {
+      return res.status(502).json({ success: false, error: 'Upstream did not return an image' });
+    }
+    const body = Buffer.from(upstream.data);
+    logoCache.set(cacheKey, { at: Date.now(), body, type: contentType });
+    // Keep the cache bounded.
+    if (logoCache.size > 5000) {
+      const oldest = logoCache.keys().next().value;
+      if (oldest) logoCache.delete(oldest);
+    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.send(body);
+  } catch (err) {
+    if (!res.headersSent) res.status(502).json({ success: false, error: 'Logo fetch failed' });
+  }
+});
 
 async function getVerifiedXtreamSourceIds() {
   // Sources that passed live playback verification (and are Active), OR that the
@@ -97,6 +151,10 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
     : legacyXtream
       ? { type: 'timeshift', days: null }
       : null;
+  // Channel logos live on the upstream providers' image servers — never expose
+  // those hosts to customers/resellers. Relay them through our logo proxy.
+  if (safe.tvgLogo) safe.tvgLogo = proxyLogoUrl(baseUrl, safe.tvgLogo);
+  if (safe.channelImg) safe.channelImg = proxyLogoUrl(baseUrl, safe.channelImg);
   if (!user.channelListCode) return safe;
   // Skip channels whose URL scheme the playback layer can't proxy (e.g. rtmp://,
   // udp://) instead of letting one bad channel break the whole customer playlist.
@@ -894,10 +952,11 @@ router.get('/epg/:code', async (req, res) => {
     // Build channel info for XMLTV output (only channels that have programs)
     const activeChannelIds = new Set(programs.map((p) => p.channelEpgId));
     const channelInfos = [];
+    const epgBaseUrl = getPublicBaseUrl(req);
     for (const id of activeChannelIds) {
       const info = channelInfoMap.get(id);
       if (info) {
-        channelInfos.push(info);
+        channelInfos.push({ ...info, icon: proxyLogoUrl(epgBaseUrl, info.icon) });
       } else {
         channelInfos.push({ epgId: id, name: id, icon: '' });
       }

@@ -267,7 +267,8 @@ userSchema.methods.generateUserPlaylist = async function (
       direct: isDirectSource && process.env.ALLOW_DIRECT_PLAYBACK === 'true' ? true : undefined,
     });
     const playbackUrl = `${baseUrl || ''}/api/v1/tv/playback/${token}.m3u8`;
-    m3uContent += `${channel.toM3U().replace(channel.channelUrl, playbackUrl)}\n\n`;
+    // toM3U(baseUrl) rewrites tvg-logo through our logo proxy as well.
+    m3uContent += `${channel.toM3U(baseUrl).replace(channel.channelUrl, playbackUrl)}\n\n`;
   }
 
   return m3uContent;

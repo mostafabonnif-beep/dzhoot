@@ -193,7 +193,7 @@ function buildM3ULine(ch: {
   channelGroup?: string;
   channelUrl: string;
   catchup?: { type?: string | null; source?: string | null; days?: number | null };
-}): string {
+}, logoProxyBase?: string): string {
   // Escape double quotes in interpolated values to prevent M3U attribute injection
   const esc = (s: string | undefined) => (s ?? '').replace(/"/g, "'");
 
@@ -201,7 +201,15 @@ function buildM3ULine(ch: {
 
   if (ch.channelId) m3uLine += ` tvg-id="${esc(ch.channelId)}"`;
   if (ch.tvgName || ch.channelName) m3uLine += ` tvg-name="${esc(ch.tvgName || ch.channelName)}"`;
-  if (ch.tvgLogo || ch.channelImg) m3uLine += ` tvg-logo="${esc(ch.tvgLogo || ch.channelImg)}"`;
+  // Logos are relayed through OUR server so the upstream providers' image
+  // hosts never appear in a customer/reseller playlist.
+  const rawLogo = ch.tvgLogo || ch.channelImg;
+  if (rawLogo) {
+    const logo = logoProxyBase && /^https?:\/\//i.test(String(rawLogo))
+      ? `${String(logoProxyBase).replace(/\/+$/, '')}/api/v1/tv/logo?url=${encodeURIComponent(String(rawLogo))}`
+      : String(rawLogo);
+    m3uLine += ` tvg-logo="${esc(logo)}"`;
+  }
   if (ch.channelGroup) m3uLine += ` group-title="${esc(ch.channelGroup)}"`;
   if (ch.catchup?.type) {
     m3uLine += ` catchup="${esc(ch.catchup.type)}"`;
@@ -215,8 +223,8 @@ function buildM3ULine(ch: {
 }
 
 // Method to convert to M3U format entry
-channelSchema.methods.toM3U = function (this: IChannelDocument): string {
-  return buildM3ULine(this);
+channelSchema.methods.toM3U = function (this: IChannelDocument, logoProxyBase?: string): string {
+  return buildM3ULine(this, logoProxyBase);
 };
 
 // Static method to generate full M3U playlist.
