@@ -11,6 +11,7 @@ import { syncXtreamSource, verifyXtreamSource } from './xtream-service';
 import { syncM3USource } from './m3u-service';
 import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
 import { expireStaleCodesAndReturnCredit } from './subscription-service';
+import { runSourceWatchdog } from './source-failover-service';
 import { sendNotificationToDevices, pushOutcome } from './fcm-service';
 
 export interface SubtaskResult {
@@ -54,6 +55,7 @@ const OPS_REPORT_INTERVAL = intervalMs(process.env.OPS_REPORT_INTERVAL_MS, 86400
 const EXPIRY_ALERT_INTERVAL = intervalMs(process.env.EXPIRY_ALERT_INTERVAL_MS, 86400000);
 const CODE_EXPIRY_INTERVAL = intervalMs(process.env.CODE_EXPIRY_INTERVAL_MS, 86400000);
 const NOTIFICATION_DISPATCH_INTERVAL = intervalMs(process.env.NOTIFICATION_DISPATCH_INTERVAL_MS, 60000);
+const SOURCE_WATCHDOG_INTERVAL = intervalMs(process.env.SOURCE_WATCHDOG_INTERVAL_MS, 60000);
 
 /** Daily operations report to admins (codes activated per reseller, new users, …). */
 async function dailyReportHandler(): Promise<TaskResult> {
@@ -117,8 +119,7 @@ async function codeExpiryHandler(): Promise<TaskResult> {
   }
 }
 
-/** Every minute: send due SCHEDULED push notifications via FCM. */
-async function notificationDispatcherHandler(): Promise<TaskResult> {
+/** Every minute: send due SCHEDULED push notifications via FCM. */async function notificationDispatcherHandler(): Promise<TaskResult> {
   const startedAt = Date.now();
   const subtasks: SubtaskResult[] = [];
   let sent = 0;
@@ -458,6 +459,33 @@ async function youtubeUrlRefreshHandler(): Promise<TaskResult> {
   }
 }
 
+/** Every 60s: probe active Xtream sources and drive the auto-failover state. */
+async function sourceWatchdogHandler(): Promise<TaskResult> {
+  const start = Date.now();
+  try {
+    const result = await runSourceWatchdog();
+    const subtasks: SubtaskResult[] = [
+      {
+        name: 'source-watchdog',
+        status: 'completed',
+        durationMs: Date.now() - start,
+        result: result.states.map((s) => ({ name: s.name, health: s.health })),
+      },
+    ];
+    return { summary: { checked: result.checked }, subtasks };
+  } catch (err: any) {
+    const subtasks: SubtaskResult[] = [
+      {
+        name: 'source-watchdog',
+        status: 'failed',
+        durationMs: Date.now() - start,
+        error: err?.message || String(err),
+      },
+    ];
+    return { summary: { ok: false, error: err?.message || String(err) }, subtasks };
+  }
+}
+
 const tasks: TaskDefinition[] = [
   {
     name: 'liveness-check',
@@ -537,6 +565,13 @@ const tasks: TaskDefinition[] = [
     description: 'Send due SCHEDULED push notifications via FCM',
     intervalMs: NOTIFICATION_DISPATCH_INTERVAL,
     handler: notificationDispatcherHandler,
+  },
+  {
+    name: 'source-watchdog',
+    displayName: 'Source Health Watchdog (Auto-Failover)',
+    description: 'Light-probe active Xtream sources and drive the backup-source failover state',
+    intervalMs: SOURCE_WATCHDOG_INTERVAL,
+    handler: sourceWatchdogHandler,
   },
 ];
 
