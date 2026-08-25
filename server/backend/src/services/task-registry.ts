@@ -13,6 +13,7 @@ import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
 import { expireStaleCodesAndReturnCredit } from './subscription-service';
 import { runSourceWatchdog } from './source-failover-service';
 import { sendNotificationToDevices, pushOutcome } from './fcm-service';
+import { sendOperationalAlert } from './alert-notifier';
 
 export interface SubtaskResult {
   name: string;
@@ -56,6 +57,7 @@ const EXPIRY_ALERT_INTERVAL = intervalMs(process.env.EXPIRY_ALERT_INTERVAL_MS, 8
 const CODE_EXPIRY_INTERVAL = intervalMs(process.env.CODE_EXPIRY_INTERVAL_MS, 86400000);
 const NOTIFICATION_DISPATCH_INTERVAL = intervalMs(process.env.NOTIFICATION_DISPATCH_INTERVAL_MS, 60000);
 const SOURCE_WATCHDOG_INTERVAL = intervalMs(process.env.SOURCE_WATCHDOG_INTERVAL_MS, 60000);
+const DISK_WATCHDOG_INTERVAL = intervalMs(process.env.DISK_WATCHDOG_INTERVAL_MS, 600000); // 10 min
 
 /** Daily operations report to admins (codes activated per reseller, new users, …). */
 async function dailyReportHandler(): Promise<TaskResult> {
@@ -486,6 +488,62 @@ async function sourceWatchdogHandler(): Promise<TaskResult> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// System disk watchdog — alerts when the host disk is filling up.
+// Uses fs.statfsSync (no exec): the API container shares the host overlay.
+// Levels: warn >= 80%, critical >= 90%. Each level alerts once per drop below
+// (threshold - 3%) so we don't spam. Delivered through the same webhook
+// channel as source alerts (AppSetting 'alert_webhook_url' — Discord/Slack).
+// ---------------------------------------------------------------------------
+const fs = require('fs');
+
+const DISK_WARN_PCT = 80;
+const DISK_CRIT_PCT = 90;
+const DISK_HYSTERESIS_PCT = 3;
+let diskAlertedLevel = 0; // 0 = none, 1 = warn, 2 = crit
+
+async function diskWatchdogHandler(): Promise<TaskResult> {
+  const start = Date.now();
+  let usedPct = -1;
+  try {
+    const st = fs.statfsSync('/');
+    usedPct = Math.round((1 - st.bavail / st.blocks) * 100);
+  } catch (err: any) {
+    return {
+      summary: { ok: false, error: `statfs failed: ${err?.message || err}` },
+      subtasks: [{ name: 'system-disk-watchdog', status: 'failed', durationMs: Date.now() - start, error: err?.message }],
+    };
+  }
+
+  const level = usedPct >= DISK_CRIT_PCT ? 2 : usedPct >= DISK_WARN_PCT ? 1 : 0;
+  const threshold = level === 2 ? DISK_CRIT_PCT : DISK_WARN_PCT;
+
+  if (level > 0 && level !== diskAlertedLevel) {
+    const ok = await sendOperationalAlert({
+      event: 'system.disk.high',
+      severity: level === 2 ? 'critical' : 'warning',
+      message: `Host disk usage reached ${usedPct}% (threshold ${threshold}%). Free space is running low — check backups, EPG data and docker images.`,
+      details: { diskUsedPct: usedPct, threshold, path: '/' },
+    }).catch((e: any) => {
+      console.error('[disk-watchdog] alert failed:', e?.message);
+      return false;
+    });
+    diskAlertedLevel = level;
+    console.log(`[disk-watchdog] ${usedPct}% → alert ${ok ? 'sent' : 'queued (no webhook configured)'}`);
+  } else if (level === 0 && diskAlertedLevel > 0) {
+    console.log(`[disk-watchdog] ${usedPct}% → recovered, alerts re-armed`);
+    diskAlertedLevel = 0;
+  } else if (level > 0 && diskAlertedLevel === level && usedPct < threshold - DISK_HYSTERESIS_PCT) {
+    diskAlertedLevel = 0; // dropped below hysteresis — allow a fresh alert later
+  }
+
+  return {
+    summary: { diskUsedPct: usedPct },
+    subtasks: [{ name: 'system-disk-watchdog', status: 'completed', durationMs: Date.now() - start, result: { diskUsedPct: usedPct } }],
+  };
+}
+
+
 const tasks: TaskDefinition[] = [
   {
     name: 'liveness-check',
@@ -565,6 +623,13 @@ const tasks: TaskDefinition[] = [
     description: 'Send due SCHEDULED push notifications via FCM',
     intervalMs: NOTIFICATION_DISPATCH_INTERVAL,
     handler: notificationDispatcherHandler,
+  },
+  {
+    name: 'system-disk-watchdog',
+    displayName: 'System Disk Watchdog',
+    description: 'Alert when host disk usage crosses 80%/90% (webhook + logs)',
+    intervalMs: DISK_WATCHDOG_INTERVAL,
+    handler: diskWatchdogHandler,
   },
   {
     name: 'source-watchdog',
