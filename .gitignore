@@ -38,4 +38,4 @@ coverage/
 
 # Upstream home-relay files — require explicit owner confirmation (audit item)
 /relay.py
-/upstream-relay-manage.sh
+/*-relay-manage.sh

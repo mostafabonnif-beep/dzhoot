@@ -183,25 +183,25 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     // The Upstream case: the server cannot reach the source API (TLS block) but the
     // CDN streams the customers use are alive — the source must stay verified.
     (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('Client network socket disconnected before secure TLS connection was established'));
-    const upstream = await XtreamSource.create({
+    const upstreamSrc = await XtreamSource.create({
       name: 'Primary Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'x', passwordEncrypted: 'y',
       status: 'Inactive', verificationStatus: 'blocked', directPlayback: true,
     });
     await Channel.create({
       channelId: 'CH-Upstream', channelName: 'قناة Upstream', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/262849.m3u8', isActive: true,
-      metadata: { source: 'xtream', xtreamSourceId: String(upstream._id) },
+      metadata: { source: 'xtream', xtreamSourceId: String(upstreamSrc._id) },
     });
 
     // First run: probe is healthy but recovery hysteresis needs TWO consecutive
     // verified probes before a blocked source is allowed back.
     const res1 = await runSourceWatchdog();
     expect(res1.states[0].health).toBe('blocked');
-    let fresh = await XtreamSource.findById(upstream._id).lean().exec();
+    let fresh = await XtreamSource.findById(upstreamSrc._id).lean().exec();
     expect(fresh!.verificationStatus).toBe('blocked');
 
     const res2 = await runSourceWatchdog();
     expect(res2.states[0].health).toBe('verified');
-    fresh = await XtreamSource.findById(upstream._id).lean().exec();
+    fresh = await XtreamSource.findById(upstreamSrc._id).lean().exec();
     expect(fresh!.verificationStatus).toBe('verified');
     const { get: axiosGet } = require('axios');
     expect(axiosGet).toHaveBeenCalledWith('https://cf.upstream-host-redacted/live/u/p/262849.m3u8', expect.anything());
@@ -214,13 +214,13 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     (axiosGet as jest.Mock)
       .mockRejectedValueOnce(new Error('dead channel 1'))
       .mockRejectedValueOnce(new Error('dead channel 2'));
-    const upstream = await XtreamSource.create({
+    const upstreamSrc = await XtreamSource.create({
       name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'x', passwordEncrypted: 'y',
       status: 'Active', verificationStatus: 'verified', directPlayback: true,
     });
-    await Channel.create({ channelId: 'CH-N1', channelName: 'A', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/1.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstream._id) } });
-    await Channel.create({ channelId: 'CH-N2', channelName: 'B', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/2.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstream._id) } });
-    await Channel.create({ channelId: 'CH-N3', channelName: 'C', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/3.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstream._id) } });
+    await Channel.create({ channelId: 'CH-N1', channelName: 'A', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/1.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstreamSrc._id) } });
+    await Channel.create({ channelId: 'CH-N2', channelName: 'B', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/2.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstreamSrc._id) } });
+    await Channel.create({ channelId: 'CH-N3', channelName: 'C', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/3.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstreamSrc._id) } });
 
     const res = await runSourceWatchdog();
     // prev is verified → no hysteresis on the down direction... but probe found a live sample → verified.

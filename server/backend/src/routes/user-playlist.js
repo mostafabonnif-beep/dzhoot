@@ -7,9 +7,14 @@ const { requireAuth } = require('./auth');
 const { audit } = require('../services/audit-log');
 const { issuePlaybackToken } = require('../services/playback-token');
 const { getPublicBaseUrl } = require('../utils/public-url');
+const { proxyLogoUrl } = require('../utils/logo-proxy');
 function tokenizeUserChannel(channel, user, baseUrl) {
   const source = channel.toObject ? channel.toObject() : channel;
   const safe = { ...source, channelUrl: '' };
+  // Logos come from provider image hosts — relay them through our server so
+  // customers never see those hosts in their playlist payload.
+  if (safe.tvgLogo) safe.tvgLogo = proxyLogoUrl(baseUrl, safe.tvgLogo);
+  if (safe.channelImg) safe.channelImg = proxyLogoUrl(baseUrl, safe.channelImg);
   if (!user.channelListCode) return safe;
   if (source.channelUrl) {
     const { token } = issuePlaybackToken({
