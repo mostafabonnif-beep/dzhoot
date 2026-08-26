@@ -51,6 +51,16 @@ interface SourceHealth {
   lastError?: string | null;
 }
 
+interface FailoverMap {
+  _id: string;
+  channelRef: string;
+  backupStreamId: string;
+  backupChannelName: string;
+  enabled?: boolean;
+  matchedBy?: string;
+  channelId?: { channelName?: string; channelGroup?: string };
+}
+
 
 const emptyForm = { name: '', serverUrl: '', username: '', password: '' };
 
@@ -85,6 +95,9 @@ export default function AdminXtreamSourcesPage() {
   const [previews, setPreviews] = useState<Record<string, SyncPreview | undefined>>({});
   const [health, setHealth] = useState<Record<string, SourceHealth | undefined>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [failoverMaps, setFailoverMaps] = useState<Record<string, FailoverMap[]>>({});
+  const [failoverOpen, setFailoverOpen] = useState<string | null>(null);
+  const [failoverForm, setFailoverForm] = useState({ channelRef: '', backupStreamId: '', backupChannelName: '' });
 
   async function loadSources() {
     try {
@@ -201,6 +214,97 @@ export default function AdminXtreamSourcesPage() {
     }
   }
 
+  async function importCatalog(source: XtreamSource) {
+    setBusyId(source._id);
+    setError('');
+    setNotice('');
+    try {
+      await api.post(`/admin/xtream-sources/${source._id}/import-catalog`);
+      setNotice(`بدأ استيراد كتالوج «${source.name}» دون تفعيل التشغيل غير الموثق.`);
+      await loadSources();
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'تعذر بدء استيراد الكتالوج.'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function loadFailoverMaps(source: XtreamSource) {
+    setFailoverOpen(source._id);
+    setBusyId(source._id);
+    try {
+      const response = await api.get(`/admin/xtream-sources/${source._id}/failover-maps`);
+      setFailoverMaps((current) => ({ ...current, [source._id]: response.data?.data || [] }));
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'تعذر تحميل مسارات failover.'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function addFailoverMap(source: XtreamSource) {
+    if (!failoverForm.channelRef.trim() || !failoverForm.backupStreamId.trim() || !failoverForm.backupChannelName.trim()) {
+      setError('مرجع القناة ومعرّف البث الاحتياطي واسمه مطلوبة لإضافة المسار.');
+      return;
+    }
+    setBusyId(source._id);
+    setError('');
+    try {
+      await api.post(`/admin/xtream-sources/${source._id}/failover-maps`, failoverForm);
+      setFailoverForm({ channelRef: '', backupStreamId: '', backupChannelName: '' });
+      setNotice('تم حفظ مسار failover اليدوي.');
+      await loadFailoverMaps(source);
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'تعذر حفظ مسار failover.'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function autoMatchFailover(source: XtreamSource) {
+    setBusyId(source._id);
+    setError('');
+    try {
+      const response = await api.post(`/admin/xtream-sources/${source._id}/failover-maps/auto-match`, { limit: 500 });
+      const result = response.data?.data;
+      setNotice(`اكتملت المطابقة الآلية: ${result?.created ?? 0} مسار جديد، ${result?.skipped ?? 0} تم تخطيه.`);
+      await loadFailoverMaps(source);
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'تعذرت المطابقة الآلية لمسارات failover.'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function deleteFailoverMap(source: XtreamSource, map: FailoverMap) {
+    if (!window.confirm(`حذف المسار الاحتياطي للقناة «${map.channelId?.channelName || map.channelRef}»؟`)) return;
+    setBusyId(source._id);
+    try {
+      await api.delete(`/admin/xtream-sources/${source._id}/failover-maps/${map._id}`);
+      setNotice('تم حذف مسار failover.');
+      await loadFailoverMaps(source);
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'تعذر حذف مسار failover.'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function runWatchdog() {
+    setBusyId('watchdog');
+    setError('');
+    try {
+      const response = await api.post('/admin/xtream-sources/watchdog/run');
+      const result = response.data?.data;
+      setNotice(`اكتمل فحص Watchdog: ${result?.checked ?? result?.processed ?? 0} مصدر تمت معالجته.`);
+      await loadSources();
+    } catch (err: unknown) {
+      setError(errorMessage(err, 'تعذر تشغيل Watchdog.'));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function syncSource(source: XtreamSource) {
     setSyncingId(source._id);
     setError('');
@@ -268,9 +372,7 @@ export default function AdminXtreamSourcesPage() {
             <h1 className="text-3xl font-display font-bold tracking-tight">مصادر Xtream</h1>
             <p className="mt-2 text-sm text-muted-foreground">أضف المصادر المصرح لك باستخدامها وراقب مزامنة القنوات والأفلام والمسلسلات.</p>
           </div>
-          <button onClick={loadSources} className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm hover:border-primary/40">
-            <RefreshCw className="h-4 w-4" /> تحديث القائمة
-          </button>
+          <div className="flex flex-wrap gap-2"><button onClick={runWatchdog} disabled={busyId === 'watchdog'} className="inline-flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/5 px-4 py-2 text-sm text-primary hover:bg-primary/10 disabled:opacity-50"><Activity className="h-4 w-4" />{busyId === 'watchdog' ? 'جارٍ فحص المصادر…' : 'تشغيل Watchdog'}</button><button onClick={loadSources} className="inline-flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm hover:border-primary/40"><RefreshCw className="h-4 w-4" /> تحديث القائمة</button></div>
         </div>
       </div>
 
@@ -307,9 +409,10 @@ export default function AdminXtreamSourcesPage() {
             <div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><div className="rounded-xl bg-primary/10 p-2 text-primary"><Server className="h-5 w-5" /></div><div><h3 className="font-semibold">{source.name}</h3><p className="mt-1 break-all text-xs text-muted-foreground">{source.serverUrl}</p></div></div><div className="flex flex-col items-end gap-1"><span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${source.status === 'Active' ? 'bg-signal-green/10 text-signal-green' : 'bg-muted text-muted-foreground'}`}>{source.status === 'Active' ? 'نشط' : 'غير نشط'}</span><span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${source.verificationStatus === 'verified' ? 'bg-signal-green/10 text-signal-green' : source.verificationStatus === 'blocked' ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/10 text-amber-700'}`}>{source.verificationStatus === 'verified' ? 'موثّق للتشغيل' : source.verificationStatus === 'blocked' ? 'محجوب' : 'بحاجة إلى تشخيص'}</span></div></div>
             <div className="mt-5 grid grid-cols-3 gap-2 text-center"><div className="rounded-xl bg-muted/50 p-3"><Database className="mx-auto mb-1 h-4 w-4 text-primary" /><strong className="block text-lg">{source.stats?.channels ?? 0}</strong><span className="text-[11px] text-muted-foreground">قنوات</span></div><div className="rounded-xl bg-muted/50 p-3"><strong className="block text-lg">{source.stats?.movies ?? 0}</strong><span className="text-[11px] text-muted-foreground">أفلام</span></div><div className="rounded-xl bg-muted/50 p-3"><strong className="block text-lg">{source.stats?.series ?? 0}</strong><span className="text-[11px] text-muted-foreground">مسلسلات</span></div></div>
             <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">{source.syncStatus === 'syncing' ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : source.syncStatus === 'error' ? <XCircle className="h-4 w-4 text-destructive" /> : <CheckCircle2 className="h-4 w-4 text-signal-green" />}<span>{source.syncStatus === 'syncing' ? 'جارٍ تنفيذ المزامنة…' : source.syncStatus === 'error' ? `فشلت المزامنة: ${source.lastError || 'خطأ غير معروف'}` : `آخر مزامنة: ${formatDate(source.lastSyncAt)}`}</span></div>
-            <div className="mt-4 flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-xs"><span><strong>التشغيل المباشر</strong><span className="ms-2 text-muted-foreground">{source.directPlayback ? "مفعل" : "متوقف"}</span></span><button onClick={() => toggleDirectPlayback(source)} className="rounded-lg border border-border px-3 py-1.5 font-medium hover:border-primary/40">{source.directPlayback ? "تعطيل" : "تفعيل"}</button></div><div className="mt-5 flex flex-wrap gap-2"><button onClick={() => testSource(source)} disabled={testingId === source._id || busyId === source._id} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Wifi className="h-4 w-4" />{testingId === source._id ? 'جارٍ الاختبار…' : 'اختبار الاتصال'}</button><button onClick={() => runDiagnostics(source)} disabled={busyId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl border border-primary/40 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"><ShieldCheck className="h-4 w-4" />تشخيص حي</button><button onClick={() => previewSource(source)} disabled={busyId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Eye className="h-4 w-4" />معاينة التغييرات</button><button onClick={() => syncSource(source)} disabled={syncingId === source._id || source.syncStatus === 'syncing' || busyId === source._id} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${syncingId === source._id || source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} />مزامنة الآن</button><button onClick={() => rollbackSource(source)} disabled={busyId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><RotateCcw className="h-4 w-4" />استرجاع</button><button onClick={() => loadHealth(source)} disabled={busyId === source._id} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Activity className="h-4 w-4" />الصحة</button><button onClick={() => deleteSource(source)} className="ms-auto inline-flex items-center gap-2 rounded-xl border border-destructive/30 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" />حذف</button></div>
+            <div className="mt-4 flex items-center justify-between rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-xs"><span><strong>التشغيل المباشر</strong><span className="ms-2 text-muted-foreground">{source.directPlayback ? "مفعل" : "متوقف"}</span></span><button onClick={() => toggleDirectPlayback(source)} className="rounded-lg border border-border px-3 py-1.5 font-medium hover:border-primary/40">{source.directPlayback ? "تعطيل" : "تفعيل"}</button></div><div className="mt-5 flex flex-wrap gap-2"><button onClick={() => testSource(source)} disabled={testingId === source._id || busyId === source._id} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Wifi className="h-4 w-4" />{testingId === source._id ? 'جارٍ الاختبار…' : 'اختبار الاتصال'}</button><button onClick={() => runDiagnostics(source)} disabled={busyId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl border border-primary/40 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"><ShieldCheck className="h-4 w-4" />تشخيص حي</button><button onClick={() => previewSource(source)} disabled={busyId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Eye className="h-4 w-4" />معاينة التغييرات</button><button onClick={() => syncSource(source)} disabled={syncingId === source._id || source.syncStatus === 'syncing' || busyId === source._id} className="inline-flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"><RefreshCw className={`h-4 w-4 ${syncingId === source._id || source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} />مزامنة الآن</button><button onClick={() => rollbackSource(source)} disabled={busyId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><RotateCcw className="h-4 w-4" />استرجاع</button><button onClick={() => loadHealth(source)} disabled={busyId === source._id} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Activity className="h-4 w-4" />الصحة</button><button onClick={() => importCatalog(source)} disabled={busyId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Database className="h-4 w-4" />استيراد الكتالوج</button><button onClick={() => failoverOpen === source._id ? setFailoverOpen(null) : loadFailoverMaps(source)} disabled={busyId === source._id} className="inline-flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-xs font-medium hover:border-primary/40 disabled:opacity-50"><Server className="h-4 w-4" />Failover</button><button onClick={() => deleteSource(source)} className="ms-auto inline-flex items-center gap-2 rounded-xl border border-destructive/30 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"><Trash2 className="h-4 w-4" />حذف</button></div>
             {previews[source._id] && <div className="mt-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs"><div className="flex items-center gap-2 font-medium text-primary"><GitCompare className="h-4 w-4" />معاينة قبل التطبيق</div><p className="mt-1 text-muted-foreground">+{previews[source._id]?.diff.added ?? 0} إضافة · {previews[source._id]?.diff.changed ?? 0} تغيير · -{previews[source._id]?.diff.removed ?? 0} حذف · {previews[source._id]?.diff.unchanged ?? 0} دون تغيير</p></div>}
             {health[source._id] && <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3 text-xs"><div className="flex items-center gap-2 font-medium"><Activity className="h-4 w-4 text-primary" />ملخص صحة المصدر</div><div className="mt-2 grid grid-cols-3 gap-2 text-center"><span><strong className="block text-base">{health[source._id]?.health?.alive ?? 0}</strong>حي</span><span><strong className="block text-base">{health[source._id]?.health?.dead ?? 0}</strong>متوقف</span><span><strong className="block text-base">{health[source._id]?.mappedChannels ?? 0}</strong>مسارات احتياطية</span></div></div>}
+            {failoverOpen === source._id && <div className="mt-3 space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><div><strong className="block">مسارات Failover</strong><span className="text-muted-foreground">تُستخدم فقط مع مصدر احتياطي مصرح به.</span></div><button onClick={() => autoMatchFailover(source)} disabled={busyId === source._id} className="rounded-lg border border-primary/40 px-3 py-1.5 font-medium text-primary disabled:opacity-50">مطابقة آلية حتى 500</button></div><div className="grid gap-2 md:grid-cols-3"><input value={failoverForm.channelRef} onChange={(event) => setFailoverForm({ ...failoverForm, channelRef: event.target.value })} placeholder="مرجع القناة" dir="ltr" className="h-9 rounded-lg border border-border bg-background px-2" /><input value={failoverForm.backupStreamId} onChange={(event) => setFailoverForm({ ...failoverForm, backupStreamId: event.target.value })} placeholder="معرّف البث الاحتياطي" dir="ltr" className="h-9 rounded-lg border border-border bg-background px-2" /><input value={failoverForm.backupChannelName} onChange={(event) => setFailoverForm({ ...failoverForm, backupChannelName: event.target.value })} placeholder="اسم القناة الاحتياطية" className="h-9 rounded-lg border border-border bg-background px-2" /></div><button onClick={() => addFailoverMap(source)} disabled={busyId === source._id} className="rounded-lg bg-primary px-3 py-1.5 font-medium text-primary-foreground disabled:opacity-50">حفظ المسار اليدوي</button>{(failoverMaps[source._id] || []).length === 0 ? <p className="text-muted-foreground">لا توجد مسارات failover مفعلة.</p> : <div className="space-y-2">{failoverMaps[source._id]?.map((map) => <div key={map._id} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background px-2 py-2"><span><strong>{map.channelId?.channelName || map.channelRef}</strong><span className="ms-2 text-muted-foreground" dir="ltr">→ {map.backupChannelName} ({map.backupStreamId})</span></span><button onClick={() => deleteFailoverMap(source, map)} className="text-destructive hover:underline">حذف</button></div>)}</div>}</div>}
           </article>
         ))}</div>}
       </section>
