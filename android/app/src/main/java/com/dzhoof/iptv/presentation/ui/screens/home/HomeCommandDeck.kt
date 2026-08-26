@@ -83,7 +83,18 @@ internal fun HomeCommandDeck(
     val isCompact = LocalConfiguration.current.screenWidthDp < COMPACT_WIDTH_DP
     val primary = MaterialTheme.colorScheme.primary
     val tertiary = MaterialTheme.colorScheme.tertiary
-    val commands = remember(channelCount, favoriteCount, primary, tertiary) {
+    // Include navigation lambdas in the memoization keys. Without them, a
+    // recreated NavHost could leave the deck calling a stale destination.
+    val commands = remember(
+        channelCount,
+        favoriteCount,
+        primary,
+        tertiary,
+        onSearchClick,
+        onLiveClick,
+        onGuideClick,
+        onFavoritesClick,
+    ) {
         listOf(
             HomeCommand(
                 label = "البحث",
