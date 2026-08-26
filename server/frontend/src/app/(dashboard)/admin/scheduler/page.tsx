@@ -104,6 +104,7 @@ export default function SchedulerPage() {
   const [error, setError] = useState('');
   const [triggeringTask, setTriggeringTask] = useState<string | null>(null);
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
+  const [loadingRunDetails, setLoadingRunDetails] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
   const { locale } = useLocale();
@@ -163,6 +164,24 @@ export default function SchedulerPage() {
       }
     };
   }, [tasks, fetchTasks, fetchRuns]);
+
+  async function toggleRunDetails(run: RunEntry) {
+    if (expandedRun === run._id) {
+      setExpandedRun(null);
+      return;
+    }
+    setExpandedRun(run._id);
+    setLoadingRunDetails(run._id);
+    try {
+      const response = await api.get(`/scheduler/runs/${run._id}`);
+      const details = response.data?.data as RunEntry | undefined;
+      if (details) setRuns((current) => current.map((item) => (item._id === run._id ? { ...item, ...details } : item)));
+    } catch {
+      toast('تعذر تحميل تفاصيل التشغيل', 'error');
+    } finally {
+      setLoadingRunDetails(null);
+    }
+  }
 
   async function triggerTask(taskName: string) {
     setTriggeringTask(taskName);
@@ -399,26 +418,12 @@ export default function SchedulerPage() {
           emptyMessage="لا توجد عمليات تشغيل."
           rowKey={(run) => run._id}
           breakpoint="always"
-          onRowClick={(run) => setExpandedRun(expandedRun === run._id ? null : run._id)}
+          onRowClick={toggleRunDetails}
           renderExpandedRow={(run) => {
-            if (expandedRun !== run._id || !run.subtasks?.length) return null;
+            if (expandedRun !== run._id) return null;
             return (
-              <div className="px-4 pb-3 bg-muted/30">
-                <div className="border border-border divide-y divide-border">
-                  {run.subtasks.map((sub, i) => (
-                    <div
-                      key={i}
-                      className="grid grid-cols-[1fr,80px,80px,1fr] gap-2 px-3 py-1.5 text-xs"
-                    >
-                      <span className="font-medium truncate">{sub.name}</span>
-                      <StatusBadge status={sub.status} />
-                      <span className="text-muted-foreground">
-                        {formatDuration(sub.durationMs, locale)}
-                      </span>
-                      <span className="text-signal-red truncate">{sub.error || ''}</span>
-                    </div>
-                  ))}
-                </div>
+              <div className="space-y-2 bg-muted/30 px-4 pb-3 text-xs">
+                {loadingRunDetails === run._id ? <div className="flex items-center gap-2 py-3 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />جارٍ تحميل تفاصيل التشغيل…</div> : <><div className="flex flex-wrap gap-4 border border-border bg-background px-3 py-2"><span>بدأ: {new Date(run.startedAt).toLocaleString()}</span><span>اكتمل: {run.completedAt ? new Date(run.completedAt).toLocaleString() : 'لم يكتمل بعد'}</span><span>النتيجة: {run.result ? 'متوفرة' : 'غير متوفرة'}</span></div>{run.error && <div className="border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">{run.error}</div>}{run.subtasks?.length ? <div className="border border-border divide-y divide-border">{run.subtasks.map((sub, i) => <div key={i} className="grid grid-cols-[1fr,80px,80px,1fr] gap-2 px-3 py-1.5"><span className="font-medium truncate">{sub.name}</span><StatusBadge status={sub.status} /><span className="text-muted-foreground">{formatDuration(sub.durationMs, locale)}</span><span className="text-signal-red truncate">{sub.error || ''}</span></div>)}</div> : <p className="text-muted-foreground">لا توجد مهام فرعية مسجلة لهذا التشغيل.</p>}</>}
               </div>
             );
           }}
