@@ -23,6 +23,7 @@ import kotlinx.coroutines.launch
 
 data class VodPlayerUiState(
     val playbackUrl: String? = null,
+    val playbackMimeType: String? = null,
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val resumePositionMs: Long = 0L,
@@ -120,6 +121,7 @@ class VodPlayerViewModel @Inject constructor(
             when (val result = catalogRepository.authorizePlayback(contentType, contentId)) {
                 is Result.Success -> _uiState.value = _uiState.value.copy(
                     playbackUrl = result.data.url,
+                    playbackMimeType = result.data.mimeType,
                     isLoading = false,
                     isRefreshing = false,
                     error = null,

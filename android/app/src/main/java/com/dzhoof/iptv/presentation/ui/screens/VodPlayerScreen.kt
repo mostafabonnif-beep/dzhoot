@@ -48,7 +48,15 @@ fun VodPlayerScreen(
 
     LaunchedEffect(state.playbackUrl) {
         state.playbackUrl?.let { url ->
-            player.setMediaItem(MediaItem.fromUri(url))
+            // The token URL is opaque (no reliable extension for progressive
+            // MKV/MP4/AVI VOD) — trust the server-provided container hint so
+            // Media3 picks the right extractor instead of inferring HLS from
+            // a stale .m3u8 suffix and failing with PARSING_CONTAINER_UNSUPPORTED.
+            player.setMediaItem(
+                MediaItem.Builder().setUri(url)
+                    .apply { state.playbackMimeType?.let { setMimeType(it) } }
+                    .build()
+            )
             player.prepare()
             if (state.resumePositionMs > 0L) player.seekTo(state.resumePositionMs)
             player.playWhenReady = true
