@@ -35,7 +35,9 @@ import com.dzhoof.iptv.presentation.ui.theme.ScrimLight
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
 import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
 import com.dzhoof.iptv.presentation.ui.theme.SurfaceElevated
+import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.theme.softShadow
 
 // Flat vertical scrim — no blur/shadow, cheap on low-end boxes
@@ -203,11 +205,16 @@ private fun ChannelInfoRow(channel: ChannelUiModel) {
             border = BorderStroke(1.dp, catColor.copy(alpha = 0.4f))
         ) {
             Text(
-                text = channel.category,
+                text = CategoryLocalizer.localize(channel.category),
                 style = LabelBadge,
                 color = catColor,
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
             )
+        }
+
+        // شارة "مباشر" الحمراء — تظهر للقنوات الحية (healthStatus == ONLINE)
+        if (channel.healthStatus == ChannelHealthStatus.ONLINE) {
+            LiveBadge()
         }
     }
 }

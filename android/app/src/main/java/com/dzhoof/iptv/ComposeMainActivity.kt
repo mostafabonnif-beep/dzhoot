@@ -11,8 +11,18 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.border
+import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.GridView
@@ -377,7 +388,6 @@ private val bottomNavItems = listOf(
     Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
     Triple(Screen.Catalog, Icons.Default.Movie, "فيديو"),
-    Triple(Screen.Guide, Icons.Default.GridView, "الدليل"),
     Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
 )
 
@@ -389,40 +399,59 @@ private fun BottomNavBar(
 ) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val isPhone = screenWidthDp < 600
-    val barHeight = if (isPhone) 80.dp else 64.dp
-    val iconSize = if (isPhone) 26.dp else 22.dp
+    val barHeight = if (isPhone) 74.dp else 64.dp
+    val iconSize = if (isPhone) 24.dp else 22.dp
     val labelSize = if (isPhone) 11.sp else 10.sp
+    val accent = MaterialTheme.colorScheme.primary
 
-    NavigationBar(
+    // شريط سفلي عائم حديث — حاوية دائرية مرتفعة مع مؤشر "حبة" للأيقونة النشطة
+    Surface(
+        shape = RoundedCornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        tonalElevation = 0.dp,
+        shadowElevation = 16.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
         modifier = modifier
-            .fillMaxWidth()
-            .height(barHeight),
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-        tonalElevation = 0.dp
+            .fillMaxWidth(0.95f)
+            .height(barHeight)
+            .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
-        bottomNavItems.forEach { (screen, icon, label) ->
-            val isSelected = currentRoute == screen.route ||
-                (screen == Screen.Channels && currentRoute == Screen.ChannelsByCategory.route)
-            NavigationBarItem(
-                selected = isSelected,
-                onClick = { onScreenSelected(screen) },
-                icon = {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            bottomNavItems.forEach { (screen, icon, label) ->
+                val isSelected = currentRoute == screen.route ||
+                    (screen == Screen.Channels && currentRoute == Screen.ChannelsByCategory.route)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            if (isSelected) accent.copy(alpha = 0.16f)
+                            else Color.Transparent
+                        )
+                        .clickable { onScreenSelected(screen) }
+                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = label,
+                        tint = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(iconSize)
                     )
-                },
-                label = { Text(text = label, maxLines = 1, fontSize = labelSize) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                    unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = MaterialTheme.colorScheme.surfaceVariant
-                )
-            )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = label,
+                        maxLines = 1,
+                        fontSize = labelSize,
+                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }

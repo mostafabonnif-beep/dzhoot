@@ -52,9 +52,9 @@ export default function ShopQrCard({ reseller, open, onClose }: ShopQrCardProps)
       <style>
         @page { size: 90mm 60mm; margin: 0; }
         body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-        .card { width: 82mm; height: 52mm; border: 1.5px solid #B85E10; border-radius: 4mm; padding: 3mm 4mm; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
+        .card { width: 82mm; height: 52mm; border: 1.5px solid #059669; border-radius: 4mm; padding: 3mm 4mm; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
         .head { display: flex; justify-content: space-between; align-items: center; }
-        .brand { font-family: Arial, sans-serif; font-weight: 900; font-size: 15px; color: #B85E10; }
+        .brand { font-family: Arial, sans-serif; font-weight: 900; font-size: 15px; color: #059669; }
         .brand small { display: block; font-weight: 600; font-size: 9px; color: #5A5470; letter-spacing: 0.5px; }
         .mid { display: flex; align-items: center; gap: 4mm; }
         .qr { width: 34mm; height: 34mm; flex-shrink: 0; }

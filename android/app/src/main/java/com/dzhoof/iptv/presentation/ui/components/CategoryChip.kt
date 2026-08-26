@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.animation.FOCUS_SCALE_TILE
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
@@ -50,13 +50,13 @@ fun CategoryChip(
             Text(
                 text = label,
                 fontWeight = if (isSelected || isFocused) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (isFocused && !isSelected) Amber else Color.Unspecified
+                color = if (isFocused && !isSelected) DzGreen300 else Color.Unspecified
             )
         },
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = selectedContainerColor,
             selectedLabelColor = selectedLabelColor,
-            containerColor = if (isFocused) Amber.copy(alpha = 0.15f) else Color.Transparent
+            containerColor = if (isFocused) DzGreen300.copy(alpha = 0.15f) else Color.Transparent
         ),
         border = borderStroke,
         shape = shape,

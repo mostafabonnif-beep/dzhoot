@@ -15,11 +15,11 @@ DZ HOOF IPTV is a free, open-source platform for managing IPTV channels on Andro
 
 ## Links
 
-- Website: https://tv.cadnative.com
-- Android TV App: https://github.com/akshaynikhare/dzhoot/releases/latest
-- Server Source: https://github.com/akshaynikhare/dzhoot
-- App Source: https://github.com/akshaynikhare/dzhoot
-- API Documentation: https://tv.cadnative.com/api/v1/
+- Website: https://iptv.ld-11.net
+- Android TV App: https://github.com/mostafabonnif-beep/dzhoot/releases/latest
+- Server Source: https://github.com/mostafabonnif-beep/dzhoot
+- App Source: https://github.com/mostafabonnif-beep/dzhoot
+- API Documentation: https://iptv.ld-11.net/api/v1/
 
 ## Tech Stack
 
@@ -38,4 +38,4 @@ DZ HOOF IPTV is a free, open-source platform for managing IPTV channels on Andro
 ## Author
 
 Built by Akshay Nikhare (https://github.com/akshaynikhare)
-Published by CADNative
+Published by DZ HOOF

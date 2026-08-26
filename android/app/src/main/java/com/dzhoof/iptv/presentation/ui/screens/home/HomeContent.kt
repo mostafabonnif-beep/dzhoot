@@ -30,6 +30,8 @@ import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
 import com.dzhoof.iptv.presentation.ui.components.ChannelRowSkeleton
+import com.dzhoof.iptv.presentation.ui.components.DemoModeBanner
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.components.HomeHero
 import com.dzhoof.iptv.presentation.ui.components.rememberHeroHeight
 import com.dzhoof.iptv.presentation.ui.components.rememberShimmerBrush
@@ -38,6 +40,7 @@ import com.dzhoof.iptv.presentation.ui.theme.Void800
 import kotlinx.coroutines.delay
 
 private const val HERO_SWAP_DEBOUNCE_MS = 300L
+private const val HOME_CATEGORY_ROWS_LIMIT = 10
 
 @Composable
 fun HomeContent(
@@ -51,6 +54,7 @@ fun HomeContent(
     onNavigateToChannels: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onMultiviewClick: (String) -> Unit,
+    isDemo: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val configuration = LocalConfiguration.current
@@ -74,10 +78,14 @@ fun HomeContent(
     }
 
     val channelsByCategory = remember(channels) {
-        channels.groupBy { it.category.ifBlank { "Other" } }
+        channels.groupBy { it.category.ifBlank { "" } }
     }
+    // التنظيم: اعرض فقط أكبر HOME_CATEGORY_ROWS_LIMIT تصنيفًا (بالعدد) —
+    // الرئيسية تبقى قصيرة ومنظمة، والتصفح الكامل من شاشة التصنيفات.
     val categoryEntries = remember(channelsByCategory) {
         channelsByCategory.entries.toList()
+            .sortedByDescending { it.value.size }
+            .take(HOME_CATEGORY_ROWS_LIMIT)
     }
     val bannerChannels = remember(featuredChannels, channels) {
         featuredChannels.ifEmpty { channels.take(5) }
@@ -138,6 +146,15 @@ fun HomeContent(
         modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = screenPaddingVertical)
     ) {
+        if (isDemo) {
+            item(key = "demo_banner") {
+                DemoModeBanner(
+                    modifier = Modifier
+                        .padding(horizontal = horizontalPadding)
+                        .padding(bottom = rowGap)
+                )
+            }
+        }
         item(key = "hero") {
             heroChannel?.let { hero ->
                 HomeHero(
@@ -222,17 +239,8 @@ fun HomeContent(
             items = categoryEntries,
             key = { _, entry -> "category_${entry.key}" }
         ) { index, (category, categoryChannels) ->
-            val localizedCategory = when (category.trim().lowercase()) {
-                "sports", "sport", "رياضة" -> stringResource(R.string.category_sports)
-                "news", "أخبار" -> stringResource(R.string.category_news)
-                "movies", "movie", "أفلام" -> stringResource(R.string.category_movies)
-                "entertainment", "ترفيه" -> stringResource(R.string.category_entertainment)
-                "music", "موسيقى" -> stringResource(R.string.category_music)
-                "kids", "children", "أطفال" -> stringResource(R.string.category_kids)
-                "documentary", "وثائقي" -> stringResource(R.string.category_documentary)
-                "general", "other", "عام" -> stringResource(R.string.category_general)
-                else -> category
-            }
+            val localizedCategory = CategoryLocalizer.localize(category)
+
             ChannelRow(
                 title = localizedCategory,
                 channels = categoryChannels,

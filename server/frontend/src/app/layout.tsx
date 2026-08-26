@@ -1,24 +1,24 @@
 import type { Metadata } from 'next';
-import { Space_Grotesk, Manrope, Noto_Sans_Arabic } from 'next/font/google';
+import { Noto_Kufi_Arabic, Cairo } from 'next/font/google';
 import { GoogleAnalytics } from '@next/third-parties/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 import { QueryProvider } from '@/components/query-provider';
 import { LocaleProvider } from '@/components/locale-provider';
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
+const notoKufi = Noto_Kufi_Arabic({
+  subsets: ['arabic'],
   variable: '--font-display',
   display: 'swap',
 });
 
-const manrope = Manrope({
-  subsets: ['latin'],
+const cairo = Cairo({
+  subsets: ['arabic', 'latin'],
   variable: '--font-body',
   display: 'swap',
 });
 
-const notoArabic = Noto_Sans_Arabic({
+const notoArabic = Noto_Kufi_Arabic({
   subsets: ['arabic'],
   variable: '--font-arabic',
   display: 'swap',
@@ -107,7 +107,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
-      <body className={`${spaceGrotesk.variable} ${manrope.variable} ${notoArabic.variable} antialiased`}>
+      <body className={`${notoKufi.variable} ${cairo.variable} ${notoArabic.variable} antialiased`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

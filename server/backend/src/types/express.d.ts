@@ -4,12 +4,13 @@ declare namespace Express {
       id: string;
       username: string;
       email: string;
-      role: 'Admin' | 'User';
+      role: 'Admin' | 'User' | 'Demo';
       channels?: unknown[];
       channelListCode?: string;
       isActive: boolean;
       emailVerified: boolean;
       allCatalog?: boolean;
+      demo?: boolean;
     };
     sessionId?: string;
     jwt?: {

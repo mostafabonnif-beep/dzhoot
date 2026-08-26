@@ -15,6 +15,25 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
     // 1. Try TV code auth first
     const tvCode = req.headers['x-tv-code'] as string | undefined;
     if (tvCode) {
+      // Demo mode — a fixed public code lets anyone browse the curated demo
+      // catalog without a real account (configurable via DEMO_TV_CODE).
+      const DEMO_TV_CODE = (process.env.DEMO_TV_CODE || 'DEMO').toUpperCase();
+      if (tvCode.toUpperCase() === DEMO_TV_CODE) {
+        req.user = {
+          id: 'demo',
+          username: 'demo',
+          email: '',
+          role: 'Demo',
+          channels: [],
+          channelListCode: DEMO_TV_CODE,
+          isActive: true,
+          emailVerified: true,
+          allCatalog: false,
+          demo: true,
+        };
+        return next();
+      }
+
       const user = (await User.findOne({
         channelListCode: tvCode.toUpperCase(),
         isActive: true,

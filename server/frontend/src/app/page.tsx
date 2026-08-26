@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Flame, PlayCircle, Smartphone, ShieldCheck, Headset, Tv, Zap, MessagesSquare } from 'lucide-react';
+import { PlayCircle, Smartphone, ShieldCheck, Headset, Tv, Zap, MessagesSquare } from 'lucide-react';
 import ShopPlans from '@/components/shop-plans';
 
 export const metadata: Metadata = {
@@ -44,7 +44,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <Link href="/" className="flex items-center gap-2 text-lg font-extrabold">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground">
-              <Flame className="h-5 w-5" aria-hidden="true" />
+              <Tv className="h-5 w-5" aria-hidden="true" />
             </span>
             DZ HOOF
           </Link>

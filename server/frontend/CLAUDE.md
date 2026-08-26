@@ -12,7 +12,7 @@
 | Data fetching | TanStack React Query 5                  | Wraps Axios calls, devtools in dev                      |
 | HTTP          | Axios                                   | Configured in `lib/api.ts` with auth interceptors       |
 | Icons         | Lucide React                            | Only icon library — never add another                   |
-| Fonts         | Space Grotesk (display), Manrope (body) | Loaded via `next/font/google`                           |
+| Fonts         | Noto Kufi Arabic (display), Cairo (body)  | Loaded via `next/font/google` |
 | Theme         | next-themes                             | Light default, dark mode supported                      |
 
 ## Quick Start

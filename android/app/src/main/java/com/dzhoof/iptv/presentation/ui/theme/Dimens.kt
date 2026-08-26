@@ -45,18 +45,18 @@ object Dimens {
     val HeroCardGap = 24.dp            // between hero/featured cards (TV)
     val HeroCardGapMobile = 14.dp      // between hero/featured cards (mobile)
     val CategoryCardGap = 14.dp        // between category cards
-    val GridGap = 16.dp                // channel grid cell spacing
+    val GridGap = 18.dp                // channel grid cell spacing
 
     // ── Channel cards ────────────────────────────────────────────────
-    val ChannelCardWidthTv = 180.dp
+    val ChannelCardWidthTv = 190.dp
     val ChannelCardHeightTv = 110.dp
     val ChannelCardWidthMobile = 140.dp
     val ChannelCardHeightMobile = 90.dp
-    val GridCardHeight = 120.dp
+    val GridCardHeight = 132.dp
 
     // ── Category cards ───────────────────────────────────────────────
     val CategoryCardWidthTv = 180.dp
-    val CategoryCardHeightTv = 100.dp
+    val CategoryCardHeightTv = 104.dp
     val CategoryCardWidthMobile = 140.dp
     val CategoryCardHeightMobile = 80.dp
     // Decorative corner icon scales with card height (home row cards are

@@ -51,6 +51,7 @@ import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.Void700
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
 /** Chips that flag categories whose name matches the query — a "matches genre" cue. */
@@ -71,7 +72,7 @@ internal fun CategoryMatchHints(
                 border = BorderStroke(1.dp, catColor.copy(alpha = 0.4f))
             ) {
                 Text(
-                    text = "in $category",
+                    text = "في ${CategoryLocalizer.localize(category)}",
                     style = MaterialTheme.typography.labelMedium,
                     color = catColor,
                     modifier = Modifier.padding(horizontal = Dimens.Space3, vertical = Dimens.Space1)

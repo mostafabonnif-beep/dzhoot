@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -59,11 +61,13 @@ import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.screens.home.COMPACT_WIDTH_DP
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.domain.model.ChannelHealthStatus
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen400
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.EmphasisMedium
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
@@ -194,7 +198,7 @@ fun HomeHero(
 @Composable
 private fun HeroCategoryBadge(category: String) {
     Text(
-        text = category,
+        text = CategoryLocalizer.localize(category),
         style = LabelBadge,
         color = categoryColor(category).copy(alpha = EmphasisMedium)
     )
@@ -206,7 +210,7 @@ private fun HeroNowBlock(hero: ChannelUiModel) {
     Column {
         hero.nowProgramTitle?.let { nowTitle ->
             Text(
-                text = "Now: $nowTitle",
+                text = "الآن: $nowTitle",
                 style = MaterialTheme.typography.titleMedium,
                 color = OnVideo,
                 maxLines = 1,
@@ -247,7 +251,13 @@ private fun HeroInfo(hero: ChannelUiModel, stackedBadge: Boolean = false) {
             )
             if (hero.category.isNotBlank()) {
                 Spacer(modifier = Modifier.height(Dimens.Space2))
-                HeroCategoryBadge(category = hero.category)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    HeroCategoryBadge(category = hero.category)
+                    if (hero.healthStatus == ChannelHealthStatus.ONLINE) {
+                        Spacer(modifier = Modifier.width(Dimens.Space2))
+                        LiveBadge()
+                    }
+                }
             }
         }
     } else {
@@ -263,6 +273,10 @@ private fun HeroInfo(hero: ChannelUiModel, stackedBadge: Boolean = false) {
             if (hero.category.isNotBlank()) {
                 Spacer(modifier = Modifier.width(Dimens.Space3))
                 HeroCategoryBadge(category = hero.category)
+            }
+            if (hero.healthStatus == ChannelHealthStatus.ONLINE) {
+                Spacer(modifier = Modifier.width(Dimens.Space3))
+                LiveBadge()
             }
         }
     }
@@ -300,13 +314,14 @@ private fun HeroProgressBar(startMs: Long, endMs: Long) {
                     .fillMaxHeight()
                     .fillMaxWidth(fraction)
                     .clip(ShapeSmall)
-                    .background(Amber)
+                    .background(DzGreen400)
             )
         }
     }
 }
 
-/** Static hero backdrop: channel thumbnail (preferred) or logo on solid [Void900]. */
+/** Hero backdrop: channel thumbnail (preferred) or logo on solid [Atlas900].
+ *  Subtle Ken Burns slow-zoom for a premium feel (skipped when reduceMotion). */
 @Composable
 private fun HeroBackdrop(
     channel: ChannelUiModel,
@@ -314,6 +329,16 @@ private fun HeroBackdrop(
     safeMargin: Dp,
     modifier: Modifier = Modifier
 ) {
+    val reduceMotion = LocalPerfProfile.current.reduceMotion
+    val zoom = remember { Animatable(1f) }
+    LaunchedEffect(Unit) {
+        if (!reduceMotion) {
+            while (true) {
+                zoom.animateTo(1.08f, tween(durationMillis = 24_000, easing = LinearEasing))
+                zoom.animateTo(1f, tween(durationMillis = 24_000, easing = LinearEasing))
+            }
+        }
+    }
     val context = LocalContext.current
     val density = LocalDensity.current
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
@@ -344,7 +369,12 @@ private fun HeroBackdrop(
             contentScale = ContentScale.Crop,
             placeholder = placeholderPainter,
             error = placeholderPainter,
-            modifier = modifier.fillMaxSize()
+            modifier = modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = zoom.value
+                    scaleY = zoom.value
+                }
         )
     } else {
         // No captured frame: a large, faint category-icon watermark on the right
@@ -428,8 +458,8 @@ private fun WatchNowButton(
         )
         Spacer(modifier = Modifier.width(Dimens.Space2))
         Text(
-            text = "Watch now",
-            // Use the Manrope label style (not the tall display face, whose caps
+            text = "شاهد الآن",
+            // Use the Cairo label style (not the tall display face, whose caps
             // get clipped inside a button's constrained content row).
             style = MaterialTheme.typography.labelLarge,
             color = labelColor,

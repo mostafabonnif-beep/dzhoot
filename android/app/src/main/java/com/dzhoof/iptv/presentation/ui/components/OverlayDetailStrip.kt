@@ -23,6 +23,7 @@ import com.dzhoof.iptv.presentation.ui.theme.LabelToast
 import com.dzhoof.iptv.presentation.ui.theme.OnVideo
 import com.dzhoof.iptv.presentation.ui.theme.TextSecondary
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 
 /** Lookup key into [com.dzhoof.iptv.presentation.model.PlayerUiState.overlayEpg]. */
 internal fun overlayEpgKey(tvgId: String?): String? =
@@ -62,7 +63,7 @@ internal fun OverlayDetailStrip(
             if (channel != null && channel.category.isNotBlank()) {
                 Spacer(modifier = Modifier.width(Dimens.Space2))
                 Text(
-                    text = channel.category,
+                    text = CategoryLocalizer.localize(channel.category),
                     style = LabelToast,
                     color = categoryColor(channel.category),
                     maxLines = 1

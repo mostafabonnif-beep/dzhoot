@@ -36,4 +36,4 @@ Allow: /
 Disallow: /admin/
 Disallow: /user/
 
-Sitemap: https://tv.cadnative.com/sitemap.xml
+Sitemap: https://iptv.ld-11.net/sitemap.xml

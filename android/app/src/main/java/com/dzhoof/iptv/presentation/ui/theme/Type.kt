@@ -16,27 +16,28 @@ import com.dzhoof.iptv.R
  *
  * Brand typefaces (bundled variable fonts, weight selected via FontVariation
  * so a single .ttf per family covers every weight):
- *   • Display  — Space Grotesk (headings, hero numerics) — geometric, characterful
- *   • Body     — Manrope (body, labels, badges)          — clean, highly legible
+ *   • Display  — Noto Kufi Arabic (headings, hero numerics) — geometric, premium TV look
+ *   • Body     — Cairo (body, labels, badges)              — clean, highly legible Arabic
  * Both mirror the web dashboard's fonts for cross-surface brand consistency.
  * Bundled (not Downloadable Fonts) so they render on Fire TV without Play Services.
  */
 
 @OptIn(ExperimentalTextApi::class)
 private fun displayFont(weight: FontWeight) = Font(
-    R.font.space_grotesk,
+    R.font.noto_kufi_arabic,
     weight = weight,
     variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
 )
 
 @OptIn(ExperimentalTextApi::class)
 private fun bodyFont(weight: FontWeight) = Font(
-    R.font.manrope,
+    R.font.cairo,
     weight = weight,
     variationSettings = FontVariation.Settings(FontVariation.weight(weight.weight)),
 )
 
-// Space Grotesk tops out at 700; ExtraBold requests resolve to the Bold entry.
+// Noto Kufi Arabic tops out at 900; ExtraBold (800) and Black (900) requests
+// resolve to the heaviest available entry.
 val DisplayFontFamily = FontFamily(
     displayFont(FontWeight.Medium),
     displayFont(FontWeight.SemiBold),

@@ -70,6 +70,17 @@ async function verifiedXtreamChannelQuery(baseQuery) {
 // payloads, not a browse limit. Override via TV_CHANNELS_MAX if the catalog grows.
 const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 20000;
 
+// ── Demo mode (وضع الديمو) ──────────────────────────────────────────
+// The app's "Browse demo channels" flow fetches /api/v1/app/demo-code,
+// then syncs channels with that code. Demo users get a curated subset of
+// the catalog — by default the Algerian group — not the full catalog.
+const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA الجزائر')
+  .split(',')
+  .map((g) => g.trim())
+  .filter(Boolean);
+const DEMO_CHANNELS_MAX = Number(process.env.DEMO_CHANNELS_MAX) || 50;
+const isDemoRequest = (req) => req.user?.demo === true;
+
 // In-memory rate-limit maps for stream metrics reporting
 const reportStatusLimits = new Map();
 const reportPlayLimits = new Map();
@@ -218,6 +229,22 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     // served from the shared cache (tokens are user-bound and expire). Only the
     // URL-free slim payload is cached for web/session consumers.
     const isTvClient = Boolean(req.user?.channelListCode);
+
+    // Demo mode: curated catalog only (e.g. Algerian channels) — never the
+    // full catalog, and always tokenized like any TV client.
+    if (isDemoRequest(req)) {
+      const demoQuery = await verifiedXtreamChannelQuery({
+        isActive: { $ne: false },
+        channelGroup: { $in: DEMO_CHANNEL_GROUPS },
+      });
+      const channels = await Channel.find(demoQuery)
+        .sort({ channelGroup: 1, order: 1 })
+        .limit(DEMO_CHANNELS_MAX)
+        .select(CHANNEL_LIST_FIELDS)
+        .lean();
+      const data = tokenizeListForClient(channels, req.user, req);
+      return res.json({ success: true, count: channels.length, data });
+    }
 
     if (catalogView && !isTvClient) {
       const cached = await channelCache.get('catalog:list');
@@ -508,9 +535,19 @@ router.get('/test-status', requireAuth, async (req, res) => {
 // Get channel by ID
 router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'Admin') {
+    if (req.user.role !== 'Admin' && !isDemoRequest(req)) {
       const userChannelIds = (req.user.channels || []).map((id) => id.toString());
       if (!userChannelIds.includes(req.params.id)) {
+        return res.status(404).json({ success: false, error: 'Channel not found' });
+      }
+    }
+    if (isDemoRequest(req)) {
+      const inDemo = await Channel.exists({
+        _id: req.params.id,
+        isActive: { $ne: false },
+        channelGroup: { $in: DEMO_CHANNEL_GROUPS },
+      });
+      if (!inDemo) {
         return res.status(404).json({ success: false, error: 'Channel not found' });
       }
     }
@@ -677,9 +714,19 @@ router.delete('/:id', requireAuth, requireAdmin, async (req, res) => {
 // Get channel with filtered fallback streams (for Android app)
 router.get('/:id/with-fallbacks', requireAuth, async (req, res) => {
   try {
-    if (req.user.role !== 'Admin') {
+    if (req.user.role !== 'Admin' && !isDemoRequest(req)) {
       const userChannelIds = (req.user.channels || []).map((id) => id.toString());
       if (!userChannelIds.includes(req.params.id)) {
+        return res.status(404).json({ success: false, error: 'Channel not found' });
+      }
+    }
+    if (isDemoRequest(req)) {
+      const inDemo = await Channel.exists({
+        _id: req.params.id,
+        isActive: { $ne: false },
+        channelGroup: { $in: DEMO_CHANNEL_GROUPS },
+      });
+      if (!inDemo) {
         return res.status(404).json({ success: false, error: 'Channel not found' });
       }
     }

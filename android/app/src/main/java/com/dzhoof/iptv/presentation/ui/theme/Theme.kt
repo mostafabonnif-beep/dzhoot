@@ -19,32 +19,32 @@ val subtleBorder: Color
     @Composable get() = if (LocalIsDarkTheme.current) SubtleBorderDark else SubtleBorderLight
 
 private val DarkColorScheme = darkColorScheme(
-    // Primary — Flame300 (bright amber, high contrast on void surfaces)
-    primary = Flame300,
-    onPrimary = Flame700,
-    primaryContainer = Flame400,
-    onPrimaryContainer = Flame50,
+    // Primary — DzGreen300 (bright amber, high contrast on void surfaces)
+    primary = DzGreen300,
+    onPrimary = DzGreen700,
+    primaryContainer = DzGreen400,
+    onPrimaryContainer = DzGreen50,
 
-    // Secondary — warm accent (Flame400, complementary to primary)
-    secondary = Flame400,
-    onSecondary = Flame50,
-    secondaryContainer = Flame500,
-    onSecondaryContainer = Flame50,
+    // Secondary — warm accent (DzGreen400, complementary to primary)
+    secondary = DzGreen400,
+    onSecondary = DzGreen50,
+    secondaryContainer = DzGreen500,
+    onSecondaryContainer = DzGreen50,
 
-    // Tertiary — Flame100 for subtle accent
-    tertiary = Flame100,
-    onTertiary = Flame700,
-    tertiaryContainer = Flame400,
-    onTertiaryContainer = Flame50,
+    // Tertiary — DzGreen100 for subtle accent
+    tertiary = DzGreen100,
+    onTertiary = DzGreen700,
+    tertiaryContainer = DzGreen400,
+    onTertiaryContainer = DzGreen50,
 
-    // Background — Void950
-    background = Void950,
+    // Background — Atlas950
+    background = Atlas950,
     onBackground = TextPrimaryDark,
 
-    // Surface — Void800
-    surface = Void800,
+    // Surface — Atlas800
+    surface = Atlas800,
     onSurface = TextPrimaryDark,
-    surfaceVariant = Void700,
+    surfaceVariant = Atlas700,
     onSurfaceVariant = TextSecondaryDark,
 
     // Error
@@ -54,70 +54,70 @@ private val DarkColorScheme = darkColorScheme(
     onErrorContainer = Color(0xFFFFC4C4),
 
     // Outline
-    outline = Void600,
-    outlineVariant = Void700,
+    outline = Atlas600,
+    outlineVariant = Atlas700,
 
     // Inverse
-    inverseSurface = Parchment200,
+    inverseSurface = Sand200,
     inverseOnSurface = TextPrimaryLight,
-    inversePrimary = Flame500,
+    inversePrimary = DzGreen500,
 
     // Scrim
-    scrim = Color(0xFF050508),
+    scrim = Atlas950,
 
     // Surface tint
-    surfaceTint = Flame300
+    surfaceTint = DzGreen300
 )
 
 private val LightColorScheme = lightColorScheme(
-    // Primary — Flame500 (deep amber, sufficient contrast on parchment)
-    primary = Flame500,
-    onPrimary = Parchment50,
-    primaryContainer = Flame100,
-    onPrimaryContainer = Flame700,
+    // Primary — DzGreen500 (deep amber, sufficient contrast on parchment)
+    primary = DzGreen500,
+    onPrimary = Sand50,
+    primaryContainer = DzGreen100,
+    onPrimaryContainer = DzGreen700,
 
-    // Secondary — warm accent (Flame700, complementary to primary)
-    secondary = Flame700,
-    onSecondary = Parchment50,
-    secondaryContainer = Flame100,
-    onSecondaryContainer = Flame700,
+    // Secondary — warm accent (DzGreen700, complementary to primary)
+    secondary = DzGreen700,
+    onSecondary = Sand50,
+    secondaryContainer = DzGreen100,
+    onSecondaryContainer = DzGreen700,
 
-    // Tertiary — Flame400
-    tertiary = Flame400,
-    onTertiary = Parchment50,
-    tertiaryContainer = Flame50,
-    onTertiaryContainer = Flame700,
+    // Tertiary — DzGreen400
+    tertiary = DzGreen400,
+    onTertiary = Sand50,
+    tertiaryContainer = DzGreen50,
+    onTertiaryContainer = DzGreen700,
 
-    // Background — Parchment50
-    background = Parchment50,
+    // Background — Sand50
+    background = Sand50,
     onBackground = TextPrimaryLight,
 
-    // Surface — Parchment200
-    surface = Parchment200,
+    // Surface — Sand200
+    surface = Sand200,
     onSurface = TextPrimaryLight,
-    surfaceVariant = Parchment300,
+    surfaceVariant = Sand300,
     onSurfaceVariant = TextSecondaryLight,
 
     // Error
     error = ErrorLight,
-    onError = Parchment50,
+    onError = Sand50,
     errorContainer = Color(0xFFFFDAD6),
     onErrorContainer = Color(0xFF5C0000),
 
     // Outline
-    outline = Parchment500,
-    outlineVariant = Parchment300,
+    outline = Sand500,
+    outlineVariant = Sand300,
 
     // Inverse
-    inverseSurface = Void800,
+    inverseSurface = Atlas800,
     inverseOnSurface = TextPrimaryDark,
-    inversePrimary = Flame300,
+    inversePrimary = DzGreen300,
 
     // Scrim
-    scrim = Color(0xFF0A0A12),
+    scrim = Atlas950,
 
     // Surface tint
-    surfaceTint = Flame500
+    surfaceTint = DzGreen500
 )
 
 @Composable

@@ -4,6 +4,7 @@ import com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import javax.inject.Inject
 import javax.inject.Singleton
 
