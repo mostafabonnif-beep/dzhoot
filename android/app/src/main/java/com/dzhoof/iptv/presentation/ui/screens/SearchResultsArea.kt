@@ -90,17 +90,26 @@ internal fun SearchResultsArea(
                     LaunchedEffect(Unit) { keyboardController?.hide() }
                 }
                 Column(modifier = Modifier.fillMaxSize()) {
-                    val totalCount = uiState.results.size + uiState.unifiedResults.totalCount
+                    // The API catalog can return live channels that are already in
+                    // the local indexed results. Show a channel once, preferring
+                    // the richer catalog card, so counts and navigation stay honest.
+                    val catalogChannelIds = remember(uiState.unifiedResults.channels) {
+                        uiState.unifiedResults.channels.mapTo(HashSet()) { it.id }
+                    }
+                    val localOnlyChannels = remember(uiState.results, catalogChannelIds) {
+                        uiState.results.filterNot { it.id in catalogChannelIds }
+                    }
+                    val totalCount = localOnlyChannels.size + uiState.unifiedResults.totalCount
                     Text(
                         text = "$totalCount نتيجة للبحث عن \"$searchQuery\"",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.secondary,
                         modifier = Modifier.padding(bottom = Dimens.RowTitleGap),
                     )
-                    val matchedCategories = remember(uiState.results, searchQuery) {
+                    val matchedCategories = remember(localOnlyChannels, searchQuery) {
                         val q = searchQuery.trim()
                         if (q.isBlank()) emptyList()
-                        else uiState.results
+                        else localOnlyChannels
                             .map { it.category }
                             .filter { it.isNotBlank() && it.contains(q, ignoreCase = true) }
                             .distinct()
@@ -122,7 +131,7 @@ internal fun SearchResultsArea(
                         onSeriesClick = onSeriesClick,
                         onProgramClick = onProgramClick,
                     )
-                    if (uiState.results.isNotEmpty()) {
+                    if (localOnlyChannels.isNotEmpty()) {
                         Text(
                             text = stringResource(R.string.search_live_channels),
                             style = MaterialTheme.typography.titleMedium,
@@ -136,7 +145,7 @@ internal fun SearchResultsArea(
                             horizontalArrangement = Arrangement.spacedBy(Dimens.GridGap),
                             verticalArrangement = Arrangement.spacedBy(Dimens.GridGap),
                         ) {
-                            itemsIndexed(uiState.results, key = { _, channel -> channel.id }) { index, channel ->
+                            itemsIndexed(localOnlyChannels, key = { _, channel -> channel.id }) { index, channel ->
                                 ChannelCard(
                                     channel = channel,
                                     onClick = { onChannelClick(channel.id) },
