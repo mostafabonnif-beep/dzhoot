@@ -8,6 +8,16 @@ const Episode = require('../models/Episode');
 const EpgProgram = require('../models/EpgProgram');
 const { optionalAuth } = require('../middleware/resolveUser');
 const { escapeRegex } = require('../utils/escapeRegex');
+const { ensureSeriesSeasons, ensureSeasonEpisodes } = require('../services/xtream-service');
+
+// Lazy upstream episode loading: a series whose seasons were never fetched is
+// fetched from the panel at most once per this window (the episodesFetchedAt
+// stamp on the series doc bounds re-fetches for genuinely episode-less series).
+const EPISODE_FETCH_STALE_MS = 24 * 60 * 60 * 1000;
+function episodeFetchStale(series) {
+  const fetchedAt = series?.episodesFetchedAt ? new Date(series.episodesFetchedAt).getTime() : 0;
+  return Date.now() - fetchedAt > EPISODE_FETCH_STALE_MS;
+}
 
 // Browseable catalog (movies / series / seasons / episodes / unified search).
 // Auth is optional — anonymous browsing is allowed; subscription gating is
@@ -140,7 +150,18 @@ router.get('/series/:id/seasons', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid series id' });
     const series = await Series.findOne({ _id: id, isActive: true }).lean();
     if (!series) return res.status(404).json({ success: false, error: 'Series not found' });
-    const seasons = await Season.find({ seriesId: id }).sort({ seasonNumber: 1 }).lean();
+    let seasons = await Season.find({ seriesId: id }).sort({ seasonNumber: 1 }).lean();
+    // Lazy seasons: the app reads THIS route — without the fetch, every series
+    // shows zero seasons forever (the /series.js twin had an admin-only fetch
+    // that app users never triggered).
+    if (seasons.length === 0 && episodeFetchStale(series)) {
+      try {
+        const fetched = await ensureSeriesSeasons(String(series._id));
+        if (fetched.length > 0) seasons = fetched;
+      } catch (err) {
+        console.warn(`[catalog] lazy seasons fetch failed for series ${id}:`, err.message);
+      }
+    }
     return res.json({ success: true, data: seasons });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
@@ -154,12 +175,25 @@ router.get('/seasons/:id/episodes', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid season id' });
     const season = await Season.findById(id).select('seriesId').lean();
     if (!season) return res.status(404).json({ success: false, error: 'Season not found' });
-    const series = await Series.findOne({ _id: season.seriesId, isActive: true }).select('_id').lean();
+    const series = await Series.findOne({ _id: season.seriesId, isActive: true }).select('_id episodesFetchedAt').lean();
     if (!series) return res.status(404).json({ success: false, error: 'Series not found' });
-    const episodes = await Episode.find({ seasonId: id, seriesId: season.seriesId })
+    let episodes = await Episode.find({ seasonId: id, seriesId: season.seriesId })
       .select('-streamUrl')
       .sort({ episodeNumber: 1 })
       .lean();
+    if (episodes.length === 0 && episodeFetchStale(series)) {
+      try {
+        const stored = await ensureSeasonEpisodes(String(season._id));
+        if (stored > 0) {
+          episodes = await Episode.find({ seasonId: id, seriesId: season.seriesId })
+            .select('-streamUrl')
+            .sort({ episodeNumber: 1 })
+            .lean();
+        }
+      } catch (err) {
+        console.warn(`[catalog] lazy episodes fetch failed for season ${id}:`, err.message);
+      }
+    }
     return res.json({ success: true, data: episodes });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });

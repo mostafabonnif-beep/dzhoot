@@ -68,9 +68,15 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
 
     let seasons = await Season.find({ seriesId: series._id }).sort({ seasonNumber: 1 }).lean();
 
-    // Lazy seasons: if none are stored yet, fetch them (and episodes) from the
-    // Xtream panel on demand for admins. Best-effort.
-    if (seasons.length === 0 && req.user?.role === 'Admin') {
+    // Lazy seasons for EVERY viewer (not just admins): customers hit this from
+    // the app — restricting the fetch to admins meant series could never load
+    // episodes for real users. The episodesFetchedAt stamp bounds the upstream
+    // cost: a series that genuinely has no episodes is re-fetched at most once
+    // per EPISODE_FETCH_STALE_MS instead of on every open. Best-effort.
+    const EPISODE_FETCH_STALE_MS = 24 * 60 * 60 * 1000;
+    const fetchedAt = series.episodesFetchedAt ? new Date(series.episodesFetchedAt).getTime() : 0;
+    const fetchStale = Date.now() - fetchedAt > EPISODE_FETCH_STALE_MS;
+    if (seasons.length === 0 && fetchStale) {
       try {
         const fetched = await ensureSeriesSeasons(String(series._id));
         if (fetched.length > 0) {
@@ -101,7 +107,7 @@ router.get('/seasons/:seasonId/episodes', requireTvOrSessionAuth, async (req, re
     if (!season) {
       return res.status(404).json({ success: false, error: 'Season not found' });
     }
-    const series = await Series.findOne({ _id: season.seriesId, isActive: true }).select('_id').lean();
+    const series = await Series.findOne({ _id: season.seriesId, isActive: true }).select('_id episodesFetchedAt').lean();
     if (!series) {
       return res.status(404).json({ success: false, error: 'Series not found' });
     }
@@ -110,11 +116,15 @@ router.get('/seasons/:seasonId/episodes', requireTvOrSessionAuth, async (req, re
       .sort({ episodeNumber: 1 })
       .lean();
 
-    // Lazy episodes: if this season has none stored yet and the requester is an
-    // admin, fetch them from the panel on demand (fast for a single series),
-    // persist, and re-query. Best-effort — a blocked source returns an empty
-    // list with an explanatory flag instead of failing the request.
-    if (episodes.length === 0 && req.user?.role === 'Admin') {
+    // Lazy episodes for EVERY viewer (same rationale as the series endpoint):
+    // fetch from the panel on first open, persist, re-query. The
+    // episodesFetchedAt stamp caps upstream calls for genuinely-empty series.
+    // Best-effort — a blocked source returns an empty list with an explanatory
+    // flag instead of failing the request.
+    const EPISODE_FETCH_STALE_MS = 24 * 60 * 60 * 1000;
+    const fetchedAt = series.episodesFetchedAt ? new Date(series.episodesFetchedAt).getTime() : 0;
+    const fetchStale = Date.now() - fetchedAt > EPISODE_FETCH_STALE_MS;
+    if (episodes.length === 0 && fetchStale) {
       try {
         const stored = await ensureSeasonEpisodes(String(season._id));
         if (stored > 0) {

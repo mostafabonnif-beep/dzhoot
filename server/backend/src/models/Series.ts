@@ -14,6 +14,7 @@ export interface ISeriesDocument extends Document {
   releaseDate?: string;
   rating?: number | null;
   isActive: boolean;
+  episodesFetchedAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +34,11 @@ const seriesSchema = new Schema<ISeriesDocument>(
     releaseDate: { type: String, default: '' },
     rating: { type: Number, default: null },
     isActive: { type: Boolean, default: true, index: true },
+    // Last time seasons/episodes were (attempted to be) fetched from the panel.
+    // Prevents re-hammering the upstream API for series that genuinely have no
+    // episodes — without it every "empty" series would trigger a fresh
+    // get_series_info call on every open.
+    episodesFetchedAt: { type: Date, default: null },
   },
   { timestamps: true },
 );
