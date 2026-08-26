@@ -252,35 +252,62 @@ private fun MovieDetails(
     onPlay: (Movie) -> Unit,
 ) {
     if (movie == null) return
+    val isCompact = LocalConfiguration.current.screenWidthDp < 600
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = onBack) { Text("رجوع") }
         Spacer(modifier = Modifier.width(16.dp))
-        Text(movie.title, style = MaterialTheme.typography.headlineSmall)
+        Text(movie.title, style = MaterialTheme.typography.headlineSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
     Spacer(modifier = Modifier.height(16.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        AsyncImage(
-            model = movie.poster,
-            contentDescription = movie.title,
-            modifier = Modifier
-                .width(180.dp)
-                .height(260.dp)
-                .clip(MaterialTheme.shapes.medium),
-            contentScale = ContentScale.Crop,
-        )
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            movie.description?.takeIf { it.isNotBlank() }?.let { Text(it, maxLines = 6, overflow = TextOverflow.Ellipsis) }
-            Text("التصنيف: ${movie.category}")
-            movie.year?.let { Text("السنة: $it") }
-            movie.rating?.let { Text("التقييم: $it") }
-            movie.durationMinutes?.let { Text("المدة: $it دقيقة") }
-            Button(onClick = { onPlay(movie) }) { Text("تشغيل الفيلم") }
+    if (isCompact) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            AsyncImage(
+                model = movie.poster,
+                contentDescription = movie.title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clip(MaterialTheme.shapes.medium),
+                contentScale = ContentScale.Crop,
+            )
+            MovieMetadata(movie = movie, onPlay = onPlay)
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            AsyncImage(
+                model = movie.poster,
+                contentDescription = movie.title,
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(260.dp)
+                    .clip(MaterialTheme.shapes.medium),
+                contentScale = ContentScale.Crop,
+            )
+            MovieMetadata(movie = movie, onPlay = onPlay, modifier = Modifier.weight(1f))
         }
     }
     if (isLoading) CircularProgressIndicator()
     error?.let {
         Spacer(modifier = Modifier.height(12.dp))
         ErrorState(message = it, onRetry = onRetry)
+    }
+}
+
+@Composable
+private fun MovieMetadata(
+    movie: Movie,
+    onPlay: (Movie) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        movie.description?.takeIf { it.isNotBlank() }?.let {
+            Text(it, maxLines = 6, overflow = TextOverflow.Ellipsis)
+        }
+        Text("التصنيف: ${movie.category}")
+        movie.year?.let { Text("السنة: $it") }
+        movie.rating?.let { Text("التقييم: $it") }
+        movie.durationMinutes?.let { Text("المدة: $it دقيقة") }
+        Button(onClick = { onPlay(movie) }) { Text("تشغيل الفيلم") }
     }
 }
 
