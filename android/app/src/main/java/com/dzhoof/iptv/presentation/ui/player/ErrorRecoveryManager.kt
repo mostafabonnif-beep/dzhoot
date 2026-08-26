@@ -148,11 +148,25 @@ class ErrorRecoveryManager(
             }
         }
 
-        if (isNetworkError(error) && totalAttempts < maxTotalAttempts) {
-            onError(errorMessage)
-            attemptReconnect()
-        } else {
+        if (totalAttempts >= maxTotalAttempts) {
             onStreamDead(errorMessage, error.errorCodeName)
+            return
+        }
+        when {
+            isNetworkError(error) -> {
+                onError(errorMessage)
+                attemptReconnect()
+            }
+            isParsingError(error) && hasFallbackRemaining() -> {
+                // A parsing error means the bytes we got are unusable — retrying
+                // the SAME URL just re-fetches the same bytes. Skip directly to
+                // the proxy (which normalizes the container) or the next slot.
+                onError(errorMessage)
+                skipToFallback()
+            }
+            else -> {
+                onStreamDead(errorMessage, error.errorCodeName)
+            }
         }
     }
 
@@ -160,6 +174,31 @@ class ErrorRecoveryManager(
         return error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
                 error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
                 error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+    }
+
+    private fun isParsingError(error: PlaybackException): Boolean {
+        return error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ||
+                error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED
+    }
+
+    /** True when another URL (proxy for this slot, or a later slot) is still untried. */
+    private fun hasFallbackRemaining(): Boolean {
+        val slot = streamSlots.getOrNull(currentSlotIndex) ?: return false
+        if (!isProxyAttempt() && slot.proxyUrl != null) return true
+        return currentSlotIndex < streamSlots.size - 1
+    }
+
+    /**
+     * Jump past the remaining same-URL retries so the next attempt uses the
+     * slot's proxy URL (or moves to the next slot). Used for parsing errors,
+     * where re-fetching identical bytes cannot recover playback.
+     */
+    private fun skipToFallback() {
+        val directAttempts = if (currentSlotIndex == 0) 3 else 1
+        attemptInSlot = maxOf(attemptInSlot, directAttempts)
+        attemptReconnect()
     }
 
     private fun attemptReconnect() {

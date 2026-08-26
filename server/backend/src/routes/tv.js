@@ -111,15 +111,21 @@ function isCustomerVisibleChannel(channel, verifiedSourceIds, directPlaybackSour
 }
 
 function inferPlaybackMimeType(streamUrl) {
-  const raw = String(streamUrl || '').toLowerCase();
-  const path = raw.split(/[?#]/, 1)[0];
-  if (/\.(m3u8|m3u)$/.test(path) || raw.includes('output=m3u8')) {
-    return 'application/vnd.apple.mpegurl';
-  }
-  if (/\.(ts|mpeg|mp2t)$/.test(path) || raw.includes('output=ts')) {
-    return 'video/mp2t';
-  }
-  return null;
+  // Shared implementation lives in utils/playback-mime (also used by
+  // routes/streams.js) — kept as a local alias so existing call sites and
+  // tests stay untouched.
+  return require('../utils/playback-mime').inferPlaybackMimeType(streamUrl);
+}
+
+/** True when the tokenized URL serves an HLS playlist (vs progressive bytes). */
+function isHlsPlayback(streamUrl) {
+  return inferPlaybackMimeType(streamUrl) === 'application/x-mpegurl';
+}
+
+/** Token URL with a container hint suffix only when the payload is HLS. */
+function playbackTokenUrl(baseUrl, token, streamUrl) {
+  const suffix = isHlsPlayback(streamUrl) ? '.m3u8' : '';
+  return `${baseUrl}/api/v1/tv/playback/${token}${suffix}`;
 }
 
 async function ensurePlaybackSubscription(user, res) {
@@ -169,7 +175,7 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
         referrer: source.activeReferrer || undefined,
       },
     });
-    safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}.m3u8`;
+    safe.channelUrl = playbackTokenUrl(baseUrl, token, source.channelUrl);
   }
   safe.alternateStreams = await Promise.all(
     (source.alternateStreams || [])
@@ -186,7 +192,7 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
             referrer: alternate.referrer || undefined,
           },
         });
-        return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}.m3u8` };
+        return { ...alternate, streamUrl: playbackTokenUrl(baseUrl, token, alternate.streamUrl) };
       }),
   );
   return safe;
@@ -455,7 +461,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       return res.json({
         success: true,
         data: {
-          playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}.m3u8`,
+          playbackUrl: playbackTokenUrl(getPublicBaseUrl(req), token, vodDoc.streamUrl),
           mimeType: inferPlaybackMimeType(vodDoc.streamUrl),
           expiresAt,
           slot: 0,
@@ -612,7 +618,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     return res.json({
       success: true,
       data: {
-        playbackUrl: `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}.m3u8`,
+        playbackUrl: playbackTokenUrl(getPublicBaseUrl(req), token, streamUrl),
         // The token URL has no file extension. Tell clients whether the first
         // response is an HLS manifest or an MPEG-TS stream so Media3 does not
         // have to guess from an opaque URL.

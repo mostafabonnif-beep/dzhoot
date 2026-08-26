@@ -257,7 +257,7 @@ class CatalogRepositoryImpl @Inject constructor(
                 )
                 val body = response.body()
                 if (response.isSuccessful && body?.success == true && body.data != null) {
-                    Result.Success(PlaybackAuthorization(body.data.url, body.data.expiresAt))
+                    Result.Success(PlaybackAuthorization(body.data.url, body.data.expiresAt, body.data.mimeType))
                 } else {
                     Result.Error(Exception(body?.error ?: playbackAuthorizationError(response)))
                 }
