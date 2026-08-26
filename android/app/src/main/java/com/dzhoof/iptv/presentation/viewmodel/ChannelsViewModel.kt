@@ -27,6 +27,7 @@ import com.dzhoof.iptv.presentation.mapper.ChannelUiMapper
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.ChannelsUiState
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
@@ -272,7 +273,7 @@ class ChannelsViewModel @Inject constructor(
                     allCatNames.mapNotNull { catName ->
                         val catChannels = categoryChannels[catName] ?: return@mapNotNull null
                         PopularCategoryUiModel(
-                            name = catName,
+                            name = CategoryLocalizer.localize(catName),
                             channelCount = catChannels.size,
                             imageUrl = catChannels.firstOrNull { it.thumbnailPath != null }?.thumbnailPath
                                 ?: catChannels.firstOrNull { it.logoUrl != null }?.logoUrl,

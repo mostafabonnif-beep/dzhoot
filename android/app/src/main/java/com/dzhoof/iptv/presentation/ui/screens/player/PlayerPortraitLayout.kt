@@ -53,6 +53,7 @@ import com.dzhoof.iptv.presentation.ui.theme.OnVideo
 import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
 import com.dzhoof.iptv.presentation.ui.theme.SurfaceElevated
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 
 /** Callbacks for the portrait sections below the docked video. */
 internal class PortraitSectionActions(
@@ -146,7 +147,7 @@ private fun PortraitDetailSection(
                         modifier = Modifier.padding(top = Dimens.Space1)
                     ) {
                         Text(
-                            text = channel.category,
+                            text = CategoryLocalizer.localize(channel.category),
                             style = LabelBadge,
                             color = catColor,
                             modifier = Modifier.padding(horizontal = Dimens.Space2, vertical = Dimens.BadgePaddingV)

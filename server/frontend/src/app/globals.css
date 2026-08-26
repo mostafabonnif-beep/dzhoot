@@ -4,78 +4,80 @@
 
 @layer base {
   :root {
-    /* ── Light Mode — Parchment + Flame500 ───────────────────────────── */
-    /* Parchment-50  #FAF8F4 */ --background: 40 33% 97%;
-    /* Parchment-200 #EDE8DE */ --card: 38 22% 89%;
-    /* Parchment-200 #EDE8DE */ --popover: 38 22% 89%;
-    /* text-primary  #1C1A24 */ --foreground: 252 15% 12%;
-    /* text-primary  #1C1A24 */ --card-foreground: 252 15% 12%;
-    /* text-primary  #1C1A24 */ --popover-foreground: 252 15% 12%;
-    /* Flame-500     #B85E10 */ --primary: 30 84% 38%;
-    /* Parchment-50  #FAF8F4 */ --primary-foreground: 40 33% 97%;
-    /* Parchment-100 #F4F0E8 */ --secondary: 40 29% 93%;
-    /* text-primary  #1C1A24 */ --secondary-foreground: 252 15% 12%;
-    /* Parchment-100 #F4F0E8 */ --muted: 40 29% 93%;
-    /* text-secondary #5A5470*/ --muted-foreground: 260 13% 39%;
-    /* Flame-100     #FFD080 */ --accent: 38 100% 75%;
-    /* Flame-700     #7A3A06 */ --accent-foreground: 26 90% 25%;
+    /* ── Light Mode — Sand + DzGreen500 (الهوية الجزائرية) ──────────── */
+    /* Sand-50      #F6F9F7 */ --background: 140 20% 97%;
+    /* Sand-200     #E2EAE4 */ --card: 135 16% 90%;
+    /* Sand-200     #E2EAE4 */ --popover: 135 16% 90%;
+    /* text-primary #14201A */ --foreground: 150 23% 10%;
+    /* text-primary #14201A */ --card-foreground: 150 23% 10%;
+    /* text-primary #14201A */ --popover-foreground: 150 23% 10%;
+    /* DzGreen-500  #059669 */ --primary: 161 94% 30%;
+    /* Sand-50      #F6F9F7 */ --primary-foreground: 140 20% 97%;
+    /* Sand-100     #ECF2EE */ --secondary: 140 19% 94%;
+    /* text-primary #14201A */ --secondary-foreground: 150 23% 10%;
+    /* Sand-100     #ECF2EE */ --muted: 140 19% 94%;
+    /* text-secondary #3E5A4C*/ --muted-foreground: 150 27% 30%;
+    /* DzGreen-100  #A7F3D0 */ --accent: 152 76% 80%;
+    /* DzGreen-700  #065F46 */ --accent-foreground: 163 88% 20%;
     /* Error light   #C02020 */ --destructive: 0 71% 44%;
-    /* Parchment-50  #FAF8F4 */ --destructive-foreground: 40 33% 97%;
-    /* Parchment-300 #E2DCD0 */ --border: 36 18% 85%;
-    /* Parchment-200 #EDE8DE */ --input: 38 22% 89%;
-    /* Flame-500     #B85E10 */ --ring: 30 84% 38%;
-                                --radius: 2px;
+    /* Sand-50      #F6F9F7 */ --destructive-foreground: 140 20% 97%;
+    /* Sand-300     #D4DED7 */ --border: 138 13% 85%;
+    /* Sand-200     #E2EAE4 */ --input: 135 16% 90%;
+    /* DzGreen-500  #059669 */ --ring: 161 94% 30%;
+    /* DzGold-400   #E8C468 */ --gold: 43 74% 66%;
+                                --radius: 10px;
     /* Signal — light mode */
     /* #1A8A40 */ --signal-green: 142 67% 32%;
     /* #C02020 */ --signal-red: 0 71% 44%;
     /* #1A60D0 */ --signal-blue: 217 78% 45%;
     /* #D07808 */ --signal-amber: 35 90% 42%;
     /* Sidebar */
-    /* Parchment-100 #F4F0E8 */ --sidebar-background: 40 29% 93%;
-    /* text-primary  #1C1A24 */ --sidebar-foreground: 252 15% 12%;
-    /* Flame-500     #B85E10 */ --sidebar-primary: 30 84% 38%;
-    /* Parchment-50  #FAF8F4 */ --sidebar-primary-foreground: 40 33% 97%;
-    /* Parchment-200 #EDE8DE */ --sidebar-accent: 38 22% 89%;
-    /* text-primary  #1C1A24 */ --sidebar-accent-foreground: 252 15% 12%;
-    /* Parchment-300 #E2DCD0 */ --sidebar-border: 36 18% 85%;
-    /* Flame-500     #B85E10 */ --sidebar-ring: 30 84% 38%;
+    /* Sand-100     #ECF2EE */ --sidebar-background: 140 19% 94%;
+    /* text-primary #14201A */ --sidebar-foreground: 150 23% 10%;
+    /* DzGreen-500  #059669 */ --sidebar-primary: 161 94% 30%;
+    /* Sand-50      #F6F9F7 */ --sidebar-primary-foreground: 140 20% 97%;
+    /* Sand-200     #E2EAE4 */ --sidebar-accent: 135 16% 90%;
+    /* text-primary #14201A */ --sidebar-accent-foreground: 150 23% 10%;
+    /* Sand-300     #D4DED7 */ --sidebar-border: 138 13% 85%;
+    /* DzGreen-500  #059669 */ --sidebar-ring: 161 94% 30%;
   }
 
   .dark {
-    /* ── Dark Mode — Void + Flame300 ─────────────────────────────────── */
-    /* Void-950   #0A0A12 */ --background: 240 30% 6%;
-    /* Void-800   #191921 */ --card: 240 15% 11%;
-    /* Void-800   #191921 */ --popover: 240 15% 11%;
+    /* ── Dark Mode — Atlas + DzGreen300 (الهوية الجزائرية) ──────────── */
+    /* Atlas-950  #070D0A */ --background: 150 30% 4%;
+    /* Atlas-800  #111D17 */ --card: 150 26% 9%;
+    /* Atlas-800  #111D17 */ --popover: 150 26% 9%;
     /* text-primary #F2EDE3*/ --foreground: 38 29% 92%;
     /* text-primary #F2EDE3*/ --card-foreground: 38 29% 92%;
     /* text-primary #F2EDE3*/ --popover-foreground: 38 29% 92%;
-    /* Flame-300  #F7A93A  */ --primary: 38 92% 60%;
-    /* Flame-700  #7A3A06  */ --primary-foreground: 26 90% 25%;
-    /* Void-700   #21212C  */ --secondary: 240 14% 16%;
-    /* text-secondary #A8A0B2 */ --secondary-foreground: 270 8% 66%;
-    /* Void-700   #21212C  */ --muted: 240 14% 16%;
-    /* text-secondary #A8A0B2 */ --muted-foreground: 270 8% 66%;
-    /* Flame-300  #F7A93A  */ --accent: 38 92% 60%;
-    /* Flame-700  #7A3A06  */ --accent-foreground: 26 90% 25%;
+    /* DzGreen-300 #34D399 */ --primary: 158 65% 52%;
+    /* Atlas-950  #070D0A */ --primary-foreground: 150 30% 4%;
+    /* Atlas-700  #16241D */ --secondary: 150 27% 11%;
+    /* text-secondary #A5B8AE */ --secondary-foreground: 148 12% 68%;
+    /* Atlas-700  #16241D */ --muted: 150 27% 11%;
+    /* text-secondary #A5B8AE */ --muted-foreground: 148 12% 68%;
+    /* DzGreen-300 #34D399 */ --accent: 158 65% 52%;
+    /* Atlas-950  #070D0A */ --accent-foreground: 150 30% 4%;
     /* Error dark  #E83838 */ --destructive: 0 78% 56%;
-    /* Parchment-50 #FAF8F4*/ --destructive-foreground: 40 33% 97%;
-    /* Void-600   #2A2B37  */ --border: 236 13% 19%;
-    /* Void-700   #21212C  */ --input: 240 14% 16%;
-    /* Flame-300  #F7A93A  */ --ring: 38 92% 60%;
+    /* Sand-50     #F6F9F7 */ --destructive-foreground: 140 20% 97%;
+    /* Atlas-600  #1D2E25 */ --border: 148 23% 15%;
+    /* Atlas-700  #16241D */ --input: 150 27% 11%;
+    /* DzGreen-300 #34D399 */ --ring: 158 65% 52%;
+    /* DzGold-300  #F0D68A */ --gold: 45 77% 74%;
     /* Signal — dark mode */
     /* #28B560 */ --signal-green: 142 62% 43%;
     /* #E83838 */ --signal-red: 0 78% 56%;
     /* #3D88F5 */ --signal-blue: 217 89% 60%;
     /* #F5A624 */ --signal-amber: 38 91% 55%;
     /* Sidebar */
-    /* Void-900   #11111A  */ --sidebar-background: 240 22% 8%;
+    /* Atlas-900  #0C1512 */ --sidebar-background: 160 32% 6%;
     /* text-primary #F2EDE3*/ --sidebar-foreground: 38 29% 92%;
-    /* Flame-300  #F7A93A  */ --sidebar-primary: 38 92% 60%;
-    /* Flame-700  #7A3A06  */ --sidebar-primary-foreground: 26 90% 25%;
-    /* Void-700   #21212C  */ --sidebar-accent: 240 14% 16%;
+    /* DzGreen-300 #34D399 */ --sidebar-primary: 158 65% 52%;
+    /* Atlas-950  #070D0A */ --sidebar-primary-foreground: 150 30% 4%;
+    /* Atlas-700  #16241D */ --sidebar-accent: 150 27% 11%;
     /* text-primary #F2EDE3*/ --sidebar-accent-foreground: 38 29% 92%;
-    /* Void-600   #2A2B37  */ --sidebar-border: 236 13% 19%;
-    /* Flame-300  #F7A93A  */ --sidebar-ring: 38 92% 60%;
+    /* Atlas-600  #1D2E25 */ --sidebar-border: 148 23% 15%;
+    /* DzGreen-300 #34D399 */ --sidebar-ring: 158 65% 52%;
   }
 }
 
@@ -107,7 +109,7 @@
 
 @layer utilities {
   .brand-gradient {
-    background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.82) 52%, hsl(var(--signal-amber)) 100%);
+    background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.82) 52%, hsl(var(--gold)) 100%);
   }
 
   .brand-glow {

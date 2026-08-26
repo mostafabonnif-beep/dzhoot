@@ -6,6 +6,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
@@ -13,8 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.input.key.onKeyEvent
@@ -42,7 +45,7 @@ fun CategoryCard(
     isFavorite: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String = "$channelCount " + if (channelCount == 1) "channel" else "channels",
+    subtitle: String = "$channelCount " + if (channelCount == 1) "قناة" else "قناة",
     onToggleFavorite: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -105,8 +108,8 @@ fun CategoryCard(
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                catColor.copy(alpha = 0.18f),
-                                catColor.copy(alpha = 0.04f)
+                                catColor.copy(alpha = 0.62f),
+                                catColor.copy(alpha = 0.28f)
                             )
                         )
                     )
@@ -131,19 +134,19 @@ fun CategoryCard(
                     placeholder = remember { ColorPainter(Void800) },
                     modifier = Modifier
                         .fillMaxSize()
-                        .alpha(0.14f)
+                        .alpha(0.24f)
                 )
             }
 
-            // Category icon — top-right, decorative
+            // Category icon — كبير ومركزي بلون أبيض (ستايل الموك-أب)
             Icon(
                 imageVector = catIcon,
                 contentDescription = null,
-                tint = catColor.copy(alpha = 0.4f),
+                tint = Color.White.copy(alpha = 0.92f),
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(Dimens.CardContentPadding)
-                    .size(iconSize)
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 18.dp)
+                    .size(iconSize * 1.35f)
             )
 
             // Accent line at top
@@ -152,15 +155,34 @@ fun CategoryCard(
                     .align(Alignment.TopStart)
                     .fillMaxWidth()
                     .height(3.dp)
-                    .background(catColor.copy(alpha = 0.8f))
+                    .background(Color.White.copy(alpha = 0.35f))
             )
+
+            // Count badge — أعلى اليمين (ستايل الموك-أب)
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(Dimens.CardContentPadding)
+                    .clip(RoundedCornerShape(50))
+                    .background(Color.White.copy(alpha = 0.22f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "$channelCount قناة",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1
+                )
+            }
 
             // Favorite badge — bottom-right, matching the channel card
             if (isFavorite) {
                 Icon(
                     imageVector = Icons.Filled.Favorite,
                     contentDescription = "Favorite",
-                    tint = Amber,
+                    tint = DzRed400,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(Dimens.CardContentPadding)
@@ -172,7 +194,7 @@ fun CategoryCard(
             // "Hold to favorite" hint when focused
             if (onToggleFavorite != null && isFocused && !isFavorite) {
                 Text(
-                    text = "Hold to favorite",
+                    text = "اضغط مطولًا لإضافتها للمفضلة",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier
@@ -192,15 +214,15 @@ fun CategoryCard(
                 Text(
                     text = name,
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = catColor,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = EmphasisMedium)
+                    color = Color.White.copy(alpha = 0.85f)
                 )
             }
         }

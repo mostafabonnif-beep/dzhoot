@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
@@ -15,10 +18,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.components.*
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.viewmodel.ChannelsViewModel
-
 @Composable
 fun CategoriesScreen(
     onCategoryClick: (String) -> Unit,
@@ -67,13 +70,16 @@ fun CategoriesScreen(
                                         ?: channels.firstOrNull { it.logoUrl != null }?.logoUrl
                                 )
                             }
-                            .sortedBy { it.first }
+                            // التنظيم: الأكبر أولًا + تجاهل التصنيفات الصغيرة جدًا (ضجيج)
+                            .filter { it.second >= 3 }
+                            .sortedByDescending { it.second }
                     }
 
+                    Column(modifier = Modifier.fillMaxSize()) {
                     LazyVerticalGrid(
                         columns = if (isCompact) GridCells.Fixed(2)
                                   else GridCells.Adaptive(minSize = 160.dp),
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.weight(1f),
                         contentPadding = PaddingValues(
                             start = if (isCompact) Dimens.ScreenPaddingHorizontalMobile
                                     else Dimens.ScreenPaddingHorizontalTv,
@@ -92,7 +98,7 @@ fun CategoriesScreen(
                     ) {
                         itemsIndexed(categoriesData) { index, (category, count, imageUrl) ->
                             CategoryCard(
-                                name = category,
+                                name = CategoryLocalizer.localize(category),
                                 channelCount = count,
                                 imageUrl = imageUrl,
                                 isFavorite = category in uiState.favoriteCategoryNames,
@@ -100,10 +106,22 @@ fun CategoriesScreen(
                                 onToggleFavorite = { viewModel.toggleCategoryFavorite(category) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(if (isCompact) Dimens.CategoryCardHeightMobile else 130.dp)
+                                    .height(if (isCompact) Dimens.CategoryCardHeightMobile else 142.dp)
                                     .animateItemEntrance(index)
                             )
                         }
+                    }
+                    if (!isCompact) {
+                        Text(
+                            text = "اضغط OK للدخول إلى التصنيف",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 18.dp, bottom = 22.dp)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                        )
+                    }
                     }
                 }
             }

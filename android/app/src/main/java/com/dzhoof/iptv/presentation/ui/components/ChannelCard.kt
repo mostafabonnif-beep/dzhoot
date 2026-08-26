@@ -57,6 +57,7 @@ import java.io.File
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzRed400
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.HealthChecking
@@ -71,6 +72,7 @@ import com.dzhoof.iptv.presentation.ui.theme.EmphasisMedium
 import com.dzhoof.iptv.presentation.ui.theme.Void700
 import com.dzhoof.iptv.presentation.ui.theme.Void800
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
 
 private const val LONG_PRESS_THRESHOLD_MS = 600L
@@ -375,6 +377,15 @@ private fun ChannelCardContent(
                 )
         )
 
+        // ── LIVE badge — top-start, يظهر للقنوات الحية ──────────────
+        if (channel.healthStatus == ChannelHealthStatus.ONLINE) {
+            LiveBadge(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(Dimens.CardContentPadding)
+            )
+        }
+
         // ── Layer 3: Text, badges ───────────────────────────────────
         // Bottom-right stack: favorite heart above the stream-health dot,
         // sitting on the card's dark bottom scrim so no extra backing needed.
@@ -422,7 +433,7 @@ private fun ChannelCardContent(
             verticalArrangement = Arrangement.Bottom
         ) {
             Text(
-                text = channel.category,
+                text = CategoryLocalizer.localize(channel.category),
                 style = LabelBadge,
                 color = catColor.copy(alpha = EmphasisMedium)
             )
@@ -481,7 +492,7 @@ private fun FavoriteBadge(
     Icon(
         imageVector = Icons.Filled.Favorite,
         contentDescription = "Favorite",
-        tint = Amber,
+        tint = DzRed400,
         modifier = modifier
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value }
             .size(Dimens.IconSmall)

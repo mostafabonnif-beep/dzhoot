@@ -38,6 +38,8 @@ fun HomeScreen(
     viewModel: ChannelsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val isDemo = remember { AppPreferences.isDemoMode(context) }
 
     // Refresh on app resume (detect server-side changes)
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -100,7 +102,8 @@ fun HomeScreen(
                     onChannelClick = openChannel,
                     onNavigateToChannels = onNavigateToChannels,
                     onToggleFavorite = viewModel::toggleFavorite,
-                    onMultiviewClick = onMultiviewClick
+                    onMultiviewClick = onMultiviewClick,
+                    isDemo = isDemo
                 )
             }
         }

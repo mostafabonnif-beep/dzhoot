@@ -12,6 +12,7 @@ import com.dzhoof.iptv.domain.usecase.ToggleFavoriteUseCase
 import com.dzhoof.iptv.presentation.mapper.ChannelUiMapper
 import com.dzhoof.iptv.presentation.model.FavoritesUiState
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow

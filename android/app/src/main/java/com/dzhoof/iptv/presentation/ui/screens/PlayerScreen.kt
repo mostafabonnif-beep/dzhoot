@@ -383,7 +383,7 @@ fun PlayerScreen(
                         onCycleAspect = onCycleAspect,
                         onShowTracks = onShowTracks,
                         onShowChannelList = onShowChannelList,
-                        onShowGuide = onNavigateToGuide,
+                        onShowGuide = null,  // الدليل أُزيل — يستهلك الطاقة والإنترنت
                         mobileChromeActions = if (isMobile) mobileChromeActions else null
                     )
                 }

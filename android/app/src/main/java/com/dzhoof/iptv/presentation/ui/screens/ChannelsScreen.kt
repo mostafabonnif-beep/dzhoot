@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.presentation.ui.screens
 
 import androidx.compose.animation.Crossfade
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -56,7 +57,11 @@ fun ChannelsScreen(
     }
 
     ScreenScaffold(
-        title = uiState.selectedCategory ?: "كل القنوات",
+        title = buildString {
+            val sel = uiState.selectedCategory
+            if (sel != null) append(CategoryLocalizer.localize(sel)) else append("كل القنوات")
+            append(" (").append(uiState.channels.size).append(')')
+        },
         modifier = modifier,
         onBack = if (uiState.selectedCategory != null || initialCategory != null) {
             {
@@ -195,7 +200,7 @@ private fun CategoryChips(
         }
         items(categories, key = { it }) { category ->
             CategoryChip(
-                label = category,
+                label = CategoryLocalizer.localize(category),
                 isSelected = selectedCategory == category,
                 selectedContainerColor = categoryColor(category),
                 selectedLabelColor = MaterialTheme.colorScheme.background,
@@ -219,7 +224,7 @@ private fun ChannelsGrid(
     val gridGap = if (isCompact) Dimens.CardGapMobile else Dimens.GridGap
     LazyVerticalGrid(
         state = gridState,
-        columns = GridCells.Adaptive(minSize = if (isCompact) 100.dp else 140.dp),
+        columns = GridCells.Adaptive(minSize = if (isCompact) 104.dp else 152.dp),
         modifier = modifier
             .fillMaxSize()
             .focusRestorer(),
