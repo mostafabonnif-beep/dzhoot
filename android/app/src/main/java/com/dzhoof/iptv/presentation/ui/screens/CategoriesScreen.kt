@@ -70,8 +70,8 @@ fun CategoriesScreen(
                                         ?: channels.firstOrNull { it.logoUrl != null }?.logoUrl
                                 )
                             }
-                            // التنظيم: الأكبر أولًا + تجاهل التصنيفات الصغيرة جدًا (ضجيج)
-                            .filter { it.second >= 3 }
+                            // Keep every real category reachable. Small categories
+                            // are valid provider data, not noise to hide from users.
                             .sortedByDescending { it.second }
                     }
 
