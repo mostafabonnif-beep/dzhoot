@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
@@ -131,6 +132,7 @@ class AppUpdater @Inject constructor(
             val request = DownloadManager.Request(Uri.parse(updateInfo.downloadUrl)).apply {
                 setTitle("تحديث DZ HOOF")
                 setDescription("جارٍ تنزيل تحديث DZ HOOF…")
+                setMimeType("application/vnd.android.package-archive")
                 setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, APK_FILENAME)
                 setAllowedOverMetered(true)
@@ -138,9 +140,9 @@ class AppUpdater @Inject constructor(
             }
 
             val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
-            downloadId = downloadManager.enqueue(request)
-            onState(DownloadState.Started)
 
+            // Register before enqueue: a fast/local download can complete before a
+            // receiver registered after enqueue is ready, leaving the UI stuck.
             downloadReceiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context, intent: Intent) {
                     val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
@@ -152,7 +154,12 @@ class AppUpdater @Inject constructor(
                             if (status == DownloadManager.STATUS_SUCCESSFUL) {
                                 onState(installUpdate())
                             } else {
-                                onState(DownloadState.Failed("فشل تنزيل التحديث"))
+                                val reason = cursor.getString(
+                                    cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
+                                )
+                                onState(DownloadState.Failed(
+                                    if (reason.isNullOrBlank()) "فشل تنزيل التحديث" else "فشل تنزيل التحديث (رمز $reason)"
+                                ))
                             }
                         }
                     } finally {
@@ -172,6 +179,8 @@ class AppUpdater @Inject constructor(
                 IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE),
                 ContextCompat.RECEIVER_EXPORTED
             )
+            downloadId = downloadManager.enqueue(request)
+            onState(DownloadState.Started)
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading update", e)
             onState(DownloadState.Failed("تعذر بدء التنزيل"))
@@ -189,9 +198,21 @@ class AppUpdater @Inject constructor(
                 return DownloadState.Failed("تعذر التحقق من التحديث — لا تتطابق التوقيعات")
             }
 
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                !context.packageManager.canRequestPackageInstalls()
+            ) {
+                val settingsIntent = Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:${context.packageName}")
+                ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(settingsIntent)
+                return DownloadState.Failed("اسمح للتطبيق بتثبيت التحديثات من هذا المصدر، ثم أعد المحاولة")
+            }
+
             val apkUri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
+            val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                data = apkUri
+                type = "application/vnd.android.package-archive"
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(installIntent)
