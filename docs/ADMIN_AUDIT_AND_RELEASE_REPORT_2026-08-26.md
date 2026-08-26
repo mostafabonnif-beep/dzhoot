@@ -88,3 +88,18 @@
 3. `server/frontend/src/components/m3u-sources-page-shell.tsx` — نمط واجهة المعاينة والاسترجاع لمصادر M3U.
 4. `server/scripts/deploy/atomic-deploy.sh` — مسار النشر الذري والنسخ الاحتياطي والاسترجاع.
 5. Pull Request #60 — https://github.com/mostafabonnif-beep/dzhoot/pull/60
+
+## ملحق الجولة الثانية
+
+بعد طلب استكمال التحسين، أضيفت إلى صفحة Xtream الأدوات التشغيلية المتبقية التالية:
+
+| الأداة | ما تنفذه الواجهة |
+|---|---|
+| Failover يدوي | إنشاء مسار احتياطي مع `channelRef` و`backupStreamId` واسم البث، ثم عرضه وحذفه بأمان |
+| المطابقة الآلية | استدعاء المطابقة الآلية بحد أقصى 500 مسار، مع عرض النتيجة للمشغّل |
+| استيراد الكتالوج | استيراد metadata دون تجاوز بوابة التحقق أو تفعيل تشغيل غير موثق |
+| Watchdog | تشغيل الفحص الإداري للمصادر من داخل اللوحة وعرض عدد المصادر المعالجة |
+
+تم اجتياز TypeScript وESLint وNext production build بعد هذه الإضافات، ثم دُمجت الجولة عبر [Pull Request #62](https://github.com/mostafabonnif-beep/dzhoot/pull/62). نُشر commit `78e144b45c07ae81f40d248c36a5868fe64a5bac` إلى VPS باستخدام staging وdry-run ثم atomic deploy. بقيت الخدمات الأساسية سليمة، وأعاد `/health` العام `status: ok`، كما لم يظهر OOM في فحص Scheduler.
+
+تظل قاعدة IPTV التشغيلية مطبقة: لا تُنشأ مسارات failover إلا لمصدر احتياطي مصرح به، ولا يعني نجاح استيراد الكتالوج أن البث الحي صالح للعملاء. الواجهة تعرض هذه الحالات منفصلة لتجنب اتخاذ قرار تشغيل خاطئ.
