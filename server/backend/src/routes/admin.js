@@ -995,12 +995,18 @@ router.delete('/pairing-requests/:id', async (req, res) => {
 
 router.get('/stats/detailed', async (req, res) => {
   try {
-    // Channel statistics
-    const totalChannels = await Channel.countDocuments({ ownerId: null });
-    const activeChannels = await Channel.countDocuments({ isActive: true, ownerId: null });
-    const inactiveChannels = await Channel.countDocuments({ isActive: false, ownerId: null });
+    // Channel statistics use the same eligible catalog scope as Stream Health:
+    // ownerless catalog channels with a real primary URL. This prevents the
+    // dashboard from counting metadata-only records as active playable channels.
+    const playableCatalogQuery = {
+      ownerId: null,
+      channelUrl: { $exists: true, $nin: ['', null] },
+    };
+    const totalChannels = await Channel.countDocuments(playableCatalogQuery);
+    const activeChannels = await Channel.countDocuments({ ...playableCatalogQuery, isActive: true });
+    const inactiveChannels = await Channel.countDocuments({ ...playableCatalogQuery, isActive: false });
     const channelsByGroup = await Channel.aggregate([
-      { $match: { ownerId: null } }, // catalog only
+      { $match: playableCatalogQuery }, // catalog channels eligible for playback checks
       { $group: { _id: '$channelGroup', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
     ]);
@@ -1380,9 +1386,10 @@ router.get('/stats/playback-quality', async (req, res) => {
 
 router.get('/stats/stream-health', async (req, res) => {
   try {
-    // Channel health (local channels)
+    // Channel health uses the same eligible scope as /stats/detailed so
+    // "active channels" and "stream health" describe the same catalog set.
     const [channelHealth] = await Channel.aggregate([
-      { $match: { ownerId: null } }, // catalog only
+      { $match: { ownerId: null, channelUrl: { $exists: true, $nin: ['', null] } } },
       {
         $group: {
           _id: null,
