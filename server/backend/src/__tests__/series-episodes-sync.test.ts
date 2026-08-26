@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * syncSeriesEpisodes parser regression tests.
  *
@@ -18,6 +17,13 @@ const XtreamSource = require('../models/XtreamSource');
 const xtreamService = require('../services/xtream-service');
 
 const SOURCE_ID = new mongoose.Types.ObjectId();
+
+type LeanEpisode = {
+  externalId: string;
+  streamUrl?: string;
+  description?: string;
+  duration?: number | null;
+};
 
 const STANDARD_XTREAM = {
   seasons: [
@@ -73,16 +79,17 @@ describe('syncSeriesEpisodes via ensureSeriesSeasons', () => {
     const seasons = await xtreamService.ensureSeriesSeasons(String(series._id));
     expect(seasons.length).toBe(2);
 
-    const episodes = await Episode.find({ seriesId: series._id }).lean();
+    const episodes = (await Episode.find({ seriesId: series._id }).lean()) as LeanEpisode[];
     expect(episodes.length).toBe(3);
-    expect(episodes.map((e) => e.externalId).sort()).toEqual(['101', '102', '201']);
+    expect(episodes.map((episode) => episode.externalId).sort()).toEqual(['101', '102', '201']);
 
     const s1 = await Season.findOne({ seriesId: series._id, seasonNumber: 1 }).lean();
     expect(s1.name).toBe('Season 1');
 
-    const ep101 = episodes.find((e) => e.externalId === '101');
-    expect(ep101.streamUrl).toBe('http://example.com/series/u/p/101.mp4');
-    expect(ep101.description).toBe('p1');
+    const ep101 = episodes.find((episode) => episode.externalId === '101');
+    expect(ep101).toBeDefined();
+    expect(ep101?.streamUrl).toBe('http://example.com/series/u/p/101.mp4');
+    expect(ep101?.description).toBe('p1');
 
     const stamped = await Series.findById(series._id).lean();
     expect(stamped.episodesFetchedAt).toBeTruthy();
@@ -140,9 +147,9 @@ describe('syncSeriesEpisodes via ensureSeriesSeasons', () => {
     mockSourceLookup();
 
     await xtreamService.ensureSeriesSeasons(String(series._id));
-    const episodes = await Episode.find({ seriesId: series._id }).lean();
+    const episodes = (await Episode.find({ seriesId: series._id }).lean()) as LeanEpisode[];
     expect(episodes.length).toBe(3);
-    const byId = Object.fromEntries(episodes.map((e) => [e.externalId, e.duration]));
+    const byId = Object.fromEntries(episodes.map((episode) => [episode.externalId, episode.duration]));
     expect(byId['501']).toBe(45);
     expect(byId['502']).toBeNull();
     expect(byId['503']).toBe(42);

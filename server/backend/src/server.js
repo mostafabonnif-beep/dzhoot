@@ -10,6 +10,7 @@ const { randomUUID } = require('crypto');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const { redactSensitiveText } = require('./services/audit-log');
+const { observeHttpRequest, isAuthorizedMetricsRequest, renderMetrics, registry } = require('./services/metrics');
 
 Sentry.init({
   dsn: process.env.BACKEND_SENTRY_DSN,
@@ -155,6 +156,7 @@ app.use(
   }),
 );
 app.use(compression());
+app.use(observeHttpRequest);
 
 // Attach a bounded correlation ID to every request so logs and support reports
 // can be joined without trusting arbitrary header content.
@@ -163,6 +165,25 @@ app.use((req, res, next) => {
   req.requestId = /^[A-Za-z0-9._:-]{1,128}$/.test(incoming) ? incoming : randomUUID();
   res.setHeader('X-Request-ID', req.requestId);
   next();
+});
+
+// Internal Prometheus scrape endpoint. It stays disabled until a token is configured,
+// and deployment configuration keeps the metrics collector bound to localhost.
+app.get('/internal/metrics', async (req, res) => {
+  if (!isAuthorizedMetricsRequest(req)) return res.sendStatus(404);
+
+  try {
+    const metrics = await renderMetrics({
+      mongoReady: mongoose.connection.readyState === 1,
+      redisReady: isRedisReady(),
+    });
+    res.setHeader('Content-Type', registry.contentType);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).send(metrics);
+  } catch (error) {
+    console.error('Metrics rendering failed:', redactSensitiveText(error));
+    return res.sendStatus(503);
+  }
 });
 
 app.use(

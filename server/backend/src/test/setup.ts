@@ -16,7 +16,7 @@ function isolatedTestMongoUri(baseUri: string): string {
 
 function requiresMongo(): boolean {
   const testPath = expect.getState().testPath || '';
-  return !/\/(stream-session-service|playback-access-service)\.test\./.test(testPath);
+  return !/\/(stream-session-service|playback-access-service|metrics)\.test\./.test(testPath);
 }
 
 beforeAll(async () => {
