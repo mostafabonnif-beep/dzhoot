@@ -54,3 +54,14 @@
 الشاشة المرفقة تعرض `تم التحقق من 3/3`. هذا الرقم لا يعني أن 16,609 قناة Xtream تم فحصها؛ بل يعني أن الكتالوج الحالي يحتوي 3 قنوات فقط، وهي قنوات `iptv-org` الثلاث التي أعادها `/api/v1/channels`. لذلك ظهور اللون الأخضر في صحة البث لا يثبت دخول مصدر Xtream.
 
 كما فُحصت استجابة Xtream `get_live_streams` كاملة، ولم تحتوِ أي قناة من 16,609 على `direct_source` رسمي بديل يمكن للتطبيق أو Backend استخدامه. هذا يستبعد إضافة direct-source كحل لهذا الحساب تحديداً.
+
+
+## تحديث 2026-08-26 — تشخيص فشل تثبيت APK
+
+أظهرت لقطات الهاتف رسالتي Google Play Protect «تطبيق محظور لحماية جهازك» و«Application non installée». بمراجعة خط CI تبين أن artifact السابق المسمى `dzhoof-staging-production-apk` كان في الحقيقة `app-staging-debug.apk`، أي نسخة debug غير مناسبة لتوزيع العملاء. كما أن flavor staging يستخدم applicationId مختلفاً (`com.dzhoof.iptv.staging`) عن النسخة الرسمية، وقد يؤدي اختيار الملف الخطأ إلى تعارض أو فشل التثبيت.
+
+تم تصحيح workflow الإصدار الرسمي ليبني ويتحقق من `app-official-release.apk` فقط، ويفحص توقيع APK و`applicationId=com.dzhoof.iptv` و`versionName`، ويرفق SHA-256. تم تشغيل الإصدار `1.0.15` عبر [Release Candidate workflow](https://github.com/mostafabonnif-beep/dzhoot/actions/runs/33007663643)، ونجحت كل الخطوات، بما فيها Build signed release APK وVerify and package official release APK وUpload official signed release APK.
+
+القاعدة التشغيلية: لا تُرسل `staging-debug` أو `staging-release` إلى العملاء. يجب استخدام `app-official-release.apk` الموقّع بنفس keystore السابق للتحديث فوق النسخة المثبتة. إذا كانت نسخة الهاتف القديمة موقعة بمفتاح مختلف، فسيطلب Android إزالة النسخة القديمة قبل التثبيت؛ لا ينبغي تجاوز Play Protect، بل يجب إعادة البناء بالمفتاح الرسمي أو تثبيت الإصدار الرسمي عبر قناة موثوقة.
+
+الإصدار الرسمي السابق `1.0.14` اجتاز CI وكان حجمه نحو 74 MB. الإصدار الأحدث `1.0.15` اجتاز خط التحقق المحسن، لكن تنزيل artifact من بيئة التدقيق انقطع بسبب مهلة الشبكة، بينما بقي artifact محفوظاً في GitHub Actions.
