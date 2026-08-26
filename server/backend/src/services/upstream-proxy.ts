@@ -8,11 +8,11 @@ import { redactSensitiveText } from './audit-log';
 const MAX_MANIFEST_SIZE = 10 * 1024 * 1024;
 
 // Transient upstream failures (proxy auth challenges, rate limits, 5xx,
-// timeouts, DNS hiccups) — retried with a short backoff because the NEO CDN
-// intermittently answers 407/509 to server-side fetches even though the same
-// URL succeeds a moment later (edge/load dependent). A retry re-follows the
-// redirect chain and almost always lands on a healthy edge.
-const MAX_UPSTREAM_RETRIES = 2;
+// timeouts, DNS hiccups) — retried with a short backoff because the upstream
+// CDN intermittently answers 407/509 to server-side fetches even though the
+// same URL succeeds a moment later (edge/load dependent). A retry re-follows
+// the redirect chain and almost always lands on a healthy edge.
+const MAX_UPSTREAM_RETRIES = 4;
 
 function isTransientUpstreamError(error: any): boolean {
   const status = error?.response?.status;
@@ -55,7 +55,10 @@ async function fetchUpstreamWithRetry(
       if (!isTransientUpstreamError(error) || attempt >= MAX_UPSTREAM_RETRIES) {
         throw error;
       }
-      await sleep(250 * (attempt + 1));
+      // Exponential backoff with jitter — a fixed cadence just re-hits the
+      // same overloaded edge together with every other retrying client.
+      const backoffMs = Math.min(2000, 300 * 2 ** attempt) + Math.floor(Math.random() * 250);
+      await sleep(backoffMs);
     }
   }
   throw lastError;
@@ -307,7 +310,7 @@ export async function proxyUpstreamStream(
         };
 
         // ── Media playlist normalization ──────────────────────────────────────
-        // Some upstreams (e.g. NEO) emit media playlists that are technically
+        // Some providers emit media playlists that are technically
         // valid but that several players handle badly: segment durations equal
         // to TARGETDURATION, the obsolete #EXT-X-ALLOW-CACHE tag, and — after
         // tokenization — per-segment 500+ char child-token URLs that change on
@@ -424,7 +427,19 @@ export async function proxyUpstreamStream(
   } catch (error: any) {
     console.error('[upstream-proxy] request error:', redactSensitiveText(error));
     if (res.headersSent) return;
-    if (error.response) res.status(error.response.status).send(error.response.statusText);
+    if (error.response) {
+      // Never forward upstream statuses/statusText to clients. A 407
+      // "Proxy Authentication Required" (or a 509/edge 5xx) both breaks
+      // players and reveals that a proxy upstream exists. Genuine 404/410
+      // (segment rotated out of the live window) stay as-is so HLS clients
+      // skip ahead; everything else becomes a generic retryable 502.
+      const upstreamStatus = Number(error.response.status) || 502;
+      if (upstreamStatus === 404 || upstreamStatus === 410) {
+        res.status(upstreamStatus).send(upstreamStatus === 404 ? 'Not Found' : 'Gone');
+      } else {
+        res.status(502).send('Stream temporarily unavailable');
+      }
+    }
     else if (error.code === 'ECONNABORTED') res.status(504).send('Gateway Timeout');
     else res.status(502).send('Bad Gateway');
   }

@@ -11,7 +11,7 @@ import { normalizeChannelName } from './channel-identity-service';
 /**
  * Source auto-failover (بطاقة «مصدر احتياطي تلقائي»):
  *
- * The catalog lives on a primary Xtream source (Business Cloud NEO). When that
+ * The catalog lives on a primary Xtream source (Primary Upstream). When that
  * source goes down, EVERY channel dies because they all share it. This service
  * adds a watchdog that light-probes the active sources, and a side map
  * (ChannelFailoverMap) that lets the playback-token flow re-point a channel to
@@ -19,9 +19,9 @@ import { normalizeChannelName } from './channel-identity-service';
  *
  * Rules (from the feasibility report):
  *  - Catch-up NEVER fails over (the backup has no catch-up).
- *  - Only channels WITH a mapping switch; unmapped channels stay on NEO.
+ *  - Only channels WITH a mapping switch; unmapped channels stay on Upstream.
  *  - Sessions in flight are untouched; only NEW playback-token requests switch
- *    (that is what makes the return to NEO gradual — no flapping).
+ *    (that is what makes the return to Upstream gradual — no flapping).
  *  - The watchdog probes the API every 60s and a live stream at most every 5min.
  */
 
@@ -259,10 +259,10 @@ export async function getFailoverTarget(
 /**
  * Light probe for one source.
  *
- * Direct-playback sources (NEO primary, ottstreambox backup) are judged by the
+ * Direct-playback sources (Upstream primary, ottstreambox backup) are judged by the
  * STREAM customers actually use — the primary probes one of its own catalog
  * channels, the backup probes a mapped stream. The server-side API reachability
- * is NOT customer-relevant for direct playback (NEO's API is unreachable from
+ * is NOT customer-relevant for direct playback (Upstream's API is unreachable from
  * this server while its CDN streams work fine — a TLS block on the API domain).
  *
  * Proxy-mode sources relay playback through the server, so their API
@@ -389,7 +389,7 @@ export async function runSourceWatchdog(): Promise<{
   // Probe every source that can serve playback: Active ones AND direct-playback
   // ones. The backup source is deliberately added with status Inactive +
   // directPlayback true (no impact on current streams while it is set up), so
-  // an Active-only query would never probe it — and NEO itself may be Inactive
+  // an Active-only query would never probe it — and Upstream itself may be Inactive
   // while its direct URLs still work.
   const sources = await XtreamSource.find({ $or: [{ status: 'Active' }, { directPlayback: true }] })
     .select('name serverUrl usernameEncrypted passwordEncrypted verificationStatus directPlayback')

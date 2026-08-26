@@ -3,7 +3,7 @@
  * finalize them into downloadable MP4 files (like YouTube Live VODs).
  *
  * - Recording runs INSIDE the API container: outbound traffic to upstream
- *   hosts that block datacenter IPs (e.g. Business Cloud NEO) is transparently
+ *   hosts that block datacenter IPs (e.g. Primary Upstream) is transparently
  *   redirected through the home relay (redsocks + iptables) exactly like the
  *   playback proxy, so a recording of those channels works while the relay is up.
  * - Streams are captured with `-c copy` (no re-encode → low CPU), containerized

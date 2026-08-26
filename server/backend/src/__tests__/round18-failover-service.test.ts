@@ -88,9 +88,9 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
   });
 
   it('getFailoverTarget resolves a verified backup mapping to an HLS URL', async () => {
-    const primary = await XtreamSource.create({ name: 'NEO', serverUrl: 'http://neo', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified', directPlayback: true });
+    const primary = await XtreamSource.create({ name: 'Upstream', serverUrl: 'http://upstream', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified', directPlayback: true });
     const backup = await XtreamSource.create({ name: 'Backup', serverUrl: 'http://ottstreambox.xyz:80', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified', directPlayback: true });
-    const channel = await Channel.create({ channelId: 'CH-1', channelName: 'ENTV1', channelUrl: 'http://neo/live/u/p/1.m3u8', isActive: true });
+    const channel = await Channel.create({ channelId: 'CH-1', channelName: 'ENTV1', channelUrl: 'http://upstream/live/u/p/1.m3u8', isActive: true });
     await ChannelFailoverMap.create({
       channelId: channel._id,
       channelRef: 'CH-1',
@@ -117,7 +117,7 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
       verificationStatus: 'verified',
       directPlayback: true,
     });
-    const channel = await Channel.create({ channelId: 'CH-5', channelName: 'ENTV1', channelUrl: 'http://neo/x', isActive: true });
+    const channel = await Channel.create({ channelId: 'CH-5', channelName: 'ENTV1', channelUrl: 'http://upstream/x', isActive: true });
     await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-5', backupSourceId: backup._id, backupChannelName: 'ENTV1', backupStreamId: '31337' });
 
     const target = await getFailoverTarget(channel);
@@ -126,7 +126,7 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
   });
 
   it('getFailoverTarget refuses an Inactive or unhealthy backup', async () => {
-    const channel = await Channel.create({ channelId: 'CH-2', channelName: 'X', channelUrl: 'http://neo/x', isActive: true });
+    const channel = await Channel.create({ channelId: 'CH-2', channelName: 'X', channelUrl: 'http://upstream/x', isActive: true });
     const inactive = await XtreamSource.create({ name: 'B1', serverUrl: 'http://b', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Inactive', verificationStatus: 'verified' });
     const degraded = await XtreamSource.create({ name: 'B2', serverUrl: 'http://b', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'degraded' });
 
@@ -139,8 +139,8 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
   });
 
   it('getFailoverTarget ignores a mapping back to the primary source itself', async () => {
-    const primary = await XtreamSource.create({ name: 'NEO', serverUrl: 'http://neo', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
-    const channel = await Channel.create({ channelId: 'CH-3', channelName: 'Y', channelUrl: 'http://neo/y', isActive: true });
+    const primary = await XtreamSource.create({ name: 'Upstream', serverUrl: 'http://upstream', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
+    const channel = await Channel.create({ channelId: 'CH-3', channelName: 'Y', channelUrl: 'http://upstream/y', isActive: true });
     await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-3', backupSourceId: primary._id, backupChannelName: 'Y', backupStreamId: '5' });
 
     expect(await getFailoverTarget(channel, primary._id)).toBeNull();
@@ -148,7 +148,7 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
 
   it('watchdog marks a source blocked when the API probe fails', async () => {
     (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('ECONNREFUSED'));
-    const src = await XtreamSource.create({ name: 'NEO', serverUrl: 'http://neo', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
+    const src = await XtreamSource.create({ name: 'Upstream', serverUrl: 'http://upstream', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
 
     const res = await runSourceWatchdog();
     expect(res.states[0].health).toBe('blocked');
@@ -159,7 +159,7 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
 
   it('watchdog keeps a healthy source verified', async () => {
     (testXtreamConnection as jest.Mock).mockResolvedValue({ ok: true, userInfo: { auth: 1 } });
-    const src = await XtreamSource.create({ name: 'NEO', serverUrl: 'http://neo', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
+    const src = await XtreamSource.create({ name: 'Upstream', serverUrl: 'http://upstream', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
 
     const res = await runSourceWatchdog();
     expect(res.states[0].health).toBe('verified');
@@ -172,7 +172,7 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     (axiosGet as jest.Mock).mockRejectedValueOnce(new Error('ECONNREFUSED'));
     (testXtreamConnection as jest.Mock).mockResolvedValue({ ok: true, userInfo: { auth: 1 } });
     const backup = await XtreamSource.create({ name: 'Backup', serverUrl: 'http://b', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified', directPlayback: true });
-    const channel = await Channel.create({ channelId: 'CH-4', channelName: 'Z', channelUrl: 'http://neo/z', isActive: true });
+    const channel = await Channel.create({ channelId: 'CH-4', channelName: 'Z', channelUrl: 'http://upstream/z', isActive: true });
     await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-4', backupSourceId: backup._id, backupChannelName: 'Z', backupStreamId: '77' });
 
     const res = await runSourceWatchdog();
@@ -180,31 +180,31 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
   });
 
   it('watchdog verifies a direct-playback primary by its real stream even when its API is unreachable', async () => {
-    // The NEO case: the server cannot reach the source API (TLS block) but the
+    // The Upstream case: the server cannot reach the source API (TLS block) but the
     // CDN streams the customers use are alive — the source must stay verified.
     (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('Client network socket disconnected before secure TLS connection was established'));
-    const neo = await XtreamSource.create({
-      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
+    const upstreamSrc = await XtreamSource.create({
+      name: 'Primary Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'x', passwordEncrypted: 'y',
       status: 'Inactive', verificationStatus: 'blocked', directPlayback: true,
     });
     await Channel.create({
-      channelId: 'CH-NEO', channelName: 'قناة NEO', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/262849.m3u8', isActive: true,
-      metadata: { source: 'xtream', xtreamSourceId: String(neo._id) },
+      channelId: 'CH-Upstream', channelName: 'قناة Upstream', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/262849.m3u8', isActive: true,
+      metadata: { source: 'xtream', xtreamSourceId: String(upstreamSrc._id) },
     });
 
     // First run: probe is healthy but recovery hysteresis needs TWO consecutive
     // verified probes before a blocked source is allowed back.
     const res1 = await runSourceWatchdog();
     expect(res1.states[0].health).toBe('blocked');
-    let fresh = await XtreamSource.findById(neo._id).lean().exec();
+    let fresh = await XtreamSource.findById(upstreamSrc._id).lean().exec();
     expect(fresh!.verificationStatus).toBe('blocked');
 
     const res2 = await runSourceWatchdog();
     expect(res2.states[0].health).toBe('verified');
-    fresh = await XtreamSource.findById(neo._id).lean().exec();
+    fresh = await XtreamSource.findById(upstreamSrc._id).lean().exec();
     expect(fresh!.verificationStatus).toBe('verified');
     const { get: axiosGet } = require('axios');
-    expect(axiosGet).toHaveBeenCalledWith('https://cf.business-cloud-neo.ru/live/u/p/262849.m3u8', expect.anything());
+    expect(axiosGet).toHaveBeenCalledWith('https://cf.upstream-host-redacted/live/u/p/262849.m3u8', expect.anything());
   });
 
   it('watchdog samples up to 3 catalog channels and verifies if ANY is alive', async () => {
@@ -214,13 +214,13 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     (axiosGet as jest.Mock)
       .mockRejectedValueOnce(new Error('dead channel 1'))
       .mockRejectedValueOnce(new Error('dead channel 2'));
-    const neo = await XtreamSource.create({
-      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
+    const upstreamSrc = await XtreamSource.create({
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'x', passwordEncrypted: 'y',
       status: 'Active', verificationStatus: 'verified', directPlayback: true,
     });
-    await Channel.create({ channelId: 'CH-N1', channelName: 'A', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/1.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(neo._id) } });
-    await Channel.create({ channelId: 'CH-N2', channelName: 'B', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/2.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(neo._id) } });
-    await Channel.create({ channelId: 'CH-N3', channelName: 'C', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/3.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(neo._id) } });
+    await Channel.create({ channelId: 'CH-N1', channelName: 'A', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/1.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstreamSrc._id) } });
+    await Channel.create({ channelId: 'CH-N2', channelName: 'B', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/2.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstreamSrc._id) } });
+    await Channel.create({ channelId: 'CH-N3', channelName: 'C', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/3.m3u8', isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(upstreamSrc._id) } });
 
     const res = await runSourceWatchdog();
     // prev is verified → no hysteresis on the down direction... but probe found a live sample → verified.
@@ -271,8 +271,8 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
       status: 'Inactive',
       verificationStatus: 'pending',
     });
-    await Channel.create({ channelId: 'CH-YLE', channelName: 'FI: Yle TV1 ᴴᴰ', channelUrl: 'http://neo/yle', isActive: true });
-    await Channel.create({ channelId: 'CH-E1', channelName: 'AR: Algerie EN TV 1', channelUrl: 'http://neo/e1', isActive: true });
+    await Channel.create({ channelId: 'CH-YLE', channelName: 'FI: Yle TV1 ᴴᴰ', channelUrl: 'http://upstream/yle', isActive: true });
+    await Channel.create({ channelId: 'CH-E1', channelName: 'AR: Algerie EN TV 1', channelUrl: 'http://upstream/e1', isActive: true });
 
     const result = await autoMatchFailoverMaps(String(backup._id), {});
     const maps = await ChannelFailoverMap.find({ backupSourceId: backup._id }).lean().exec();
@@ -295,8 +295,8 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
       status: 'Inactive',
       verificationStatus: 'pending',
     });
-    await Channel.create({ channelId: 'CH-E1', channelName: 'AR: Algerie EN TV 1', channelUrl: 'http://neo/e1', isActive: true });
-    await Channel.create({ channelId: 'CH-ECH', channelName: 'AR: Echourouk TV ᴿᴬᵂ', channelUrl: 'http://neo/ech', isActive: true });
+    await Channel.create({ channelId: 'CH-E1', channelName: 'AR: Algerie EN TV 1', channelUrl: 'http://upstream/e1', isActive: true });
+    await Channel.create({ channelId: 'CH-ECH', channelName: 'AR: Echourouk TV ᴿᴬᵂ', channelUrl: 'http://upstream/ech', isActive: true });
 
     const result = await autoMatchFailoverMaps(String(backup._id), {});
     // ENTV1 (via dictionary) + Echorouk (via dictionary) — the unknown and the
@@ -320,8 +320,8 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
       status: 'Inactive',
       verificationStatus: 'pending',
     });
-    await Channel.create({ channelId: 'CH-A', channelName: 'ENTV1', channelUrl: 'http://neo/a', isActive: true });
-    await Channel.create({ channelId: 'CH-B', channelName: 'beIN SPORTS 1', channelUrl: 'http://neo/b', isActive: true });
+    await Channel.create({ channelId: 'CH-A', channelName: 'ENTV1', channelUrl: 'http://upstream/a', isActive: true });
+    await Channel.create({ channelId: 'CH-B', channelName: 'beIN SPORTS 1', channelUrl: 'http://upstream/b', isActive: true });
 
     const result = await autoMatchFailoverMaps(String(backup._id), { categories: ['ALGERIE'] });
     expect(result.created).toBe(1); // only ENTV1 (ALGERIE category); beIN is in SPORTS
@@ -339,8 +339,8 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
       status: 'Inactive',
       verificationStatus: 'pending',
     });
-    await Channel.create({ channelId: 'CH-A', channelName: 'ENTV1', channelUrl: 'http://neo/a', isActive: true });
-    await Channel.create({ channelId: 'CH-B', channelName: 'beIN SPORTS 1', channelUrl: 'http://neo/b', isActive: true });
+    await Channel.create({ channelId: 'CH-A', channelName: 'ENTV1', channelUrl: 'http://upstream/a', isActive: true });
+    await Channel.create({ channelId: 'CH-B', channelName: 'beIN SPORTS 1', channelUrl: 'http://upstream/b', isActive: true });
 
     const result = await autoMatchFailoverMaps(String(backup._id), {});
     expect(result.created).toBe(2); // ENTV1 + beIN SPORTS 1; the third has no match

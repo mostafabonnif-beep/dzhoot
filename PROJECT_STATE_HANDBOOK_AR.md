@@ -42,10 +42,10 @@
 
 | المصدر | النوع | القنوات | الحالة |
 |---|---|---|---|
-| **Business Cloud NEO** (`cf.business-cloud-neo.ru`) | Xtream | 16,632 | Active — **directPlayback=true**، VOD 66,866، مسلسلات 16,804 |
+| **Primary Upstream** (`cf.upstream-host-redacted`) | Xtream | 16,632 | Active — **directPlayback=true**، VOD 66,866، مسلسلات 16,804 |
 | **iptv-org Algeria (free legal)** | M3U | 7 | Active — يزامن بنجاح بعد إصلاح مفاتيح scheduler |
 
-- **مهم — تشغيل NEO المباشر**: NEO يحظر IP مراكز البيانات (يرد **HTTP 456** على `/live/...m3u8` من الخادم). القنوات تُبث مباشرة من شبكة المستخدم. للعمليات الخادمية (المزامنة، الـ proxy) يوجد **Relay منزلي**: redsocks + نفق SSH عكسي (المنفذ 9000) يمر عبر IP منزل المالك — التوثيق الكامل: `server/docs/ops/NEO_RELAY_OPS.md`. التوجيه يعمل فقط عندما يكون النفق المنزلي مفتوحًا.
+- **مهم — تشغيل Upstream المباشر**: Upstream يحظر IP مراكز البيانات (يرد **HTTP 456** على `/live/...m3u8` من الخادم). القنوات تُبث مباشرة من شبكة المستخدم. للعمليات الخادمية (المزامنة، الـ proxy) يوجد **Relay منزلي**: redsocks + نفق SSH عكسي (المنفذ 9000) يمر عبر IP منزل المالك — التوثيق الكامل: `server/docs/ops/UPSTREAM_RELAY_OPS.md`. التوجيه يعمل فقط عندما يكون النفق المنزلي مفتوحًا.
 - **حالة القنوات**: 16,639 قناة → **16,638 healthy / 1 failing** (قناة M3U ميتة فعلًا). التطبيق لا يخفي قنوات directPlayback عن المستخدمين.
 - **EPG**: تغطية **~9% فقط** (15,220 قناة بلا دليل) + **13/50 مصدر EPG فاشل** (iptv-epg.org يرد 404) — أهم مشكلة متبقية في اللوحة.
 
@@ -89,14 +89,14 @@ sudo env ENV_FILE=/etc/dzhoot/.env.production ./scripts/deploy/deploy-production
 - **الوظيفة**: تسجيل قناة حية الآن → عند انتهاء البث/الإيقاف يُحوَّل تلقائيًا إلى **MP4 جاهز** مع **رابط ثابت** للمشاهدة والتحميل (مثل يوتيوب لايف).
 - **Backend**: `models/Recording.ts` + `services/recording-service.ts` (ffmpeg `-c copy` → TS على القرص، ثم remux إلى MP4 +faststart، ffprobe للمدة، تنظيف الاحتفاظ، منع التكرار لكل قناة، سقف `RECORDING_MAX_CONCURRENT=2`، حد أقصى `RECORDING_MAX_SECONDS=12h`) + `routes/admin-recordings.js` (list/stats، start، stop، delete، `/watch` و`/download`). ffmpeg 8 داخل صورة API + volume `recordings_data:/app/recordings`.
 - **Frontend**: صفحة `/admin/recordings` (بحث عن قناة + بدء/إيقاف/مشاهدة/تحميل/حذف + تحديث تلقائي أثناء التسجيل) في القائمة الجانبية (عربي/إنجليزي/فرنسي).
-- **مهم — يعتمد على الـ Relay**: تسجيل قنوات NEO يمر عبر نفس مسار الـ Relay المنزلي (redsocks) — إن كان النفق مغلقًا يفشل الالتقاط (الحالة `failed`).
+- **مهم — يعتمد على الـ Relay**: تسجيل قنوات Upstream يمر عبر نفس مسار الـ Relay المنزلي (redsocks) — إن كان النفق مغلقًا يفشل الالتقاط (الحالة `failed`).
 - **التخزين**: ~2.5Mbps → ~1.1GB/ساعة. الاحتفاظ 30 يومًا (`RECORDING_RETENTION_DAYS`)؛ تحقق من مساحة القرص (37GB متاح).
 - **تم التحقق حيًا**: سُجّل "SPO: Al Kass 1 HD" 100 ثانية → MP4 31.2MB صالح (`ftyp isom`) → watch/download يعملان (التسجيل التجريبي موجود في اللوحة — احذفه متى شئت).
 - ملاحظات إصلاحات: ffmpeg يخرج 255 عند الإيقاف — نُنهي التسجيل متى وُجدت بيانات؛ أسماء الملفات ASCII فقط (رموز ᴴᴰ تكسر Content-Disposition).
 
 ### إصلاح تشغيل التطبيق (PR #40 + PR #42) — القنوات لا تعمل في الـ Android
 - **الأعراض**: اللوحة تشغّل القنوات لكن التطبيق يفشل برسالة "البث غير متاح / قد تتوقف مصادر البث". السجلات أظهرت أن التطبيق يجلب القائمة (200) لكنه لا يصل لرابط قابل للتشغيل.
-- **الجذر الحقيقي (PR #42 — مهم)**: التطبيق (media3 1.4.1) يفشل على **كل قنوات NEO** بخطأ `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED` (36 فشلًا مقابل نجاح واحد لقناة M3U easybroadcast). المانيفست المُوكَّل كان صالحًا (ffmpeg وhls.js يلعبانه) لكن Media3 يرفضه: `TARGETDURATION` مساوٍ لمدة المقطع + وسم `#EXT-X-ALLOW-CACHE` القديم + روابط مقاطع بطول 500+ حرفًا (توكنات فرعية جديدة كل تحديث).
+- **الجذر الحقيقي (PR #42 — مهم)**: التطبيق (media3 1.4.1) يفشل على **كل قنوات Upstream** بخطأ `ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED` (36 فشلًا مقابل نجاح واحد لقناة M3U easybroadcast). المانيفست المُوكَّل كان صالحًا (ffmpeg وhls.js يلعبانه) لكن Media3 يرفضه: `TARGETDURATION` مساوٍ لمدة المقطع + وسم `#EXT-X-ALLOW-CACHE` القديم + روابط مقاطع بطول 500+ حرفًا (توكنات فرعية جديدة كل تحديث).
 - **الحل**: الوكيل يُطبّع قوائم MEDIA:
   - روابط مقاطع قصيرة ثابتة تحت التوكن الجذري: `/api/v1/tv/playback/<root>/segments/<abs-seq>.ts` (نفس الرابط عبر التحديثات؛ يُحلّ من النافذة الحالية للمصدر كل طلب مع ذاكرة 3 ثوانٍ)
   - `TARGETDURATION` يُرفع إلى ceil(أطول مقطع)+1
@@ -107,7 +107,7 @@ sudo env ENV_FILE=/etc/dzhoot/.env.production ./scripts/deploy/deploy-production
 - **إصلاحات سابقة متراكمة (PR #40)**: القائمة تزوّد روابط مُرمّزة قابلة للتشغيل لعملاء TV؛ الجلسة تُنشأ كسولًا عند أول تشغيل بدل 429؛ `playback-token` يحل بالـ _id أو channelId.
 - ملاحظة: قنوات "NM:" المكررة خارج البث عند المزود (مانيفست أسود) — ليست خللًا في المنصة.
 
-### التشخيص — سبب "16,635 قناة معطلة"1. **وسم dead قديم على قنوات directPlayback**: قنوات NEO فُحصت قديمًا من الخادم (فشلت — 456)، وسمّت نفسها ميتة، ثم أُفلتت من الفحص بعد تفعيل directPlayback دون تصحيح الوسم.
+### التشخيص — سبب "16,635 قناة معطلة"1. **وسم dead قديم على قنوات directPlayback**: قنوات Upstream فُحصت قديمًا من الخادم (فشلت — 456)، وسمّت نفسها ميتة، ثم أُفلتت من الفحص بعد تفعيل directPlayback دون تصحيح الوسم.
 2. **القناة الميتة لا تُعاد فحوصها أبدًا**: `checkAndPromote` كان يفحص غير الميتة فقط → لا تعافٍ تلقائي.
 3. **مهلة الفحص 10 ثوانٍ فقط**: قنوات M3U بطيئة (11-12 ثانية) تُوسم ميتة رغم عملها.
 4. **حاوية scheduler بلا مفاتيح تشفير**: `XTREAM_SECRET_KEY/JWT_ACCESS_SECRET` غير موجودة فيها → كل `m3u-sync`/`xtream-sync` مجدول يفشل بخطأ "must be configured in production".
@@ -122,7 +122,7 @@ sudo env ENV_FILE=/etc/dzhoot/.env.production ./scripts/deploy/deploy-production
 
 ### النشر والتحقق (مُنجز على الإنتاج)
 - patch على `/opt/dzhoot` (4 ملفات) + `deploy-production.sh --apply` (نسخ mongodump + بناء + إعادة تشغيل — توقف ثوانٍ).
-- علاج mongosh: `{directSources:1, modified:16632}` → كل قنوات NEO أصبحت working.
+- علاج mongosh: `{directSources:1, modified:16632}` → كل قنوات Upstream أصبحت working.
 - **النتائج**: failing **16,635 → 1** | M3U sync: error → **idle بدون أخطاء** | فحص الصحة: 16,639 فحصت، 1 all-dead فقط.
 - حدود الذاكرة 2048m مطبقة على الحاويات (الخادم 4.2GB متاح).
 
@@ -144,7 +144,7 @@ sudo env ENV_FILE=/etc/dzhoot/.env.production ./scripts/deploy/deploy-production
 
 ### تشغيلية
 - [ ] النسخ الاحتياطي البعيد غير مفعّل (يتطلب بيانات مزود تخزين)
-- [ ] ملاحظة قانونية: المصادر الحالية (NEO) إعادة بث لمحتوى غير مرخّص — قرار استراتيجي للمالك (البقاء مقابل التحول لمحتوى مرخّص)
+- [ ] ملاحظة قانونية: المصادر الحالية (Upstream) إعادة بث لمحتوى غير مرخّص — قرار استراتيجي للمالك (البقاء مقابل التحول لمحتوى مرخّص)
 
 ## 9. وثائق مفيدة داخل المستودع
 
@@ -152,7 +152,7 @@ sudo env ENV_FILE=/etc/dzhoot/.env.production ./scripts/deploy/deploy-production
 |---|---|
 | `PROJECT_ROADMAP.md` | خارطة التطوير والمراحل بالعربية |
 | `server/PROJECT_STATUS.md` | حالة الإنتاج والتحقق |
-| `server/docs/ops/NEO_RELAY_OPS.md` | بنية Relay المنزلي لمصدر NEO |
+| `server/docs/ops/UPSTREAM_RELAY_OPS.md` | بنية Relay المنزلي لمصدر Upstream |
 | `server/docs/ops/direct-playback-liveness-fix.md` | إصلاح 2026-08-23 + أمر mongosh |
 | `server/docs/ops/ROLLBACK_GUIDE.md` | إجراءات التراجع |
 | `server/docs/API_DOCUMENTATION.md` | توثيق API |

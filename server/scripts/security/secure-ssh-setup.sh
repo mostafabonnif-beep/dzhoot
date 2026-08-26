@@ -115,7 +115,7 @@ cat <<EOF
 
 4. Validate before reload: sshd -t && systemctl reload ssh
 
-Root key authentication remains enabled so the existing NEO reverse tunnel is
+Root key authentication remains enabled so the existing Upstream reverse tunnel is
 not interrupted. Rotate the exposed root password only after the alternate
 key login has been verified.
 EOF

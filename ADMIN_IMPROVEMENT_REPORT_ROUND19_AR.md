@@ -93,5 +93,5 @@ push دائمًا.**
 
 ---
 *ما زال مطلوبًا من المستخدم: تغيير كلمتي المرور المكشوفتين (admin من الإعدادات،
-root عند OVH) + تدوير github.token وJWT_SECRET + رقم Max Connections من NEO +
+root عند OVH) + تدوير github.token وJWT_SECRET + رقم Max Connections من Upstream +
 مفاتيح CinetPay/FCM/Brevo.*

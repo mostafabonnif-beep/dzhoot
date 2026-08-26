@@ -70,8 +70,8 @@ describe('TV playback-token — direct + proxy fallback (Round 16)', () => {
 
   it('returns a proxy fallback URL alongside the direct URL for direct-enabled sources', async () => {
     const source = await XtreamSource.create({
-      name: 'Business Cloud NEO',
-      serverUrl: 'https://cf.business-cloud-neo.ru',
+      name: 'Primary Upstream',
+      serverUrl: 'https://cf.upstream-host-redacted',
       usernameEncrypted: 'enc-user',
       passwordEncrypted: 'enc-pass',
       status: 'Active',
@@ -81,7 +81,7 @@ describe('TV playback-token — direct + proxy fallback (Round 16)', () => {
     await Channel.create({
       channelId: 'CH-DIRECT',
       channelName: 'قناة مباشرة',
-      channelUrl: 'https://cf.business-cloud-neo.ru/live/abc/def/262849.m3u8',
+      channelUrl: 'https://cf.upstream-host-redacted/live/abc/def/262849.m3u8',
       isActive: true,
       metadata: { source: 'xtream', xtreamSourceId: String(source._id) },
     });

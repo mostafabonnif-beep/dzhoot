@@ -381,7 +381,7 @@ async function syncSeriesEpisodes(sourceId: mongoose.Types.ObjectId, seriesDoc: 
     // (episode_count, cover, ...), while the actual episodes live in a DICT
     // `episodes` keyed by season number ({ "1": [...], "2": [...] }). Some
     // panels embed an `episodes` array inside each season object instead, and
-    // some (NEO included) return an EMPTY seasons array while the episodes
+    // some (Upstream included) return an EMPTY seasons array while the episodes
     // dict is populated. The previous parser read only `seasons[].episodes`,
     // so it imported zero episodes for the standard format — leaving the whole
     // catalog with 0 playable episodes. Parse all three shapes: union the

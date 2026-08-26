@@ -88,7 +88,7 @@ describe('syncSeriesEpisodes via ensureSeriesSeasons', () => {
     expect(stamped.episodesFetchedAt).toBeTruthy();
   });
 
-  test('empty seasons array with populated episodes dict still imports (NEO shape)', async () => {
+  test('empty seasons array with populated episodes dict still imports (Upstream shape)', async () => {
     const series = await seedSeries();
     jest.spyOn(axios, 'get').mockResolvedValue({ data: EMPTY_SEASONS_BUT_EPISODES });
     mockSourceLookup();

@@ -11,7 +11,7 @@
 | **المستودع** | ✅ GitHub `main` = `b024e55` = الخادم (12 ملفًا بالـ checksums) |
 | **الإنتاج** | ✅ `v1.0.1-20260824T195220Z` — 6 حاويات healthy + لا OOM |
 | **الجولة 13** | ✅ 4 أخطاء أُصلحت + ميزتان جديدتان (كلها مُتحقق حيًا) |
-| **القنوات في التطبيق** | ✅ **~90% من عينة 30 قناة حية وتشتغل** (27 ALIVE / 2 DEAD / 1 EMPTY) — مصدر Xtream واحد (Business Cloud NEO) |
+| **القنوات في التطبيق** | ✅ **~90% من عينة 30 قناة حية وتشتغل** (27 ALIVE / 2 DEAD / 1 EMPTY) — مصدر Xtream واحد (Primary Upstream) |
 | **الاختبارات** | ✅ 253/253 باك-إند + 6/6 واجهة + tsc + eslint نظيفة |
 
 ---
@@ -41,8 +41,8 @@
 7. **بحث شامل ⌘K / Ctrl+K**: ملف جديد `frontend/src/components/global-search.tsx` + زر في الهيدر — يبحث بالتوازي في المستخدمين + الأكواد + القنوات، تنقل بلوحة المفاتيح، نتائج مجمعة، يعمل من أي صفحة.
 
 ### ج) فحص القنوات (طلب المستخدم: "القنوات فيها شغالة في التطبيق")
-- **16,640 قناة، كلها `isActive: true`، كلها بروابط** من مصدر Xtream واحد: `Business Cloud NEO` (`cf.business-cloud-neo.ru`).
-- **بروتوكول البث**: الرابط `https://cf.business-cloud-neo.ru/live/.../NNN.m3u8` يعيد **302** إلى نطاق edge موقّت (`*.ip1-neo62-htweerwerww.me:80/live/play/TOKEN/NNN`) ثم قائمة HLS حية.
+- **16,640 قناة، كلها `isActive: true`، كلها بروابط** من مصدر Xtream واحد: `Primary Upstream` (`cf.upstream-host-redacted`).
+- **بروتوكول البث**: الرابط `https://cf.upstream-host-redacted/live/.../NNN.m3u8` يعيد **302** إلى نطاق edge موقّت (`*.edge-host-redacted:80/live/play/TOKEN/NNN`) ثم قائمة HLS حية.
 - **عينة 30 قناة عشوائية (اختبار من الخادم بوكيل VLC)**: **27 حية (90%)** تحوي `#EXT-X-MEDIA-SEQUENCE` + **2 ميتة** ("Cannot read /home/nxt/storage/streams/NNNN_.m3u8" — القناة غير موجودة عند المزود) + **1 فارغة** (لا استجابة).
 - **الخلاصة**: القنوات تشتغل في التطبيق فعلًا؛ ~7-10% ميتة بسبب المزود (طبيعي في IPTV أحادي المصدر). `flaggedBad` = 0 و`alternateStreams` = 0 — لا يوجد بدائل بعد.
 

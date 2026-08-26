@@ -86,7 +86,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     return Channel.create({
       channelId,
       channelName: 'قناة حية',
-      channelUrl: `http://neo.test/live/u/p/262849.m3u8`,
+      channelUrl: `http://upstream.test/live/u/p/262849.m3u8`,
       isActive: true,
       metadata: { source: 'xtream', xtreamSourceId: String(source._id) },
     });
@@ -95,7 +95,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
   it('source-hiding: without ALLOW_DIRECT_PLAYBACK a direct-enabled source still yields a relayed token', async () => {
     process.env.ALLOW_DIRECT_PLAYBACK = 'false';
     const source = await XtreamSource.create({
-      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'verified', directPlayback: true,
     });
     await seedChannel(source);
@@ -107,10 +107,10 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     // The client only ever sees OUR server URL — the provider host/credentials
     // must never appear in anything client-visible.
     expect(data.playbackUrl).toContain('/api/v1/tv/playback/');
-    expect(data.playbackUrl).not.toContain('neo.test');
+    expect(data.playbackUrl).not.toContain('upstream.test');
     const payload = verifyPlaybackToken(tokenFromUrl(data.playbackUrl));
     expect(payload?.direct).not.toBe(true);
-    expect(payload?.streamUrl).toContain('neo.test');
+    expect(payload?.streamUrl).toContain('upstream.test');
     // No direct token, so no direct→proxy pair is minted either.
     expect(data.proxyPlaybackUrl).toBeUndefined();
     process.env.ALLOW_DIRECT_PLAYBACK = 'true';
@@ -125,11 +125,11 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('JSON playlist never leaks provider hosts — logos are relayed, stream URLs are ours', async () => {
     const source = await XtreamSource.create({
-      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'verified', directPlayback: true,
     });
     await Channel.create({
-      channelId: 'CH-LOGO', channelName: 'قناة', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/1.m3u8',
+      channelId: 'CH-LOGO', channelName: 'قناة', channelUrl: 'https://cf.upstream-host-redacted/live/u/p/1.m3u8',
       channelImg: 'http://51.158.145.100/picons/logos/x.png', isActive: true,
       metadata: { source: 'xtream', xtreamSourceId: String(source._id) },
     });
@@ -141,7 +141,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     // No RAW provider URL may appear — the provider host only survives as an
     // encoded query parameter of OUR logo relay endpoint.
     expect(body).not.toContain('http://51.158.145.100');
-    expect(body).not.toContain('https://cf.business-cloud-neo.ru');
+    expect(body).not.toContain('https://cf.upstream-host-redacted');
     expect(body).toContain('/api/v1/tv/logo?url=http%3A%2F%2F51.158.145.100');
     expect(body).toContain('/api/v1/tv/logo?url=');
     expect(body).toContain('/api/v1/tv/playback/');
@@ -149,7 +149,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('healthy primary → normal token, no failover', async () => {
     const source = await XtreamSource.create({
-      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'verified', directPlayback: true,
     });
     await seedChannel(source);
@@ -160,12 +160,12 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.body.data.source).toBeUndefined();
     expect(getFailoverTarget).not.toHaveBeenCalled();
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toContain('neo.test');
+    expect(payload?.streamUrl).toContain('upstream.test');
   });
 
   it('primary down + verified backup map → token served from the backup source', async () => {
     const primary = await XtreamSource.create({
-      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'degraded', directPlayback: true,
     });
     const backup = await XtreamSource.create({
@@ -196,7 +196,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('catch-up request never fails over even when the primary is down', async () => {
     const primary = await XtreamSource.create({
-      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'blocked', directPlayback: true,
     });
     await seedChannel(primary);
@@ -205,7 +205,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     const res = await request(buildApp())
       .post('/api/v1/tv/playback-token')
       .send({ channelId: 'CH-LIVE', slot: 0, catchupStartMs: Date.now(), catchupDurationMin: 30 });
-    // No failover consulted; catch-up stays on the primary (NEO).
+    // No failover consulted; catch-up stays on the primary (Upstream).
     expect(getFailoverTarget).not.toHaveBeenCalled();
     // The route resolves a catch-up URL or reports catch-up unavailable — but
     // never touches the backup path.
@@ -214,7 +214,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('primary down but no map → keeps the primary URL (directPlayback still eligible)', async () => {
     const primary = await XtreamSource.create({
-      name: 'NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'blocked', directPlayback: true,
     });
     await seedChannel(primary);
@@ -225,6 +225,6 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBeUndefined();
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toContain('neo.test');
+    expect(payload?.streamUrl).toContain('upstream.test');
   });
 });

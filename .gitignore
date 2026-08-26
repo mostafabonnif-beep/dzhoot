@@ -36,6 +36,6 @@ coverage/
 **/.gradle/
 **/build/
 
-# NEO home-relay files — require explicit owner confirmation (audit item)
+# Upstream home-relay files — require explicit owner confirmation (audit item)
 /relay.py
-/neo-relay-manage.sh
+/*-relay-manage.sh

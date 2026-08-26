@@ -15,6 +15,7 @@ const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../util
 const { audit } = require('../services/audit-log');
 const { channelCache } = require('../services/cache');
 const { buildChannelHealth } = require('../utils/channel-health');
+const { proxyLogoUrl } = require('../utils/logo-proxy');
 
 // The shared admin/demo catalog is identical for every admin hit and is the heaviest
 // read. Cache it (10 min TTL via channelCache) and bust it on any catalog mutation.
@@ -182,6 +183,10 @@ function tokenizeListForClient(channels, user, req) {
   return channels.map((raw, i) => {
     const safe = { ...raw };
     if (raw.channelUrl) safe.channelUrl = makeUrl(raw.channelUrl);
+    // Channel logos live on the providers' image hosts — relay them through
+    // our own server so customers never see (or DNS-resolve) those hosts.
+    if (raw.tvgLogo) safe.tvgLogo = proxyLogoUrl(baseUrl, raw.tvgLogo);
+    if (raw.channelImg) safe.channelImg = proxyLogoUrl(baseUrl, raw.channelImg);
     safe.alternateStreams = (raw.alternateStreams || [])
       .filter((a) => a.liveness?.status !== 'dead' && a.flaggedBad?.isFlagged !== true)
       .slice(0, 10)

@@ -2,7 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 /**
  * ChannelFailoverMap — a side-table that maps a catalog channel (from the
- * primary source, e.g. Business Cloud NEO) to a matching channel on a backup
+ * primary source, e.g. Primary Upstream) to a matching channel on a backup
  * Xtream source (e.g. ottstreambox). When the primary source goes down, the
  * playback-token flow uses this map to issue a token from the backup source
  * instead — no app update, no customer-visible change beyond a 2-5s spinner.

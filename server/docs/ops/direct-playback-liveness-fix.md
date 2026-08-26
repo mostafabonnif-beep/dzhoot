@@ -3,7 +3,7 @@
 ## Root cause
 
 Channels imported from **direct-playback** Xtream sources (e.g. Business Cloud
-NEO) are served straight to clients; the server's datacenter IP cannot probe
+Upstream) are served straight to clients; the server's datacenter IP cannot probe
 them (upstream returns HTTP 456 / blocks the IP). Channels imported earlier —
 when the source was still server-probed — keep a stale `metadata.isWorking=false`,
 so the admin dashboard reports the whole catalog as "dead" (16,635 failing on
@@ -48,7 +48,7 @@ docker compose -f docker-compose.production.yml --env-file /etc/dzhoot/.env.prod
 '
 ```
 
-Expected on 2026-08-23 production: `modified ≈ 16632` (all Business Cloud NEO
+Expected on 2026-08-23 production: `modified ≈ 16632` (all Primary Upstream
 channels); dashboard banner and channel health then show the catalog as working,
 with only genuinely-dead probed (M3U) channels remaining flagged.
 
