@@ -72,3 +72,18 @@
 تم تحسين `ComposeMainActivity` وإدراج البحث كوجهة أساسية في شريط الهاتف السفلي. أصبح شريط الهاتف يحتوي خمس وجهات عالية الاستخدام: الرئيسية، البحث، المفضلة، التصنيفات، والإعدادات. بقي شريط Android TV منفصلاً ومحتفظاً بالتنقل الخاص بالريموت، كما بقيت الدليل وVOD متاحين من مساراتهما المناسبة.
 
 نجحت فحوص CI بعد إصلاح تعارض Kotlin: Android lint وunit tests وassemble debug، إضافة إلى frontend وbackend وsecret guard. تم دمج الإصلاح عبر PR #71، ثم بناء الإصدار الرسمي `1.0.16` عبر [Release Candidate workflow](https://github.com/mostafabonnif-beep/dzhoot/actions/runs/33012013143)، ونجحت خطوات التوقيع والتحقق ورفع official APK. هذا الإصدار يختلف فعلياً في التنقل عن 1.0.15، وليس مجرد إعادة توقيع.
+
+
+## تحديث النشر التلقائي — 1.0.16
+
+تم دفع التغييرات إلى GitHub ودمجها في `main` عبر PR #72. بُني APK الرسمي 1.0.16 على VPS باستخدام keystore الإنتاج، ثم وُضع في `/opt/dzhoot/server/downloads/dzhoof-v1.0.16.apk` بصلاحيات قراءة عامة. بعد تحديث bind mount الخاص بـ Caddy، أصبح الرابط العام يعيد HTTP 200:
+
+`https://iptv.ld-11.net/downloads/dzhoof-v1.0.16.apk`
+
+تم تسجيل AppVersion في قاعدة `dzhoof-iptv` بالقيم `versionName=1.0.16` و`versionCode=10016` و`isActive=true`، مع تعطيل الإصدار السابق فقط بعد نجاح إدخال الإصدار الجديد. اختبار `/api/v1/app/version` أكد أن جهازاً على 10015 يحصل على `updateAvailable=true` وأن جهازاً على 10016 يحصل على `updateAvailable=false`.
+
+أُخذت نسخة قبل تعديل AppVersion في:
+
+`/opt/dzhoot/server/backups/appversions-pre-20260826T212511Z.json`
+
+لم تتم إعادة تشغيل API أو MongoDB أو Redis أو Scheduler. تمت إعادة إنشاء Caddy وحده لتحديث mount الملفات، ثم بقيت الخدمات الأخرى بحالتها الصحية.
