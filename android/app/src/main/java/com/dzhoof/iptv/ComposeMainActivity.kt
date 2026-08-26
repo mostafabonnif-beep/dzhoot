@@ -383,11 +383,24 @@ private fun DzhoofAppShell(
     }
 }
 
-private val bottomNavItems = listOf(
+private val tvBottomNavItems = listOf(
     Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
     Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
     Triple(Screen.Catalog, Icons.Default.Movie, "فيديو"),
+    Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
+)
+
+/**
+ * Phone navigation intentionally stays focused on five high-frequency actions.
+ * Search is a first-class destination rather than a floating-only shortcut;
+ * Guide and VOD remain reachable from the catalog/categories flows.
+ */
+private val phoneBottomNavItems = listOf(
+    Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
+    Triple(Screen.Search, Icons.Default.Search, "بحث"),
+    Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
+    Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
     Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
 )
 
@@ -403,6 +416,7 @@ private fun BottomNavBar(
     val iconSize = if (isPhone) 24.dp else 22.dp
     val labelSize = if (isPhone) 11.sp else 10.sp
     val accent = MaterialTheme.colorScheme.primary
+    val items = if (isPhone) phoneBottomNavItems else tvBottomNavItems
 
     // شريط سفلي عائم حديث — حاوية دائرية مرتفعة مع مؤشر "حبة" للأيقونة النشطة
     Surface(
@@ -416,6 +430,7 @@ private fun BottomNavBar(
             .height(barHeight)
             .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
+<<<<<<< HEAD
         Row(
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically,
@@ -436,6 +451,15 @@ private fun BottomNavBar(
                         .clickable { onScreenSelected(screen) }
                         .padding(horizontal = 12.dp, vertical = 5.dp)
                 ) {
+=======
+        items.forEach { (screen, icon, label) ->
+            val isSelected = currentRoute == screen.route ||
+                (screen == Screen.Channels && currentRoute == Screen.ChannelsByCategory.route)
+            NavigationBarItem(
+                selected = isSelected,
+                onClick = { onScreenSelected(screen) },
+                icon = {
+>>>>>>> 4d1bc4d (feat(android): promote search in phone navigation)
                     Icon(
                         imageVector = icon,
                         contentDescription = label,
