@@ -45,7 +45,7 @@ fun CategoryCard(
     isFavorite: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String = "$channelCount " + if (channelCount == 1) "قناة" else "قناة",
+    subtitle: String = "$channelCount " + if (channelCount == 1) "قناة" else "قنوات",
     onToggleFavorite: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
