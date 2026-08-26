@@ -1,4 +1,3 @@
-// @ts-nocheck
 /**
  * syncSeriesEpisodes parser regression tests.
  *
