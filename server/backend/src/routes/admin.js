@@ -675,7 +675,7 @@ router.get('/channels/filter-options', async (req, res) => {
       Channel.distinct('metadata.language', { ownerId: null }),
       Channel.distinct('metadata.country', { ownerId: null }),
     ]);
-    const statuses = ['Live', 'Dead'];
+    const statuses = ['Live', 'Dead', 'Untested'];
 
     res.json({
       success: true,
@@ -708,22 +708,6 @@ router.get('/channels', async (req, res) => {
       if (groups.length > 0) filter.channelGroup = { $in: groups };
     }
 
-    // Status filter: Active = isWorking !== false, Down = isWorking === false
-    if (status) {
-      const statuses = status
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean);
-      if (statuses.length === 1) {
-        if (statuses[0] === 'Dead') {
-          filter['metadata.isWorking'] = false;
-        } else if (statuses[0] === 'Live') {
-          filter['metadata.isWorking'] = { $ne: false };
-        }
-      }
-      // If both are selected, no filter needed (show all)
-    }
-
     // Language filter
     if (language) {
       const langs = language
@@ -748,6 +732,31 @@ router.get('/channels', async (req, res) => {
       filter.$or = [{ channelName: regex }, { channelGroup: regex }];
     }
 
+    // Health breakdown snapshot: reflects the current context (group/language/
+    // country/search) but deliberately ignores the status filter, so the
+    // quick-filter counts stay meaningful when a status is selected.
+    const healthFilter = { ...filter };
+
+    // Status filter: Live = isWorking !== false, Dead = isWorking === false,
+    // Untested = isWorking never set (matches missing/null). Multi-select → OR.
+    if (status) {
+      const statuses = status
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const clauses = [];
+      if (statuses.includes('Dead')) clauses.push({ 'metadata.isWorking': false });
+      if (statuses.includes('Live')) clauses.push({ 'metadata.isWorking': { $ne: false } });
+      if (statuses.includes('Untested')) clauses.push({ 'metadata.isWorking': { $nin: [true, false] } });
+      if (clauses.length === 1) {
+        Object.assign(filter, clauses[0]);
+      } else if (clauses.length > 1 && clauses.length < 3) {
+        // $and wrapper so we never clash with the search $or above.
+        filter.$and = [{ $or: clauses }];
+      }
+      // Selecting all three statuses = show everything (no filter).
+    }
+
     const p = Math.max(parseInt(page, 10) || 1, 1);
     const ps = Math.min(Math.max(parseInt(pageSize, 10) || 50, 1), 200);
 
@@ -755,7 +764,8 @@ router.get('/channels', async (req, res) => {
     // filter — cache it (short TTL, busted on catalog mutations) and run it alongside the find.
     const filterKey = JSON.stringify({ group, status, language, country, search });
     const countKey = `chcount:${filterKey}`;
-    const healthKey = `chcount:health:${filterKey}`;
+    // Health ignores the status filter (see healthFilter above) — cache by context only.
+    const healthKey = `chcount:health:${JSON.stringify({ group, language, country, search })}`;
 
     const [channels, totalCount, health] = await Promise.all([
       Channel.find(filter)
@@ -774,7 +784,7 @@ router.get('/channels', async (req, res) => {
         const cached = await statsCache.get(healthKey);
         if (cached) return cached;
         const agg = await Channel.aggregate([
-          { $match: filter },
+          { $match: healthFilter },
           { $group: { _id: '$metadata.isWorking', n: { $sum: 1 } } },
         ]);
         const fresh = { working: 0, notWorking: 0, untested: 0 };
