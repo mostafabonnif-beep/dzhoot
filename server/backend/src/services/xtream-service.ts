@@ -376,40 +376,90 @@ async function upsertSeries(sourceId: mongoose.Types.ObjectId, item: any, group:
 async function syncSeriesEpisodes(sourceId: mongoose.Types.ObjectId, seriesDoc: any, creds: XtreamCredentials) {
   try {
     const info = await apiGet(creds, 'get_series_info', { series_id: seriesDoc.externalId });
-    const seasons = Array.isArray(info?.seasons) ? info.seasons : [];
-    for (const s of seasons) {
+
+    // Xtream Codes standard format: `seasons` carries season METADATA only
+    // (episode_count, cover, ...), while the actual episodes live in a DICT
+    // `episodes` keyed by season number ({ "1": [...], "2": [...] }). Some
+    // panels embed an `episodes` array inside each season object instead, and
+    // some (NEO included) return an EMPTY seasons array while the episodes
+    // dict is populated. The previous parser read only `seasons[].episodes`,
+    // so it imported zero episodes for the standard format — leaving the whole
+    // catalog with 0 playable episodes. Parse all three shapes: union the
+    // season numbers from both places, then prefer the dict (fall back to the
+    // embedded array).
+    const seasonsRaw: any[] = Array.isArray(info?.seasons) ? info.seasons : [];
+    const episodesDict: Record<string, any[]> =
+      info?.episodes && typeof info.episodes === 'object' && !Array.isArray(info.episodes)
+        ? info.episodes
+        : {};
+
+    const seasonNumbers = new Set<number>();
+    for (const s of seasonsRaw) seasonNumbers.add(Number(s?.season_number) || 0);
+    for (const key of Object.keys(episodesDict)) {
+      if (Array.isArray(episodesDict[key])) seasonNumbers.add(Number(key) || 0);
+    }
+
+    for (const seasonNumber of seasonNumbers) {
+      const meta =
+        seasonsRaw.find((s) => (Number(s?.season_number) || 0) === seasonNumber) || {};
       const season = await Season.findOneAndUpdate(
-        { seriesId: seriesDoc._id, seasonNumber: Number(s.season_number) || 0 },
+        { seriesId: seriesDoc._id, seasonNumber },
         {
           $set: {
-            name: String(s.name || `Season ${s.season_number}`),
-            cover: s.cover || '',
+            name: String(meta.name || `Season ${seasonNumber}`),
+            cover: meta.cover || '',
           },
         },
         { upsert: true, setDefaultsOnInsert: true, new: true },
       ).exec();
 
-      const episodes = Array.isArray(s.episodes) ? s.episodes : [];
+      const embedded = Array.isArray(meta.episodes) ? meta.episodes : [];
+      const episodes =
+        embedded.length > 0
+          ? embedded
+          : Array.isArray(episodesDict[String(seasonNumber)])
+            ? episodesDict[String(seasonNumber)]
+            : [];
       for (const ep of episodes) {
-        const ext = ep.container_extension || 'm3u8';
-        await Episode.findOneAndUpdate(
-          { seriesId: seriesDoc._id, externalId: String(ep.id) },
-          {
-            $set: {
-              seasonId: season._id,
-              episodeNumber: Number(ep.episode_num) || 0,
-              title: String(ep.title || `Episode ${ep.episode_num || ''}`).trim(),
-              description: ep.info?.plot || '',
-              thumbnail: ep.info?.movie_image || ep.info?.thumb || '',
-              duration: ep.info?.duration ? Number(ep.info.duration) : null,
-              streamUrl: episodeUrl(creds, ep.id, String(ext).replace(/^\./, '')),
-              containerExtension: String(ext).replace(/^\./, ''),
+        if (!ep?.id) continue;
+        try {
+          const ext = ep.container_extension || 'm3u8';
+          // Panels emit duration as free text ("45 min", "01:30:00", "N/A") —
+          // Number() then yields NaN and Mongoose throws a CastError that used
+          // to abort the WHOLE series import (0 episodes stored). Parse the
+          // leading number only, and never let one bad episode kill the rest.
+          const rawDuration = String(ep.info?.duration ?? '').match(/[\d.]+/);
+          const parsedDuration = rawDuration ? Number(rawDuration[0]) : NaN;
+          await Episode.findOneAndUpdate(
+            { seriesId: seriesDoc._id, externalId: String(ep.id) },
+            {
+              $set: {
+                seasonId: season._id,
+                episodeNumber: Number(ep.episode_num) || 0,
+                title: String(ep.title || `Episode ${ep.episode_num || ''}`).trim(),
+                description: ep.info?.plot || '',
+                thumbnail: ep.info?.movie_image || ep.info?.thumb || '',
+                duration: Number.isFinite(parsedDuration) ? parsedDuration : null,
+                streamUrl: episodeUrl(creds, ep.id, String(ext).replace(/^\./, '')),
+                containerExtension: String(ext).replace(/^\./, ''),
+              },
             },
-          },
-          { upsert: true, setDefaultsOnInsert: true },
-        ).exec();
+            { upsert: true, setDefaultsOnInsert: true },
+          ).exec();
+        } catch (epErr) {
+          console.warn(
+            `[xtream] episode ${ep.id} import failed for series ${seriesDoc.externalId}:`,
+            (epErr as Error).message,
+          );
+        }
       }
     }
+    // Stamp ONLY on success: genuinely episode-less series are cached for the
+    // stale window, while transient panel/data errors retry on the next open.
+    await Series.updateOne(
+      { _id: seriesDoc._id },
+      { $set: { episodesFetchedAt: new Date() } },
+    ).exec();
   } catch (err) {
     // Episodes are best-effort — a single series must not fail the whole sync.
     console.warn(`[xtream] episodes sync failed for series ${seriesDoc.externalId}:`, (err as Error).message);
