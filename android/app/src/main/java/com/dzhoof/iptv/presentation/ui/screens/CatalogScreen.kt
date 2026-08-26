@@ -325,6 +325,7 @@ private fun SeriesDetails(
     onEpisodeClick: (Episode) -> Unit,
 ) {
     if (series == null) return
+    val isCompact = LocalConfiguration.current.screenWidthDp < 600
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = onBack) { Text("رجوع") }
         Spacer(modifier = Modifier.width(16.dp))
@@ -365,7 +366,11 @@ private fun SeriesDetails(
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(episodes, key = { it.id }) { episode ->
-                EpisodeRow(episode = episode, onClick = { onEpisodeClick(episode) })
+                EpisodeRow(
+                    episode = episode,
+                    isCompact = isCompact,
+                    onClick = { onEpisodeClick(episode) },
+                )
             }
         }
     }
@@ -400,7 +405,11 @@ private fun PosterCard(
 }
 
 @Composable
-private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
+private fun EpisodeRow(
+    episode: Episode,
+    isCompact: Boolean,
+    onClick: () -> Unit,
+) {
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -414,16 +423,21 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
                 model = episode.thumbnail,
                 contentDescription = episode.title,
                 modifier = Modifier
-                    .width(180.dp)
-                    .height(100.dp)
+                    .width(if (isCompact) 112.dp else 180.dp)
+                    .height(if (isCompact) 72.dp else 100.dp)
                     .clip(MaterialTheme.shapes.small),
                 contentScale = ContentScale.Crop,
             )
             Spacer(modifier = Modifier.width(14.dp))
             Column {
-                Text("الحلقة ${episode.episodeNumber}: ${episode.title}", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "الحلقة ${episode.episodeNumber}: ${episode.title}",
+                    style = if (isCompact) MaterialTheme.typography.titleSmall else MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 episode.description?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(it, maxLines = if (isCompact) 2 else 3, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
