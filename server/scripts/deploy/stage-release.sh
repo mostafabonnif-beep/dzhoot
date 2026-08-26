@@ -17,7 +17,7 @@ set -Eeuo pipefail
 SHA_OR_REF="${1:-main}"
 REPO="${DZHOOF_REPO:-mostafabonnif-beep/dzhoot}"
 RELEASES_ROOT="${RELEASES_ROOT:-/opt/dzhoot-releases}"
-TARBALL_URL="https://github.com/${REPO}/archive/${SHA_OR_REF}.tar.gz"
+TARBALL_URL="https://api.github.com/repos/${REPO}/tarball/${SHA_OR_REF}"
 API_URL="https://api.github.com/repos/${REPO}/commits/${SHA_OR_REF}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -25,13 +25,23 @@ trap 'rm -rf "$TMP"' EXIT
 say() { printf '[stage-release] %s\n' "$*"; }
 die() { printf '[stage-release][ABORT] %s\n' "$*" >&2; exit 1; }
 
+# The repo is private: GitHub API + tarball downloads need the server token.
+TOKEN_FILE="${DZHOOT_TOKEN_FILE:-/etc/dzhoot/github.token}"
+github_auth_header() {
+  if [ -f "$TOKEN_FILE" ]; then
+    printf 'Authorization: Bearer %s' "$(tr -d '\r\n' < "$TOKEN_FILE")"
+  fi
+}
+
 command -v curl >/dev/null || die "curl is required"
 command -v python3 >/dev/null || die "python3 is required (for SHA resolution)"
 [ "$(id -u)" -eq 0 ] || die "run as root (release dirs are owned by root)"
 
 say "resolving $SHA_OR_REF in $REPO ..."
+CURL_AUTH=()
+if [ -f "$TOKEN_FILE" ]; then CURL_AUTH=(-H "$(github_auth_header)"); fi
 FULL_SHA="$(curl -fsS --max-time 20 -H "Accept: application/vnd.github+json" \
-  "$API_URL" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)"
+  "${CURL_AUTH[@]}" "$API_URL" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("sha",""))' 2>/dev/null || true)"
 case "$FULL_SHA" in
   ""|*[!0-9a-f]*) die "could not resolve '$SHA_OR_REF' to a full commit SHA (API response missing 'sha')" ;;
 esac
@@ -45,7 +55,7 @@ if [ -f "$DEST/.staged-ok" ]; then
 fi
 
 say "downloading $TARBALL_URL"
-curl -fsSL --max-time 300 "$TARBALL_URL" -o "$TMP/release.tar.gz" || die "tarball download failed"
+curl -fsSL --max-time 300 "${CURL_AUTH[@]}" "$TARBALL_URL" -o "$TMP/release.tar.gz" || die "tarball download failed"
 [ -s "$TMP/release.tar.gz" ] || die "downloaded tarball is empty"
 tar -tzf "$TMP/release.tar.gz" >/dev/null 2>&1 || die "downloaded file is not a valid tarball"
 
@@ -55,7 +65,7 @@ say "tarball sha256: $TARBALL_SHA256"
 # Extract only server/ from the tarball. GNU tar wildcards avoid listing the
 # whole archive; `head` on a tar listing would SIGPIPE tar and trip pipefail.
 mkdir -p "$TMP/extract"
-tar -xzf "$TMP/release.tar.gz" -C "$TMP/extract" --strip-components=1 --wildcards 'dzhoot-*/server' 2>/dev/null   || die "tarball does not contain server/ (wrong repo or SHA?)"
+tar -xzf "$TMP/release.tar.gz" -C "$TMP/extract" --strip-components=1 --wildcards "*-${REPO##*/}-*/server" 2>/dev/null   || die "tarball does not contain server/ (wrong repo or SHA?)"
 SRC_DIR="$TMP/extract/server"
 [ -d "$SRC_DIR" ] || die "tarball does not contain server/ (wrong repo or SHA?)"
 
