@@ -65,6 +65,7 @@ const common = {
   'channels.working': ['{count} يعمل', '{count} working', '{count} actifs'],
   'channels.notWorking': ['{count} لا يعمل', '{count} not working', '{count} inactifs'],
   'channels.untested': ['{count} لم يُختبر', '{count} untested', '{count} non testés'],
+  'channels.showAll': ['إظهار الكل', 'Show all', 'Tout afficher'],
   'channels.showing': ['(عرض {shown} من {total})', '(showing {shown} of {total})', '(affichage de {shown} sur {total})'],
   'channels.searchAvailable': ['ابحث عن القنوات المتاحة…', 'Search available channels…', 'Rechercher les chaînes disponibles…'],
   'channels.noAvailable': ['لا توجد قنوات متاحة للإضافة', 'No channels available to add', 'Aucune chaîne disponible à ajouter'],

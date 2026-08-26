@@ -1708,7 +1708,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
         ariaLabel={t('channels.search')}
       />
 
-      {/* Stream health stats */}
+      {/* Stream health stats — admins can click a stat to filter the list by it */}
       {(() => {
         const list = isAdmin ? channels : filtered;
         const working =
@@ -1721,18 +1721,67 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             : list.filter((c) => c.metadata?.isWorking === false).length;
         const untested =
           isAdmin && healthStats ? healthStats.untested : list.length - working - notWorking;
+        const statusFilterActive = isAdmin && selectedStatuses.length > 0;
+        const toggleStatusQuickFilter = (value: string) => {
+          setSelectedStatuses((prev) =>
+            prev.length === 1 && prev[0] === value ? [] : [value],
+          );
+        };
+        const quickBtn = (
+          value: string,
+          count: number,
+          label: string,
+          colorClass: string,
+        ) => {
+          const active = statusFilterActive && selectedStatuses.includes(value);
+          return (
+            <button
+              type="button"
+              onClick={() => toggleStatusQuickFilter(value)}
+              aria-pressed={active}
+              title={label}
+              className={`font-medium transition-all rounded-sm px-1 -mx-1 ${colorClass} ${
+                active
+                  ? 'underline underline-offset-4 decoration-2 bg-background/60'
+                  : 'hover:underline hover:underline-offset-4 opacity-90 hover:opacity-100'
+              }`}
+            >
+              {label.replace('{count}', String(count))}
+            </button>
+          );
+        };
         return (
           <div className="flex items-center gap-4 px-4 py-2.5 bg-muted/50 border border-border text-xs">
             <Zap className="h-4 w-4 text-muted-foreground shrink-0" />
-            <span className="text-signal-green font-medium">{t('channels.working').replace('{count}', String(working))}</span>
-            <span className="text-signal-red font-medium">{t('channels.notWorking').replace('{count}', String(notWorking))}</span>
-            <span className="text-muted-foreground font-medium">{t('channels.untested').replace('{count}', String(untested))}</span>
-            {!isAdmin && filtered.length !== channels.length && (
-              <span className="text-muted-foreground">
-                {t('channels.showing')
-                  .replace('{shown}', String(filtered.length))
-                  .replace('{total}', String(channels.length))}
-              </span>
+            {isAdmin ? (
+              <>
+                {quickBtn('Live', working, t('channels.working'), 'text-signal-green')}
+                {quickBtn('Dead', notWorking, t('channels.notWorking'), 'text-signal-red')}
+                {quickBtn('Untested', untested, t('channels.untested'), 'text-muted-foreground')}
+                {statusFilterActive && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedStatuses([])}
+                    className="ms-auto inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                    {t('channels.showAll')}
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="text-signal-green font-medium">{t('channels.working').replace('{count}', String(working))}</span>
+                <span className="text-signal-red font-medium">{t('channels.notWorking').replace('{count}', String(notWorking))}</span>
+                <span className="text-muted-foreground font-medium">{t('channels.untested').replace('{count}', String(untested))}</span>
+                {filtered.length !== channels.length && (
+                  <span className="text-muted-foreground">
+                    {t('channels.showing')
+                      .replace('{shown}', String(filtered.length))
+                      .replace('{total}', String(channels.length))}
+                  </span>
+                )}
+              </>
             )}
           </div>
         );
