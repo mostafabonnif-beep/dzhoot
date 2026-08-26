@@ -383,7 +383,10 @@ fun PlayerScreen(
                         onCycleAspect = onCycleAspect,
                         onShowTracks = onShowTracks,
                         onShowChannelList = onShowChannelList,
-                        onShowGuide = null,  // الدليل أُزيل — يستهلك الطاقة والإنترنت
+                        // The guide is opened on demand only. It does not preload
+                        // from the player, so it preserves the player's light idle
+                        // footprint while restoring a first-class TV shortcut.
+                        onShowGuide = onNavigateToGuide,
                         mobileChromeActions = if (isMobile) mobileChromeActions else null
                     )
                 }

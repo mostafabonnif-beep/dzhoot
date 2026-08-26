@@ -128,7 +128,7 @@ private fun GuideHeaderDetail(
 
     if (focused == null) {
         Text(
-            text = "Highlight a program for details",
+            text = "حدّد برنامجاً لعرض تفاصيله",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -149,7 +149,7 @@ private fun GuideHeaderDetail(
             if (program.isLive) {
                 Icon(
                     imageVector = Icons.Filled.FiberManualRecord,
-                    contentDescription = "Live now",
+                    contentDescription = "مباشر الآن",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.height(Dimens.IconSmall)
                 )
@@ -176,5 +176,5 @@ private fun GuideHeaderDetail(
 
 private fun buildTimeRange(start: Instant, end: Instant): String {
     val minutes = Duration.between(start, end).toMinutes().coerceAtLeast(0)
-    return "${formatSlotLabel(start)} – ${formatSlotLabel(end)}  (${minutes} min)"
+    return "${formatSlotLabel(start)} – ${formatSlotLabel(end)}  (${minutes} د)"
 }

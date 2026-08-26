@@ -73,7 +73,7 @@ internal fun OverlayChannelItem(
             modifier = Modifier.fillMaxSize()
         )
 
-        // "NOW" badge for the currently playing channel, "LAST"/"RECENT" for pinned recall cards
+        // شارة للقناة المشغلة حالياً، وأخرى للقنوات الأخيرة لتسهيل الرجوع السريع.
         if (isCurrentChannel || recentIndex != null) {
             Surface(
                 shape = BadgeShape,
@@ -82,9 +82,9 @@ internal fun OverlayChannelItem(
             ) {
                 Text(
                     text = when {
-                        isCurrentChannel -> "NOW"
-                        recentIndex == 0 -> "LAST"
-                        else -> "RECENT"
+                        isCurrentChannel -> "الآن"
+                        recentIndex == 0 -> "الأخيرة"
+                        else -> "حديثاً"
                     },
                     style = LabelBadge,
                     fontWeight = FontWeight.Bold,
@@ -133,7 +133,7 @@ internal fun OverlayCategoryChips(
     ) {
         item(key = "all") {
             OverlayFilterChip(
-                label = "All",
+                label = "الكل",
                 isSelected = selectedCategory == null,
                 selectedColor = Amber,
                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary,

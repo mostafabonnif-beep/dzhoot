@@ -92,13 +92,13 @@ internal fun PlayerQuickActions(
     ) {
         QuickActionButton(
             icon = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            label = if (isFavorite) "Favorited" else "Favorite",
+            label = if (isFavorite) "في المفضلة" else "إضافة للمفضلة",
             tint = if (isFavorite) MaterialTheme.colorScheme.error else OnVideo,
             onClick = onToggleFavorite,
             focusRequester = firstActionFocusRequester
         )
 
-        val sleepLabel = sleepTimerMinutes?.let { "Sleep ${it}m" } ?: "Sleep off"
+        val sleepLabel = sleepTimerMinutes?.let { "إيقاف بعد ${it} د" } ?: "إيقاف تلقائي متوقف"
         QuickActionButton(
             icon = Icons.Filled.Bedtime,
             label = sleepLabel,
