@@ -99,6 +99,13 @@ fun DzhoofNavGraph(
                         restoreState = true
                     }
                 },
+                onNavigateToGuide = {
+                    navController.navigate(Screen.Guide.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
                 onNavigateToSettings = {
                     navController.navigate(Screen.Settings.route) {
                         popUpTo(Screen.Home.route) { saveState = true }

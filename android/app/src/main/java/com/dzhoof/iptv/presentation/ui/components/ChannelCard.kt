@@ -52,6 +52,7 @@ import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
@@ -92,6 +93,13 @@ private fun channelMonogram(name: String): String {
         words.size == 1 -> words[0].take(2).uppercase()
         else -> (words[0].take(1) + words[1].take(1)).uppercase()
     }
+}
+
+/** Percentage elapsed in the EPG programme currently on air. */
+private fun liveProgramProgress(startMs: Long, endMs: Long, nowMs: Long): Float {
+    val durationMs = endMs - startMs
+    if (durationMs <= 0L) return 0f
+    return ((nowMs - startMs).toDouble() / durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -448,6 +456,12 @@ private fun ChannelCardContent(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+                LiveProgramProgress(
+                    startMs = channel.nowProgramStartMs,
+                    endMs = channel.nowProgramEndMs,
+                    accent = catColor,
+                    modifier = Modifier.padding(top = 5.dp, bottom = 5.dp)
+                )
             }
             Text(
                 text = channel.name,
@@ -460,6 +474,47 @@ private fun ChannelCardContent(
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+/**
+ * A light-weight EPG progress signal for a live card. The state refreshes at
+ * a human-readable cadence rather than every frame, keeping long home rails
+ * inexpensive even on entry-level TV hardware.
+ */
+@Composable
+private fun LiveProgramProgress(
+    startMs: Long?,
+    endMs: Long?,
+    accent: Color,
+    modifier: Modifier = Modifier
+) {
+    if (startMs == null || endMs == null || endMs <= startMs) return
+
+    val progress by produceState(
+        initialValue = liveProgramProgress(startMs, endMs, System.currentTimeMillis()),
+        key1 = startMs,
+        key2 = endMs
+    ) {
+        while (true) {
+            value = liveProgramProgress(startMs, endMs, System.currentTimeMillis())
+            delay(30_000L)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(3.dp)
+            .clip(CircleShape)
+            .background(OnVideo.copy(alpha = 0.25f))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(progress)
+                .fillMaxHeight()
+                .background(accent)
+        )
     }
 }
 

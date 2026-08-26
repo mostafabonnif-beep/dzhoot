@@ -39,7 +39,7 @@ android {
         val buildVersionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
-            "1.0.13"
+            "1.0.18"
         }
         val buildVersionParts = buildVersionName
             .trim()
@@ -257,6 +257,10 @@ dependencies {
 val sentryAuthToken = System.getenv("SENTRY_AUTH_TOKEN")?.trim().orEmpty()
 
 sentry {
+    // Gradle-plugin telemetry probes sentry-cli at task-graph time. Disable this
+    // non-essential build telemetry so local/CI tests do not depend on executing
+    // the downloaded CLI; the in-app Sentry SDK and authenticated upload tasks remain intact.
+    telemetry = false
     includeSourceContext = true
     org = "dzhoof"
     projectName = "dzhoof"

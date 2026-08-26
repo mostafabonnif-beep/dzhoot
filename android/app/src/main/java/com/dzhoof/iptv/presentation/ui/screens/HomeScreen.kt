@@ -30,6 +30,7 @@ fun HomeScreen(
     onNavigateToChannels: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToFavorites: () -> Unit,
+    onNavigateToGuide: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onChannelClick: (String) -> Unit,
     onPairDevice: () -> Unit = {},
@@ -101,6 +102,9 @@ fun HomeScreen(
                     lastPlayedChannelId = uiState.lastPlayedChannelId,
                     onChannelClick = openChannel,
                     onNavigateToChannels = onNavigateToChannels,
+                    onNavigateToSearch = onNavigateToSearch,
+                    onNavigateToGuide = onNavigateToGuide,
+                    onNavigateToFavorites = onNavigateToFavorites,
                     onToggleFavorite = viewModel::toggleFavorite,
                     onMultiviewClick = onMultiviewClick,
                     isDemo = isDemo

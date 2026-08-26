@@ -17,9 +17,11 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -160,6 +162,45 @@ internal fun BoxScope.PlayerOverlays(
                 style = BodyOverlay,
                 color = OnVideo
             )
+        }
+    }
+
+    // Fallback route badge: a successful automatic recovery should be visible
+    // to the viewer, without turning it into a blocking error state.
+    val fallbackLabel = when {
+        uiState.isUsingProxy -> "اتصال احتياطي نشط"
+        uiState.activeStreamUrl != null -> "مصدر احتياطي نشط"
+        else -> null
+    }
+    AnimatedVisibility(
+        visible = fallbackLabel != null && playbackHealthy,
+        enter = fadeIn(tween(DURATION_NORMAL, easing = EaseOutQuart)),
+        exit = fadeOut(tween(DURATION_EXIT, easing = EaseOutQuart)),
+        modifier = Modifier
+            .align(Alignment.BottomEnd)
+            .padding(end = 24.dp, bottom = if (infoBarVisible) 120.dp else 24.dp)
+    ) {
+        Surface(
+            color = ScrimHeavy,
+            shape = ShapePill
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.WifiTethering,
+                    contentDescription = null,
+                    tint = Amber,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = fallbackLabel.orEmpty(),
+                    style = LabelToast,
+                    color = OnVideo
+                )
+            }
         }
     }
 

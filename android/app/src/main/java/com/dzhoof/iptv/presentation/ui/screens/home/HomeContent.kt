@@ -52,6 +52,9 @@ fun HomeContent(
     lastPlayedChannelId: String?,
     onChannelClick: (String) -> Unit,
     onNavigateToChannels: (String) -> Unit,
+    onNavigateToSearch: () -> Unit,
+    onNavigateToGuide: () -> Unit,
+    onNavigateToFavorites: () -> Unit,
     onToggleFavorite: (String) -> Unit,
     onMultiviewClick: (String) -> Unit,
     isDemo: Boolean = false,
@@ -132,7 +135,7 @@ fun HomeContent(
         forYou.isNotEmpty(),
         popularCategories.isNotEmpty()
     ) {
-        var offset = 2 // Hero + featured row are always present
+        var offset = 3 // Command deck + hero + featured row are always present
         if (recentlyWatched.isNotEmpty()) offset++
         if (forYou.isNotEmpty()) offset++
         if (popularCategories.isNotEmpty()) offset++
@@ -155,6 +158,20 @@ fun HomeContent(
                 )
             }
         }
+        item(key = "command_deck") {
+            HomeCommandDeck(
+                channelCount = channels.size,
+                favoriteCount = channels.count { it.isFavorite },
+                onSearchClick = onNavigateToSearch,
+                onLiveClick = { onNavigateToChannels("") },
+                onGuideClick = onNavigateToGuide,
+                onFavoritesClick = onNavigateToFavorites,
+                modifier = Modifier
+                    .padding(horizontal = horizontalPadding)
+                    .padding(bottom = rowGap)
+                    .animateItemEntrance(index = 0)
+            )
+        }
         item(key = "hero") {
             heroChannel?.let { hero ->
                 HomeHero(
@@ -166,7 +183,7 @@ fun HomeContent(
                         // requiredHeight overrides HomeHero's internal .height() so
                         // the phone hero shrinks; TV/landscape is left untouched.
                         .then(if (isCompact) Modifier.requiredHeight(compactHeroHeight) else Modifier)
-                        .animateItemEntrance(index = 0)
+                        .animateItemEntrance(index = 1)
                 )
             }
         }
@@ -182,7 +199,7 @@ fun HomeContent(
                 horizontalPadding = horizontalPadding,
                 modifier = Modifier
                     .padding(bottom = rowGap)
-                    .animateItemEntrance(index = 1)
+                    .animateItemEntrance(index = 2)
             )
         }
 
@@ -200,7 +217,7 @@ fun HomeContent(
                     horizontalPadding = horizontalPadding,
                     modifier = Modifier
                         .padding(bottom = rowGap)
-                        .animateItemEntrance(index = 2)
+                        .animateItemEntrance(index = 3)
                 )
             }
         }
@@ -217,7 +234,7 @@ fun HomeContent(
                     horizontalPadding = horizontalPadding,
                     modifier = Modifier
                         .padding(bottom = rowGap)
-                        .animateItemEntrance(index = if (recentlyWatched.isNotEmpty()) 3 else 2)
+                        .animateItemEntrance(index = if (recentlyWatched.isNotEmpty()) 4 else 3)
                 )
             }
         }

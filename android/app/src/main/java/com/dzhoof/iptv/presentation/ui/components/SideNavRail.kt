@@ -30,13 +30,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.WifiTethering
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -78,9 +79,10 @@ private data class NavItem(
 
 private val topNavItems = listOf(
     NavItem(Screen.Home, Icons.Default.Home, "الرئيسية"),
+    NavItem(Screen.Channels, Icons.Default.WifiTethering, "البث المباشر"),
+    NavItem(Screen.Guide, Icons.Default.CalendarToday, "دليل البرامج"),
     NavItem(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     NavItem(Screen.Search, Icons.Default.Search, "بحث"),
-    NavItem(Screen.Categories, Icons.Default.Category, "التصنيفات"),
     NavItem(Screen.Catalog, Icons.Default.Movie, "فيديو"),
 )
 
