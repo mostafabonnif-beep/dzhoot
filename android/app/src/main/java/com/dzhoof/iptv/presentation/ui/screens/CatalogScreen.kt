@@ -35,6 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -170,6 +171,10 @@ private fun CatalogContent(
     onLoadMore: () -> Unit,
     onRetry: () -> Unit,
 ) {
+    val isCompact = LocalConfiguration.current.screenWidthDp < 600
+    val posterMinSize = if (isCompact) 118.dp else 150.dp
+    val posterHeight = if (isCompact) 172.dp else 210.dp
+
     if (state.isLoading && state.movies.isEmpty() && state.series.isEmpty()) {
         CircularProgressIndicator(modifier = Modifier.fillMaxWidth())
         return
@@ -188,7 +193,7 @@ private fun CatalogContent(
 
     if (state.tab == CatalogTab.MOVIES) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
+            columns = GridCells.Adaptive(minSize = posterMinSize),
             contentPadding = PaddingValues(bottom = 28.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -198,6 +203,7 @@ private fun CatalogContent(
                     title = movie.title,
                     subtitle = movie.year?.toString() ?: movie.category,
                     imageUrl = movie.poster,
+                    posterHeight = posterHeight,
                     onClick = { onMovieClick(movie) },
                 )
             }
@@ -211,7 +217,7 @@ private fun CatalogContent(
         }
     } else {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
+            columns = GridCells.Adaptive(minSize = posterMinSize),
             contentPadding = PaddingValues(bottom = 28.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -221,6 +227,7 @@ private fun CatalogContent(
                     title = series.title,
                     subtitle = series.category,
                     imageUrl = series.poster,
+                    posterHeight = posterHeight,
                     onClick = { onSeriesClick(series) },
                 )
             }
@@ -342,6 +349,7 @@ private fun PosterCard(
     title: String,
     subtitle: String,
     imageUrl: String?,
+    posterHeight: androidx.compose.ui.unit.Dp = 210.dp,
     onClick: () -> Unit,
 ) {
     Card(
@@ -353,7 +361,7 @@ private fun PosterCard(
             contentDescription = title,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(210.dp)
+                .height(posterHeight)
                 .clip(MaterialTheme.shapes.medium),
             contentScale = ContentScale.Crop,
         )
