@@ -87,3 +87,24 @@
 `/opt/dzhoot/server/backups/appversions-pre-20260826T212511Z.json`
 
 لم تتم إعادة تشغيل API أو MongoDB أو Redis أو Scheduler. تمت إعادة إنشاء Caddy وحده لتحديث mount الملفات، ثم بقيت الخدمات الأخرى بحالتها الصحية.
+
+
+## إصلاح احترافي لدورة التحديث — 1.0.17
+
+تم إصلاح دورة تحديث APK داخل `AppUpdater`: تسجيل BroadcastReceiver قبل `DownloadManager.enqueue` لمنع سباق التنزيل، تحديد MIME الصحيح، عرض سبب فشل DownloadManager، فحص `canRequestPackageInstalls()` قبل فتح المثبّت، فتح `ACTION_INSTALL_PACKAGE` بدلاً من Intent عام، والتحقق من توقيع APK قبل التثبيت.
+
+نجح CI الكامل في PR #74، بما في ذلك Android وBackend وFrontend وSecret Guard. بُني official release 1.0.17 في تشغيل Release Candidate رقم 33018511508، واجتاز التوقيع وفحص هوية الحزمة ورفع artifact الرسمي.
+
+تم نشر APK على VPS في:
+
+`https://iptv.ld-11.net/downloads/dzhoof-v1.0.17.apk`
+
+تحقق الرابط بإرجاع HTTP 200 و`content-type: application/vnd.android.package-archive` وحجم 77,803,824 بايت. SHA-256 للملف المنشور هو:
+
+`86b821b668a56c8208ee44c9721564f41f574669fb9ebf1398df6310a0389238`
+
+تم تسجيل الإصدار في AppVersion كـ `versionCode=10017` و`versionName=1.0.17`. فحص API أكد أن الأجهزة على 1.0.15 و1.0.16 ترى `updateAvailable=true`، بينما الجهاز على 1.0.17 يرى `updateAvailable=false`. أُخذت نسخة قبل تحديث سجل الإصدارات في:
+
+`/opt/dzhoot/server/backups/appversions-pre-20260826T222415Z.json`
+
+التوقيع متطابق بين 1.0.15 و1.0.16، وبصمة شهادة الإنتاج هي `5938049a7b7eb803d7354efb96ca1989fdf17af1f62ff0e7fb68bd765920bb11`. لذلك فإن مشكلة التحديث السابقة كانت في دورة التنزيل/التثبيت وتوزيع النسخة، وليست اختلاف شهادة بين النسختين.
