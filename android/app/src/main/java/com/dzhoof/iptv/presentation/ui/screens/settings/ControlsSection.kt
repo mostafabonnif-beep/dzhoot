@@ -58,7 +58,7 @@ internal fun ControlsSection(
     modifier: Modifier = Modifier
 ) {
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
-        SettingsCard(title = "تحكم المشغل", modifier = modifier) {
+    SettingsCard(title = "تحكم المشغل", modifier = modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(if (isCompact) 14.dp else 10.dp)) {
             PlayerKeyRow(
                 label = "تأكيد الخروج من التطبيق (اضغط رجوع مرتين في الرئيسية)",

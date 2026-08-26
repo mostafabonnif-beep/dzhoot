@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.presentation.ui.screens.player
 
 import android.content.Context
+import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -15,6 +16,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.source.MediaSource
 import com.dzhoof.iptv.domain.model.PlaybackTarget
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.dzhoof.iptv.ComposeMainActivity
@@ -54,6 +56,7 @@ internal fun isHlsMimeType(mimeType: String): Boolean {
  * archive URL, arms the recovery manager, and prepares playback.
  * Returns false when the channel has no usable stream URL.
  */
+@OptIn(UnstableApi::class)
 internal suspend fun prepareChannelStream(
     context: Context,
     exoPlayer: ExoPlayer,

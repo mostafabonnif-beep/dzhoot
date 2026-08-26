@@ -155,7 +155,7 @@ class AppUpdater @Inject constructor(
                                 onState(installUpdate())
                             } else {
                                 val reason = cursor.getString(
-                                    cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
+                                    cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON)
                                 )
                                 onState(DownloadState.Failed(
                                     if (reason.isNullOrBlank()) "فشل تنزيل التحديث" else "فشل تنزيل التحديث (رمز $reason)"
