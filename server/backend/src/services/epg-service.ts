@@ -401,16 +401,21 @@ export class EpgService {
         continue;
       }
 
-      // For iptv-org channels: extract country from channelId TLD
-      const epgId = ch.tvgId || ch.channelId || '';
-      const dotIdx = epgId.lastIndexOf('.');
-      if (dotIdx > 0 && dotIdx < epgId.length - 1) {
-        const country = epgId.substring(dotIdx + 1).toLowerCase();
-        if (country.length === 2) {
-          if (!countryToChannelIds.has(country)) {
-            countryToChannelIds.set(country, []);
-          }
-          countryToChannelIds.get(country)!.push(epgId);
+      // For iptv-org channels: extract country from the provider id suffix.
+      // Keep both tvgId and channelId as aliases: guides frequently publish one
+      // while the catalog stores the other. Matching remains exact after
+      // lowercasing, so this improves coverage without fuzzy name collisions.
+      const epgIds = [ch.tvgId, ch.channelId].filter(Boolean).map(String);
+      const countryId = epgIds.find((id) => {
+        const dotIdx = id.lastIndexOf('.');
+        return dotIdx > 0 && dotIdx < id.length - 1 && id.substring(dotIdx + 1).length === 2;
+      });
+      if (countryId) {
+        const country = countryId.substring(countryId.lastIndexOf('.') + 1).toLowerCase();
+        if (!countryToChannelIds.has(country)) countryToChannelIds.set(country, []);
+        const ids = countryToChannelIds.get(country)!;
+        for (const epgId of epgIds) {
+          if (!ids.some((existing) => existing.toLowerCase() === epgId.toLowerCase())) ids.push(epgId);
         }
       }
     }
@@ -883,23 +888,38 @@ export class EpgService {
     }
 
     const coverageSources = sources.map((source) => {
-      const identifiers = [...new Set(source.coveredChannelIds.map((id) => String(id).toLowerCase()))];
-      const matchedIdentifiers = identifiers.filter((id) => programIdSet.has(id));
-      const unmatchedChannels = identifiers
-        .filter((id) => !programIdSet.has(id))
-        .map((id) => channelByIdentifier.get(id))
-        .filter(Boolean)
+      const identifiers = [...new Set(source.coveredChannelIds.map((id) => String(id).trim().toLowerCase()))].filter(Boolean);
+      const channelMatches = new Map<string, { channel: any; matched: boolean }>();
+      for (const id of identifiers) {
+        if (id === '*') continue;
+        const channel = channelByIdentifier.get(id);
+        if (!channel) continue;
+        const key = String(channel._id || channel.channelId);
+        const current = channelMatches.get(key);
+        channelMatches.set(key, { channel, matched: Boolean(current?.matched || programIdSet.has(id)) });
+      }
+      const coveredChannels = identifiers.includes('*')
+        ? (channels as any[]).map((channel) => ({
+            channel,
+            matched: [channel.tvgId, channel.channelId]
+              .filter(Boolean)
+              .some((id: any) => programIdSet.has(String(id).trim().toLowerCase())),
+          }))
+        : [...channelMatches.values()];
+      const matchedChannels = coveredChannels.filter((entry) => entry.matched);
+      const unmatchedChannels = coveredChannels
+        .filter((entry) => !entry.matched)
         .slice(0, 100)
-        .map((channel: any) => ({
+        .map(({ channel }) => ({
           channelId: String(channel.channelId),
           name: String(channel.channelName || ''),
           tvgId: channel.tvgId ? String(channel.tvgId) : null,
         }));
       return {
         source: source.source,
-        coveredChannelCount: identifiers.length,
-        matchedChannelCount: matchedIdentifiers.length,
-        coveragePercent: identifiers.length === 0 ? 0 : Math.round((matchedIdentifiers.length / identifiers.length) * 100),
+        coveredChannelCount: coveredChannels.length,
+        matchedChannelCount: matchedChannels.length,
+        coveragePercent: coveredChannels.length === 0 ? 0 : Math.round((matchedChannels.length / coveredChannels.length) * 100),
         unmatchedChannels,
       };
     });
