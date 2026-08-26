@@ -85,17 +85,29 @@ jobs:
           DZHOOF_API_URL: ${{ inputs.api_url }}
         run: ./gradlew assembleRelease --stacktrace -PversionName=${{ inputs.version_name }}
 
-      - name: List built APKs
+      - name: Verify and package official release APK
         working-directory: android
-        run: find app/build/outputs -name "*.apk" -exec ls -la {} \; || true
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/official/release/app-official-release.apk
+          test -s "$APK"
+          SDK_BUILD_TOOLS="${ANDROID_SDK_ROOT}/build-tools/34.0.0"
+          "$SDK_BUILD_TOOLS/apksigner" verify --verbose "$APK"
+          "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "package: name='com.dzhoof.iptv'"
+          "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "versionName='${{ inputs.version_name }}'"
+          sha256sum "$APK" > app-official-release.apk.sha256
+          ls -lh "$APK" app-official-release.apk.sha256
 
-      - name: Upload signed release APK
+      - name: Upload official signed release APK
         uses: actions/upload-artifact@v4
         with:
-          name: dzhoof-release-${{ inputs.version_name }}
-          # upload-artifact resolves paths against the repo root (GITHUB_WORKSPACE),
-          # not the step's working-directory — hence the leading android/.
-          path: android/app/build/outputs/apk/*/release/*.apk
+          name: dzhoof-official-release-${{ inputs.version_name }}
+          # Only the official application is distributable to customers. The
+          # staging flavor is intentionally excluded to prevent wrong-package
+          # installation attempts and Play Protect confusion.
+          path: |
+            android/app/build/outputs/apk/official/release/app-official-release.apk
+            android/app/app-official-release.apk.sha256
           if-no-files-found: error
 
       - name: Remove signing material
