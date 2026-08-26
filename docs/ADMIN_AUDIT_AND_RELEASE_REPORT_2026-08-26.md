@@ -103,3 +103,15 @@
 تم اجتياز TypeScript وESLint وNext production build بعد هذه الإضافات، ثم دُمجت الجولة عبر [Pull Request #62](https://github.com/mostafabonnif-beep/dzhoot/pull/62). نُشر commit `78e144b45c07ae81f40d248c36a5868fe64a5bac` إلى VPS باستخدام staging وdry-run ثم atomic deploy. بقيت الخدمات الأساسية سليمة، وأعاد `/health` العام `status: ok`، كما لم يظهر OOM في فحص Scheduler.
 
 تظل قاعدة IPTV التشغيلية مطبقة: لا تُنشأ مسارات failover إلا لمصدر احتياطي مصرح به، ولا يعني نجاح استيراد الكتالوج أن البث الحي صالح للعملاء. الواجهة تعرض هذه الحالات منفصلة لتجنب اتخاذ قرار تشغيل خاطئ.
+
+## ملحق الجولة الثالثة
+
+تم توحيد إحصائيات `Active Channels` و`Stream Health` على نطاق واحد: قنوات الكتالوج التي تملك رابط بث فعلياً. لم تعد سجلات metadata-only تدخل في عدد القنوات القابلة للتشغيل، ما يمنع تضخيم المؤشر الإداري.
+
+كما حسّنت الجولة مطابقة EPG بشكل محافظ؛ أصبحت مصادر iptv-org تستخدم `tvgId` و`channelId` كمعرّفين بديلين دقيقين، وتُحسب التغطية على مستوى القناة الفريدة. أضيف دعم صحيح للمصادر العامة wildcard دون استخدام مطابقة fuzzy قد تربط برنامجاً بقناة خاطئة.
+
+وفي Scheduler، عند فتح أي تشغيل من السجل تُحمّل التفاصيل من `GET /scheduler/runs/:id`، وتظهر أوقات البدء والانتهاء والنتيجة والأخطاء والمهام الفرعية مباشرة من الخلفية.
+
+تم دمج الجولة عبر [Pull Request #64](https://github.com/mostafabonnif-beep/dzhoot/pull/64) و[Pull Request #65](https://github.com/mostafabonnif-beep/dzhoot/pull/65) و[Pull Request #66](https://github.com/mostafabonnif-beep/dzhoot/pull/66). الإصدار النشط على VPS هو `f4fca47e9cd79aa7bcdd9a641643061a16619e12`. اكتمل atomic deploy، ونجح `/health`، وبقيت API وFrontend وScheduler وMongoDB وRedis سليمة، ولم يظهر OOM في فحص Scheduler.
+
+ملاحظة اختبارية: فحوص TypeScript وESLint وNext production build ناجحة. اختبارات التكامل التي تعتمد على MongoMemoryServer لم تكتمل محلياً بسبب تعذر تنزيل MongoDB binary في بيئة الاختبار، لذلك بقيت هذه النقطة مسجلة للمراجعة في CI أو بيئة MongoDB معزولة جاهزة.
