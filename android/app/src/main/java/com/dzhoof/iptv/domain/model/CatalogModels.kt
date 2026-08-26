@@ -55,6 +55,7 @@ data class CatalogPage<T>(
 data class PlaybackAuthorization(
     val url: String,
     val expiresAt: Long,
+    val mimeType: String? = null,
 )
 
 data class UnifiedSearchResults(

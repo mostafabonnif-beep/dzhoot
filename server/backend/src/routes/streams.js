@@ -16,6 +16,7 @@ const { checkPlaybackSubscription } = require('../services/playback-access-servi
 const { issuePlaybackToken } = require('../services/playback-token');
 const { registerStreamSession } = require('../services/stream-session-service');
 const { getPublicBaseUrl } = require('../utils/public-url');
+const { inferPlaybackMimeType, HLS_MIME_TYPE } = require('../utils/playback-mime');
 
 // Stream authorization: /api/v1/streams
 // The client requests a playable URL here instead of using raw catalog URLs,
@@ -166,7 +167,13 @@ router.post('/authorize', async (req, res) => {
       direct: directPlayback,
       sessionId: rootSessionId,
     });
-    const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}.m3u8`;
+    // The token URL carries a container hint: HLS payloads keep the .m3u8
+    // suffix, progressive containers (MKV/MP4/AVI/TS — i.e. ALL of our VOD)
+    // must NOT get it, otherwise Media3 infers HLS from the extension and
+    // fails parsing the video bytes as a playlist (PARSING_CONTAINER_UNSUPPORTED).
+    const playbackMimeType = inferPlaybackMimeType(url);
+    const suffix = playbackMimeType === HLS_MIME_TYPE ? '.m3u8' : '';
+    const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}${suffix}`;
 
     // Per-user concurrent stream limit. A new session is rejected when the limit is reached; existing sessions are preserved.
     const session = await registerStreamSession({
@@ -191,6 +198,9 @@ router.post('/authorize', async (req, res) => {
         contentId: String(id),
         url: playbackUrl,
         expiresAt,
+        // Container hint so clients pick the right extractor instead of
+        // guessing from the (possibly extension-less) token URL.
+        mimeType: playbackMimeType,
         authorized: true,
         deliveryMode: directPlayback ? 'direct' : 'proxy',
         subscriptionRequired,

@@ -106,6 +106,7 @@ data class PlaybackAuthorizationData(
     val contentId: String,
     val url: String,
     val expiresAt: Long,
+    val mimeType: String? = null,
     val authorized: Boolean = false,
     val subscriptionRequired: Boolean = false,
 )

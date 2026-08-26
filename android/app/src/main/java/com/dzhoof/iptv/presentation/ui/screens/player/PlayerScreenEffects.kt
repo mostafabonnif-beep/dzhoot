@@ -12,7 +12,6 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.source.MediaSource
 import com.dzhoof.iptv.domain.model.PlaybackTarget
 import androidx.media3.common.Player
@@ -33,6 +32,20 @@ private fun mediaItem(url: String, mimeType: String?): MediaItem {
     val builder = MediaItem.Builder().setUri(url)
     if (!mimeType.isNullOrBlank()) builder.setMimeType(mimeType)
     return builder.build()
+}
+
+/**
+ * True when the server-described stream is HLS. Media3's
+ * MimeTypes.APPLICATION_M3U8 constant is "application/x-mpegURL", while the
+ * ecosystem (and older server builds) commonly send
+ * "application/vnd.apple.mpegurl". A plain equals() against the constant
+ * misses that and routes the playlist to the PROGRESSIVE extractor, which
+ * sniffs the playlist text and dies instantly with
+ * ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED — before fetching any segment.
+ */
+internal fun isHlsMimeType(mimeType: String): Boolean {
+    val m = mimeType.trim().lowercase()
+    return m.contains("mpegurl") || m.contains("m3u8") || m.contains("apple.streaming")
 }
 
 /**
@@ -91,9 +104,7 @@ internal suspend fun prepareChannelStream(
             // ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ("تنسيق البث غير
             // متوافق") because HlsMediaSource never fetches a segment.
             val primaryMime = primaryTarget.mimeType
-            if (primaryMime.isNullOrBlank() ||
-                primaryMime.equals(MimeTypes.APPLICATION_M3U8, ignoreCase = true)
-            ) {
+            if (primaryMime.isNullOrBlank() || isHlsMimeType(primaryMime)) {
                 exoPlayer.setMediaSource(buildHlsMediaSource(primaryTarget.url))
             } else {
                 exoPlayer.setMediaItem(
