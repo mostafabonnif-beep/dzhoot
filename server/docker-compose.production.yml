@@ -90,6 +90,8 @@ services:
       FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY}
       BACKEND_SENTRY_DSN: ${BACKEND_SENTRY_DSN}
       ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL}
+      # Internal Prometheus scrape token. Leave blank until the optional monitoring profile is enabled.
+      METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
       DISABLE_SCHEDULER: 'true'
@@ -254,6 +256,35 @@ services:
         max-size: '10m'
         max-file: '3'
 
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    container_name: dzhoof-prometheus
+    restart: unless-stopped
+    profiles: ['monitoring']
+    ports:
+      - '127.0.0.1:9090:9090'
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/runtime:/etc/prometheus/secrets:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - api
+    networks:
+      - dzhoof-network
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
 networks:
   dzhoof-network:
     driver: bridge
@@ -271,4 +302,6 @@ volumes:
   redis_data:
     driver: local
   recordings_data:
+    driver: local
+  prometheus_data:
     driver: local
