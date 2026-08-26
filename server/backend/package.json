@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@dzhoof/shared": "*",
+    "@prometheus-io/client": "^0.16.0",
     "@sentry/node": "^10.46.0",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
