@@ -1,6 +1,6 @@
 const fs = require('fs');
 const { timingSafeEqual } = require('crypto');
-const client = require('@prometheus-io/client');
+const client = require('prom-client');
 
 const registry = new client.Registry();
 registry.setDefaultLabels({ service: 'dzhoof-api' });
