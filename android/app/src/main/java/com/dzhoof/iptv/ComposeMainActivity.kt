@@ -430,13 +430,12 @@ private fun BottomNavBar(
             .height(barHeight)
             .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
-<<<<<<< HEAD
         Row(
             modifier = Modifier.fillMaxSize(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            bottomNavItems.forEach { (screen, icon, label) ->
+            items.forEach { (screen, icon, label) ->
                 val isSelected = currentRoute == screen.route ||
                     (screen == Screen.Channels && currentRoute == Screen.ChannelsByCategory.route)
                 Column(
@@ -451,15 +450,6 @@ private fun BottomNavBar(
                         .clickable { onScreenSelected(screen) }
                         .padding(horizontal = 12.dp, vertical = 5.dp)
                 ) {
-=======
-        items.forEach { (screen, icon, label) ->
-            val isSelected = currentRoute == screen.route ||
-                (screen == Screen.Channels && currentRoute == Screen.ChannelsByCategory.route)
-            NavigationBarItem(
-                selected = isSelected,
-                onClick = { onScreenSelected(screen) },
-                icon = {
->>>>>>> 4d1bc4d (feat(android): promote search in phone navigation)
                     Icon(
                         imageVector = icon,
                         contentDescription = label,
