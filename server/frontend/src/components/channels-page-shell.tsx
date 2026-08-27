@@ -104,6 +104,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   const isAdmin = mode === 'admin';
   const { toast } = useToast();
   const { t, locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
   const { user } = useAuthStore();
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,11 +203,17 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   const [testingAll, setTestingAll] = useState(false);
   const [testResults, setTestResults] = useState<{ working: number; failed: number } | null>(null);
 
-  // User: Add from system
+  // User: Add from system (server-side paginated catalog browse)
   const [allChannels, setAllChannels] = useState<Channel[]>([]);
+  const [allChannelsTotal, setAllChannelsTotal] = useState(0);
+  const [addPage, setAddPage] = useState(1);
   const [allChannelsLoading, setAllChannelsLoading] = useState(false);
   const [addChannelsError, setAddChannelsError] = useState('');
-  const [addSearch, setAddSearch] = useState('');
+  const {
+    search: addSearch,
+    debouncedSearch: addDebouncedSearch,
+    handleSearchChange: handleAddSearchChange,
+  } = useDebouncedSearch('', 300);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // User: M3U copy
@@ -357,16 +364,21 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     }
   }
 
-  async function fetchAllChannels(signal?: AbortSignal) {
+  async function fetchAvailableChannels(page: number, search: string, signal?: AbortSignal) {
     setAllChannelsLoading(true);
     setAddChannelsError('');
     try {
-      const res = await api.get('/channels', { signal });
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('pageSize', '50');
+      if (search) params.set('search', search);
+      const res = await api.get(`/channels?${params.toString()}`, { signal });
       const body = res.data;
       setAllChannels(Array.isArray(body) ? body : body.data || body.channels || []);
+      setAllChannelsTotal(body.totalCount ?? (Array.isArray(body) ? body.length : body.count || 0));
     } catch (err: unknown) {
       if (isCanceled(err)) return;
-      setAddChannelsError('تعذر تحميل القنوات');
+      setAddChannelsError(L('تعذر تحميل القنوات', 'Impossible de charger les chaînes', 'Failed to load channels'));
     } finally {
       if (!signal?.aborted) setAllChannelsLoading(false);
     }
@@ -386,14 +398,24 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
 
-  // User: load the full catalog when the "Add from system" panel opens
+  // User: fetch the first page when the "Add from system" panel opens
   useEffect(() => {
-    if (isAdmin || !showAdd || allChannels.length > 0) return;
+    if (isAdmin || !showAdd) return;
+    setAddPage(1);
     const controller = new AbortController();
-    fetchAllChannels(controller.signal);
+    fetchAvailableChannels(1, addDebouncedSearch, controller.signal);
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showAdd]);
+
+  // User: refetch on page change or debounced search change
+  useEffect(() => {
+    if (isAdmin || !showAdd) return;
+    const controller = new AbortController();
+    fetchAvailableChannels(addPage, addDebouncedSearch, controller.signal);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin, showAdd, addPage, addDebouncedSearch]);
 
   // Admin: track prev filters and reset page
   const prevFiltersRef = useRef({
@@ -1069,14 +1091,9 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     setTimeout(() => setCopied(false), 1500);
   }
 
-  // Add-from-system panel filtering
+  // Add-from-system panel: exclude already-owned channels (search is server-side now)
   const myIds = new Set(channels.map((c) => c._id));
-  const availableChannels = allChannels.filter(
-    (c) =>
-      !myIds.has(c._id) &&
-      (getName(c).toLowerCase().includes(addSearch.toLowerCase()) ||
-        c.channelGroup?.toLowerCase().includes(addSearch.toLowerCase())),
-  );
+  const availableChannels = allChannels.filter((c) => !myIds.has(c._id));
 
   // Detail modal fields
   const detailFields: ChannelField[] = detailChannel
@@ -1199,7 +1216,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'group',
           header: (
             <ColumnFilter
-              label="المجموعة"
+              label={L('المجموعة', 'Groupe', 'Group')}
               options={filterOptions.group}
               selected={selectedGroups}
               onChange={setSelectedGroups}
@@ -1214,7 +1231,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'country',
           header: (
             <ColumnFilter
-              label="الدولة"
+              label={L('الدولة', 'Pays', 'Country')}
               options={filterOptions.country}
               selected={selectedCountries}
               onChange={setSelectedCountries}
@@ -1231,7 +1248,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'language',
           header: (
             <ColumnFilter
-              label="اللغة"
+              label={L('اللغة', 'Langue', 'Language')}
               options={filterOptions.language}
               selected={selectedLanguages}
               onChange={setSelectedLanguages}
@@ -1266,7 +1283,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'status',
           header: (
             <ColumnFilter
-              label="الحالة"
+              label={L('الحالة', 'Statut', 'Status')}
               options={filterOptions.status}
               selected={selectedStatuses}
               onChange={setSelectedStatuses}
@@ -1292,7 +1309,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 onClick={() => handleTestOne(c)}
                 disabled={testing === c._id}
                 className="flex items-center justify-center h-6 w-6 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                title="اختبار البث"
+                title={L('اختبار البث', 'Tester le flux', 'Test stream')} aria-label={L('اختبار البث', 'Tester le flux', 'Test stream')}
               >
                 <Zap className="h-3 w-3" />
               </button>
@@ -1301,7 +1318,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 return viable.length > 0 ? (
                   <span
                     className="inline-flex items-center px-1 py-0.5 text-[9px] font-mono font-medium bg-primary/10 text-primary border border-primary/20"
-                    title={`${viable.length} alternate stream${viable.length > 1 ? 's' : ''}`}
+                    title={L(`${viable.length} بث بديل`, `${viable.length} flux alternatif${viable.length > 1 ? 's' : ''}`, `${viable.length} alternate stream${viable.length > 1 ? 's' : ''}`)}
                   >
                     +{viable.length}
                   </span>
@@ -1314,7 +1331,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           key: 'plays',
           header: (
             <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Plays
+              {L('المشاهدات', 'Lectures', 'Plays')}
             </span>
           ),
           cell: (c: Channel) => (
@@ -1335,7 +1352,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 onClick={() => handleSort('group')}
                 className="inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors text-left"
               >
-                Group <SortIcon field="group" />
+                {L('المجموعة', 'Groupe', 'Group')} <SortIcon field="group" />
               </button>
               <ColumnFilter
                 label=""
@@ -1355,7 +1372,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           mobileHidden: true,
           header: (
             <ColumnFilter
-              label="الحالة"
+              label={L('الحالة', 'Statut', 'Status')}
               options={statusOptions}
               selected={selectedStatuses}
               onChange={(v) => setSelectedStatuses(v)}
@@ -1381,7 +1398,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 onClick={() => handleTestOne(c)}
                 disabled={testing === c._id}
                 className="flex items-center justify-center h-6 w-6 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                title="اختبار البث"
+                title={L('اختبار البث', 'Tester le flux', 'Test stream')} aria-label={L('اختبار البث', 'Tester le flux', 'Test stream')}
               >
                 <Zap className="h-3 w-3" />
               </button>
@@ -1390,7 +1407,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 return viable.length > 0 ? (
                   <span
                     className="inline-flex items-center px-1 py-0.5 text-[9px] font-mono font-medium bg-primary/10 text-primary border border-primary/20"
-                    title={`${viable.length} alternate stream${viable.length > 1 ? 's' : ''}`}
+                    title={L(`${viable.length} بث بديل`, `${viable.length} flux alternatif${viable.length > 1 ? 's' : ''}`, `${viable.length} alternate stream${viable.length > 1 ? 's' : ''}`)}
                   >
                     +{viable.length}
                   </span>
@@ -1404,7 +1421,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           mobileHidden: true,
           header: (
             <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Plays
+              {L('المشاهدات', 'Lectures', 'Plays')}
             </span>
           ),
           cell: (c: Channel) => (
@@ -1627,7 +1644,10 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               type="text"
               placeholder={t('channels.searchAvailable')}
               value={addSearch}
-              onChange={(e) => setAddSearch(e.target.value)}
+              onChange={(e) => {
+                handleAddSearchChange(e.target.value);
+                setAddPage(1);
+              }}
               className="w-full h-10 ps-10 pe-4 border border-border bg-background text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
               aria-label={t('channels.searchAvailable')}
             />
@@ -1639,14 +1659,14 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                   <span className="text-destructive">{addChannelsError}</span>
                 ) : allChannelsLoading ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" /> جارٍ تحميل القنوات...
+                    <Loader2 className="h-4 w-4 animate-spin" /> {L('جارٍ تحميل القنوات...', 'Chargement des chaînes…', 'Loading channels...')}
                   </span>
                 ) : (
                   t('channels.noAvailable')
                 )}
               </div>
             ) : (
-              availableChannels.slice(0, 50).map((ch) => (
+              availableChannels.map((ch) => (
                 <label
                   key={ch._id}
                   className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
@@ -1669,6 +1689,16 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               ))
             )}
           </div>
+          {allChannelsTotal > 50 && (
+            <div className="flex justify-center border-t border-border pt-3">
+              <Pagination
+                page={addPage}
+                pageSize={50}
+                totalCount={allChannelsTotal}
+                onPageChange={setAddPage}
+              />
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <button
               onClick={handleAddChannels}
@@ -1686,7 +1716,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               }}
               className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
             >
-              إلغاء
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -2070,7 +2100,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 }}
                 className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
             </div>
           </form>
@@ -2192,7 +2222,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 onClick={() => setEditChannel(null)}
                 className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
             </div>
           </form>
@@ -2381,7 +2411,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               onClick={() => setShowImport(false)}
               className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
             >
-              إلغاء
+              {t('common.cancel')}
             </button>
           </div>
         </form>
@@ -2436,7 +2466,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               }}
               className="px-5 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
             >
-              إلغاء
+              {t('common.cancel')}
             </button>
           </div>
         </div>
