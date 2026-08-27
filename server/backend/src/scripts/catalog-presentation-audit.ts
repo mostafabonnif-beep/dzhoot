@@ -31,7 +31,7 @@ const REPORT_PATH = reportFlagIndex >= 0 && process.argv[reportFlagIndex + 1]
   : path.resolve(process.cwd(), `catalog-presentation-audit-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
 
 const HASH_MARKER = /#{3,}/u;
-const UPSTREAM_NAME_MARKER = /(?:^|[\s|_-])neo(?:[\s|_-]|$)/iu;
+const UPSTREAM_NAME_MARKER = /(?:^|[\s|_./-])neo(?:[\s|_./-]|$)/iu;
 const DISPLAY_FIELDS = ['channelName', 'tvgName', 'channelGroup', 'channelImg', 'tvgLogo'];
 
 function reasonsFor(channel: Record<string, unknown>): string[] {

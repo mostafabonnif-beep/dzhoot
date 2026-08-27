@@ -5,7 +5,7 @@
 // available to authorized operators while client payloads receive only neutral data.
 
 const HASH_MARKER = /#{3,}/u;
-const UPSTREAM_NAME_MARKER = /(?:^|[\s|_-])neo(?:[\s|_-]|$)/iu;
+const UPSTREAM_NAME_MARKER = /(?:^|[\s|_./-])neo(?:[\s|_./-]|$)/iu;
 const DEFAULT_COUNTRY = 'دولي';
 const DEFAULT_CATEGORY = 'عام';
 
