@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/components/locale-provider';
 import Pagination from '@/components/ui/pagination';
+import ConfirmDialog from '@/components/ui/confirm-dialog';
 import SearchInput from '@/components/ui/search-input';
 import { useDebouncedSearch } from '@/hooks/use-debounced-search';
 
@@ -47,6 +48,8 @@ export default function DevicesPage() {
   const [pairingsLoading, setPairingsLoading] = useState(true);
   const [pairingsPage, setPairingsPage] = useState(1);
   const [revokingId, setRevokingId] = useState<string | null>(null);
+  const [unpairTarget, setUnpairTarget] = useState<AdminDevice | null>(null);
+  const [revokeTarget, setRevokeTarget] = useState<PairingRequest | null>(null);
 
   const [error, setError] = useState('');
   const PAGE_SIZE = 50;
@@ -120,15 +123,14 @@ export default function DevicesPage() {
     if (devicesPage > maxPage) setDevicesPage(maxPage);
   }, [devicesTotal, devicesPage]);
 
-  async function handleUnpair(device: AdminDevice) {
-    const confirmed = window.confirm(
-      L(
-        `سيتم إلغاء اقتران الجهاز «${device.name || device.deviceId}» وحرر حصة جهاز لصاحبه. هل تريد المتابعة؟`,
-        `L’appareil «${device.name || device.deviceId}» sera désassocié et libérera une place pour son propriétaire. Continuer ?`,
-        `Device "${device.name || device.deviceId}" will be unpaired and free a device slot for its owner. Continue?`,
-      ),
-    );
-    if (!confirmed) return;
+  function handleUnpair(device: AdminDevice) {
+    setUnpairTarget(device);
+  }
+
+  async function confirmUnpair() {
+    const device = unpairTarget;
+    if (!device) return;
+    setUnpairTarget(null);
     setUnpairingId(device._id);
     try {
       await api.delete(`/admin/devices/${device._id}`, { data: { confirmed: true } });
@@ -141,15 +143,14 @@ export default function DevicesPage() {
     }
   }
 
-  async function handleRevokePairing(req: PairingRequest) {
-    const confirmed = window.confirm(
-      L(
-        `سيتم إنهاء طلب الاقتران PIN «${req.pin || ''}» (${req.deviceName || req.deviceModel || '—'}). هل تريد المتابعة؟`,
-        `La demande d’association PIN «${req.pin || ''}» (${req.deviceName || req.deviceModel || '—'}) sera expirée. Continuer ?`,
-        `Pairing request PIN "${req.pin || ''}" (${req.deviceName || req.deviceModel || '—'}) will be expired. Continue?`,
-      ),
-    );
-    if (!confirmed) return;
+  function handleRevokePairing(req: PairingRequest) {
+    setRevokeTarget(req);
+  }
+
+  async function confirmRevokePairing() {
+    const req = revokeTarget;
+    if (!req) return;
+    setRevokeTarget(null);
     setRevokingId(req._id);
     try {
       await api.delete(`/admin/pairing-requests/${req._id}`, { data: { confirmed: true } });
@@ -385,6 +386,42 @@ export default function DevicesPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!unpairTarget}
+        title={L('إلغاء اقتران الجهاز', 'Désassocier l’appareil', 'Unpair device')}
+        message={
+          unpairTarget
+            ? L(
+                `سيتم إلغاء اقتران الجهاز «${unpairTarget.name || unpairTarget.deviceId}» وحرر حصة جهاز لصاحبه. هل تريد المتابعة؟`,
+                `L’appareil «${unpairTarget.name || unpairTarget.deviceId}» sera désassocié et libérera une place pour son propriétaire. Continuer ?`,
+                `Device "${unpairTarget.name || unpairTarget.deviceId}" will be unpaired and free a device slot for its owner. Continue?`,
+              )
+            : ''
+        }
+        variant="destructive"
+        loading={unpairingId !== null}
+        onConfirm={confirmUnpair}
+        onCancel={() => setUnpairTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!revokeTarget}
+        title={L('إنهاء طلب الاقتران', 'Expirer la demande', 'Expire pairing request')}
+        message={
+          revokeTarget
+            ? L(
+                `سيتم إنهاء طلب الاقتران PIN «${revokeTarget.pin || ''}» (${revokeTarget.deviceName || revokeTarget.deviceModel || '—'}). هل تريد المتابعة؟`,
+                `La demande d’association PIN «${revokeTarget.pin || ''}» (${revokeTarget.deviceName || revokeTarget.deviceModel || '—'}) sera expirée. Continuer ?`,
+                `Pairing request PIN "${revokeTarget.pin || ''}" (${revokeTarget.deviceName || revokeTarget.deviceModel || '—'}) will be expired. Continue?`,
+              )
+            : ''
+        }
+        variant="destructive"
+        loading={revokingId !== null}
+        onConfirm={confirmRevokePairing}
+        onCancel={() => setRevokeTarget(null)}
+      />
     </div>
   );
 }

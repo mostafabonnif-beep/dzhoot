@@ -84,6 +84,8 @@ export default function ResellersPage() {
   const [formError, setFormError] = useState('');
 
   const [deleteTarget, setDeleteTarget] = useState<ResellerData | null>(null);
+  const [settleTarget, setSettleTarget] = useState<CreditDebtItem | null>(null);
+  const [deleteDebtTarget, setDeleteDebtTarget] = useState<CreditDebtItem | null>(null);
   const [qrTarget, setQrTarget] = useState<ResellerData | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [plans, setPlans] = useState<{ _id: string; name: string; durationDays: number }[]>([]);
@@ -238,8 +240,14 @@ export default function ResellersPage() {
     }
   }
 
-  async function handleSettleDebt(d: CreditDebtItem) {
-    if (!window.confirm(t('resellers.debtSettleConfirm').replace('{name}', d.resellerName))) return;
+  function handleSettleDebt(d: CreditDebtItem) {
+    setSettleTarget(d);
+  }
+
+  async function confirmSettleDebt() {
+    const d = settleTarget;
+    if (!d) return;
+    setSettleTarget(null);
     setSettlingDebtId(d._id);
     try {
       await api.patch(`/admin/reseller-debts/${d._id}`, { status: 'PAID' });
@@ -252,8 +260,14 @@ export default function ResellersPage() {
     }
   }
 
-  async function handleDeleteDebt(d: CreditDebtItem) {
-    if (!window.confirm(t('resellers.debtDeleteConfirm').replace('{name}', d.resellerName))) return;
+  function handleDeleteDebt(d: CreditDebtItem) {
+    setDeleteDebtTarget(d);
+  }
+
+  async function confirmDeleteDebt() {
+    const d = deleteDebtTarget;
+    if (!d) return;
+    setDeleteDebtTarget(null);
     setDeletingDebtId(d._id);
     try {
       await api.delete(`/admin/reseller-debts/${d._id}`);
@@ -1029,6 +1043,26 @@ export default function ResellersPage() {
         loading={deleting}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+      <ConfirmDialog
+        open={!!settleTarget}
+        title={t('resellers.debtSettleTitle')}
+        message={settleTarget ? t('resellers.debtSettleConfirm').replace('{name}', settleTarget.resellerName) : ''}
+        confirmLabel={t('common.confirm')}
+        loading={settlingDebtId !== null}
+        onConfirm={confirmSettleDebt}
+        onCancel={() => setSettleTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteDebtTarget}
+        title={t('resellers.debtDeleteTitle')}
+        message={deleteDebtTarget ? t('resellers.debtDeleteConfirm').replace('{name}', deleteDebtTarget.resellerName) : ''}
+        confirmLabel={t('common.delete')}
+        variant="destructive"
+        loading={deletingDebtId !== null}
+        onConfirm={confirmDeleteDebt}
+        onCancel={() => setDeleteDebtTarget(null)}
       />
       {qrTarget && (
         <ShopQrCard

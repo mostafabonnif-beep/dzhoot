@@ -28,6 +28,7 @@ import {
   Store,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
+import SidebarVersion from './sidebar-version';
 import { BrandMark } from './brand-mark';
 import { useLocale } from '@/components/locale-provider';
 
@@ -110,6 +111,7 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
           )}
           <button
             onClick={() => setMobileSidebarOpen(false)}
+            aria-label={role === 'admin' ? 'إغلاق قائمة التنقل' : 'Close navigation menu'}
             className="lg:hidden p-1 rounded-md text-muted-foreground hover:bg-accent"
           >
             <X className="h-5 w-5" />
@@ -154,13 +156,12 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
 
         {/* Sidebar Footer / Collapse Toggle */}
         <div className="border-t border-border/70 p-3 hidden lg:flex items-center justify-between">
-          {!sidebarCollapsed && (
-            <span className="text-xs text-muted-foreground px-2">DZ HOOF IPTV · 1.0.1</span>
-          )}
+          {!sidebarCollapsed && <SidebarVersion />}
           <button
             onClick={toggleSidebar}
             className="p-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-accent-foreground mx-auto lg:mx-0"
             title={sidebarCollapsed ? 'توسيع القائمة' : 'تصغير القائمة'}
+            aria-label={sidebarCollapsed ? 'توسيع القائمة' : 'تصغير القائمة'}
           >
             {sidebarCollapsed ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
           </button>

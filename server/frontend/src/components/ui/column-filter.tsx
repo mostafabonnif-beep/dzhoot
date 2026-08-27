@@ -166,7 +166,7 @@ export default function ColumnFilter({
           {(searchable || options.length > 8) && (
             <div className="px-2 pt-2">
               <div className="relative">
-                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <Search className="absolute start-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
                 <input
                   type="text"
                   value={filterSearch}
@@ -174,7 +174,7 @@ export default function ColumnFilter({
                   placeholder={labelFor('بحث…', 'Search…', 'Rechercher…')}
                   aria-label={`${labelFor('بحث في خيارات', 'Search', 'Rechercher dans')} ${label}`}
                   aria-controls={`${dropdownId}-options`}
-                  className="w-full h-7 pl-7 pr-2 text-xs border border-border bg-background placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary"
+                  className="w-full h-7 ps-7 pe-2 text-xs border border-border bg-background placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary"
                 />
               </div>
             </div>
@@ -196,7 +196,7 @@ export default function ColumnFilter({
               {labelFor('مسح', 'Clear', 'Effacer')}
             </button>
             {isActive && (
-              <span className="ml-auto text-xs text-muted-foreground">
+              <span className="ms-auto text-xs text-muted-foreground">
                 {selected.length}/{options.length}
               </span>
             )}
@@ -226,7 +226,7 @@ export default function ColumnFilter({
                       className="accent-primary h-4 w-4 shrink-0 focus-visible:ring-2 focus-visible:ring-primary"
                     />
                     <span className="text-xs truncate" title={opt}>
-                      {opt || '(empty)'}
+                      {opt || labelFor('(فارغ)', '(empty)', '(vide)')}
                     </span>
                   </label>
                 );

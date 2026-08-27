@@ -5,6 +5,7 @@ import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff, Download, Upload,
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/components/locale-provider';
+import ConfirmDialog from '@/components/ui/confirm-dialog';
 
 interface ServerInfo {
   name: string;
@@ -20,6 +21,25 @@ interface CacheEntry {
   count?: number;
 }
 
+interface CacheStatusData {
+  lastRefreshedAt?: string | null;
+  updatedAt?: string | null;
+  enrichedCount?: number;
+  refreshInProgress?: boolean;
+  refreshDurationMs?: number | null;
+  livenessCheckInProgress?: boolean;
+  lastLivenessCheckAt?: string | null;
+  livenessStats?: { alive: number; dead: number; unknown: number };
+  sourceCounts?: Record<string, number>;
+}
+
+const FEATURE_LABELS: Record<string, [string, string, string]> = {
+  CHANNEL_STREAMING: ['بث القنوات', 'Streaming des chaînes', 'Channel streaming'],
+  PIN_BASED_PAIRING: ['الربط برمز PIN', 'Appairage par code PIN', 'PIN-based pairing'],
+  AUTO_UPDATES: ['التحديثات التلقائية', 'Mises à jour automatiques', 'Auto updates'],
+  USER_MANAGEMENT: ['إدارة المستخدمين', 'Gestion des utilisateurs', 'User management'],
+};
+
 export default function SettingsPage() {
   const { toast } = useToast();
   const { t, locale } = useLocale();
@@ -27,7 +47,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [playlistUrl, setPlaylistUrl] = useState('');
   const [copied, setCopied] = useState(false);
-  const [cacheStatus, setCacheStatus] = useState<CacheEntry[]>([]);
+  const [cacheStatus, setCacheStatus] = useState<CacheStatusData | null>(null);
   const [cacheLoading, setCacheLoading] = useState(false);
   const [totpEnabled, setTotpEnabled] = useState(false);
   const [totpSetup, setTotpSetup] = useState<{ secret: string; uri: string } | null>(null);
@@ -36,6 +56,11 @@ export default function SettingsPage() {
   const [disableCode, setDisableCode] = useState('');
   const [totpLoading, setTotpLoading] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  const [importConfirmOpen, setImportConfirmOpen] = useState(false);
+  const [clearCacheConfirmOpen, setClearCacheConfirmOpen] = useState(false);
+  const [revokeSessionsConfirmOpen, setRevokeSessionsConfirmOpen] = useState(false);
+  const [cleanupSessionsConfirmOpen, setCleanupSessionsConfirmOpen] = useState(false);
+  const pendingImportFileRef = useRef<File | null>(null);
   // Change-password (admins have no other self-service path — /user is User-only).
   const [pwCurrent, setPwCurrent] = useState('');
   const [pwNew, setPwNew] = useState('');
@@ -101,20 +126,10 @@ export default function SettingsPage() {
     try {
       const res = await api.get('/iptv-org/cache-status');
       const data = res.data.data || res.data;
-      if (Array.isArray(data)) {
-        setCacheStatus(data);
-      } else if (typeof data === 'object') {
-        setCacheStatus(
-          Object.entries(data).map(([key, val]) => ({
-            key,
-            ...(typeof val === 'object' && val !== null
-              ? (val as { cached: boolean; age?: number; count?: number })
-              : { cached: false }),
-          })),
-        );
-      }
+      setCacheStatus(typeof data === 'object' && data !== null ? (data as CacheStatusData) : null);
     } catch (err) {
       console.error('Failed to fetch cache status:', err);
+      setCacheStatus(null);
     }
   }
 
@@ -221,17 +236,14 @@ export default function SettingsPage() {
     // Reset so picking the same file twice still fires onChange.
     e.target.value = '';
     if (!file) return;
-    if (
-      !window.confirm(
-        locale === 'ar'
-          ? 'تأكيد: استيراد الإعدادات من هذا الملف سيستبدل القيم الحالية للمفاتيح المعروفة. متابعة؟'
-          : locale === 'fr'
-            ? 'Confirmer : importer remplacera les valeurs actuelles. Continuer ?'
-            : 'Confirm: importing will overwrite current known settings. Continue?',
-      )
-    ) {
-      return;
-    }
+    pendingImportFileRef.current = file;
+    setImportConfirmOpen(true);
+  }
+
+  async function confirmImportSettings() {
+    const file = pendingImportFileRef.current;
+    if (!file) return;
+    setImportConfirmOpen(false);
     setSettingsBusy(true);
     try {
       const text = await file.text();
@@ -254,15 +266,12 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleClearCache() {
-    const confirmed = window.confirm(
-      locale === 'ar'
-        ? 'سيتم مسح جميع بيانات IPTV-Org المخزنة مؤقتًا (القوائم وحالة البث). يستغرق إعادة جلبها وقتًا. هل تريد المتابعة؟'
-        : locale === 'fr'
-          ? 'Toutes les données mises en cache d’IPTV-Org (listes et état des flux) seront effacées. Leur récupération prend du temps. Continuer ?'
-          : 'All cached IPTV-Org data (playlists and liveness state) will be cleared. Refetching takes time. Continue?',
-    );
-    if (!confirmed) return;
+  function handleClearCache() {
+    setClearCacheConfirmOpen(true);
+  }
+
+  async function confirmClearCache() {
+    setClearCacheConfirmOpen(false);
     setCacheLoading(true);
     try {
       await api.post('/iptv-org/clear-cache');
@@ -279,6 +288,42 @@ export default function SettingsPage() {
       toast('فشل مسح ذاكرة التخزين المؤقت', 'error');
     } finally {
       setCacheLoading(false);
+    }
+  }
+
+  async function confirmRevokeSessions() {
+    setRevokeSessionsConfirmOpen(false);
+    try {
+      const res = await api.post('/auth/revoke-other-sessions');
+      toast(
+        res.data.message ||
+          (locale === 'ar'
+            ? 'تم إلغاء الجلسات الأخرى'
+            : locale === 'fr'
+              ? 'Sessions révoquées'
+              : 'Other sessions revoked'),
+        'success',
+      );
+    } catch {
+      toast(locale === 'ar' ? 'فشل إلغاء الجلسات' : locale === 'fr' ? 'Échec de la révocation' : 'Failed to revoke sessions', 'error');
+    }
+  }
+
+  async function confirmCleanupSessions() {
+    setCleanupSessionsConfirmOpen(false);
+    try {
+      const res = await api.post('/auth/cleanup-sessions');
+      toast(
+        res.data.message ||
+          (locale === 'ar'
+            ? 'تم تنظيف الجلسات'
+            : locale === 'fr'
+              ? 'Sessions nettoyées'
+              : 'Sessions cleaned up'),
+        'success',
+      );
+    } catch {
+      toast(locale === 'ar' ? 'فشل تنظيف الجلسات' : locale === 'fr' ? 'Échec du nettoyage' : 'Failed to clean up sessions', 'error');
     }
   }
 
@@ -299,6 +344,22 @@ export default function SettingsPage() {
     return locale === 'ar'
       ? `${Math.floor(mins / 60)} س و${mins % 60} د`
       : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  }
+
+  function formatDateTime(iso?: string | null) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '—';
+    try {
+      return d.toLocaleString(locale === 'ar' ? 'ar-DZ' : locale === 'fr' ? 'fr-FR' : 'en-GB', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return d.toISOString().slice(0, 16).replace('T', ' ');
+    }
   }
 
   if (loading) {
@@ -329,7 +390,9 @@ export default function SettingsPage() {
               <dd className="text-sm font-medium">{info.name}</dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <dt className="text-sm text-muted-foreground">الإصدار</dt>
+              <dt className="text-sm text-muted-foreground">
+                {locale === 'ar' ? 'الإصدار' : locale === 'fr' ? 'Version' : 'Version'}
+              </dt>
               <dd className="text-sm font-medium">{info.version}</dd>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
@@ -343,14 +406,20 @@ export default function SettingsPage() {
               <div className="px-4 py-3">
                 <dt className="text-sm text-muted-foreground mb-2">الميزات</dt>
                 <dd className="flex flex-wrap gap-2">
-                  {Object.entries(info.features).map(([key, enabled]) => (
-                    <span
-                      key={key}
-                      className={`text-xs uppercase tracking-[0.1em] px-2 py-1 border border-border ${enabled ? 'bg-muted/50' : 'bg-muted/20 line-through text-muted-foreground/50'}`}
-                    >
-                      {key.replace(/([A-Z])/g, ' $1').trim()}
-                    </span>
-                  ))}
+                  {Object.entries(info.features).map(([key, enabled]) => {
+                    const normKey = key.replace(/([A-Z])/g, '_$1').toUpperCase();
+                    const label =
+                      FEATURE_LABELS[normKey]?.[locale === 'ar' ? 0 : locale === 'fr' ? 1 : 2] ??
+                      key.replace(/([A-Z])/g, ' $1').trim();
+                    return (
+                      <span
+                        key={key}
+                        className={`text-xs uppercase tracking-[0.1em] px-2 py-1 border border-border ${enabled ? 'bg-muted/50' : 'bg-muted/20 line-through text-muted-foreground/50'}`}
+                      >
+                        {label}
+                      </span>
+                    );
+                  })}
                 </dd>
               </div>
             )}
@@ -405,8 +474,16 @@ export default function SettingsPage() {
       <div className="border border-border">
         <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2">
           <div>
-            <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">المصادقة الثنائية</h2>
-            <p className="mt-1 text-xs text-muted-foreground">حماية إضافية لحسابات المشرفين عبر تطبيق Authenticator.</p>
+            <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">
+              {locale === 'ar' ? 'المصادقة الثنائية' : locale === 'fr' ? 'Authentification à deux facteurs' : 'Two-factor authentication'}
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {locale === 'ar'
+                ? 'حماية إضافية لحسابات المشرفين عبر تطبيق Authenticator.'
+                : locale === 'fr'
+                  ? 'Protection supplémentaire des comptes administrateurs via une application d’authentification.'
+                  : 'Extra protection for admin accounts via an authenticator app.'}
+            </p>
           </div>
           {totpEnabled ? <ShieldCheck className="h-5 w-5 text-signal-green" /> : <ShieldOff className="h-5 w-5 text-muted-foreground" />}
         </div>
@@ -414,38 +491,60 @@ export default function SettingsPage() {
           {totpEnabled ? (
             <>
               <div className="rounded-xl border border-signal-green/30 bg-signal-green/10 px-3 py-3 text-sm text-signal-green">
-                2FA مفعّل على حساب المشرف الحالي.
+                {locale === 'ar'
+                  ? '2FA مفعّل على حساب المشرف الحالي.'
+                  : locale === 'fr'
+                    ? 'La 2FA est activée sur le compte administrateur actuel.'
+                    : '2FA is enabled on the current admin account.'}
               </div>
               <div className="grid gap-3 md:grid-cols-2">
-                <input type="password" value={disablePassword} onChange={(event) => setDisablePassword(event.target.value)} placeholder="كلمة المرور الحالية" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="current-password" />
-                <input inputMode="numeric" maxLength={8} value={disableCode} onChange={(event) => setDisableCode(event.target.value.replace(/\D/g, ''))} placeholder="رمز 2FA الحالي" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
+                <input type="password" value={disablePassword} onChange={(event) => setDisablePassword(event.target.value)} placeholder={locale === 'ar' ? 'كلمة المرور الحالية' : locale === 'fr' ? 'Mot de passe actuel' : 'Current password'} className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="current-password" />
+                <input inputMode="numeric" maxLength={8} value={disableCode} onChange={(event) => setDisableCode(event.target.value.replace(/\D/g, ''))} placeholder={locale === 'ar' ? 'رمز 2FA الحالي' : locale === 'fr' ? 'Code 2FA actuel' : 'Current 2FA code'} className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
               </div>
               <button type="button" onClick={disableTotp} disabled={totpLoading || !disablePassword || disableCode.length < 6} className="inline-flex items-center gap-2 rounded-lg border border-destructive/40 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-50">
-                {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />} تعطيل 2FA
+                {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldOff className="h-4 w-4" />} {locale === 'ar' ? 'تعطيل 2FA' : locale === 'fr' ? 'Désactiver la 2FA' : 'Disable 2FA'}
               </button>
             </>
           ) : (
             <>
-              <p className="text-sm text-muted-foreground">فعّل 2FA قبل إطلاق النسخة النهائية. استخدم تطبيقًا موثوقًا مثل Google Authenticator أو Aegis.</p>
+              <p className="text-sm text-muted-foreground">
+                {locale === 'ar'
+                  ? 'أضف طبقة حماية إضافية لحساب المشرف باستخدام تطبيق مصادقة موثوق مثل Google Authenticator أو Aegis.'
+                  : locale === 'fr'
+                    ? 'Ajoutez une couche de protection supplémentaire à votre compte administrateur avec une application d’authentification fiable comme Google Authenticator ou Aegis.'
+                    : 'Add an extra layer of protection to your admin account with a trusted authenticator app such as Google Authenticator or Aegis.'}
+              </p>
               {!totpSetup ? (
                 <button type="button" onClick={startTotpSetup} disabled={totpLoading} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-                  {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} بدء إعداد 2FA
+                  {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} {locale === 'ar' ? 'بدء إعداد 2FA' : locale === 'fr' ? 'Configurer la 2FA' : 'Set up 2FA'}
                 </button>
               ) : (
                 <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-4">
-                  <p className="text-sm font-medium">أضف الحساب إلى تطبيق المصادقة، ثم أدخل الرمز الظاهر حاليًا.</p>
+                  <p className="text-sm font-medium">
+                    {locale === 'ar'
+                      ? 'أضف الحساب إلى تطبيق المصادقة، ثم أدخل الرمز الظاهر حاليًا.'
+                      : locale === 'fr'
+                        ? 'Ajoutez le compte à votre application d’authentification, puis saisissez le code affiché.'
+                        : 'Add the account to your authenticator app, then enter the currently displayed code.'}
+                  </p>
                   <label className="block space-y-1.5 text-xs text-muted-foreground">
-                    <span>URI الخاص بالتطبيق</span>
+                    <span>{locale === 'ar' ? 'URI الخاص بالتطبيق' : locale === 'fr' ? 'URI de l’application' : 'App URI'}</span>
                     <textarea readOnly value={totpSetup.uri} className="min-h-20 w-full rounded-lg border border-border bg-background p-2 font-mono text-[11px]" />
                   </label>
                   <label className="block space-y-1.5 text-xs text-muted-foreground">
-                    <span>المفتاح اليدوي الاحتياطي — احفظه في مدير أسرار</span>
+                    <span>
+                      {locale === 'ar'
+                        ? 'المفتاح اليدوي الاحتياطي — احفظه في مدير أسرار'
+                        : locale === 'fr'
+                          ? 'Clé de secours manuelle — conservez-la dans un gestionnaire de secrets'
+                          : 'Manual backup key — store it in a secrets manager'}
+                    </span>
                     <code className="block rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm text-foreground">{totpSetup.secret}</code>
                   </label>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <input inputMode="numeric" maxLength={8} value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, ''))} placeholder="رمز 2FA من 6 أرقام" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
+                    <input inputMode="numeric" maxLength={8} value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, ''))} placeholder={locale === 'ar' ? 'رمز 2FA من 6 أرقام' : locale === 'fr' ? 'Code 2FA à 6 chiffres' : '6-digit 2FA code'} className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="one-time-code" />
                     <button type="button" onClick={confirmTotp} disabled={totpLoading || totpCode.length < 6} className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-                      {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} تأكيد وتفعيل
+                      {totpLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />} {locale === 'ar' ? 'تأكيد وتفعيل' : locale === 'fr' ? 'Confirmer et activer' : 'Confirm & enable'}
                     </button>
                   </div>
                 </div>
@@ -459,22 +558,28 @@ export default function SettingsPage() {
       <div className="border border-border">
         <div className="flex items-center justify-between border-b border-border bg-muted/50 px-4 py-2">
           <div>
-            <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">تغيير كلمة المرور</h2>
+            <h2 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground">
+              {locale === 'ar' ? 'تغيير كلمة المرور' : locale === 'fr' ? 'Changer le mot de passe' : 'Change password'}
+            </h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              غيّر كلمة مرور حساب المشرف الحالي. تُسجَّل الخروج من جميع الجلسات الأخرى تلقائيًا.
+              {locale === 'ar'
+                ? 'غيّر كلمة مرور حساب المشرف الحالي. تُسجَّل الخروج من جميع الجلسات الأخرى تلقائيًا.'
+                : locale === 'fr'
+                  ? 'Changez le mot de passe du compte administrateur actuel. Toutes les autres sessions seront déconnectées automatiquement.'
+                  : 'Change the current admin account password. All other sessions are logged out automatically.'}
             </p>
           </div>
           <KeyRound className="h-5 w-5 text-muted-foreground" />
         </div>
         <div className="space-y-3 px-4 py-4">
           <div className="grid gap-3 md:grid-cols-3">
-            <input type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} placeholder="كلمة المرور الحالية" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="current-password" />
-            <input type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)} placeholder="كلمة المرور الجديدة (8+ أحرف)" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="new-password" />
-            <input type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)} placeholder="تأكيد كلمة المرور الجديدة" className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="new-password" />
+            <input type="password" value={pwCurrent} onChange={(e) => setPwCurrent(e.target.value)} placeholder={locale === 'ar' ? 'كلمة المرور الحالية' : locale === 'fr' ? 'Mot de passe actuel' : 'Current password'} className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="current-password" />
+            <input type="password" value={pwNew} onChange={(e) => setPwNew(e.target.value)} placeholder={locale === 'ar' ? 'كلمة المرور الجديدة (8+ أحرف)' : locale === 'fr' ? 'Nouveau mot de passe (8+ caractères)' : 'New password (8+ characters)'} className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="new-password" />
+            <input type="password" value={pwConfirm} onChange={(e) => setPwConfirm(e.target.value)} placeholder={locale === 'ar' ? 'تأكيد كلمة المرور الجديدة' : locale === 'fr' ? 'Confirmer le nouveau mot de passe' : 'Confirm new password'} className="h-10 rounded-lg border border-border bg-background px-3 text-sm" autoComplete="new-password" />
           </div>
           <div className="flex items-center gap-3">
             <button type="button" onClick={changeAdminPassword} disabled={pwLoading || !pwCurrent || !pwNew || !pwConfirm} className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
-              {pwLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} تغيير كلمة المرور
+              {pwLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />} {locale === 'ar' ? 'تغيير كلمة المرور' : locale === 'fr' ? 'Changer le mot de passe' : 'Change password'}
             </button>
           </div>
         </div>
@@ -497,30 +602,7 @@ export default function SettingsPage() {
                   : 'Revoke all sessions except your current one. Other users and tabs will need to log in again.'}
             </p>
             <button
-              onClick={async () => {
-                const confirmed = window.confirm(
-                  locale === 'ar'
-                    ? 'سيتم تسجيل خروج جميع المستخدمين والتبويبات الأخرى من لوحة التحكم. هل تريد المتابعة؟'
-                    : locale === 'fr'
-                      ? 'Tous les autres utilisateurs et onglets seront déconnectés du panneau d’administration. Continuer ?'
-                      : 'All other users and tabs will be logged out of the admin panel. Continue?',
-                );
-                if (!confirmed) return;
-                try {
-                  const res = await api.post('/auth/revoke-other-sessions');
-                  toast(
-                    res.data.message ||
-                      (locale === 'ar'
-                        ? 'تم إلغاء الجلسات الأخرى'
-                        : locale === 'fr'
-                          ? 'Sessions révoquées'
-                          : 'Other sessions revoked'),
-                    'success',
-                  );
-                } catch {
-                  toast('فشل إلغاء الجلسات', 'error');
-                }
-              }}
+              onClick={() => setRevokeSessionsConfirmOpen(true)}
               className="inline-flex items-center px-4 py-2 text-sm font-medium border-2 border-destructive/40 bg-destructive/5 text-destructive shadow-sm transition-colors hover:bg-destructive/10 active:bg-destructive/15"
             >
               {locale === 'ar'
@@ -539,37 +621,14 @@ export default function SettingsPage() {
                   : 'Remove all expired sessions from the database.'}
             </p>
             <button
-              onClick={async () => {
-                const confirmed = window.confirm(
-                  locale === 'ar'
-                    ? 'سيتم حذف جميع الجلسات المنتهية نهائيًا. هل تريد المتابعة؟'
-                    : locale === 'fr'
-                      ? 'Toutes les sessions expirées seront supprimées définitivement. Continuer ?'
-                      : 'All expired sessions will be permanently removed. Continue?',
-                );
-                if (!confirmed) return;
-                try {
-                  const res = await api.post('/auth/cleanup-sessions');
-                  toast(
-                    res.data.message ||
-                      (locale === 'ar'
-                        ? 'تم تنظيف الجلسات'
-                        : locale === 'fr'
-                          ? 'Sessions nettoyées'
-                          : 'Sessions cleaned up'),
-                    'success',
-                  );
-                } catch {
-                  toast('فشل تنظيف الجلسات', 'error');
-                }
-              }}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium border-2 border-border bg-card shadow-sm transition-colors hover:border-primary/40 active:bg-muted"
+              onClick={() => setCleanupSessionsConfirmOpen(true)}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium border border-border text-muted-foreground shadow-sm transition-colors hover:text-foreground"
             >
               {locale === 'ar'
                 ? 'تنظيف الجلسات المنتهية'
                 : locale === 'fr'
                   ? 'Nettoyer les sessions expirées'
-                  : 'Clean Up Expired Sessions'}
+                  : 'Clean up expired sessions'}
             </button>
           </div>
         </div>
@@ -651,45 +710,110 @@ export default function SettingsPage() {
           </button>
         </div>
         <div className="divide-y divide-border">
-          {cacheStatus.length === 0 ? (
-            <div className="px-4 py-4 text-sm text-muted-foreground">لا توجد بيانات ذاكرة تخزين مؤقت</div>
+          {cacheStatus === null ? (
+            <div className="px-4 py-4 text-sm text-muted-foreground">
+              {locale === 'ar'
+                ? 'لا توجد بيانات ذاكرة تخزين مؤقت'
+                : locale === 'fr'
+                  ? 'Aucune donnée de cache'
+                  : 'No cache data'}
+            </div>
           ) : (
-            cacheStatus.map((entry) => (
-              <div key={entry.key} className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm capitalize">{entry.key}</span>
-                <div className="flex items-center gap-3">
-                  {entry.count !== undefined && (
-                    <span className="text-xs text-muted-foreground">
-                      {entry.count}{' '}
-                      {locale === 'ar'
-                        ? 'عنصر'
-                        : locale === 'fr'
-                          ? 'éléments'
-                          : 'items'}
+            <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  {locale === 'ar' ? 'حالة التحديث' : locale === 'fr' ? 'État du rafraîchissement' : 'Refresh state'}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+                  <span
+                    className={`h-2 w-2 rounded-full ${cacheStatus.refreshInProgress ? 'bg-amber-500 animate-pulse' : 'bg-signal-green'}`}
+                  />
+                  {cacheStatus.refreshInProgress
+                    ? locale === 'ar'
+                      ? 'قيد التحديث'
+                      : locale === 'fr'
+                        ? 'En cours'
+                        : 'Refreshing'
+                    : locale === 'ar'
+                      ? 'جاهز'
+                      : locale === 'fr'
+                        ? 'Prêt'
+                        : 'Ready'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  {locale === 'ar' ? 'القنوات المخصّبة' : locale === 'fr' ? 'Chaînes enrichies' : 'Enriched channels'}
+                </span>
+                <span className="text-sm font-medium tabular-nums">{cacheStatus.enrichedCount ?? 0}</span>
+              </div>
+              <div className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  {locale === 'ar' ? 'آخر تحديث' : locale === 'fr' ? 'Dernier rafraîchissement' : 'Last refreshed'}
+                </span>
+                <span className="text-sm font-medium">
+                  {cacheStatus.lastRefreshedAt ? formatDateTime(cacheStatus.lastRefreshedAt) : '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  {locale === 'ar' ? 'مدة آخر تحديث' : locale === 'fr' ? 'Durée du dernier rafraîchissement' : 'Last refresh duration'}
+                </span>
+                <span className="text-sm font-medium tabular-nums">
+                  {cacheStatus.refreshDurationMs != null ? `${Math.round(cacheStatus.refreshDurationMs / 1000)}s` : '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  {locale === 'ar' ? 'فحص البث' : locale === 'fr' ? 'Vérification des flux' : 'Liveness check'}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium">
+                  <span
+                    className={`h-2 w-2 rounded-full ${cacheStatus.livenessCheckInProgress ? 'bg-amber-500 animate-pulse' : 'bg-signal-green'}`}
+                  />
+                  {cacheStatus.livenessCheckInProgress
+                    ? locale === 'ar'
+                      ? 'قيد الفحص'
+                      : locale === 'fr'
+                        ? 'En cours'
+                        : 'Checking'
+                    : locale === 'ar'
+                      ? 'جاهز'
+                      : locale === 'fr'
+                        ? 'Prêt'
+                        : 'Ready'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2 rounded border border-border px-3 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  {locale === 'ar' ? 'المصادر المخزّنة' : locale === 'fr' ? 'Sources en cache' : 'Cached sources'}
+                </span>
+                <span className="text-sm font-medium tabular-nums">
+                  {cacheStatus.sourceCounts ? Object.keys(cacheStatus.sourceCounts).length : 0}
+                </span>
+              </div>
+              {cacheStatus.livenessStats && (
+                <div className="rounded border border-border px-3 py-2.5 sm:col-span-2 lg:col-span-3">
+                  <span className="text-xs text-muted-foreground">
+                    {locale === 'ar' ? 'نتائج فحص البث' : locale === 'fr' ? 'Résultats de la vérification' : 'Liveness results'}
+                  </span>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      {locale === 'ar' ? 'تعمل' : locale === 'fr' ? 'Actifs' : 'Alive'}: {cacheStatus.livenessStats.alive ?? 0}
                     </span>
-                  )}
-                  <span className="text-xs text-muted-foreground">{formatAge(entry.age)}</span>
-                  <div className="relative inline-flex items-center gap-1.5">
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${entry.cached ? 'bg-signal-green' : 'bg-muted-foreground/30'}`}
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {entry.cached
-                        ? locale === 'ar'
-                          ? 'مخزّنة'
-                          : locale === 'fr'
-                            ? 'En cache'
-                            : 'Cached'
-                        : locale === 'ar'
-                          ? 'فارغة'
-                          : locale === 'fr'
-                            ? 'Vide'
-                            : 'Empty'}
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/10 px-2.5 py-1 text-xs font-medium text-rose-600 dark:text-rose-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                      {locale === 'ar' ? 'متوقفة' : locale === 'fr' ? 'Morts' : 'Dead'}: {cacheStatus.livenessStats.dead ?? 0}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                      {locale === 'ar' ? 'غير معروفة' : locale === 'fr' ? 'Inconnus' : 'Unknown'}: {cacheStatus.livenessStats.unknown ?? 0}
                     </span>
                   </div>
                 </div>
-              </div>
-            ))
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -866,6 +990,68 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={importConfirmOpen}
+        title={locale === 'ar' ? 'تأكيد الاستيراد' : locale === 'fr' ? 'Confirmer l’import' : 'Confirm import'}
+        message={
+          locale === 'ar'
+            ? 'تأكيد: استيراد الإعدادات من هذا الملف سيستبدل القيم الحالية للمفاتيح المعروفة. متابعة؟'
+            : locale === 'fr'
+              ? 'Confirmer : importer remplacera les valeurs actuelles. Continuer ?'
+              : 'Confirm: importing will overwrite current known settings. Continue?'
+        }
+        variant="destructive"
+        loading={settingsBusy}
+        onConfirm={confirmImportSettings}
+        onCancel={() => setImportConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={clearCacheConfirmOpen}
+        title={locale === 'ar' ? 'مسح ذاكرة التخزين المؤقت' : locale === 'fr' ? 'Vider le cache' : 'Clear cache'}
+        message={
+          locale === 'ar'
+            ? 'سيتم مسح جميع بيانات IPTV-Org المخزنة مؤقتًا (القوائم وحالة البث). يستغرق إعادة جلبها وقتًا. هل تريد المتابعة؟'
+            : locale === 'fr'
+              ? 'Toutes les données mises en cache d’IPTV-Org (listes et état des flux) seront effacées. Leur récupération prend du temps. Continuer ?'
+              : 'All cached IPTV-Org data (playlists and liveness state) will be cleared. Refetching takes time. Continue?'
+        }
+        variant="destructive"
+        loading={cacheLoading}
+        onConfirm={confirmClearCache}
+        onCancel={() => setClearCacheConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={revokeSessionsConfirmOpen}
+        title={locale === 'ar' ? 'إلغاء الجلسات الأخرى' : locale === 'fr' ? 'Révoquer les autres sessions' : 'Revoke other sessions'}
+        message={
+          locale === 'ar'
+            ? 'سيتم تسجيل خروج جميع المستخدمين والتبويبات الأخرى من لوحة التحكم. هل تريد المتابعة؟'
+            : locale === 'fr'
+              ? 'Tous les autres utilisateurs et onglets seront déconnectés du panneau d’administration. Continuer ?'
+              : 'All other users and tabs will be logged out of the admin panel. Continue?'
+        }
+        variant="destructive"
+        onConfirm={confirmRevokeSessions}
+        onCancel={() => setRevokeSessionsConfirmOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={cleanupSessionsConfirmOpen}
+        title={locale === 'ar' ? 'تنظيف الجلسات المنتهية' : locale === 'fr' ? 'Nettoyer les sessions expirées' : 'Clean up expired sessions'}
+        message={
+          locale === 'ar'
+            ? 'سيتم حذف جميع الجلسات المنتهية نهائيًا. هل تريد المتابعة؟'
+            : locale === 'fr'
+              ? 'Toutes les sessions expirées seront supprimées définitivement. Continuer ?'
+              : 'All expired sessions will be permanently removed. Continue?'
+        }
+        variant="destructive"
+        onConfirm={confirmCleanupSessions}
+        onCancel={() => setCleanupSessionsConfirmOpen(false)}
+      />
     </div>
   );
 }

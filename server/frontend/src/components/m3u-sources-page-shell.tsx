@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Eye, Link2, Loader2, Play, Plus, RefreshCw, RotateCcw, Trash2, XCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useLocale } from '@/components/locale-provider';
 
 interface SyncDiff {
   added: number;
@@ -41,6 +42,8 @@ interface M3USource {
 
 export default function M3USourcesPageShell() {
   const { toast } = useToast();
+  const { locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
   const [sources, setSources] = useState<M3USource[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -208,14 +211,14 @@ export default function M3USourcesPageShell() {
   }
 
   return (
-    <div className="space-y-6 p-6" dir="rtl">
+    <div className="space-y-6 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold">
           <Link2 className="h-6 w-6 text-primary" />
-          مصادر M3U التلقائية
+          {L('مصادر M3U التلقائية', 'Sources M3U automatiques', 'Automatic M3U sources')}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          أضف روابط M3U القانونية ليتم تنزيلها وتحليلها وتحديث القنوات تلقائياً.
+          {L('أضف روابط M3U القانونية ليتم تنزيلها وتحليلها وتحديث القنوات تلقائياً.', 'Ajoutez des liens M3U autorisés pour les télécharger, les analyser et mettre à jour les chaînes automatiquement.', 'Add licensed M3U links to download, parse, and update channels automatically.')}
         </p>
       </div>
 
@@ -223,13 +226,13 @@ export default function M3USourcesPageShell() {
         <input
           value={form.name}
           onChange={(event) => setForm({ ...form, name: event.target.value })}
-          placeholder="اسم المصدر"
+          placeholder={L('اسم المصدر', 'Nom de la source', 'Source name')}
           className="h-10 rounded-md border bg-background px-3 text-sm"
         />
         <input
           value={form.playlistUrl}
           onChange={(event) => setForm({ ...form, playlistUrl: event.target.value })}
-          placeholder="رابط M3U أو M3U8"
+          placeholder={L('رابط M3U أو M3U8', 'URL M3U ou M3U8', 'M3U or M3U8 URL')}
           type="url"
           dir="ltr"
           className="h-10 rounded-md border bg-background px-3 text-sm"
@@ -237,7 +240,7 @@ export default function M3USourcesPageShell() {
         <input
           value={form.epgUrl}
           onChange={(event) => setForm({ ...form, epgUrl: event.target.value })}
-          placeholder="رابط XMLTV اختياري"
+          placeholder={L('رابط XMLTV اختياري', 'URL XMLTV facultative', 'Optional XMLTV URL')}
           type="url"
           dir="ltr"
           className="h-10 rounded-md border bg-background px-3 text-sm"
@@ -248,7 +251,7 @@ export default function M3USourcesPageShell() {
           className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-          إضافة مصدر
+          {L('إضافة مصدر', 'Ajouter la source', 'Add source')}
         </button>
       </form>
 
@@ -258,7 +261,7 @@ export default function M3USourcesPageShell() {
         </div>
       ) : sources.length === 0 ? (
         <div className="rounded-lg border border-dashed p-12 text-center text-muted-foreground">
-          لا توجد مصادر M3U مضافة بعد.
+          {L('لا توجد مصادر M3U مضافة بعد.', 'Aucune source M3U ajoutée pour le moment.', 'No M3U sources added yet.')}
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -268,45 +271,45 @@ export default function M3USourcesPageShell() {
                 <div>
                   <h2 className="font-semibold">{source.name}</h2>
                   <p className="mt-1 text-xs text-muted-foreground" dir="ltr">
-                    {source.hasEpgUrl ? 'M3U + XMLTV' : 'M3U فقط'}
+                    {source.hasEpgUrl ? 'M3U + XMLTV' : L('M3U فقط', 'M3U uniquement', 'M3U only')}
                   </p>
                 </div>
                 <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs ${source.status === 'Active' ? 'bg-green-500/10 text-green-600' : 'bg-muted text-muted-foreground'}`}>
                   {source.status === 'Active' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
-                  {source.status === 'Active' ? 'نشط' : 'متوقف'}
+                  {source.status === 'Active' ? L('نشط', 'Actif', 'Active') : L('متوقف', 'Désactivé', 'Disabled')}
                 </span>
               </div>
 
               <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.channels ?? 0}</strong>قنوات</div>
-                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.duplicates ?? 0}</strong>مكرر</div>
-                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.blocked ?? 0}</strong>محظور</div>
+                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.channels ?? 0}</strong>{L('قنوات', 'chaînes', 'channels')}</div>
+                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.duplicates ?? 0}</strong>{L('مكرر', 'doublons', 'duplicates')}</div>
+                <div className="rounded-md bg-muted p-2"><strong className="block text-base">{source.stats?.blocked ?? 0}</strong>{L('محظور', 'bloquées', 'blocked')}</div>
               </div>
 
               <p className="mt-3 text-xs text-muted-foreground">
-                الحالة: {source.syncStatus === 'syncing' ? 'جارٍ التحديث…' : source.syncStatus === 'error' ? `خطأ: ${source.lastError || 'غير معروف'}` : source.lastSyncAt ? `آخر تحديث: ${new Date(source.lastSyncAt).toLocaleString('ar-DZ')}` : 'لم تتم المزامنة بعد'}
+                {L('الحالة:', 'État :', 'Status:')} {source.syncStatus === 'syncing' ? L('جارٍ التحديث…', 'Mise à jour…', 'Updating…') : source.syncStatus === 'error' ? `${L('خطأ', 'Erreur', 'Error')}: ${source.lastError || L('غير معروف', 'Inconnu', 'Unknown')}` : source.lastSyncAt ? `${L('آخر تحديث:', 'Dernière mise à jour :', 'Last sync:')} ${new Date(source.lastSyncAt).toLocaleString(locale === 'ar' ? 'ar-DZ' : locale === 'fr' ? 'fr-FR' : 'en-GB')}` : L('لم تتم المزامنة بعد', 'Pas encore synchronisé', 'Not synced yet')}
               </p>
 
               <div className="mt-4 flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2 text-xs">
-                <span><strong>التشغيل المباشر</strong><span className="ms-2 text-muted-foreground">{source.directPlayback ? 'مفعل' : 'متوقف'}</span></span>
+                <span><strong>{L('التشغيل المباشر', 'Lecture directe', 'Direct playback')}</strong><span className="ms-2 text-muted-foreground">{source.directPlayback ? L('مفعل', 'Activé', 'Enabled') : L('متوقف', 'Désactivé', 'Disabled')}</span></span>
                 <button onClick={() => toggleDirectPlayback(source)} className="rounded-md border px-3 py-1.5 font-medium hover:bg-muted">
-                  {source.directPlayback ? 'تعطيل' : 'تفعيل'}
+                  {source.directPlayback ? L('تعطيل', 'Désactiver', 'Disable') : L('تفعيل', 'Activer', 'Enable')}
                 </button>
               </div>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <button onClick={() => testSource(source)} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted"><Play className="h-3.5 w-3.5" /> اختبار</button>
-                <button onClick={() => previewSource(source)} disabled={busySourceId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50"><Eye className="h-3.5 w-3.5" /> معاينة</button>
-                <button onClick={() => syncSource(source)} disabled={source.syncStatus === 'syncing' || busySourceId === source._id} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} /> مزامنة الآن</button>
-                <button onClick={() => rollbackSource(source)} disabled={busySourceId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50"><RotateCcw className="h-3.5 w-3.5" /> استرجاع</button>
-                <button onClick={() => toggleSource(source)} className="rounded-md border px-3 py-2 text-xs hover:bg-muted">{source.status === 'Active' ? 'إيقاف' : 'تفعيل'}</button>
-                <button onClick={() => deleteSource(source)} className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"><Trash2 className="h-3.5 w-3.5" /> حذف</button>
+                <button onClick={() => testSource(source)} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted"><Play className="h-3.5 w-3.5" /> {L('اختبار', 'Tester', 'Test')}</button>
+                <button onClick={() => previewSource(source)} disabled={busySourceId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50"><Eye className="h-3.5 w-3.5" /> {L('معاينة', 'Aperçu', 'Preview')}</button>
+                <button onClick={() => syncSource(source)} disabled={source.syncStatus === 'syncing' || busySourceId === source._id} className="inline-flex items-center gap-1 rounded-md bg-primary px-3 py-2 text-xs text-primary-foreground disabled:opacity-50"><RefreshCw className={`h-3.5 w-3.5 ${source.syncStatus === 'syncing' ? 'animate-spin' : ''}`} /> {L('مزامنة الآن', 'Synchroniser', 'Sync now')}</button>
+                <button onClick={() => rollbackSource(source)} disabled={busySourceId === source._id || source.syncStatus === 'syncing'} className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50"><RotateCcw className="h-3.5 w-3.5" /> {L('استرجاع', 'Restaurer', 'Rollback')}</button>
+                <button onClick={() => toggleSource(source)} className="rounded-md border px-3 py-2 text-xs hover:bg-muted">{source.status === 'Active' ? L('إيقاف', 'Désactiver', 'Disable') : L('تفعيل', 'Activer', 'Enable')}</button>
+                <button onClick={() => deleteSource(source)} className="inline-flex items-center gap-1 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive hover:bg-destructive/10"><Trash2 className="h-3.5 w-3.5" /> {L('حذف', 'Supprimer', 'Delete')}</button>
               </div>
               {previews[source._id] && (
                 <div className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3 text-xs">
-                  <p className="font-medium text-primary">معاينة جاهزة قبل التطبيق</p>
+                  <p className="font-medium text-primary">{L('معاينة جاهزة قبل التطبيق', 'Aperçu prêt avant application', 'Preview ready before applying')}</p>
                   <p className="mt-1 text-muted-foreground">
-                    +{previews[source._id]?.diff.added} إضافة · {previews[source._id]?.diff.changed} تغيير · -{previews[source._id]?.diff.removed} حذف · {previews[source._id]?.diff.unchanged} دون تغيير
+                    +{previews[source._id]?.diff.added} {L('إضافة', 'ajouts', 'added')} · {previews[source._id]?.diff.changed} {L('تغيير', 'modifications', 'changed')} · -{previews[source._id]?.diff.removed} {L('حذف', 'suppressions', 'removed')} · {previews[source._id]?.diff.unchanged} {L('دون تغيير', 'inchangés', 'unchanged')}
                   </p>
                 </div>
               )}

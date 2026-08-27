@@ -6,6 +6,7 @@ import Modal from '@/components/ui/modal';
 import ChannelLogo from '@/components/ui/channel-logo';
 import StatusDot from '@/components/ui/status-dot';
 import type { AlternateStream, FlaggedBad } from '@/types';
+import { useLocale } from '@/components/locale-provider';
 
 export interface ChannelField {
   label: string;
@@ -53,6 +54,8 @@ export default function ChannelDetailModal({
   onUnflagAlternate,
   isAdmin,
 }: ChannelDetailModalProps) {
+  const { locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [confirmPromote, setConfirmPromote] = useState<number | null>(null);
 
@@ -229,8 +232,7 @@ export default function ChannelDetailModal({
             {confirmPromote !== null && onPromoteAlternate && (
               <div className="mt-2 p-3 border border-primary/30 bg-primary/5 text-xs space-y-2">
                 <p className="text-foreground">
-                  Promote alternate #{confirmPromote + 1} to primary? This changes the stream for
-                  all users.
+                  {L('ترقية البث البديل', 'Promouvoir le flux alternatif', 'Promote alternate')} #{confirmPromote + 1} {L('إلى الأساسي؟ سيؤثر هذا على البث لجميع المستخدمين.', 'au rang de principal ? Cela modifiera le flux pour tous les utilisateurs.', 'to primary? This changes the stream for all users.')}
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -242,13 +244,13 @@ export default function ChannelDetailModal({
                     disabled={!!pendingAction}
                     className="px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] hover:bg-primary/90 transition-colors disabled:opacity-50"
                   >
-                    Confirm Promote
+                    {L('تأكيد الترقية', 'Confirmer', 'Confirm Promote')}
                   </button>
                   <button
                     onClick={() => setConfirmPromote(null)}
                     className="px-3 py-1.5 text-xs font-medium border border-border text-muted-foreground uppercase tracking-[0.1em] hover:text-foreground transition-colors"
                   >
-                    Cancel
+                    {L('إلغاء', 'Annuler', 'Cancel')}
                   </button>
                 </div>
               </div>
@@ -259,10 +261,14 @@ export default function ChannelDetailModal({
         {showRawData && rawData && (
           <details className="group">
             <summary className="text-xs uppercase tracking-[0.15em] text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors">
-              Raw Data
+              {L('البيانات الخام', 'Données brutes', 'Raw data')}
             </summary>
             <pre className="mt-2 text-xs font-mono bg-muted border border-border p-2 sm:p-3 max-h-[300px] overflow-y-auto whitespace-pre-wrap break-all">
-              {JSON.stringify(rawData, null, 2)}
+              {JSON.stringify(
+                Object.fromEntries(Object.entries(rawData).filter(([k]) => !k.startsWith('_'))),
+                null,
+                2,
+              )}
             </pre>
           </details>
         )}
@@ -274,7 +280,7 @@ export default function ChannelDetailModal({
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"
             >
               <Play className="h-4 w-4" />
-              Preview Stream
+              {L('معاينة البث', 'Aperçu du flux', 'Preview Stream')}
             </button>
           )}
           {/* Primary stream flag/unflag */}

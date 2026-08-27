@@ -58,15 +58,50 @@ function formatDuration(ms?: number | null, locale?: string): string {
   return locale === 'ar' ? `${(ms / 60000).toFixed(1)} د` : `${(ms / 60000).toFixed(1)}m`;
 }
 
-function formatInterval(ms: number): string {
+function formatInterval(ms: number, locale?: string): string {
   const hours = ms / 3600000;
-  if (hours < 1) return `${(ms / 60000).toFixed(0)} دقيقة`;
-  if (hours === 1) return 'ساعة واحدة';
-  return `${hours} ساعة`;
+  if (locale === 'ar') {
+    if (hours < 1) return `${(ms / 60000).toFixed(0)} دقيقة`;
+    if (hours === 1) return 'ساعة واحدة';
+    return `${hours} ساعة`;
+  }
+  if (locale === 'fr') {
+    if (hours < 1) return `${(ms / 60000).toFixed(0)} min`;
+    if (hours === 1) return '1 heure';
+    return `${hours} heures`;
+  }
+  if (hours < 1) return `${(ms / 60000).toFixed(0)} min`;
+  if (hours === 1) return '1 hour';
+  return `${hours} hours`;
 }
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, locale?: string): string {
   const diff = Date.now() - new Date(iso).getTime();
+  if (locale === 'en') {
+    const fmtAgo = (v: string) => v;
+    if (diff < 0) {
+      const absDiff = Math.abs(diff);
+      if (absDiff < 60000) return 'in under a minute';
+      if (absDiff < 3600000) return `in ${Math.round(absDiff / 60000)} min`;
+      return `in ${(absDiff / 3600000).toFixed(1)} h`;
+    }
+    if (diff < 60000) return 'under a minute ago';
+    if (diff < 3600000) return `${Math.round(diff / 60000)} min ago`;
+    if (diff < 86400000) return `${(diff / 3600000).toFixed(1)} h ago`;
+    return `${Math.floor(diff / 86400000)} d ago`;
+  }
+  if (locale === 'fr') {
+    if (diff < 0) {
+      const absDiff = Math.abs(diff);
+      if (absDiff < 60000) return 'dans moins d’une minute';
+      if (absDiff < 3600000) return `dans ${Math.round(absDiff / 60000)} min`;
+      return `dans ${(absDiff / 3600000).toFixed(1)} h`;
+    }
+    if (diff < 60000) return 'il y a moins d’une minute';
+    if (diff < 3600000) return `il y a ${Math.round(diff / 60000)} min`;
+    if (diff < 86400000) return `il y a ${(diff / 3600000).toFixed(1)} h`;
+    return `il y a ${Math.floor(diff / 86400000)} j`;
+  }
   if (diff < 0) {
     const absDiff = Math.abs(diff);
     if (absDiff < 60000) return 'بعد أقل من دقيقة';
@@ -79,7 +114,13 @@ function formatRelativeTime(iso: string): string {
   return `منذ ${Math.floor(diff / 86400000)} يوم`;
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, locale }: { status: string; locale?: string }) {
+  const labels =
+    locale === 'en'
+      ? { completed: 'Completed', failed: 'Failed', running: 'Running', pending: 'Pending' }
+      : locale === 'fr'
+        ? { completed: 'Terminé', failed: 'Échec', running: 'En cours', pending: 'En attente' }
+        : { completed: 'مكتمل', failed: 'فشل', running: 'قيد التشغيل', pending: 'معلّق' };
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] uppercase tracking-[0.1em] font-medium border ${STATUS_STYLES[status] || STATUS_STYLES.pending}`}
@@ -87,7 +128,7 @@ function StatusBadge({ status }: { status: string }) {
       {status === 'running' && <Loader2 className="h-2.5 w-2.5 animate-spin" />}
       {status === 'completed' && <CheckCircle className="h-2.5 w-2.5" />}
       {status === 'failed' && <XCircle className="h-2.5 w-2.5" />}
-      {{ completed: 'مكتمل', failed: 'فشل', running: 'قيد التشغيل', pending: 'معلّق' }[status] || status}
+      {(labels as Record<string, string>)[status] || status}
     </span>
   );
 }
@@ -108,6 +149,7 @@ export default function SchedulerPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
   const { locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -115,7 +157,7 @@ export default function SchedulerPage() {
       setTasks(res.data.data || []);
       setError('');
     } catch {
-      setError('فشل تحميل بيانات المهام');
+      setError(L('فشل تحميل بيانات المهام', 'Échec du chargement des tâches', 'Failed to load tasks'));
     }
   }, []);
 
@@ -131,7 +173,7 @@ export default function SchedulerPage() {
       setTotalRuns(res.data.totalCount || 0);
       setError('');
     } catch {
-      setError('فشل تحميل بيانات المهام');
+      setError(L('فشل تحميل بيانات المهام', 'Échec du chargement des tâches', 'Failed to load tasks'));
     }
   }, [runsPage, taskFilter]);
 
@@ -177,7 +219,7 @@ export default function SchedulerPage() {
       const details = response.data?.data as RunEntry | undefined;
       if (details) setRuns((current) => current.map((item) => (item._id === run._id ? { ...item, ...details } : item)));
     } catch {
-      toast('تعذر تحميل تفاصيل التشغيل', 'error');
+      toast(L('تعذر تحميل تفاصيل التشغيل', 'Impossible de charger les détails', 'Failed to load run details'), 'error');
     } finally {
       setLoadingRunDetails(null);
     }
@@ -187,12 +229,12 @@ export default function SchedulerPage() {
     setTriggeringTask(taskName);
     try {
       await api.post(`/scheduler/trigger/${taskName}`);
-      toast(`تم تشغيل المهمة '${taskName}'`, 'success');
+      toast(`${L('تم تشغيل المهمة', 'Tâche lancée', 'Task triggered')} '${taskName}'`, 'success');
       // Refresh immediately
       await fetchTasks();
       await fetchRuns();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'فشل تشغيل المهمة';
+      const msg = err instanceof Error ? err.message : L('فشل تشغيل المهمة', 'Échec du lancement', 'Failed to trigger task');
       toast(msg, 'error');
     } finally {
       setTriggeringTask(null);
@@ -206,11 +248,11 @@ export default function SchedulerPage() {
     try {
       if (task.enabled === false) {
         await api.post(`/scheduler/tasks/${task.name}/resume`);
-        toast(`تم استئناف المهمة '${task.displayName}'`, 'success');
+        toast(`${L('تم استئناف المهمة', 'Tâche reprise', 'Task resumed')} '${task.displayName}'`, 'success');
       } else {
         const ok = window.confirm(
           locale === 'ar'
-            ? `سيتم إيقاف التشغيل التلقائي للمهمة «${task.displayName}». يمكنك تشغيلها يدوياً في أي وقت. متابعة؟`
+            ? `${L('سيتم إيقاف التشغيل التلقائي للمهمة', 'La planification automatique de la tâche sera suspendue', 'Automatic scheduling for the task will be paused')} «${task.displayName}». ${L('يمكنك تشغيلها يدوياً في أي وقت. متابعة؟', 'Vous pouvez la lancer manuellement à tout moment. Continuer ?', 'You can still run it manually anytime. Continue?')}`
             : locale === 'fr'
               ? `L’exécution automatique de «${task.displayName}» sera suspendue. Vous pourrez toujours la lancer manuellement. Continuer ?`
               : `Automatic runs of "${task.displayName}" will be paused. You can still run it manually. Continue?`,
@@ -222,7 +264,7 @@ export default function SchedulerPage() {
       await fetchTasks();
       await fetchRuns();
     } catch {
-      toast('فشل تغيير حالة المهمة', 'error');
+      toast(L('فشل تغيير حالة المهمة', 'Échec du changement d’état', 'Failed to change task state'), 'error');
     } finally {
       setTogglingTask(null);
     }
@@ -232,7 +274,7 @@ export default function SchedulerPage() {
     return (
       <div className="flex items-center justify-center py-16">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        <span className="ms-2 text-sm text-muted-foreground">جارٍ تحميل المهام…</span>
+        <span className="ms-2 text-sm text-muted-foreground">{L('جارٍ تحميل المهام…', 'Chargement des tâches…', 'Loading tasks…')}</span>
       </div>
     );
   }
@@ -241,9 +283,9 @@ export default function SchedulerPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.08em]">المهام المجدولة</h1>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.08em]">{L('المهام المجدولة', 'Tâches planifiées', 'Scheduled tasks')}</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          المهام الخلفية، سجل التشغيل، والتشغيل اليدوي
+          {L('المهام الخلفية، سجل التشغيل، والتشغيل اليدوي', 'Tâches d’arrière-plan, journal d’exécution et lancement manuel', 'Background jobs, run history, and manual triggers')}
         </p>
       </div>
 
@@ -268,7 +310,7 @@ export default function SchedulerPage() {
               {task.isRunning ? (
                 <span className="shrink-0 inline-flex items-center gap-1 px-2 py-1 text-[10px] uppercase tracking-[0.1em] font-medium text-primary bg-primary/10 border border-primary/30">
                   <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                  قيد التشغيل
+                  {L('قيد التشغيل', 'En cours', 'Running')}
                 </span>
               ) : (
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -282,7 +324,7 @@ export default function SchedulerPage() {
                     ) : (
                       <Play className="h-3 w-3" />
                     )}
-                    شغّل الآن
+                    {L('شغّل الآن', 'Lancer', 'Run now')}
                   </button>
                   <button
                     onClick={() => toggleTask(task)}
@@ -331,14 +373,14 @@ export default function SchedulerPage() {
 
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div>
-                <span className="text-muted-foreground uppercase tracking-[0.1em]">الجدولة</span>
+                <span className="text-muted-foreground uppercase tracking-[0.1em]">{L('الجدولة', 'Planification', 'Schedule')}</span>
                 <p className="font-medium mt-0.5 flex items-center gap-1.5">
                   <Timer className="h-3 w-3 text-muted-foreground" />
-                  كل {formatInterval(task.intervalMs)}
+                  {L('كل', 'Toutes les', 'Every')} {formatInterval(task.intervalMs, locale)}
                 </p>
               </div>
               <div>
-                <span className="text-muted-foreground uppercase tracking-[0.1em]">التشغيل القادم</span>
+                <span className="text-muted-foreground uppercase tracking-[0.1em]">{L('التشغيل القادم', 'Prochaine exécution', 'Next run')}</span>
                 <p className="font-medium mt-0.5">
                   {task.enabled === false ? (
                     <span className="inline-flex items-center gap-1 text-signal-amber">
@@ -346,9 +388,9 @@ export default function SchedulerPage() {
                       {locale === 'ar' ? 'موقوفة' : locale === 'fr' ? 'Suspendue' : 'Paused'}
                     </span>
                   ) : task.nextRunAt ? (
-                    formatRelativeTime(task.nextRunAt)
+                    formatRelativeTime(task.nextRunAt, locale)
                   ) : (
-                    'معلّق'
+                    L('معلّق', 'En attente', 'Pending')
                   )}
                 </p>
               </div>
@@ -357,12 +399,12 @@ export default function SchedulerPage() {
             {task.lastRun && (
               <div className="border-t border-border pt-2 space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground uppercase tracking-[0.1em]">آخر تشغيل</span>
-                  <StatusBadge status={task.lastRun.status} />
+                  <span className="text-muted-foreground uppercase tracking-[0.1em]">{L('آخر تشغيل', 'Dernière exécution', 'Last run')}</span>
+                  <StatusBadge status={task.lastRun.status} locale={locale} />
                 </div>
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">
-                    {formatRelativeTime(task.lastRun.startedAt)}
+                    {formatRelativeTime(task.lastRun.startedAt, locale)}
                   </span>
                   <span className="text-muted-foreground">
                     {formatDuration(task.lastRun.durationMs, locale)}
@@ -423,7 +465,7 @@ export default function SchedulerPage() {
             if (expandedRun !== run._id) return null;
             return (
               <div className="space-y-2 bg-muted/30 px-4 pb-3 text-xs">
-                {loadingRunDetails === run._id ? <div className="flex items-center gap-2 py-3 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />جارٍ تحميل تفاصيل التشغيل…</div> : <><div className="flex flex-wrap gap-4 border border-border bg-background px-3 py-2"><span>بدأ: {new Date(run.startedAt).toLocaleString()}</span><span>اكتمل: {run.completedAt ? new Date(run.completedAt).toLocaleString() : 'لم يكتمل بعد'}</span><span>النتيجة: {run.result ? 'متوفرة' : 'غير متوفرة'}</span></div>{run.error && <div className="border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">{run.error}</div>}{run.subtasks?.length ? <div className="border border-border divide-y divide-border">{run.subtasks.map((sub, i) => <div key={i} className="grid grid-cols-[1fr,80px,80px,1fr] gap-2 px-3 py-1.5"><span className="font-medium truncate">{sub.name}</span><StatusBadge status={sub.status} /><span className="text-muted-foreground">{formatDuration(sub.durationMs, locale)}</span><span className="text-signal-red truncate">{sub.error || ''}</span></div>)}</div> : <p className="text-muted-foreground">لا توجد مهام فرعية مسجلة لهذا التشغيل.</p>}</>}
+                {loadingRunDetails === run._id ? <div className="flex items-center gap-2 py-3 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />{L('جارٍ تحميل تفاصيل التشغيل…', 'Chargement des détails…', 'Loading run details…')}</div> : <><div className="flex flex-wrap gap-4 border border-border bg-background px-3 py-2"><span>{L('بدأ:', 'Début :', 'Started:')} {new Date(run.startedAt).toLocaleString()}</span><span>{L('اكتمل:', 'Fin :', 'Finished:')} {run.completedAt ? new Date(run.completedAt).toLocaleString() : L('لم يكتمل بعد', 'Pas terminé', 'Not finished')}</span><span>{L('النتيجة:', 'Résultat :', 'Result:')} {run.result ? L('متوفرة', 'Disponible', 'Available') : L('غير متوفرة', 'Indisponible', 'Unavailable')}</span></div>{run.error && <div className="border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">{run.error}</div>}{run.subtasks?.length ? <div className="border border-border divide-y divide-border">{run.subtasks.map((sub, i) => <div key={i} className="grid grid-cols-[1fr,80px,80px,1fr] gap-2 px-3 py-1.5"><span className="font-medium truncate">{sub.name}</span><StatusBadge status={sub.status} locale={locale} /><span className="text-muted-foreground">{formatDuration(sub.durationMs, locale)}</span><span className="text-signal-red truncate">{sub.error || ''}</span></div>)}</div> : <p className="text-muted-foreground">{L('لا توجد مهام فرعية مسجلة لهذا التشغيل.', 'Aucune sous-tâche enregistrée pour cette exécution.', 'No subtasks recorded for this run.')}</p>}</>}
               </div>
             );
           }}
@@ -475,7 +517,7 @@ export default function SchedulerPage() {
                 headerClassName:
                   'text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium',
                 header: 'الحالة',
-                cell: (run) => <StatusBadge status={run.status} />,
+                cell: (run) => <StatusBadge status={run.status} locale={locale} />,
               },
               {
                 key: 'duration',

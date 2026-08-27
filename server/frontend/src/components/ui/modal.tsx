@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useLocale } from '@/components/locale-provider';
 import { X } from 'lucide-react';
 
@@ -42,7 +42,8 @@ export default function Modal({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  const titleId = title ? (ariaLabelledBy ?? 'modal-title') : undefined;
+  const generatedTitleId = useId();
+  const titleId = title ? (ariaLabelledBy ?? `modal-title-${generatedTitleId}`) : undefined;
 
   useEffect(() => {
     if (!open) return;

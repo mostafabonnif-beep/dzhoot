@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 import { useLocale } from '@/components/locale-provider';
+import ConfirmDialog from '@/components/ui/confirm-dialog';
 import { useToast } from '@/hooks/use-toast';
 import Pagination from '@/components/ui/pagination';
 
@@ -113,6 +114,7 @@ export default function EpgPage() {
   const [sourcesLoading, setSourcesLoading] = useState(false);
   const [testingUrl, setTestingUrl] = useState<string | null>(null);
   const [togglingUrl, setTogglingUrl] = useState<string | null>(null);
+  const [disableSource, setDisableSource] = useState<EpgSource | null>(null);
   const [error, setError] = useState('');
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -282,17 +284,24 @@ export default function EpgPage() {
         await api.post(`/epg/sources/${encodeURIComponent(source.url)}/enable`);
         toast(L('تم تفعيل المصدر', 'Source activée', 'Source enabled'), 'success');
       } else {
-        const confirmed = window.confirm(
-          L(
-            'سيتم استبعاد هذا المصدر من تحديثات دليل البرامج القادمة، وستبقى برامجه الحالية لكن لن تتجدد. هل تريد المتابعة؟',
-            'Cette source sera exclue des prochaines mises à jour EPG. Ses programmes resteront mais ne seront plus actualisés. Continuer ?',
-            'This source will be excluded from future EPG refreshes. Its existing programs remain but will not be updated. Continue?',
-          ),
-        );
-        if (!confirmed) return;
-        await api.post(`/epg/sources/${encodeURIComponent(source.url)}/disable`);
-        toast(L('تم تعطيل المصدر', 'Source désactivée', 'Source disabled'), 'success');
+        setDisableSource(source);
       }
+    } catch {
+      toast(L('تعذر تغيير حالة المصدر', 'Impossible de modifier la source', 'Failed to update source'), 'error');
+    } finally {
+      setTogglingUrl(null);
+      await fetchSources();
+    }
+  }
+
+  async function confirmDisableSource() {
+    const source = disableSource;
+    if (!source) return;
+    setDisableSource(null);
+    setTogglingUrl(source.url);
+    try {
+      await api.post(`/epg/sources/${encodeURIComponent(source.url)}/disable`);
+      toast(L('تم تعطيل المصدر', 'Source désactivée', 'Source disabled'), 'success');
     } catch {
       toast(L('تعذر تغيير حالة المصدر', 'Impossible de modifier la source', 'Failed to update source'), 'error');
     } finally {
@@ -727,6 +736,20 @@ export default function EpgPage() {
           </p>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={!!disableSource}
+        title={L('تعطيل مصدر دليل البرامج', 'Désactiver la source EPG', 'Disable EPG source')}
+        message={L(
+          'سيتم استبعاد هذا المصدر من تحديثات دليل البرامج القادمة، وستبقى برامجه الحالية لكن لن تتجدد. هل تريد المتابعة؟',
+          'Cette source sera exclue des prochaines mises à jour EPG. Ses programmes resteront mais ne seront plus actualisés. Continuer ?',
+          'This source will be excluded from future EPG refreshes. Its existing programs remain but will not be updated. Continue?',
+        )}
+        variant="destructive"
+        loading={togglingUrl !== null}
+        onConfirm={confirmDisableSource}
+        onCancel={() => setDisableSource(null)}
+      />
     </div>
   );
 }

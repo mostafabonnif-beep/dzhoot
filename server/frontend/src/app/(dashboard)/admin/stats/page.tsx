@@ -144,17 +144,18 @@ interface TrendPoint {
 
 type TimeRange = '7d' | '30d' | '90d';
 
+// Theme-aware chart palette: hue/luminosity adapt to dark mode via CSS variables.
 const CHART_COLORS = [
-  'hsl(38, 75%, 38%)',
-  'hsl(142, 60%, 34%)',
-  'hsl(220, 60%, 50%)',
-  'hsl(280, 50%, 50%)',
-  'hsl(0, 55%, 48%)',
-  'hsl(180, 50%, 40%)',
-  'hsl(60, 55%, 42%)',
-  'hsl(330, 50%, 45%)',
-  'hsl(200, 60%, 45%)',
-  'hsl(100, 45%, 40%)',
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-2))',
+  'hsl(var(--chart-3))',
+  'hsl(var(--chart-4))',
+  'hsl(var(--chart-5))',
+  'hsl(var(--chart-6))',
+  'hsl(var(--chart-7))',
+  'hsl(var(--chart-8))',
+  'hsl(var(--chart-9))',
+  'hsl(var(--chart-10))',
 ];
 
 function formatDate(dateStr: string): string {
@@ -529,7 +530,7 @@ export default function StatsPage() {
 
 
       {/* Overview cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
           label={
             locale === 'ar' ? 'إجمالي القنوات' : locale === 'fr' ? 'Total des chaînes' : 'Total Channels'
@@ -711,7 +712,7 @@ export default function StatsPage() {
                   width={100}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Bar dataKey="value" fill="hsl(220, 60%, 50%)" radius={[0, 2, 2, 0]} />
+                <Bar dataKey="value" fill="hsl(var(--chart-3))" radius={[0, 2, 2, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -740,14 +741,14 @@ export default function StatsPage() {
                   : 'User Registrations'
             }
             data={userTrend}
-            color="hsl(38, 75%, 38%)"
+            color="hsl(var(--chart-1))"
             range={userRange}
             onRangeChange={setUserRange}
           />
           <TrendChart
             title={locale === 'ar' ? 'الجلسات' : locale === 'fr' ? 'Sessions' : 'Sessions'}
             data={sessionTrend}
-            color="hsl(220, 60%, 50%)"
+            color="hsl(var(--chart-3))"
             range={sessionRange}
             onRangeChange={setSessionRange}
           />
@@ -756,7 +757,7 @@ export default function StatsPage() {
               locale === 'ar' ? 'ربط الأجهزة' : locale === 'fr' ? 'Appairages' : 'Pairings'
             }
             data={pairingTrend}
-            color="hsl(142, 60%, 34%)"
+            color="hsl(var(--chart-2))"
             range={pairingRange}
             onRangeChange={setPairingRange}
           />

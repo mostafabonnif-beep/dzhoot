@@ -138,6 +138,7 @@ export default function CodesPage() {
   // Bulk selection
   const [selectedCodes, setSelectedCodes] = useState<Set<string>>(new Set());
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
+  const [bulkRevokeOpen, setBulkRevokeOpen] = useState(false);
 
   // Clear selection when the visible page or filters change.
   useEffect(() => {
@@ -348,37 +349,53 @@ export default function CodesPage() {
     }
   }
 
-  async function handleBulkCodeAction(action: 'revoke' | 'restore') {
+  function requestBulkRevoke() {
     if (selectedCodes.size === 0) return;
+    setBulkRevokeOpen(true);
+  }
+
+  async function confirmBulkRevoke() {
+    if (selectedCodes.size === 0) return;
+    setBulkRevokeOpen(false);
     const ids = Array.from(selectedCodes);
-    if (action === 'revoke') {
-      const ok = window.confirm(
-        locale === 'ar'
-          ? `سيتم إلغاء ${ids.length} كود (الأكواد المفعّلة تُستثنى). هل تريد المتابعة؟`
-          : locale === 'fr'
-            ? `${ids.length} codes seront révoqués (les codes activés sont exclus). Continuer ?`
-            : `${ids.length} codes will be revoked (activated codes are excluded). Continue?`,
-      );
-      if (!ok) return;
-    }
     setBulkActionLoading(true);
     try {
-      const endpoint =
-        action === 'revoke' ? '/admin/activation-codes/bulk-revoke' : '/admin/activation-codes/bulk-restore';
-      const res = await api.post(endpoint, { ids, confirmed: action === 'revoke' });
-      const count = action === 'revoke' ? res.data?.revokedCount : res.data?.restoredCount;
+      const res = await api.post('/admin/activation-codes/bulk-revoke', { ids, confirmed: true });
+      const count = res.data?.revokedCount;
       toast(
         locale === 'ar'
-          ? action === 'revoke'
-            ? `تم إلغاء ${count ?? ids.length} كود`
-            : `تمت استعادة ${count ?? ids.length} كود`
+          ? `تم إلغاء ${count ?? ids.length} كود`
           : locale === 'fr'
-            ? action === 'revoke'
-              ? `${count ?? ids.length} codes révoqués`
-              : `${count ?? ids.length} codes restaurés`
-            : action === 'revoke'
-              ? `Revoked ${count ?? ids.length} codes`
-              : `Restored ${count ?? ids.length} codes`,
+            ? `${count ?? ids.length} codes révoqués`
+            : `Revoked ${count ?? ids.length} codes`,
+        'success',
+      );
+      setSelectedCodes(new Set());
+      await Promise.all([fetchCodes(), fetchStats()]);
+    } catch {
+      toast(t('codes.revokeError'), 'error');
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }
+
+  async function handleBulkCodeAction(action: 'revoke' | 'restore') {
+    if (selectedCodes.size === 0) return;
+    if (action === 'revoke') {
+      requestBulkRevoke();
+      return;
+    }
+    const ids = Array.from(selectedCodes);
+    setBulkActionLoading(true);
+    try {
+      const res = await api.post('/admin/activation-codes/bulk-restore', { ids, confirmed: false });
+      const count = res.data?.restoredCount;
+      toast(
+        locale === 'ar'
+          ? `تمت استعادة ${count ?? ids.length} كود`
+          : locale === 'fr'
+            ? `${count ?? ids.length} codes restaurés`
+            : `Restored ${count ?? ids.length} codes`,
         'success',
       );
       setSelectedCodes(new Set());
@@ -451,7 +468,7 @@ export default function CodesPage() {
       cell: (c) => (
         <input
           type="checkbox"
-          aria-label={`Select ${c.codeLast4}`}
+          aria-label={locale === 'ar' ? `تحديد ${c.codeLast4}` : locale === 'fr' ? `Sélectionner ${c.codeLast4}` : `Select ${c.codeLast4}`}
           checked={selectedCodes.has(c._id)}
           onChange={(e) => {
             const next = new Set(selectedCodes);
@@ -481,6 +498,7 @@ export default function CodesPage() {
                 }}
                 className="p-1 text-muted-foreground hover:text-foreground"
                 title={plain ? t('codes.hide') : t('codes.reveal')}
+                aria-label={plain ? t('codes.hide') : t('codes.reveal')}
                 disabled={revealingId === c._id}
               >
                 {revealingId === c._id ? (
@@ -499,6 +517,7 @@ export default function CodesPage() {
                   }}
                   className="p-1 text-muted-foreground hover:text-foreground"
                   title={t('codes.copy')}
+                  aria-label={t('codes.copy')}
                 >
                   {copiedCode === plain ? (
                     <Check className="h-3.5 w-3.5 text-emerald-500" />
@@ -1079,6 +1098,23 @@ export default function CodesPage() {
         loading={actionLoading}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={bulkRevokeOpen}
+        title={t('codes.revokeTitle')}
+        message={
+          locale === 'ar'
+            ? `سيتم إلغاء ${selectedCodes.size} كود (الأكواد المفعّلة تُستثنى). هل تريد المتابعة؟`
+            : locale === 'fr'
+              ? `${selectedCodes.size} codes seront révoqués (les codes activés sont exclus). Continuer ?`
+              : `${selectedCodes.size} codes will be revoked (activated codes are excluded). Continue?`
+        }
+        confirmLabel={t('codes.revoke')}
+        variant="destructive"
+        loading={bulkActionLoading}
+        onConfirm={confirmBulkRevoke}
+        onCancel={() => setBulkRevokeOpen(false)}
       />
     </div>
   );

@@ -274,7 +274,7 @@ export default function RecordingsPage() {
                         <button
                           onClick={() => stop(r._id)}
                           disabled={busyId === r._id}
-                          title="إيقاف وإنهاء"
+                          title="إيقاف وإنهاء" aria-label="إيقاف وإنهاء"
                           className="rounded p-1.5 text-red-600 hover:bg-red-500/10"
                         >
                           {busyId === r._id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
@@ -286,14 +286,14 @@ export default function RecordingsPage() {
                             href={`/api/v1/admin/recordings/${r._id}/watch`}
                             target="_blank"
                             rel="noreferrer"
-                            title="مشاهدة"
+                            title="مشاهدة" aria-label="مشاهدة"
                             className="rounded p-1.5 hover:bg-muted"
                           >
                             <Eye className="h-4 w-4" />
                           </a>
                           <a
                             href={`/api/v1/admin/recordings/${r._id}/download`}
-                            title="تحميل MP4"
+                            title="تحميل MP4" aria-label="تحميل MP4"
                             className="rounded p-1.5 text-primary hover:bg-primary/10"
                           >
                             <Download className="h-4 w-4" />
@@ -303,7 +303,7 @@ export default function RecordingsPage() {
                       <button
                         onClick={() => del(r)}
                         disabled={busyId === r._id}
-                        title="حذف"
+                        title="حذف" aria-label="حذف"
                         className="rounded p-1.5 text-muted-foreground hover:bg-red-500/10 hover:text-red-600"
                       >
                         <Trash2 className="h-4 w-4" />
