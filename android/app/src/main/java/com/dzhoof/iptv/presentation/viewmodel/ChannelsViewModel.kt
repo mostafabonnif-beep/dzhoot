@@ -56,6 +56,7 @@ private const val FOR_YOU_LIMIT = 12
 private const val HEALTH_SCAN_DEBOUNCE_MS = 500L
 private const val CATEGORY_UPDATE_DEBOUNCE_MS = 1_000L
 private const val GUIDE_URL = "https://github.com/mostafabonnif-beep/dzhoot/blob/main/android/docs/README.md"
+private const val DEFERRED_HOME_WORK_DELAY_MS = 1_200L
 
 @HiltViewModel
 class ChannelsViewModel @Inject constructor(
@@ -83,9 +84,22 @@ class ChannelsViewModel @Inject constructor(
     private var hasResumedBefore = false
 
     init {
+        // The first frame only needs the cached channel catalogue. EPG parsing,
+        // recommendations, favourite-category observation and QR generation are
+        // valuable but must never compete with the splash-to-home transition.
+        loadChannels()
+        refresh()
         viewModelScope.launch {
-            epgRepository.ensureLoaded()
-            // Re-enrich displayed channels once EPG is loaded
+            kotlinx.coroutines.delay(DEFERRED_HOME_WORK_DELAY_MS)
+            startDeferredHomeWork()
+        }
+    }
+
+    private fun startDeferredHomeWork() {
+        viewModelScope.launch {
+            runCatching { epgRepository.ensureLoaded() }
+            // Re-enrich displayed channels once EPG is loaded. A failed EPG load
+            // leaves the live catalogue usable with the normal fallback labels.
             _uiState.update { state ->
                 state.copy(
                     channels = state.channels.map { enrichWithEpgIfReady(it) },
@@ -95,10 +109,8 @@ class ChannelsViewModel @Inject constructor(
                 )
             }
         }
-        loadChannels()
         loadHomeData()
         observeFavoriteCategories()
-        refresh()
         generateGuideQrCode()
     }
 

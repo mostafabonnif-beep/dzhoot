@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
@@ -54,6 +55,7 @@ import com.dzhoof.iptv.presentation.ui.theme.DzRed400
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import java.util.Locale
 
 /**
  * Phone-first Client 2.0 landing experience.
@@ -80,18 +82,22 @@ internal fun Client2MobileHome(
     isDemo: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val leadChannel = remember(featuredChannels, channels) {
-        (featuredChannels + channels).firstOrNull()
+    val leadChannel = remember(featuredChannels, recentlyWatched, forYou, channels) {
+        uniqueChannels(recentlyWatched + featuredChannels + forYou + channels)
+            .sortedWith(
+                compareByDescending<ChannelUiModel> { it.nowProgramTitle != null }
+                    .thenByDescending { it.logoUrl != null }
+                    .thenByDescending { it.serverHealthScore ?: -1 }
+            )
+            .firstOrNull()
     }
     val nowPlaying = remember(featuredChannels, recentlyWatched, forYou, channels) {
-        (featuredChannels + recentlyWatched + forYou + channels)
-            .distinctBy { it.id }
-            .take(8)
+        uniqueChannels(featuredChannels + recentlyWatched + forYou + channels).take(5)
     }
-    val personalized = remember(forYou, recentlyWatched, featuredChannels) {
-        (forYou + recentlyWatched + featuredChannels)
-            .distinctBy { it.id }
-            .take(4)
+    val personalized = remember(forYou, recentlyWatched, featuredChannels, nowPlaying) {
+        uniqueChannels(forYou + recentlyWatched + featuredChannels)
+            .filterNot { candidate -> nowPlaying.any { it.id == candidate.id } }
+            .take(3)
     }
     val categories = remember(browseCollections) {
         browseCollections
@@ -178,6 +184,13 @@ internal fun Client2MobileHome(
     }
 }
 
+private fun uniqueChannels(channels: List<ChannelUiModel>): List<ChannelUiModel> =
+    channels.distinctBy { channel ->
+        channel.identityKey?.takeIf { it.isNotBlank() }
+            ?: channel.tvgId?.takeIf { it.isNotBlank() }
+            ?: cleanChannelTitle(channel.name).lowercase(Locale.ROOT)
+    }
+
 private data class MobileCategory(
     val id: String,
     val label: String,
@@ -191,46 +204,62 @@ private fun MobileHomeIdentity(
     onSearchClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+        border = BorderStroke(1.dp, DzGreen300.copy(alpha = 0.22f)),
+        modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "منصة البث",
-                style = MaterialTheme.typography.labelLarge,
-                color = DzGreen300,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "شاهد ما يهمك الآن",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-                fontWeight = FontWeight.ExtraBold
-            )
-            Spacer(modifier = Modifier.height(5.dp))
-            Text(
-                text = if (channelCount > 0) "$channelCount قناة مرتبة لك" else "قنواتك ستظهر هنا فور جاهزيتها",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Surface(
-            onClick = onSearchClick,
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
-            modifier = Modifier.size(52.dp)
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "بحث",
-                    tint = DzGreen300,
-                    modifier = Modifier.size(25.dp)
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = DzGreen300.copy(alpha = 0.16f),
+                modifier = Modifier.size(46.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = "DZ",
+                        color = DzGreen300,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "DZ HOOF",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.4.sp
                 )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = if (channelCount > 0) "بث مباشر  •  $channelCount قناة" else "يتم تجهيز البث المباشر",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Surface(
+                onClick = onSearchClick,
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.70f),
+                modifier = Modifier.size(44.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = "بحث",
+                        tint = DzGreen300,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
     }
@@ -257,7 +286,7 @@ private fun MobileLiveLeadCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .height(196.dp)
                 .background(
                     Brush.linearGradient(
                         colors = listOf(
@@ -423,14 +452,14 @@ private fun MobileShortcut(
         color = MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.large,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f)),
-        modifier = modifier.height(82.dp)
+        modifier = modifier.height(68.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(imageVector = icon, contentDescription = label, tint = tint, modifier = Modifier.size(24.dp))
-            Spacer(modifier = Modifier.height(6.dp))
+            Icon(imageVector = icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium,
@@ -449,43 +478,77 @@ private fun MobileCategoryShelf(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        MobileSectionTitle(eyebrow = "استكشف", title = "تصفح حسب الفئة")
+        MobileSectionTitle(eyebrow = "الأقسام الرئيسية", title = "اختر ما تريد مشاهدته")
         Spacer(modifier = Modifier.height(12.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            items(categories, key = { it.id }) { category ->
-                val tint = categoryColor(category.visualCategory)
-                Surface(
-                    onClick = { onCategoryClick(category.id) },
-                    color = tint.copy(alpha = 0.10f),
-                    shape = MaterialTheme.shapes.large,
-                    border = BorderStroke(1.dp, tint.copy(alpha = 0.25f))
+        Column(verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            categories.take(4).chunked(2).forEach { rowCategories ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(9.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = categoryIcon(category.visualCategory),
-                            contentDescription = null,
-                            tint = tint,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(7.dp))
-                        Text(
-                            text = category.label,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = category.channelCount.toString(),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                    rowCategories.forEach { category ->
+                        MobileCategoryTile(
+                            category = category,
+                            onClick = { onCategoryClick(category.id) },
+                            modifier = Modifier.weight(1f)
                         )
                     }
+                    if (rowCategories.size == 1) Spacer(modifier = Modifier.weight(1f))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MobileCategoryTile(
+    category: MobileCategory,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tint = categoryColor(category.visualCategory)
+    Surface(
+        onClick = onClick,
+        color = MaterialTheme.colorScheme.surface,
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.28f)),
+        modifier = modifier.height(78.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                shape = MaterialTheme.shapes.medium,
+                color = tint.copy(alpha = 0.14f),
+                modifier = Modifier.size(38.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = categoryIcon(category.visualCategory),
+                        contentDescription = null,
+                        tint = tint,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = category.label,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontWeight = FontWeight.ExtraBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = "${category.channelCount} قناة",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
             }
         }
     }

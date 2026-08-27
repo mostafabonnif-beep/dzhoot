@@ -336,6 +336,7 @@ class ChannelsViewModelTest {
         every { favoriteCategoryDao.getAllFavoriteCategoryNames() } returns favCatFlow
 
         val vm = createViewModel()
+        advanceTimeBy(1_300)
         runCurrent()
 
         favCatFlow.value = listOf("News", "Sports")
