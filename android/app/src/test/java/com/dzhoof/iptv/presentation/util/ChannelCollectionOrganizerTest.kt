@@ -70,6 +70,24 @@ class ChannelCollectionOrganizerTest {
         assertFalse(ChannelCollectionOrganizer.isCollectionId("Sport"))
     }
 
+    @Test
+    fun `large playlist is indexed once without losing curated counts`() {
+        val channels = List(4_500) { index ->
+            when (index % 3) {
+                0 -> channel(name = "beIN SPORTS $index", category = "QATAR | SPORT", country = "QA")
+                1 -> channel(name = "France News $index", category = "FR | News", country = "FR")
+                else -> channel(name = "ENTV $index", category = "DZ | General", country = "DZ")
+            }
+        }
+
+        val collections = ChannelCollectionOrganizer.collections(channels)
+
+        assertEquals(1_500, collections.first { it.id == ChannelCollectionOrganizer.BEIN_SPORTS_ID }.channelCount)
+        assertEquals(1_500, collections.first { it.id == "collection:country:qa" }.channelCount)
+        assertEquals(1_500, collections.first { it.id == "collection:country:fr" }.channelCount)
+        assertEquals(1_500, collections.first { it.id == "collection:country:dz" }.channelCount)
+    }
+
     private fun channel(
         name: String,
         category: String,

@@ -99,6 +99,7 @@ fun HomeScreen(
                     recentlyWatched = uiState.recentlyWatched,
                     forYou = uiState.forYou,
                     popularCategories = uiState.popularCategories,
+                    browseCollections = uiState.browseCollections,
                     lastPlayedChannelId = uiState.lastPlayedChannelId,
                     onChannelClick = openChannel,
                     onNavigateToChannels = onNavigateToChannels,

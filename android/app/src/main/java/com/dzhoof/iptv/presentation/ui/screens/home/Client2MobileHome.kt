@@ -46,6 +46,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
+import com.dzhoof.iptv.presentation.util.ChannelCollection
 import com.dzhoof.iptv.presentation.ui.components.DemoModeBanner
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen400
@@ -53,7 +54,6 @@ import com.dzhoof.iptv.presentation.ui.theme.DzRed400
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
-import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
 
 /**
  * Phone-first Client 2.0 landing experience.
@@ -70,6 +70,7 @@ internal fun Client2MobileHome(
     featuredChannels: List<ChannelUiModel>,
     recentlyWatched: List<ChannelUiModel>,
     forYou: List<ChannelUiModel>,
+    browseCollections: List<ChannelCollection>,
     onChannelClick: (String) -> Unit,
     onNavigateToChannels: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
@@ -92,8 +93,8 @@ internal fun Client2MobileHome(
             .distinctBy { it.id }
             .take(4)
     }
-    val categories = remember(channels) {
-        ChannelCollectionOrganizer.collections(channels)
+    val categories = remember(browseCollections) {
+        browseCollections
             .take(12)
             .map { collection ->
                 MobileCategory(

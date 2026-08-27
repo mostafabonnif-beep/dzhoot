@@ -27,6 +27,7 @@ import com.dzhoof.iptv.R
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
+import com.dzhoof.iptv.presentation.util.ChannelCollection
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
 import com.dzhoof.iptv.presentation.ui.components.ChannelRowSkeleton
@@ -49,6 +50,7 @@ fun HomeContent(
     recentlyWatched: List<ChannelUiModel>,
     forYou: List<ChannelUiModel>,
     popularCategories: List<PopularCategoryUiModel>,
+    browseCollections: List<ChannelCollection>,
     lastPlayedChannelId: String?,
     onChannelClick: (String) -> Unit,
     onNavigateToChannels: (String) -> Unit,
@@ -90,6 +92,7 @@ fun HomeContent(
             featuredChannels = featuredChannels,
             recentlyWatched = recentlyWatched,
             forYou = forYou,
+            browseCollections = browseCollections,
             onChannelClick = onChannelClick,
             onNavigateToChannels = onNavigateToChannels,
             onNavigateToSearch = onNavigateToSearch,

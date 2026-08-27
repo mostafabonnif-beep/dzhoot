@@ -41,7 +41,9 @@ object ChannelCollectionOrganizer {
         val id: String,
         val title: String,
         val tokens: List<String>
-    )
+    ) {
+        val normalizedTokens: List<String> = tokens.map(::normalizeSearchText)
+    }
 
     private val countryRules = listOf(
         CountryRule("country:dz", "القنوات الجزائرية", listOf("ALGERIA", "ALGERIE", "DZ", "الجزائر", "جزائرية")),
@@ -86,15 +88,26 @@ object ChannelCollectionOrganizer {
                     id = "$PREFIX${country.id}",
                     title = country.title,
                     visualCategory = "general"
-                ) { text -> containsAny(text, country.tokens) }
+                ) { text -> containsAny(text, country.normalizedTokens) }
             )
         }
     }
 
     /** Returns the established virtual browse collections that have live channels. */
-    fun collections(channels: List<ChannelUiModel>): List<ChannelCollection> =
-        definitions.mapNotNull { definition ->
-            val count = channels.count { channel -> definition.matches(searchableText(channel)) }
+    fun collections(channels: List<ChannelUiModel>): List<ChannelCollection> {
+        // A playlist can contain several thousand channels. The original draft
+        // repeatedly normalized every channel for every collection, which risks
+        // allocating excessive short-lived strings immediately after splash.
+        // Normalize each channel once and tally all definitions in the same pass.
+        val counts = IntArray(definitions.size)
+        channels.forEach { channel ->
+            val text = searchableText(channel)
+            definitions.forEachIndexed { index, definition ->
+                if (definition.matches(text)) counts[index]++
+            }
+        }
+        return definitions.mapIndexedNotNull { index, definition ->
+            val count = counts[index]
             definition.takeIf { count > 0 }?.let {
                 ChannelCollection(
                     id = definition.id,
@@ -104,6 +117,7 @@ object ChannelCollectionOrganizer {
                 )
             }
         }
+    }
 
     fun isCollectionId(value: String?): Boolean = value?.startsWith(PREFIX) == true
 
@@ -133,31 +147,41 @@ object ChannelCollectionOrganizer {
         searchableText(channel.name, channel.category, channel.country)
 
     private fun searchableText(name: String, category: String, country: String?): String =
-        "$name $category ${country.orEmpty()}"
-            .uppercase(Locale.ROOT)
-            .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
+        normalizeSearchText("$name $category ${country.orEmpty()}")
 
-    private fun containsAny(text: String, tokens: List<String>): Boolean = tokens.any { token ->
-        val normalizedToken = token
-            .uppercase(Locale.ROOT)
-            .replace(Regex("[^\\p{L}\\p{N}]+"), " ")
-            .trim()
-        if (normalizedToken.length <= 2) {
-            Regex("(^|\\s)${Regex.escape(normalizedToken)}($|\\s)").containsMatchIn(text)
-        } else {
-            text.contains(normalizedToken)
+    private fun containsAny(text: String, normalizedTokens: List<String>): Boolean {
+        // Country codes such as FR or DZ must only match an independent word,
+        // never an accidental substring inside a channel name such as "Fresh".
+        val paddedText = " $text "
+        return normalizedTokens.any { token ->
+            if (token.length <= 2) paddedText.contains(" $token ") else text.contains(token)
         }
     }
 
-    private val sportTokens = listOf(
+    private fun normalizeSearchText(value: String): String {
+        val result = StringBuilder(value.length)
+        var needsSpace = false
+        value.uppercase(Locale.ROOT).forEach { char ->
+            if (char.isLetterOrDigit()) {
+                if (needsSpace && result.isNotEmpty()) result.append(' ')
+                result.append(char)
+                needsSpace = false
+            } else if (result.isNotEmpty()) {
+                needsSpace = true
+            }
+        }
+        return result.toString()
+    }
+
+    private fun normalizedTokens(tokens: List<String>): List<String> = tokens.map(::normalizeSearchText)
+
+    private val sportTokens = normalizedTokens(listOf(
         "SPORT", "SPORTS", "FOOTBALL", "SOCCER", "NBA", "F1", "UFC", "رياضة", "رياضية", "كرة القدم"
-    )
-    private val newsTokens = listOf("NEWS", "INFO", "CNN", "BBC", "AL JAZEERA", "FRANCE 24", "أخبار", "إخبارية")
-    private val movieTokens = listOf("MOVIE", "MOVIES", "CINEMA", "FILM", "أفلام", "سينما")
-    private val seriesTokens = listOf("SERIES", "DRAMA", "SHOW", "مسلسلات", "دراما")
-    private val kidsTokens = listOf("KIDS", "KID", "CHILD", "CARTOON", "ANIME", "أطفال", "كرتون")
-    private val documentaryTokens = listOf("DOCUMENT", "NATURE", "DISCOVERY", "ANIMAL", "وثائقي", "طبيعة")
-    private val musicTokens = listOf("MUSIC", "RADIO", "MTV", "موسيقى", "راديو")
+    ))
+    private val newsTokens = normalizedTokens(listOf("NEWS", "INFO", "CNN", "BBC", "AL JAZEERA", "FRANCE 24", "أخبار", "إخبارية"))
+    private val movieTokens = normalizedTokens(listOf("MOVIE", "MOVIES", "CINEMA", "FILM", "أفلام", "سينما"))
+    private val seriesTokens = normalizedTokens(listOf("SERIES", "DRAMA", "SHOW", "مسلسلات", "دراما"))
+    private val kidsTokens = normalizedTokens(listOf("KIDS", "KID", "CHILD", "CARTOON", "ANIME", "أطفال", "كرتون"))
+    private val documentaryTokens = normalizedTokens(listOf("DOCUMENT", "NATURE", "DISCOVERY", "ANIMAL", "وثائقي", "طبيعة"))
+    private val musicTokens = normalizedTokens(listOf("MUSIC", "RADIO", "MTV", "موسيقى", "راديو"))
 }

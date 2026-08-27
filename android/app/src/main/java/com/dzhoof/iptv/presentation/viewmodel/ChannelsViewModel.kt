@@ -157,14 +157,25 @@ class ChannelsViewModel @Inject constructor(
                             allUiChannels
                         }
 
+                        // Build the curated index once per channel-load. The organizer
+                        // is allocation-safe for large playlists, and composables consume
+                        // only this ready-made result instead of classifying while drawing.
+                        // Any unexpected organizer failure leaves browse shelves empty but
+                        // never prevents the channel catalogue itself from appearing.
+                        val browseCollections = if (category == null || isCuratedCollection) {
+                            runCatching { ChannelCollectionOrganizer.collections(allUiChannels) }
+                                .getOrDefault(emptyList())
+                        } else {
+                            _uiState.value.browseCollections
+                        }
+
                         // Browse surfaces use a curated organization layer (brands, genres
                         // and countries) while Room keeps its raw provider categories intact.
                         // A direct raw-category deep link retains the prior category list.
                         val allCategories: List<String>
                         val catLogos: Map<String, List<String>>
                         if (category == null || isCuratedCollection) {
-                            allCategories = ChannelCollectionOrganizer.collections(allUiChannels)
-                                .map { it.id }
+                            allCategories = browseCollections.map { it.id }
                             catLogos = emptyMap()
                         } else {
                             allCategories = _uiState.value.categories
@@ -175,6 +186,7 @@ class ChannelsViewModel @Inject constructor(
                             it.copy(
                                 channels = uiChannels,
                                 categories = allCategories,
+                                browseCollections = browseCollections,
                                 categoryLogos = catLogos,
                                 // Only recompute For You from the unfiltered catalog; a
                                 // category filter shows a subset and would skew the mix.

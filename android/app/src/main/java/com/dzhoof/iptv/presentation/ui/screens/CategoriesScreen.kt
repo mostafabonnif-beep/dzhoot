@@ -59,8 +59,8 @@ fun CategoriesScreen(
         uiState.categories.isEmpty() -> "empty"
         else -> "content"
     }
-    val categoriesData = remember(uiState.channels, uiState.favoriteCategoryNames) {
-        ChannelCollectionOrganizer.collections(uiState.channels)
+    val categoriesData = remember(uiState.browseCollections, uiState.favoriteCategoryNames) {
+        uiState.browseCollections
             .map { collection ->
                 Client2MobileCategory(
                     sourceName = collection.id,

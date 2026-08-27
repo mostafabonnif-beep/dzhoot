@@ -1,5 +1,7 @@
 package com.dzhoof.iptv.presentation.model
 
+import com.dzhoof.iptv.presentation.util.ChannelCollection
+
 enum class ErrorType {
     NONE,
     AUTH_REQUIRED,
@@ -11,6 +13,9 @@ enum class ErrorType {
 data class ChannelsUiState(
     val channels: List<ChannelUiModel> = emptyList(),
     val categories: List<String> = emptyList(),
+    // Precomputed client-side brand/country collections. Kept in state so the
+    // phone UI never reprocesses a large playlist during composition.
+    val browseCollections: List<ChannelCollection> = emptyList(),
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val isInitialLoadComplete: Boolean = false,
