@@ -4,6 +4,11 @@ import crypto from 'crypto';
 import { IUserDocument, IUserModel } from '@dzhoof/shared';
 import { issuePlaybackToken } from '../services/playback-token';
 
+const {
+  hasRestrictedPresentationMarker,
+  publicCatalogPresentationQuery,
+} = require('../utils/catalog-presentation');
+
 const userSchema = new Schema<IUserDocument>(
   {
     username: {
@@ -231,7 +236,9 @@ userSchema.methods.generateUserPlaylist = async function (
   let channels;
   if (this.role === 'Admin' || this.allCatalog === true) {
     // Admin and trial users with allCatalog receive the shared catalog only.
-    channels = await ChannelModel.find({ $and: [{ ownerId: null }, xtreamVisibilityGuard] }).sort({ channelGroup: 1, order: 1 });
+    channels = await ChannelModel.find({
+      $and: [{ ownerId: null, isActive: { $ne: false } }, publicCatalogPresentationQuery(), xtreamVisibilityGuard],
+    }).sort({ channelGroup: 1, order: 1 });
   } else {
     channels = await ChannelModel.find({
       $and: [{ _id: { $in: this.channels } }, xtreamVisibilityGuard],
@@ -248,6 +255,7 @@ userSchema.methods.generateUserPlaylist = async function (
   m3uContent += `#PLAYLIST:${this.username}'s Channel List\n\n`;
 
   for (const channel of channels as any[]) {
+    if (hasRestrictedPresentationMarker(channel)) continue;
     const isDirectSource = directPlaybackSourceIds.includes(String(channel.metadata?.xtreamSourceId || ''));
     // For direct-playback sources, isWorking reflects the server's datacenter IP
     // (blocked upstream), not the customer's network — keep the primary URL.

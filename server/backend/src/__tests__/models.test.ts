@@ -40,12 +40,21 @@ describe('Channel model', () => {
       channelUrl: 'http://example.com/news.m3u8',
       channelImg: 'http://example.com/logo.png',
       channelGroup: 'News',
+      catchup: {
+        type: 'append',
+        days: 7,
+        source: 'https://upstream.example/catchup?token=private',
+      },
     });
     await channel.save();
     const m3u = channel.toM3U();
     expect(m3u).toContain('#EXTINF');
     expect(m3u).toContain('News Channel');
     expect(m3u).toContain('http://example.com/news.m3u8');
+    expect(m3u).toContain('group-title="دولي · أخبار"');
+    expect(m3u).toContain('catchup="append"');
+    expect(m3u).not.toContain('catchup-source=');
+    expect(m3u).not.toContain('upstream.example');
   });
 });
 
