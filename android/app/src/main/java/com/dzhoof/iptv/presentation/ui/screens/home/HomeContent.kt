@@ -90,7 +90,6 @@ fun HomeContent(
             featuredChannels = featuredChannels,
             recentlyWatched = recentlyWatched,
             forYou = forYou,
-            popularCategories = popularCategories,
             onChannelClick = onChannelClick,
             onNavigateToChannels = onNavigateToChannels,
             onNavigateToSearch = onNavigateToSearch,
