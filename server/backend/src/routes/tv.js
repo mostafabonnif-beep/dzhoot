@@ -24,6 +24,12 @@ const { epgCache } = require('../services/cache');
 const { decryptSecret } = require('../utils/crypto');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
+const {
+  hasRestrictedPresentationMarker,
+  publicCatalogPresentationQuery,
+  presentChannelForClient,
+  sortClientCatalogChannels,
+} = require('../utils/catalog-presentation');
 const { isSourceDown, getFailoverTarget } = require('../services/source-failover-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
 
@@ -100,6 +106,7 @@ async function getDirectPlaybackSourceIds() {
 
 function isCustomerVisibleChannel(channel, verifiedSourceIds, directPlaybackSourceIds) {
   const isDirectSource = directPlaybackSourceIds.has(String(channel.metadata?.xtreamSourceId || ''));
+  if (hasRestrictedPresentationMarker(channel)) return false;
   // A known-dead stream must never be offered to a customer, regardless of
   // whether it came from IPTV-org, Xtream, or another managed source.
   // Direct-playback sources are exempt: their isWorking flag reflects the
@@ -161,10 +168,10 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
   // those hosts to customers/resellers. Relay them through our logo proxy.
   if (safe.tvgLogo) safe.tvgLogo = proxyLogoUrl(baseUrl, safe.tvgLogo);
   if (safe.channelImg) safe.channelImg = proxyLogoUrl(baseUrl, safe.channelImg);
-  if (!user.channelListCode) return safe;
+  if (!user.channelListCode) return presentChannelForClient(safe);
   // Skip channels whose URL scheme the playback layer can't proxy (e.g. rtmp://,
   // udp://) instead of letting one bad channel break the whole customer playlist.
-  if (source.channelUrl && !/^https?:\/\//i.test(String(source.channelUrl))) return safe;
+  if (source.channelUrl && !/^https?:\/\//i.test(String(source.channelUrl))) return presentChannelForClient(safe);
   if (source.channelUrl) {
     const { token } = issuePlaybackToken({
       userId: String(user._id),
@@ -195,7 +202,7 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
         return { ...alternate, streamUrl: playbackTokenUrl(baseUrl, token, alternate.streamUrl) };
       }),
   );
-  return safe;
+  return presentChannelForClient(safe);
 }
 
 // NO authentication required for TV endpoints
@@ -210,6 +217,7 @@ async function loadEpgChannelIds(user) {
   const query = {
     $and: [
       baseQuery,
+      publicCatalogPresentationQuery(),
       {
         $nor: [
           {
@@ -351,7 +359,8 @@ router.get('/playlist/:code/json', async (req, res) => {
     const visibleChannels = channels.filter((channel) => isCustomerVisibleChannel(channel, verifiedSourceIds, directSourceIds));
     const baseUrl = getPublicBaseUrl(req);
     const tokenizedChannels = await Promise.all(
-      visibleChannels.map((channel) => tokenizeChannelForClient(channel, user, baseUrl)),
+      sortClientCatalogChannels(visibleChannels)
+        .map((channel) => tokenizeChannelForClient(channel, user, baseUrl)),
     );
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');

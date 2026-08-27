@@ -7,10 +7,16 @@ const { requireAuth } = require('./auth');
 const { audit } = require('../services/audit-log');
 const { issuePlaybackToken } = require('../services/playback-token');
 const { getPublicBaseUrl } = require('../utils/public-url');
+const {
+  hasRestrictedPresentationMarker,
+  presentChannelForClient,
+  publicCatalogPresentationQuery,
+  sortClientCatalogChannels,
+} = require('../utils/catalog-presentation');
 function tokenizeUserChannel(channel, user, baseUrl) {
   const source = channel.toObject ? channel.toObject() : channel;
   const safe = { ...source, channelUrl: '' };
-  if (!user.channelListCode) return safe;
+  if (!user.channelListCode) return presentChannelForClient(safe);
   if (source.channelUrl) {
     const { token } = issuePlaybackToken({
       userId: String(user._id),
@@ -31,7 +37,7 @@ function tokenizeUserChannel(channel, user, baseUrl) {
       });
       return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}.m3u8` };
     });
-  return safe;
+  return presentChannelForClient(safe);
 }
 
 const {
@@ -62,7 +68,9 @@ router.get('/me/channels', requireAuth, async (req, res) => {
       user.channels?.map((ch) => ch._id || ch).slice(0, 3),
     );
     const baseUrl = getPublicBaseUrl(req);
-    const channels = (user.channels || []).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    const channels = sortClientCatalogChannels(
+      (user.channels || []).filter((channel) => !hasRestrictedPresentationMarker(channel)),
+    ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
     res.json({ success: true, channels });
   } catch (error) {
     console.error('❌ Get my channels error:', error);
@@ -86,8 +94,11 @@ router.put('/me/channels', requireAuth, async (req, res) => {
     // Validate channel IDs — only catalog channels or the user's own private imports,
     // so a user can't add another user's private channel to their selection.
     const channels = await Channel.find({
-      _id: { $in: channelIds },
-      $or: [{ ownerId: null }, { ownerId: req.user.id }],
+      $and: [
+        { _id: { $in: channelIds } },
+        { $or: [{ ownerId: null }, { ownerId: req.user.id }] },
+        publicCatalogPresentationQuery(),
+      ],
     });
     if (channels.length !== channelIds.length) {
       return res.status(400).json({ success: false, error: 'Some channel IDs are invalid' });
@@ -131,8 +142,11 @@ router.post('/me/channels/add', requireAuth, async (req, res) => {
 
     const existingIds = new Set(user.channels.map((id) => id.toString()));
     const validChannels = await Channel.find({
-      _id: { $in: channelIds },
-      $or: [{ ownerId: null }, { ownerId: req.user.id }],
+      $and: [
+        { _id: { $in: channelIds } },
+        { $or: [{ ownerId: null }, { ownerId: req.user.id }] },
+        publicCatalogPresentationQuery(),
+      ],
     }).select('_id');
     const validIds = validChannels.map((c) => c._id.toString());
 
@@ -234,7 +248,9 @@ router.get('/me/channels-with-fallbacks', requireAuth, async (req, res) => {
     }
 
     const baseUrl = getPublicBaseUrl(req);
-    const channels = (user.channels || []).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    const channels = sortClientCatalogChannels(
+      (user.channels || []).filter((channel) => !hasRestrictedPresentationMarker(channel)),
+    ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
     res.json({ success: true, channels });
   } catch (error) {
     console.error('Get channels with fallbacks error:', error);
