@@ -29,6 +29,15 @@ class DzhoofApplication : Application(), Configuration.Provider {
         instance = this
         startupRecoveryMode = AppPreferences.beginStartup(this)
 
+        // Preserve Android's normal crash handling. The local marker stores only
+        // the exception class so the next launch can enter a lightweight recovery
+        // path without retaining stream links, messages, credentials, or account data.
+        val previousExceptionHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching { AppPreferences.recordStartupFailure(this, throwable) }
+            previousExceptionHandler?.uncaughtException(thread, throwable)
+        }
+
         if (BuildConfig.FIREBASE_ENABLED) {
             runCatching {
                 FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(!BuildConfig.DEBUG)
@@ -59,6 +68,10 @@ class DzhoofApplication : Application(), Configuration.Provider {
         @Volatile
         var startupRecoveryMode: Boolean = false
             private set
+
+        fun leaveStartupRecoveryModeForRetry() {
+            startupRecoveryMode = false
+        }
 
         @JvmStatic
         fun getAppContext() = instance.applicationContext

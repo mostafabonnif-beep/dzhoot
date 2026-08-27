@@ -87,6 +87,7 @@ import com.dzhoof.iptv.presentation.ui.components.SideNavRail
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
 import com.dzhoof.iptv.presentation.ui.screens.SplashScreen
+import com.dzhoof.iptv.presentation.ui.screens.StartupRecoveryScreen
 import com.dzhoof.iptv.presentation.ui.screens.UpdateAvailableScreen
 import com.dzhoof.iptv.presentation.viewmodel.AppUpdateViewModel
 import com.dzhoof.iptv.presentation.ui.theme.DiagonalGradientBackground
@@ -185,6 +186,18 @@ class ComposeMainActivity : ComponentActivity() {
             val perfProfile = remember { detectPerfProfile(this) }
             CompositionLocalProvider(LocalPerfProfile provides perfProfile) {
                 DzHoofTheme(darkTheme = darkTheme) {
+                    if (DzhoofApplication.startupRecoveryMode) {
+                        StartupRecoveryScreen(
+                            lastFailureType = AppPreferences.getLastStartupFailureType(this@ComposeMainActivity),
+                            onRetryNormally = {
+                                AppPreferences.retryNormalStartup(this@ComposeMainActivity)
+                                DzhoofApplication.leaveStartupRecoveryModeForRetry()
+                                recreate()
+                            }
+                        )
+                        return@DzHoofTheme
+                    }
+
                     var showSplash by rememberSaveable { mutableStateOf(showSplashOnStart) }
                     // A launch is considered stable only after the splash has ended
                     // and the home shell remained alive briefly. Until then, the next

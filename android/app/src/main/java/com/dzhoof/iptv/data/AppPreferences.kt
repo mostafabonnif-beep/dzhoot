@@ -25,6 +25,8 @@ object AppPreferences {
     private const val PARENTAL_LOCK_ENABLED_KEY = "parental_lock_enabled"
     private const val STARTUP_IN_PROGRESS_KEY = "startup_in_progress"
     private const val STARTUP_RECOVERY_MODE_KEY = "startup_recovery_mode"
+    private const val LAST_STARTUP_FAILURE_TYPE_KEY = "last_startup_failure_type"
+    private const val LAST_STARTUP_FAILURE_AT_KEY = "last_startup_failure_at"
     val DEFAULT_SERVER_URL: String
         get() = BuildConfig.API_BASE_URL.trimEnd('/')
 
@@ -58,6 +60,32 @@ object AppPreferences {
     fun isStartupRecoveryMode(context: Context): Boolean =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(STARTUP_RECOVERY_MODE_KEY, false)
+
+    /** Records only a class name and timestamp; no message, URL, token, or user data is stored. */
+    fun recordStartupFailure(context: Context, throwable: Throwable) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(LAST_STARTUP_FAILURE_TYPE_KEY, throwable.javaClass.simpleName.take(120))
+            .putLong(LAST_STARTUP_FAILURE_AT_KEY, System.currentTimeMillis())
+            .apply()
+    }
+
+    fun getLastStartupFailureType(context: Context): String? =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(LAST_STARTUP_FAILURE_TYPE_KEY, null)
+
+    fun getLastStartupFailureAt(context: Context): Long =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getLong(LAST_STARTUP_FAILURE_AT_KEY, 0L)
+
+    /** Allows a deliberate normal retry after the user has reached recovery mode. */
+    fun retryNormalStartup(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(STARTUP_IN_PROGRESS_KEY, false)
+            .putBoolean(STARTUP_RECOVERY_MODE_KEY, false)
+            .apply()
+    }
 
     /** Clears the crash-loop marker only after the home experience remained alive. */
     fun markStartupStable(context: Context) {
