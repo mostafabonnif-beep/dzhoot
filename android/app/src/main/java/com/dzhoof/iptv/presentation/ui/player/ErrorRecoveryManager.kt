@@ -171,6 +171,12 @@ class ErrorRecoveryManager(
                 onError(errorMessage)
                 skipToFallback()
             }
+            error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS && hasFallbackRemaining() -> {
+                // Permanent HTTP responses (for example 403/404) will not recover
+                // by retrying the same URL; move to proxy or the next source.
+                onError(errorMessage)
+                skipToFallback()
+            }
             else -> {
                 onStreamDead(errorMessage, error.errorCodeName)
             }

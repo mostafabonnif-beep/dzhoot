@@ -3,6 +3,8 @@ package com.dzhoof.iptv.presentation.ui.player
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.DataSpec
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,6 +74,22 @@ class ErrorRecoveryManagerTest {
     private fun nonNetworkError(): PlaybackException =
         PlaybackException("Decode error", null, PlaybackException.ERROR_CODE_UNSPECIFIED)
 
+    private fun httpError(statusCode: Int): PlaybackException {
+        val cause = HttpDataSource.InvalidResponseCodeException(
+            statusCode,
+            "HTTP $statusCode",
+            null,
+            emptyMap(),
+            mockk<DataSpec>(relaxed = true),
+            ByteArray(0),
+        )
+        return PlaybackException(
+            "HTTP $statusCode",
+            cause,
+            PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+        )
+    }
+
     private fun primarySlot(
         directUrl: String = "http://primary.m3u8",
         proxyUrl: String? = null
@@ -117,6 +135,36 @@ class ErrorRecoveryManagerTest {
 
         assertEquals(1, onStreamDeadMessages.size)
         assertEquals(0, onErrorMessages.size)
+    }
+
+    @Test
+    fun `permanent http error uses specific message and falls back when available`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(listOf(primarySlot(), alternateSlot()))
+
+        listenerSlot.captured.onPlayerError(httpError(404))
+        runCurrent()
+
+        assertEquals(1, onErrorMessages.size)
+        assertEquals("مصدر البث غير موجود", onErrorMessages.single())
+        assertEquals(0, onStreamDeadMessages.size)
+        advanceTimeBy(3000)
+        runCurrent()
+        assertEquals(listOf("http://alt.m3u8"), onAlternateFallbackUrls)
+    }
+
+    @Test
+    fun `transient http error retries and reports server message`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(listOf(primarySlot()))
+
+        listenerSlot.captured.onPlayerError(httpError(503))
+        advanceTimeBy(3000)
+        runCurrent()
+
+        assertEquals(listOf("خطأ مؤقت في خادم البث"), onErrorMessages)
+        assertEquals(1, onRecoveringAttempts.size)
+        assertEquals(0, onStreamDeadMessages.size)
     }
 
     // ── Max retries ──────────────────────────────────────────────
