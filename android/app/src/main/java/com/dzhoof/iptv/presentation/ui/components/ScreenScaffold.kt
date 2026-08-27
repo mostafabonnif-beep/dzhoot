@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.presentation.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 
 /**
@@ -93,7 +96,7 @@ fun ScreenHeader(
     trailing: (@Composable RowScope.() -> Unit)? = null
 ) {
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
-    Row(
+    Surface(
         modifier = modifier
             .fillMaxWidth()
             .padding(
@@ -107,22 +110,36 @@ fun ScreenHeader(
                                  else Dimens.ScreenPaddingHorizontalTv
                 ) else Modifier
             ),
-        verticalAlignment = Alignment.CenterVertically
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+        tonalElevation = 0.dp,
+        shadowElevation = if (isCompact) 4.dp else 8.dp,
+        border = BorderStroke(
+            1.dp,
+            (accentColor ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.18f)
+        )
     ) {
-        if (onBack != null) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "رجوع",
-                    tint = MaterialTheme.colorScheme.onBackground
-                )
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = if (isCompact) Dimens.Space3 else Dimens.Space4),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "رجوع",
+                        tint = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+                Spacer(modifier = Modifier.width(Dimens.Space3))
             }
-            Spacer(modifier = Modifier.width(Dimens.Space3))
-        }
-        ScreenHeaderTitle(text = title, accentColor = accentColor)
-        if (trailing != null) {
-            Spacer(modifier = Modifier.weight(1f))
-            trailing()
+            ScreenHeaderTitle(text = title, accentColor = accentColor)
+            if (trailing != null) {
+                Spacer(modifier = Modifier.weight(1f))
+                trailing()
+            }
         }
     }
 }

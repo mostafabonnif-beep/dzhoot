@@ -32,6 +32,7 @@ import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
 import com.dzhoof.iptv.presentation.ui.components.*
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
+import com.dzhoof.iptv.presentation.ui.player.isTvDevice
 import com.dzhoof.iptv.presentation.ui.theme.*
 import com.dzhoof.iptv.presentation.viewmodel.ChannelsViewModel
 
@@ -56,7 +57,25 @@ fun ChannelsScreen(
         viewModel.loadChannels(initialCategory)
     }
 
-    ScreenScaffold(
+    val contentState = when {
+        uiState.isLoading && uiState.channels.isEmpty() -> "loading"
+        uiState.error != null && uiState.channels.isEmpty() -> "error"
+        uiState.channels.isEmpty() -> "empty"
+        else -> "content"
+    }
+    val isTv = isTvDevice(LocalContext.current)
+
+    // Client 2.0 gives television users a true three-pane Live TV hub while
+    // phone/tablet and non-content states retain the proven responsive flow.
+    if (isTv && contentState == "content") {
+        Client2TvLiveHub(
+            uiState = uiState,
+            onCategorySelected = viewModel::loadChannels,
+            onChannelClick = onChannelClick,
+            onToggleFavorite = viewModel::toggleFavorite,
+            modifier = modifier
+        )
+    } else ScreenScaffold(
         title = buildString {
             val sel = uiState.selectedCategory
             if (sel != null) append(CategoryLocalizer.localize(sel)) else append("كل القنوات")
@@ -91,13 +110,6 @@ fun ChannelsScreen(
             }
         }
     ) {
-        val contentState = when {
-            uiState.isLoading && uiState.channels.isEmpty() -> "loading"
-            uiState.error != null && uiState.channels.isEmpty() -> "error"
-            uiState.channels.isEmpty() -> "empty"
-            else -> "content"
-        }
-
         Crossfade(
             targetState = contentState,
             animationSpec = tween(DURATION_NORMAL, easing = EaseOutQuart),
@@ -191,7 +203,7 @@ private fun CategoryChips(
                 CategoryChip(
                     label = "الكل",
                     isSelected = selectedCategory == null,
-                    selectedContainerColor = Amber,
+                    selectedContainerColor = DzGreen300,
                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                     onClick = onAllSelected,
                     modifier = Modifier.focusRequester(allChipFocusRequester)

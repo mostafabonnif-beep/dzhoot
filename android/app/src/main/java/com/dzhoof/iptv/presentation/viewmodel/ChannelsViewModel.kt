@@ -477,8 +477,9 @@ class ChannelsViewModel @Inject constructor(
                     }
                 }
                 _uiState.update { it.copy(guideQrBitmap = bmp) }
-            } catch (_: WriterException) {
-                // QR generation failed silently — empty state will show without QR
+            } catch (_: Exception) {
+                // QR is optional for the empty state. Any encoder or bitmap failure
+                // must remain isolated from the channels flow and lifecycle tests.
             }
         }
     }

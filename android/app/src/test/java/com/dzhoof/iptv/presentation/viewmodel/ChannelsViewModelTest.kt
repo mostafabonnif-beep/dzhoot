@@ -20,21 +20,16 @@ import com.dzhoof.iptv.domain.usecase.RefreshChannelsUseCase
 import com.dzhoof.iptv.domain.usecase.ToggleFavoriteUseCase
 import com.dzhoof.iptv.presentation.mapper.ChannelUiMapper
 import com.dzhoof.iptv.presentation.model.ErrorType
-import com.google.zxing.WriterException
-import com.google.zxing.qrcode.QRCodeWriter
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkConstructor
-import io.mockk.unmockkConstructor
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -76,10 +71,6 @@ class ChannelsViewModelTest {
 
     @Before
     fun setup() {
-        // Mock QRCodeWriter to throw WriterException so generateGuideQrCode() exits cleanly
-        mockkConstructor(QRCodeWriter::class)
-        every { anyConstructed<QRCodeWriter>().encode(any(), any(), any<Int>(), any<Int>()) } throws WriterException("mocked")
-
         // Default mocks for init
         coEvery { epgRepository.ensureLoaded() } returns Unit
         every { epgRepository.getNowNextIfCached(any()) } returns null
@@ -94,10 +85,6 @@ class ChannelsViewModelTest {
         every { channelDao.getAllChannels() } returns flowOf(emptyList())
     }
 
-    @After
-    fun tearDown() {
-        unmockkConstructor(QRCodeWriter::class)
-    }
 
     private fun createViewModel() = ChannelsViewModel(
         getChannelsUseCase = getChannelsUseCase,
