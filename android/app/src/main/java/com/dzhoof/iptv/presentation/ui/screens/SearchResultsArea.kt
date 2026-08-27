@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -225,6 +226,7 @@ private fun SearchChannelSection(
     channels: List<UnifiedChannelResult>,
     onClick: (String) -> Unit,
 ) {
+    val isCompact = LocalConfiguration.current.screenWidthDp < 600
     Text(
         text = stringResource(R.string.search_live_channels),
         style = MaterialTheme.typography.titleMedium,
@@ -237,10 +239,36 @@ private fun SearchChannelSection(
                 .padding(bottom = 6.dp)
                 .clickable { onClick(channel.id) },
         ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Text(channel.name, style = MaterialTheme.typography.titleSmall)
-                channel.group?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
+            Row(
+                modifier = Modifier.padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                channel.logo?.takeIf { it.isNotBlank() }?.let { logo ->
+                    AsyncImage(
+                        model = logo,
+                        contentDescription = channel.name,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .size(if (isCompact) 44.dp else 56.dp)
+                            .clip(MaterialTheme.shapes.small),
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = channel.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    channel.group?.takeIf { it.isNotBlank() }?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
