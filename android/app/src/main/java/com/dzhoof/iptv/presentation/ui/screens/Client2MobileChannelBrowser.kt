@@ -18,8 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LiveTv
@@ -41,20 +39,16 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileDesign
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileFilterChip
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileMasthead
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileSectionHeading
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.DzRed400
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
-
-private val BrowserPanelShape = CutCornerShape(
-    topStart = 16.dp,
-    topEnd = 4.dp,
-    bottomEnd = 16.dp,
-    bottomStart = 4.dp
-)
-private val BrowserControlShape = RoundedCornerShape(5.dp)
 
 /**
  * Phone-first live channel browser. It deliberately avoids poster-style channel
@@ -83,29 +77,11 @@ internal fun Client2MobileChannelBrowser(
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         item(key = "browser_header") {
-            Column {
-                Text(
-                    text = headerKicker,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = DzGreen300,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = selectedTitle,
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    fontWeight = FontWeight.ExtraBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(7.dp))
-                Text(
-                    text = countDescription(channels.size),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            DzHoofMobileMasthead(
+                kicker = headerKicker,
+                title = selectedTitle,
+                subtitle = countDescription(channels.size)
+            )
         }
 
         item(key = "browser_filters") {
@@ -117,19 +93,7 @@ internal fun Client2MobileChannelBrowser(
         }
 
         item(key = "browser_divider") {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Box(modifier = Modifier.width(28.dp).height(2.dp).background(DzGreen300))
-                Text(
-                    text = "البث المباشر",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.Bold
-                )
-            }
+            DzHoofMobileSectionHeading(title = "البث المباشر", kicker = "قائمة التشغيل")
         }
 
         items(channels, key = { it.id }) { channel ->
@@ -176,27 +140,11 @@ private fun BrowserFilter(
     label: String,
     active: Boolean,
     onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = BrowserControlShape,
-        color = if (active) DzGreen300.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
-        border = BorderStroke(
-            1.dp,
-            if (active) DzGreen300 else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f)
-        )
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (active) DzGreen300 else MaterialTheme.colorScheme.onSurfaceVariant,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
-        )
-    }
-}
+) = DzHoofMobileFilterChip(
+    label = label,
+    active = active,
+    onClick = onClick
+)
 
 @Composable
 private fun Client2MobileChannelRow(
@@ -220,7 +168,7 @@ private fun Client2MobileChannelRow(
 
     Surface(
         onClick = onClick,
-        shape = BrowserPanelShape,
+        shape = DzHoofMobileDesign.PanelShape,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, accent.copy(alpha = 0.32f)),
         modifier = modifier.fillMaxWidth()
@@ -240,7 +188,7 @@ private fun Client2MobileChannelRow(
             )
             Spacer(modifier = Modifier.width(9.dp))
             Surface(
-                shape = BrowserControlShape,
+                shape = DzHoofMobileDesign.ControlShape,
                 color = Color.White.copy(alpha = 0.95f),
                 modifier = Modifier.size(54.dp)
             ) {
@@ -283,7 +231,7 @@ private fun Client2MobileChannelRow(
             }
             Surface(
                 onClick = onFavoriteClick,
-                shape = BrowserControlShape,
+                shape = DzHoofMobileDesign.ControlShape,
                 color = if (channel.isFavorite) DzRed400.copy(alpha = 0.14f) else Color.Transparent,
                 modifier = Modifier.size(38.dp)
             ) {

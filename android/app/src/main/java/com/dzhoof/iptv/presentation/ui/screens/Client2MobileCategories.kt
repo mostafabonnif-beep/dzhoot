@@ -21,7 +21,6 @@ import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.PlayCircleOutline
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -36,11 +35,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileDesign
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileMasthead
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.DzRed400
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
@@ -109,7 +109,7 @@ internal fun Client2MobileCategories(
                     focusedIndicatorColor = DzGreen300,
                     unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant
                 ),
-                shape = MaterialTheme.shapes.large,
+                shape = DzHoofMobileDesign.ControlShape,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 20.dp, vertical = 6.dp)
@@ -120,7 +120,7 @@ internal fun Client2MobileCategories(
             item(key = "categories_mobile_no_results") {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
-                    shape = MaterialTheme.shapes.large,
+                    shape = DzHoofMobileDesign.PanelShape,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -157,27 +157,12 @@ private fun MobileCategoriesIntro(
     channelCount: Int,
     modifier: Modifier = Modifier
 ) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Text(
-            text = "دليل القنوات",
-            style = MaterialTheme.typography.labelLarge,
-            color = DzGreen300,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "اكتشف حسب اهتماماتك",
-            style = MaterialTheme.typography.headlineSmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.ExtraBold
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = "$categoryCount تصنيف · $channelCount قناة متاحة",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    DzHoofMobileMasthead(
+        kicker = "DZ HOOF / GUIDE",
+        title = "دليل القنوات",
+        subtitle = "$categoryCount تصنيف · $channelCount قناة متاحة",
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -192,29 +177,28 @@ private fun MobileCategoryRow(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f)),
+        shape = DzHoofMobileDesign.PanelShape,
+        border = BorderStroke(1.dp, tint.copy(alpha = DzHoofMobileDesign.PanelBorderAlpha)),
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(94.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface,
-                            tint.copy(alpha = 0.08f)
-                        )
-                    )
-                )
-                .padding(horizontal = 14.dp),
+                .height(86.dp)
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(52.dp)
+                    .background(tint)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
             Surface(
                 color = tint.copy(alpha = 0.14f),
-                shape = MaterialTheme.shapes.large,
-                modifier = Modifier.size(62.dp)
+                shape = DzHoofMobileDesign.ControlShape,
+                modifier = Modifier.size(54.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -252,13 +236,20 @@ private fun MobileCategoryRow(
                     )
                 }
             }
-            IconButton(onClick = onFavoriteClick, modifier = Modifier.size(44.dp)) {
-                Icon(
-                    imageVector = if (category.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                    contentDescription = if (category.isFavorite) "إزالة ${category.displayName} من المفضلة" else "إضافة ${category.displayName} إلى المفضلة",
-                    tint = if (category.isFavorite) DzRed400 else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
-                )
+            Surface(
+                onClick = onFavoriteClick,
+                shape = DzHoofMobileDesign.ControlShape,
+                color = if (category.isFavorite) DzRed400.copy(alpha = 0.14f) else Color.Transparent,
+                modifier = Modifier.size(42.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (category.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        contentDescription = if (category.isFavorite) "إزالة ${category.displayName} من المفضلة" else "إضافة ${category.displayName} إلى المفضلة",
+                        tint = if (category.isFavorite) DzRed400 else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(21.dp)
+                    )
+                }
             }
         }
     }

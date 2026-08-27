@@ -4,8 +4,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.shape.CutCornerShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -52,6 +50,9 @@ import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.util.ChannelCollection
 import com.dzhoof.iptv.presentation.ui.components.DemoModeBanner
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileDesign
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileMasthead
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileSectionHeading
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen400
 import com.dzhoof.iptv.presentation.ui.theme.DzRed400
@@ -59,14 +60,6 @@ import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import java.util.Locale
-
-private val BroadcastPanelShape = CutCornerShape(
-    topStart = 18.dp,
-    topEnd = 4.dp,
-    bottomEnd = 18.dp,
-    bottomStart = 4.dp
-)
-private val BroadcastActionShape = RoundedCornerShape(5.dp)
 
 /**
  * Phone-first Client 2.0 landing experience.
@@ -215,52 +208,15 @@ private fun MobileHomeIdentity(
     onSearchClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        shape = BroadcastPanelShape,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, DzGreen300.copy(alpha = 0.34f)),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Surface(
-                shape = BroadcastActionShape,
-                color = DzGreen300.copy(alpha = 0.14f),
-                border = BorderStroke(1.dp, DzGreen300.copy(alpha = 0.35f)),
-                modifier = Modifier.size(46.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = "DZ",
-                        color = DzGreen300,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "DZ HOOF  /  LIVE",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.4.sp
-                )
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = if (channelCount > 0) "بث مباشر  •  $channelCount قناة" else "يتم تجهيز البث المباشر",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+    DzHoofMobileMasthead(
+        kicker = "DZ HOOF / LIVE",
+        title = "البث المباشر",
+        subtitle = if (channelCount > 0) "بث مباشر  •  $channelCount قناة" else "يتم تجهيز البث المباشر",
+        modifier = modifier,
+        trailing = {
             Surface(
                 onClick = onSearchClick,
-                shape = BroadcastActionShape,
+                shape = DzHoofMobileDesign.ControlShape,
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.size(44.dp)
             ) {
@@ -274,7 +230,7 @@ private fun MobileHomeIdentity(
                 }
             }
         }
-    }
+    )
 }
 
 @Composable
@@ -291,7 +247,7 @@ private fun MobileLiveLeadCard(
     Surface(
         onClick = onWatch,
         color = MaterialTheme.colorScheme.surface,
-        shape = BroadcastPanelShape,
+        shape = DzHoofMobileDesign.PanelShape,
         border = BorderStroke(1.dp, accent.copy(alpha = 0.36f)),
         modifier = modifier.fillMaxWidth()
     ) {
@@ -327,7 +283,7 @@ private fun MobileLiveLeadCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         color = DzRed400.copy(alpha = 0.14f),
-                        shape = BroadcastActionShape
+                        shape = DzHoofMobileDesign.ControlShape
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -396,7 +352,7 @@ private fun MobileLiveLeadCard(
 
                 Button(
                     onClick = onWatch,
-                    shape = BroadcastActionShape,
+                    shape = DzHoofMobileDesign.ControlShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DzGreen400,
                         contentColor = Color(0xFF052015)
@@ -462,7 +418,7 @@ private fun MobileShortcut(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
-        shape = BroadcastActionShape,
+        shape = DzHoofMobileDesign.ControlShape,
         border = BorderStroke(1.dp, tint.copy(alpha = 0.28f)),
         modifier = modifier.height(64.dp)
     ) {
@@ -522,7 +478,7 @@ private fun MobileCategoryTile(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
-        shape = BroadcastPanelShape,
+        shape = DzHoofMobileDesign.PanelShape,
         border = BorderStroke(1.dp, tint.copy(alpha = 0.42f)),
         modifier = modifier.height(78.dp)
     ) {
@@ -532,7 +488,7 @@ private fun MobileCategoryTile(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Surface(
-                shape = BroadcastActionShape,
+                shape = DzHoofMobileDesign.ControlShape,
                 color = tint.copy(alpha = 0.14f),
                 modifier = Modifier.size(38.dp)
             ) {
@@ -577,20 +533,11 @@ private fun MobileChannelListSection(
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            MobileSectionTitle(eyebrow = eyebrow, title = title)
-            Text(
-                text = "عرض الكل",
-                style = MaterialTheme.typography.labelLarge,
-                color = DzGreen300,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable(onClick = onSeeAllClick)
-            )
-        }
+        DzHoofMobileSectionHeading(
+            kicker = eyebrow,
+            title = title,
+            onSeeAllClick = onSeeAllClick
+        )
         Spacer(modifier = Modifier.height(10.dp))
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             channels.forEach { channel ->
@@ -605,23 +552,12 @@ private fun MobileChannelListSection(
 }
 
 @Composable
-private fun MobileSectionTitle(eyebrow: String, title: String, modifier: Modifier = Modifier) {
-    Column(modifier = modifier) {
-        Text(
-            text = eyebrow,
-            style = MaterialTheme.typography.labelMedium,
-            color = DzGreen300,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(modifier = Modifier.height(2.dp))
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            fontWeight = FontWeight.ExtraBold
-        )
-    }
-}
+private fun MobileSectionTitle(eyebrow: String, title: String, modifier: Modifier = Modifier) =
+    DzHoofMobileSectionHeading(
+        kicker = eyebrow,
+        title = title,
+        modifier = modifier
+    )
 
 @Composable
 private fun MobileChannelListItem(
@@ -637,7 +573,7 @@ private fun MobileChannelListItem(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
-        shape = BroadcastPanelShape,
+        shape = DzHoofMobileDesign.PanelShape,
         border = BorderStroke(1.dp, accent.copy(alpha = 0.30f)),
         modifier = modifier.fillMaxWidth()
     ) {
@@ -657,7 +593,7 @@ private fun MobileChannelListItem(
             Spacer(modifier = Modifier.width(9.dp))
             Surface(
                 color = Color.White.copy(alpha = 0.95f),
-                shape = BroadcastActionShape,
+                shape = DzHoofMobileDesign.ControlShape,
                 modifier = Modifier.size(58.dp)
             ) {
                 if (channel.logoUrl != null) {
@@ -701,7 +637,7 @@ private fun MobileChannelListItem(
             Surface(
                 onClick = onFavoriteClick,
                 color = if (channel.isFavorite) DzRed400.copy(alpha = 0.14f) else Color.Transparent,
-                shape = BroadcastActionShape,
+                shape = DzHoofMobileDesign.ControlShape,
                 modifier = Modifier.size(40.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {

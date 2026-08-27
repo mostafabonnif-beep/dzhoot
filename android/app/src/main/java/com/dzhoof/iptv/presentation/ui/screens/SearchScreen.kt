@@ -33,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -50,6 +49,7 @@ import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.components.AppTextField
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileMasthead
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
 import com.dzhoof.iptv.presentation.ui.components.VoiceSearchButton
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
@@ -213,34 +213,10 @@ fun SearchScreen(
 
 @Composable
 private fun Client2MobileSearchHeading(modifier: Modifier = Modifier) {
-    Surface(
-        shape = CutCornerShape(topStart = 16.dp, topEnd = 4.dp, bottomEnd = 16.dp, bottomStart = 4.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, DzGreen300.copy(alpha = 0.34f)),
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(DzGreen300)
-                )
-                Spacer(modifier = Modifier.size(8.dp))
-                Text(
-                    text = "DZ HOOF / SEARCH",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = DzGreen300,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
-                )
-            }
-            Spacer(modifier = Modifier.height(5.dp))
-            Text(
-                text = "ابحث في البث والمكتبة",
-                style = MaterialTheme.typography.headlineSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
-            )
-        }
-    }
+    DzHoofMobileMasthead(
+        kicker = "DZ HOOF / SEARCH",
+        title = "ابحث في البث والمكتبة",
+        subtitle = "قنوات مباشرة، أفلام، ومسلسلات في مكان واحد",
+        modifier = modifier
+    )
 }
