@@ -260,7 +260,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       if (cached) return res.json(cached);
     }
 
-    if (wantsPagination && !isTvClient) {
+    if (wantsPagination) {
       // Catalog view sees the shared catalog only (ownerId:null); a user sees their own selection.
       const baseQuery = catalogView
         ? { ownerId: null }
@@ -287,7 +287,9 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
           return fresh;
         })(),
       ]);
-      const data = channels.map((channel) => slimAlternates(channel, directSourceIds));
+      const data = isTvClient
+        ? tokenizeListForClient(channels, req.user, req)
+        : channels.map((channel) => slimAlternates(channel, directSourceIds));
       return res.json({
         success: true,
         count: channels.length,
