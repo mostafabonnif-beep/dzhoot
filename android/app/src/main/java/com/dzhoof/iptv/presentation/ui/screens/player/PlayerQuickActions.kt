@@ -35,7 +35,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.animation.FOCUS_SCALE_TILE
 import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
 import com.dzhoof.iptv.presentation.ui.theme.OnVideo
@@ -102,7 +102,7 @@ internal fun PlayerQuickActions(
         QuickActionButton(
             icon = Icons.Filled.Bedtime,
             label = sleepLabel,
-            tint = if (sleepTimerMinutes != null) Amber else OnVideo,
+            tint = if (sleepTimerMinutes != null) DzGreen300 else OnVideo,
             onClick = { onCycleSleepTimer(nextSleepTimerStep(sleepTimerMinutes)) }
         )
 
@@ -166,7 +166,7 @@ private fun QuickActionButton(
                 focusedElevation = 0.dp
             )
             .clip(ShapeSmall)
-            .background(if (isFocused) Amber.copy(alpha = 0.18f) else Color.Transparent)
+            .background(if (isFocused) DzGreen300.copy(alpha = 0.22f) else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = Dimens.Space3, vertical = Dimens.Space2)
     ) {
