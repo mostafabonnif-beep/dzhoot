@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.presentation.ui.screens.guide
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -23,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.GuideFocusedProgram
 import com.dzhoof.iptv.presentation.model.GuideUiState
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
@@ -112,65 +115,82 @@ private fun GuideHeaderDetail(
     if (timelineUnavailable) {
         // With no timeline there are no program cells to focus — show the
         // notice pill instead of the (always empty) program details.
-        Text(
-            text = "لا يتوفر جدول البرامج — عرض القنوات فقط",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
-                .clip(ShapeMedium)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2)
-        )
+        Surface(
+            shape = ShapeMedium,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+        ) {
+            Text(
+                text = "لا يتوفر جدول البرامج — عرض القنوات فقط",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = Dimens.Space4, vertical = Dimens.Space2)
+            )
+        }
         return
     }
 
     if (focused == null) {
-        Text(
-            text = "حدّد برنامجاً لعرض تفاصيله",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Surface(
+            shape = ShapeMedium,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f))
+        ) {
+            Text(
+                text = "حدّد برنامجاً لعرض تفاصيله",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = Dimens.Space4, vertical = Dimens.Space2)
+            )
+        }
         return
     }
 
     val program = focused.program
-    Column(
-        horizontalAlignment = Alignment.End,
-        verticalArrangement = Arrangement.spacedBy(Dimens.Space1)
+    Surface(
+        shape = ShapeMedium,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(Dimens.Space2)
+        Column(
+            modifier = Modifier.padding(horizontal = Dimens.Space4, vertical = Dimens.Space2),
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space1)
         ) {
-            if (program.isLive) {
-                Icon(
-                    imageVector = Icons.Filled.FiberManualRecord,
-                    contentDescription = "مباشر الآن",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.height(Dimens.IconSmall)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Dimens.Space2)
+            ) {
+                if (program.isLive) {
+                    Icon(
+                        imageVector = Icons.Filled.FiberManualRecord,
+                        contentDescription = "مباشر الآن",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.height(Dimens.IconSmall)
+                    )
+                }
+                Text(
+                    text = program.title,
+                    style = if (isCompact) MaterialTheme.typography.labelMedium
+                    else MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             Text(
-                text = program.title,
-                style = if (isCompact) MaterialTheme.typography.labelMedium
-                else MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
+                text = buildTimeRange(program.startTime, program.endTime) + " · " + focused.channelName,
+                style = if (isCompact) MaterialTheme.typography.labelSmall
+                else MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
         }
-        Text(
-            text = buildTimeRange(program.startTime, program.endTime) + " · " + focused.channelName,
-            style = if (isCompact) MaterialTheme.typography.labelSmall
-            else MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
