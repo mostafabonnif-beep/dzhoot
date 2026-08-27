@@ -110,6 +110,10 @@ jobs:
           "$SDK_BUILD_TOOLS/apksigner" verify --verbose "$APK"
           "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "package: name='com.dzhoof.iptv'"
           "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "versionName='$VERSION_NAME'"
+          base="${VERSION_NAME%%-*}"
+          IFS=. read -r major minor patch <<< "$base"
+          expected_version_code=$((major * 10000 + minor * 100 + patch))
+          "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "versionCode='$expected_version_code'"
           sha256sum "$APK" > app-official-release.apk.sha256
           ls -lh "$APK" app-official-release.apk.sha256
 

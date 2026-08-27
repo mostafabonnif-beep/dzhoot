@@ -170,3 +170,9 @@
 | `lintOfficialDebug` | ناجح |
 | `officialRelease` | وصل إلى `packageOfficialRelease` ثم توقف بسبب غياب `storeFile` للـ keystore |
 | النشر على VPS أو Endpoint التحديث | لم يتم |
+
+## تدقيق مطابقة versionCode في Workflow
+
+تم تقوية خطوة التحقق في Workflow الإصدار الرسمي. بعد بناء APK وتوقيعه، يتحقق المسار الآن من `packageName` و`versionName` و`versionCode` معاً، ويحسب الرقم المتوقع من صيغة `major*10000 + minor*100 + patch`. هذا يمنع رفع ملف يحمل اسم إصدار صحيحاً لكن رقم بناء غير متوافق مع نظام التحديث التلقائي.
+
+تمت محاكاة الصيغة محلياً للقيم `1.0.18 → 10018` و`1.0.18-rc.1 → 10018` و`1.2.3 → 10203`. لم يتم تشغيل Workflow على GitHub أو نشر أي APK، لأن توقيع الإنتاج ما زال يحتاج keystore الصحيح.
