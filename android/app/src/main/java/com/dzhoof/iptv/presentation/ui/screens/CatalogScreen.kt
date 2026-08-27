@@ -32,8 +32,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -50,6 +54,7 @@ import com.dzhoof.iptv.presentation.ui.components.AppTextField
 import com.dzhoof.iptv.presentation.ui.components.EmptyState
 import com.dzhoof.iptv.presentation.ui.components.ErrorState
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
+import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
 import com.dzhoof.iptv.presentation.viewmodel.CatalogTab
 import com.dzhoof.iptv.presentation.viewmodel.CatalogViewModel
 
@@ -405,8 +410,12 @@ private fun PosterCard(
     posterHeight: androidx.compose.ui.unit.Dp = 210.dp,
     onClick: () -> Unit,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Card(
         onClick = onClick,
+        modifier = Modifier
+            .onFocusChanged { focused = it.isFocused }
+            .tvFocusVisuals(focused = focused, shape = MaterialTheme.shapes.medium),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         AsyncImage(
@@ -431,9 +440,13 @@ private fun EpisodeRow(
     isCompact: Boolean,
     onClick: () -> Unit,
 ) {
+    var focused by remember { mutableStateOf(false) }
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .onFocusChanged { focused = it.isFocused }
+            .tvFocusVisuals(focused = focused, shape = MaterialTheme.shapes.small),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
     ) {
         Row(
