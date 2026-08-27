@@ -60,6 +60,7 @@ class GuideViewModel @Inject constructor(
 
     private var loadJob: Job? = null
     private var favoritesJob: Job? = null
+    private var hydrationJob: Job? = null
 
     // ── Full (unfiltered) working set, kept off the UI state so filtering/hydration is in-memory ──
     private var skeletonRows: List<GuideRowUiModel> = emptyList()
@@ -80,6 +81,7 @@ class GuideViewModel @Inject constructor(
 
     fun load() {
         loadJob?.cancel()
+        hydrationJob?.cancel()
         loadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null, errorType = ErrorType.NONE) }
 
@@ -151,15 +153,21 @@ class GuideViewModel @Inject constructor(
                 favoriteIds = ids
                 _uiState.update { it.copy(hasFavorites = ids.isNotEmpty()) }
                 // Re-derive the rows only when the change is actually on screen.
-                if (selectedFilter is GuideFilter.Favorites) hydrateRange(0, INITIAL_ROWS)
+                if (selectedFilter is GuideFilter.Favorites) scheduleHydration(0, INITIAL_ROWS)
             }
         }
     }
 
     /** Called by the grid as the viewport moves; hydrates the visible window and evicts the rest. */
     fun onVisibleRangeChanged(firstVisible: Int, lastVisible: Int) {
-        viewModelScope.launch {
-            hydrateRange(firstVisible - HYDRATION_BUFFER, lastVisible + HYDRATION_BUFFER)
+        scheduleHydration(firstVisible - HYDRATION_BUFFER, lastVisible + HYDRATION_BUFFER)
+    }
+
+    /** Keep only the newest viewport request; stale ranges must not publish over the active focus path. */
+    private fun scheduleHydration(from: Int, to: Int) {
+        hydrationJob?.cancel()
+        hydrationJob = viewModelScope.launch {
+            hydrateRange(from, to)
         }
     }
 
@@ -168,7 +176,7 @@ class GuideViewModel @Inject constructor(
         selectedFilter = filter
         _uiState.update { it.copy(selectedFilter = filter) }
         // Recompute the displayed list and pre-hydrate its first screenful (the grid resets to top).
-        viewModelScope.launch { hydrateRange(0, INITIAL_ROWS) }
+        scheduleHydration(0, INITIAL_ROWS)
     }
 
     /**
