@@ -16,7 +16,7 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.animation.animateFadeIn
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.TextDim
 import com.dzhoof.iptv.presentation.ui.theme.TextPrimary
 import com.dzhoof.iptv.presentation.ui.theme.TextSecondary
@@ -46,7 +46,7 @@ fun RecoveringOverlay(
         ) {
             CircularProgressIndicator(
                 modifier = Modifier.size(40.dp),
-                color = Amber,
+                color = DzGreen300,
                 strokeWidth = 3.dp
             )
             Text(

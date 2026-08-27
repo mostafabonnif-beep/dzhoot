@@ -35,7 +35,7 @@ import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.components.OverlayToast
 import com.dzhoof.iptv.presentation.ui.components.PlayerInfoBar
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.BodyOverlay
 import com.dzhoof.iptv.presentation.ui.theme.DisplayNumberChip
 import com.dzhoof.iptv.presentation.ui.theme.LabelToast
@@ -192,7 +192,7 @@ internal fun BoxScope.PlayerOverlays(
                 Icon(
                     imageVector = Icons.Filled.WifiTethering,
                     contentDescription = null,
-                    tint = Amber,
+                    tint = DzGreen300,
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
