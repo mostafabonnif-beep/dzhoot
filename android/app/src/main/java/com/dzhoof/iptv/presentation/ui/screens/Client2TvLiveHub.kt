@@ -70,6 +70,7 @@ import com.dzhoof.iptv.presentation.ui.theme.Atlas700
 import com.dzhoof.iptv.presentation.ui.theme.Atlas800
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
 
 /**
  * Client 2.0 TV-first Live hub.
@@ -124,7 +125,9 @@ internal fun Client2TvLiveHub(
 
         Client2SpotlightPane(
             channel = selectedChannel,
-            categoryLabel = uiState.selectedCategory?.let(CategoryLocalizer::localize) ?: "كل القنوات",
+            categoryLabel = uiState.selectedCategory?.let { selected ->
+                ChannelCollectionOrganizer.titleFor(selected) ?: CategoryLocalizer.localize(selected)
+            } ?: "كل القنوات",
             onPlay = { selectedChannel?.let { onChannelClick(it.id) } },
             onToggleFavorite = { selectedChannel?.let { onToggleFavorite(it.id) } },
             modifier = Modifier
@@ -197,9 +200,9 @@ private fun Client2CategoryPane(
                 }
                 items(categories, key = { it }) { category ->
                     Client2CategoryItem(
-                        label = CategoryLocalizer.localize(category),
+                        label = ChannelCollectionOrganizer.titleFor(category) ?: CategoryLocalizer.localize(category),
                         selected = category == selectedCategory,
-                        accent = categoryColor(category),
+                        accent = categoryColor(ChannelCollectionOrganizer.visualCategoryFor(category) ?: category),
                         onClick = { onCategorySelected(category) }
                     )
                 }

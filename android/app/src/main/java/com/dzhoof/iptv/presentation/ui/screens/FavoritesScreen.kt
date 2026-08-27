@@ -2,6 +2,7 @@ package com.dzhoof.iptv.presentation.ui.screens
 
 import androidx.compose.animation.Crossfade
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -115,7 +116,8 @@ private fun FavoritesContent(
                     ) {
                         items(favoriteCategories, key = { it.name }) { category ->
                             CategoryCard(
-                                name = CategoryLocalizer.localize(category.name),
+                                name = ChannelCollectionOrganizer.titleFor(category.name)
+                                    ?: CategoryLocalizer.localize(category.name),
                                 channelCount = category.channelCount,
                                 imageUrl = category.imageUrl,
                                 isFavorite = true,

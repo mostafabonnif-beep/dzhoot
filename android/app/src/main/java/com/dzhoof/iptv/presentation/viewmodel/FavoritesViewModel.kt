@@ -13,6 +13,7 @@ import com.dzhoof.iptv.presentation.mapper.ChannelUiMapper
 import com.dzhoof.iptv.presentation.model.FavoritesUiState
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,7 +65,22 @@ class FavoritesViewModel @Inject constructor(
                 val channelsByCategory = allChannels.groupBy { it.categoryId }
                 val healthMap = healthList.associateBy { it.channelId }
                 favCategories.mapNotNull { favCat ->
-                    val catChannels = channelsByCategory[favCat.categoryName] ?: return@mapNotNull null
+                    // A favourite may be a raw provider group (legacy) or one of
+                    // Client 2.0's country/brand virtual collections. Resolve both
+                    // against the same cached channel inventory.
+                    val catChannels = if (ChannelCollectionOrganizer.isCollectionId(favCat.categoryName)) {
+                        allChannels.filter { channel ->
+                            ChannelCollectionOrganizer.matchesRaw(
+                                name = channel.name,
+                                category = channel.categoryId,
+                                country = channel.country,
+                                collectionId = favCat.categoryName
+                            )
+                        }
+                    } else {
+                        channelsByCategory[favCat.categoryName].orEmpty()
+                    }
+                    if (catChannels.isEmpty()) return@mapNotNull null
                     PopularCategoryUiModel(
                         name = favCat.categoryName,
                         channelCount = catChannels.size,

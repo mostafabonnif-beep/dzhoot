@@ -306,7 +306,7 @@ class ChannelsViewModelTest {
     }
 
     @Test
-    fun `loadChannels extracts categories from all channels`() = runTest {
+    fun `loadChannels exposes curated browse collections from all channels`() = runTest {
         val channels = listOf(
             testChannel.copy(id = "1", category = "News"),
             testChannel.copy(id = "2", category = "Sports"),
@@ -319,7 +319,15 @@ class ChannelsViewModelTest {
         advanceTimeBy(600)
         runCurrent()
 
-        assertEquals(listOf("Movies", "News", "Sports"), vm.uiState.value.categories)
+        assertEquals(
+            listOf(
+                "collection:genre:sports",
+                "collection:genre:news",
+                "collection:genre:movies",
+                "collection:country:us"
+            ),
+            vm.uiState.value.categories
+        )
     }
 
     @Test

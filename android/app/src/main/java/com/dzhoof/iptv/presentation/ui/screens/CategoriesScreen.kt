@@ -37,6 +37,7 @@ import com.dzhoof.iptv.presentation.ui.components.LoadingIndicator
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
 import com.dzhoof.iptv.presentation.viewmodel.ChannelsViewModel
 
 @Composable
@@ -59,22 +60,21 @@ fun CategoriesScreen(
         else -> "content"
     }
     val categoriesData = remember(uiState.channels, uiState.favoriteCategoryNames) {
-        uiState.channels
-            .groupBy { it.category.ifBlank { "Other" } }
-            .map { (name, channels) ->
+        ChannelCollectionOrganizer.collections(uiState.channels)
+            .map { collection ->
                 Client2MobileCategory(
-                    sourceName = name,
-                    displayName = cleanCategoryTitle(CategoryLocalizer.localize(name)),
-                    channelCount = channels.size,
-                    isFavorite = name in uiState.favoriteCategoryNames
+                    sourceName = collection.id,
+                    displayName = collection.title,
+                    channelCount = collection.channelCount,
+                    isFavorite = collection.id in uiState.favoriteCategoryNames
                 )
             }
-            // Favourites remain immediately reachable, then categories are ordered
-            // by the amount of live content actually available.
+            // Pinned collections remain immediately reachable, followed by the
+            // deliberate organizer priority: beIN SPORTS, genres, then countries.
             .sortedWith(
                 compareByDescending<Client2MobileCategory> { it.isFavorite }
+                    .thenBy { collectionPriority(it.sourceName) }
                     .thenByDescending { it.channelCount }
-                    .thenBy { it.displayName }
             )
     }
 
@@ -178,8 +178,12 @@ private fun DesktopCategoriesGrid(
     }
 }
 
-private fun cleanCategoryTitle(value: String): String = value
-    .replace(Regex("^\\s*#+\\s*"), "")
-    .replace(Regex("\\s+"), " ")
-    .trim()
-    .ifBlank { "تصنيفات متنوعة" }
+private fun collectionPriority(id: String): Int = when (id) {
+    ChannelCollectionOrganizer.BEIN_SPORTS_ID -> 0
+    ChannelCollectionOrganizer.SPORTS_ID -> 1
+    ChannelCollectionOrganizer.NEWS_ID -> 2
+    ChannelCollectionOrganizer.MOVIES_ID -> 3
+    ChannelCollectionOrganizer.SERIES_ID -> 4
+    ChannelCollectionOrganizer.KIDS_ID -> 5
+    else -> 10
+}

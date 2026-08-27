@@ -22,6 +22,7 @@ class ChannelUiMapper @Inject constructor() {
             logoUrl = channel.logoUrl,
             streamUrl = channel.streamUrl,
             category = channel.category,
+            country = channel.country,
             tvgId = channel.tvgId,
             isFavorite = channel.isFavorite,
             healthStatus = healthStatus,
@@ -65,7 +66,7 @@ class ChannelUiMapper @Inject constructor() {
             logoUrl = uiModel.logoUrl,
             category = uiModel.category,
             language = null,
-            country = null,
+            country = uiModel.country,
             isFavorite = uiModel.isFavorite
         )
     }

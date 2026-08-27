@@ -28,6 +28,7 @@ import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.ChannelsUiState
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.WriterException
 import com.google.zxing.qrcode.QRCodeWriter
@@ -127,7 +128,11 @@ class ChannelsViewModel @Inject constructor(
                 }
             }
 
-            val channelFlow = if (category != null) {
+            // Curated country/brand shelves are virtual client-side collections.
+            // Raw provider categories keep using the efficient Room query, whereas a
+            // curated collection reads the cached catalog then filters in memory.
+            val isCuratedCollection = ChannelCollectionOrganizer.isCollectionId(category)
+            val channelFlow = if (category != null && !isCuratedCollection) {
                 getChannelsByCategoryUseCase(category)
             } else {
                 getChannelsUseCase(Unit)
@@ -142,32 +147,26 @@ class ChannelsViewModel @Inject constructor(
             }.collect { (result, healthList) ->
                 when (result) {
                     is Result.Success -> {
-                        val uiChannels = sortChannelsForTv(
+                        val allUiChannels = sortChannelsForTv(
                             channelUiMapper.toUiModelsWithHealth(result.data, healthList)
                                 .map { enrichWithEpgIfReady(it) }
                         )
+                        val uiChannels = if (isCuratedCollection && category != null) {
+                            ChannelCollectionOrganizer.filter(allUiChannels, category)
+                        } else {
+                            allUiChannels
+                        }
 
-                        // Only rebuild categories/logos when showing all channels (no filter).
-                        // When a category is selected we show a filtered subset, but the full
-                        // category list must stay visible so the user can jump between categories.
+                        // Browse surfaces use a curated organization layer (brands, genres
+                        // and countries) while Room keeps its raw provider categories intact.
+                        // A direct raw-category deep link retains the prior category list.
                         val allCategories: List<String>
                         val catLogos: Map<String, List<String>>
-                        if (category == null) {
-                            allCategories = uiChannels
-                                .map { it.category }
-                                .filter { it.isNotBlank() }
-                                .distinct()
-                                .sorted()
-                            catLogos = uiChannels
-                                .groupBy { it.category }
-                                .mapValues { (_, channels) ->
-                                    channels
-                                        .mapNotNull { it.logoUrl }
-                                        .distinct()
-                                        .take(4)
-                                }
+                        if (category == null || isCuratedCollection) {
+                            allCategories = ChannelCollectionOrganizer.collections(allUiChannels)
+                                .map { it.id }
+                            catLogos = emptyMap()
                         } else {
-                            // Keep existing categories & logos from the previous "all" load
                             allCategories = _uiState.value.categories
                             catLogos = _uiState.value.categoryLogos
                         }

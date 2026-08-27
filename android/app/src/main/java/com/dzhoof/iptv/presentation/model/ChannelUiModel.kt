@@ -25,5 +25,7 @@ data class ChannelUiModel(
     // Used to render "how far into the live program" progress — never a
     // saved file position. Null when EPG is unavailable.
     val nowProgramStartMs: Long? = null,
-    val nowProgramEndMs: Long? = null
+    val nowProgramEndMs: Long? = null,
+    /** Optional provider country; absent for many M3U/Xtream sources. */
+    val country: String? = null
 )

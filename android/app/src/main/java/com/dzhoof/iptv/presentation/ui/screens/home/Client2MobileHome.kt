@@ -53,6 +53,7 @@ import com.dzhoof.iptv.presentation.ui.theme.DzRed400
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
 
 /**
  * Phone-first Client 2.0 landing experience.
@@ -69,7 +70,6 @@ internal fun Client2MobileHome(
     featuredChannels: List<ChannelUiModel>,
     recentlyWatched: List<ChannelUiModel>,
     forYou: List<ChannelUiModel>,
-    popularCategories: List<PopularCategoryUiModel>,
     onChannelClick: (String) -> Unit,
     onNavigateToChannels: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
@@ -92,20 +92,17 @@ internal fun Client2MobileHome(
             .distinctBy { it.id }
             .take(4)
     }
-    val categories = remember(popularCategories, channels) {
-        if (popularCategories.isNotEmpty()) {
-            popularCategories
-                .sortedByDescending { it.channelCount }
-                .take(10)
-                .map { MobileCategory(it.name, it.channelCount) }
-        } else {
-            channels.groupBy { it.category.trim() }
-                .filterKeys { it.isNotBlank() }
-                .entries
-                .sortedByDescending { it.value.size }
-                .take(10)
-                .map { MobileCategory(it.key, it.value.size) }
-        }
+    val categories = remember(channels) {
+        ChannelCollectionOrganizer.collections(channels)
+            .take(12)
+            .map { collection ->
+                MobileCategory(
+                    id = collection.id,
+                    label = collection.title,
+                    channelCount = collection.channelCount,
+                    visualCategory = collection.visualCategory
+                )
+            }
     }
 
     LazyColumn(
@@ -180,7 +177,12 @@ internal fun Client2MobileHome(
     }
 }
 
-private data class MobileCategory(val name: String, val channelCount: Int)
+private data class MobileCategory(
+    val id: String,
+    val label: String,
+    val channelCount: Int,
+    val visualCategory: String
+)
 
 @Composable
 private fun MobileHomeIdentity(
@@ -449,10 +451,10 @@ private fun MobileCategoryShelf(
         MobileSectionTitle(eyebrow = "استكشف", title = "تصفح حسب الفئة")
         Spacer(modifier = Modifier.height(12.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-            items(categories, key = { it.name }) { category ->
-                val tint = categoryColor(category.name)
+            items(categories, key = { it.id }) { category ->
+                val tint = categoryColor(category.visualCategory)
                 Surface(
-                    onClick = { onCategoryClick(category.name) },
+                    onClick = { onCategoryClick(category.id) },
                     color = tint.copy(alpha = 0.10f),
                     shape = MaterialTheme.shapes.large,
                     border = BorderStroke(1.dp, tint.copy(alpha = 0.25f))
@@ -462,14 +464,14 @@ private fun MobileCategoryShelf(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = categoryIcon(category.name),
+                            imageVector = categoryIcon(category.visualCategory),
                             contentDescription = null,
                             tint = tint,
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(7.dp))
                         Text(
-                            text = CategoryLocalizer.localize(category.name),
+                            text = category.label,
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurface,
                             fontWeight = FontWeight.Bold,

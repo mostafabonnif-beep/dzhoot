@@ -2,6 +2,7 @@ package com.dzhoof.iptv.presentation.ui.screens
 
 import androidx.compose.animation.Crossfade
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import com.dzhoof.iptv.presentation.util.ChannelCollectionOrganizer
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
@@ -78,7 +79,11 @@ fun ChannelsScreen(
     } else ScreenScaffold(
         title = buildString {
             val sel = uiState.selectedCategory
-            if (sel != null) append(CategoryLocalizer.localize(sel)) else append("كل القنوات")
+            if (sel != null) {
+                append(ChannelCollectionOrganizer.titleFor(sel) ?: CategoryLocalizer.localize(sel))
+            } else {
+                append("كل القنوات")
+            }
             append(" (").append(uiState.channels.size).append(')')
         },
         modifier = modifier,
@@ -92,7 +97,9 @@ fun ChannelsScreen(
                 }
             }
         } else null,
-        accentColor = uiState.selectedCategory?.let { categoryColor(it) },
+        accentColor = uiState.selectedCategory?.let { selected ->
+            categoryColor(ChannelCollectionOrganizer.visualCategoryFor(selected) ?: selected)
+        },
         belowHeader = {
             if (uiState.categories.isNotEmpty()) {
                 CategoryChips(
@@ -105,7 +112,7 @@ fun ChannelsScreen(
                         viewModel.loadChannels(null)
                     },
                     allChipFocusRequester = allChipFocusRequester,
-                    showAllChip = initialCategory == null
+                    showAllChip = remember(initialCategory) { initialCategory.isNullOrBlank() }
                 )
             }
         }
@@ -212,9 +219,9 @@ private fun CategoryChips(
         }
         items(categories, key = { it }) { category ->
             CategoryChip(
-                label = CategoryLocalizer.localize(category),
+                label = ChannelCollectionOrganizer.titleFor(category) ?: CategoryLocalizer.localize(category),
                 isSelected = selectedCategory == category,
-                selectedContainerColor = categoryColor(category),
+                selectedContainerColor = categoryColor(ChannelCollectionOrganizer.visualCategoryFor(category) ?: category),
                 selectedLabelColor = MaterialTheme.colorScheme.background,
                 onClick = { onCategorySelected(category) }
             )
