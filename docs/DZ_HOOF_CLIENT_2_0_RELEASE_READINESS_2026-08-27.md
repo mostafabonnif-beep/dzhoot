@@ -102,3 +102,14 @@
 | حالة GitHub | التغيير مدفوع إلى `manus/observability-foundation` |
 | آخر commit | `a9c7da1` — `test(android): cover player http recovery` |
 | الإنتاج وVPS | لم يُعدّل أي منهما |
+
+## فحص جودة إضافي
+
+تم تشغيل `:app:lintOfficialDebug` باستخدام Backend HTTPS الرسمي، وانتهى بنجاح. لم تظهر أخطاء Lint جديدة في دفعات Guide وEPG والمشغل الحالية. لم تُجرَ تعديلات كود إضافية في هذه الجولة بعد آخر commit؛ كان الهدف تأكيد سلامة الفرع قبل الانتقال إلى اختبار الأجهزة الفعلية.
+
+| التحقق | النتيجة |
+|---|---|
+| `:app:lintOfficialDebug` | ناجح |
+| حالة الفرع | نظيف ومتزامن مع `origin/manus/observability-foundation` قبل تحديث التقرير |
+| الإنتاج وVPS | دون تغيير |
+| الخطوة العملية التالية | اختبار Android TV والهاتف، ثم تجهيز `officialRelease` بعد توفير keystore الإنتاجي |
