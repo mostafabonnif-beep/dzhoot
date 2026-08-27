@@ -107,6 +107,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <head>
+        {/* Apply the saved locale (lang/dir) before first paint to avoid an RTL/LTR flash for EN/FR users. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var s=localStorage.getItem('dzhoof-locale');if(s==='en'||s==='fr'){document.documentElement.lang=s;document.documentElement.dir='ltr';}}catch(e){}})();`,
+          }}
+        />
+      </head>
       <body className={`${notoKufi.variable} ${cairo.variable} ${notoArabic.variable} antialiased`}>
         <ThemeProvider
           attribute="class"

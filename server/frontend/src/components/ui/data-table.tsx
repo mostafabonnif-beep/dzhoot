@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
+import { useLocale } from '@/components/locale-provider';
 
 export interface DataTableColumn<T> {
   key: string;
@@ -36,7 +37,7 @@ export default function DataTable<T>({
   data,
   gridTemplate,
   ariaLabel,
-  emptyMessage = 'No data found.',
+  emptyMessage,
   rowKey,
   onRowClick,
   rowAriaLabel,
@@ -45,6 +46,9 @@ export default function DataTable<T>({
   renderExpandedRow,
   resizable = false,
 }: DataTableProps<T>) {
+  const { locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
+  const resolvedEmptyMessage = emptyMessage ?? L('لا توجد بيانات.', 'Aucune donnée.', 'No data found.');
   const tableId = useId();
   const isAlways = breakpoint === 'always';
   const headerRef = useRef<HTMLDivElement>(null);
@@ -235,7 +239,7 @@ export default function DataTable<T>({
         <div role="rowgroup">
           {data.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-              {emptyMessage}
+              {resolvedEmptyMessage}
             </div>
           ) : renderExpandedRow ? (
             data.map((item) => (

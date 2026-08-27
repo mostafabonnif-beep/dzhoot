@@ -1,5 +1,6 @@
 'use client';
 
+import { useId } from 'react';
 import Modal from './modal';
 import { useLocale } from '@/components/locale-provider';
 
@@ -25,6 +26,8 @@ export default function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const { t } = useLocale();
+  const titleId = useId();
+  const descId = useId();
   const btnClass =
     variant === 'destructive'
       ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
@@ -36,11 +39,11 @@ export default function ConfirmDialog({
       onClose={onCancel}
       title={title}
       role="alertdialog"
-      ariaLabelledBy="confirm-dialog-title"
-      ariaDescribedBy="confirm-dialog-desc"
+      ariaLabelledBy={titleId}
+      ariaDescribedBy={descId}
     >
       <div className="p-5 space-y-5">
-        <p id="confirm-dialog-desc" className="text-sm text-muted-foreground">
+        <p id={descId} className="text-sm text-muted-foreground">
           {message}
         </p>
         <div className="flex items-center gap-3">

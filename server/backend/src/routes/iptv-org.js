@@ -63,14 +63,19 @@ router.post('/refresh-cache', adminOnly, async (req, res) => {
 router.get('/cache-status', async (req, res) => {
   try {
     const meta = await iptvOrgCacheService.getCacheMeta();
+    // Shape the response: only expose meaningful fields (never raw _id/__v etc.).
     res.json({
       success: true,
-      data: meta || {
-        lastRefreshedAt: null,
-        enrichedCount: 0,
-        refreshInProgress: false,
-        livenessCheckInProgress: false,
-        livenessStats: { alive: 0, dead: 0, unknown: 0 },
+      data: {
+        lastRefreshedAt: meta?.lastRefreshedAt ?? null,
+        updatedAt: meta?.updatedAt ?? null,
+        enrichedCount: meta?.enrichedCount ?? 0,
+        refreshInProgress: meta?.refreshInProgress ?? false,
+        refreshDurationMs: meta?.refreshDurationMs ?? null,
+        livenessCheckInProgress: meta?.livenessCheckInProgress ?? false,
+        lastLivenessCheckAt: meta?.lastLivenessCheckAt ?? null,
+        livenessStats: meta?.livenessStats ?? { alive: 0, dead: 0, unknown: 0 },
+        sourceCounts: meta?.sourceCounts ?? {},
       },
     });
   } catch (error) {

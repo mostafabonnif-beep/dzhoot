@@ -292,7 +292,7 @@ export default function PlansPage() {
           <button
             onClick={(e) => handleCopyId(e, p._id)}
             className="p-1.5 text-muted-foreground hover:text-foreground"
-            title="نسخ معرّف الباقة"
+            title="نسخ معرّف الباقة" aria-label="نسخ معرّف الباقة"
           >
             {copiedId === p._id ? (
               <Check className="h-4 w-4 text-emerald-500" />
@@ -306,7 +306,7 @@ export default function PlansPage() {
               openEdit(p);
             }}
             className="p-1.5 text-muted-foreground hover:text-foreground"
-            title="تعديل الباقة"
+            title="تعديل الباقة" aria-label="تعديل الباقة"
           >
             <Pencil className="h-4 w-4" />
           </button>
@@ -316,7 +316,7 @@ export default function PlansPage() {
               setDeleteTarget(p);
             }}
             className="p-1.5 text-muted-foreground hover:text-destructive"
-            title="حذف أو تعطيل"
+            title="حذف أو تعطيل" aria-label="حذف أو تعطيل"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -517,7 +517,7 @@ export default function PlansPage() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title="حذف الباقة"
+        title="حذف الباقة" aria-label="حذف الباقة"
         message={`هل تريد حذف "${deleteTarget?.name}"؟ سيتم تعطيل الباقات المرتبطة بأكواد تفعيل بدلًا من حذفها.`}
         confirmLabel="حذف"
         variant="destructive"
