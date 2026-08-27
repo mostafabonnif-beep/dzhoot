@@ -158,7 +158,7 @@ internal fun BoxScope.PlayerOverlays(
                 modifier = Modifier.size(28.dp)
             )
             Text(
-                text = if (isFav) "Added to Favorites" else "Removed from Favorites",
+                text = if (isFav) "تمت الإضافة إلى المفضلة" else "تمت الإزالة من المفضلة",
                 style = BodyOverlay,
                 color = OnVideo
             )
@@ -214,7 +214,8 @@ internal fun BoxScope.PlayerOverlays(
             .align(Alignment.TopStart)
             .padding(32.dp)
     ) {
-        OverlayToast("Sleep in ${sleepRemaining ?: 0}s")
+                    OverlayToast("متبقٍ ${sleepRemaining ?: 0} ثانية على المؤقت")
+
     }
 
     // Sleep timer expired — "Still watching?" prompt with a cancel window
@@ -224,7 +225,7 @@ internal fun BoxScope.PlayerOverlays(
         exit = fadeOut(tween(DURATION_EXIT, easing = EaseOutQuart)),
         modifier = Modifier.align(Alignment.Center)
     ) {
-        OverlayToast("Still watching? Press any button to continue")
+        OverlayToast("هل ما زلت تشاهد؟ اضغط أي زر للمتابعة")
     }
 
     // Channel number entry — top-right while typing
