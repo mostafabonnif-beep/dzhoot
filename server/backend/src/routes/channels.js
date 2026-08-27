@@ -246,9 +246,56 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       return res.json({ success: true, count: channels.length, data });
     }
 
-    if (catalogView && !isTvClient) {
+    // Paginated browsing (web panel "Add from system"): server-side text search
+    // + pagination so the browser never downloads the full ~16k-channel catalog.
+    const p = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const ps = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 50, 1), 200);
+    const searchQ = typeof req.query.search === 'string' ? req.query.search.trim() : '';
+    const wantsPagination =
+      req.query.page !== undefined || req.query.pageSize !== undefined || searchQ !== '';
+
+    // The full-catalog cache is only valid for unpaginated requests.
+    if (!wantsPagination && catalogView && !isTvClient) {
       const cached = await channelCache.get('catalog:list');
       if (cached) return res.json(cached);
+    }
+
+    if (wantsPagination && !isTvClient) {
+      // Catalog view sees the shared catalog only (ownerId:null); a user sees their own selection.
+      const baseQuery = catalogView
+        ? { ownerId: null }
+        : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
+      const query = await verifiedXtreamChannelQuery(baseQuery);
+      if (searchQ) {
+        const regex = new RegExp(escapeRegex(searchQ), 'i');
+        query.$or = [{ channelName: regex }, { channelGroup: regex }];
+      }
+      const countKey = `catalog:count:${JSON.stringify({ search: searchQ, catalogView })}`;
+      const directSourceIds = await getDirectPlaybackSourceIds();
+      const [channels, totalCount] = await Promise.all([
+        Channel.find(query)
+          .sort({ channelGroup: 1, order: 1 })
+          .skip((p - 1) * ps)
+          .limit(ps)
+          .select(CHANNEL_LIST_FIELDS)
+          .lean(),
+        (async () => {
+          const cached = await channelCache.get(countKey);
+          if (typeof cached === 'number') return cached;
+          const fresh = await Channel.countDocuments(query);
+          await channelCache.set(countKey, fresh);
+          return fresh;
+        })(),
+      ]);
+      const data = channels.map((channel) => slimAlternates(channel, directSourceIds));
+      return res.json({
+        success: true,
+        count: channels.length,
+        totalCount,
+        page: p,
+        pageSize: ps,
+        data,
+      });
     }
 
     // Catalog view sees the shared catalog only (ownerId:null); a user sees their own selection.
