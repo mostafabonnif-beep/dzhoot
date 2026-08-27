@@ -15,6 +15,12 @@ const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../util
 const { audit } = require('../services/audit-log');
 const { channelCache } = require('../services/cache');
 const { buildChannelHealth } = require('../utils/channel-health');
+const {
+  hasRestrictedPresentationMarker,
+  publicCatalogPresentationQuery,
+  presentChannelForClient,
+  sortClientCatalogChannels,
+} = require('../utils/catalog-presentation');
 
 // The shared admin/demo catalog is identical for every admin hit and is the heaviest
 // read. Cache it (10 min TTL via channelCache) and bust it on any catalog mutation.
@@ -46,6 +52,7 @@ async function verifiedXtreamChannelQuery(baseQuery) {
         isActive: { $ne: false },
         'flaggedBad.isFlagged': { $ne: true },
       },
+      publicCatalogPresentationQuery(),
       {
         $nor: [
           // Sources that are neither verified nor operator-visible are hidden.
@@ -160,7 +167,10 @@ function slimAlternates(channel, directPlaybackSourceIds = new Set()) {
     ...channel,
     directPlayback: directPlaybackSourceIds.has(String(channel.metadata?.xtreamSourceId || '')),
   });
-  return safeChannel;
+  // Presentation is a customer-facing projection. It strips internal source
+  // metadata and formats the group as country + category without changing the
+  // operator's source, licensing, or audit data in MongoDB.
+  return presentChannelForClient(safeChannel);
 }
 
 // Direct-playback source ids — sources whose streams clients fetch from their
@@ -197,7 +207,7 @@ function tokenizeListForClient(channels, user, req) {
       .filter((a) => a.liveness?.status !== 'dead' && a.flaggedBad?.isFlagged !== true)
       .slice(0, 10)
       .map((a) => ({ ...a, streamUrl: a.streamUrl ? makeUrl(a.streamUrl) : '' }));
-    return safe;
+    return presentChannelForClient(safe);
   });
 }
 
@@ -210,7 +220,6 @@ const CHANNEL_LIST_FIELDS = [
   'channelDrmType order isActive',
   'metadata.country metadata.language metadata.quality',
   'metadata.isWorking metadata.lastTested metadata.responseTime',
-  'metadata.source metadata.xtreamStreamId metadata.xtreamSourceId',
   'identityKey identityConfidence identityMatch',
   'catchup.type catchup.days',
   'flaggedBad.isFlagged flaggedBad.reason',
@@ -242,7 +251,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
         .limit(DEMO_CHANNELS_MAX)
         .select(CHANNEL_LIST_FIELDS)
         .lean();
-      const data = tokenizeListForClient(channels, req.user, req);
+      const data = tokenizeListForClient(sortClientCatalogChannels(channels), req.user, req);
       return res.json({ success: true, count: channels.length, data });
     }
 
@@ -256,7 +265,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
 
     // The full-catalog cache is only valid for unpaginated requests.
     if (!wantsPagination && catalogView && !isTvClient) {
-      const cached = await channelCache.get('catalog:list');
+      const cached = await channelCache.get('catalog:list:presentation-v1');
       if (cached) return res.json(cached);
     }
 
@@ -270,30 +279,25 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
         const regex = new RegExp(escapeRegex(searchQ), 'i');
         query.$or = [{ channelName: regex }, { channelGroup: regex }];
       }
-      const countKey = `catalog:count:${JSON.stringify({ search: searchQ, catalogView })}`;
-      const directSourceIds = await getDirectPlaybackSourceIds();
-      const [channels, totalCount] = await Promise.all([
+      // Country/category are derived at presentation time, not stored as a trusted
+      // source field. Sort the bounded result set before slicing so pagination stays
+      // globally consistent with /grouped rather than following raw supplier labels.
+      const [catalogChannels, directSourceIds] = await Promise.all([
         Channel.find(query)
-          .sort({ channelGroup: 1, order: 1 })
-          .skip((p - 1) * ps)
-          .limit(ps)
+          .limit(TV_CHANNELS_MAX)
           .select(CHANNEL_LIST_FIELDS)
           .lean(),
-        (async () => {
-          const cached = await channelCache.get(countKey);
-          if (typeof cached === 'number') return cached;
-          const fresh = await Channel.countDocuments(query);
-          await channelCache.set(countKey, fresh);
-          return fresh;
-        })(),
+        getDirectPlaybackSourceIds(),
       ]);
+      const orderedChannels = sortClientCatalogChannels(catalogChannels);
+      const channels = orderedChannels.slice((p - 1) * ps, p * ps);
       const data = isTvClient
         ? tokenizeListForClient(channels, req.user, req)
         : channels.map((channel) => slimAlternates(channel, directSourceIds));
       return res.json({
         success: true,
         count: channels.length,
-        totalCount,
+        totalCount: orderedChannels.length,
         page: p,
         pageSize: ps,
         data,
@@ -314,16 +318,17 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       .lean();
 
     const directSourceIds = await getDirectPlaybackSourceIds();
+    const orderedChannels = sortClientCatalogChannels(channels);
     const data = isTvClient
-      ? tokenizeListForClient(channels, req.user, req)
-      : channels.map((channel) => slimAlternates(channel, directSourceIds));
+      ? tokenizeListForClient(orderedChannels, req.user, req)
+      : orderedChannels.map((channel) => slimAlternates(channel, directSourceIds));
     const payload = {
       success: true,
       count: channels.length,
       data,
     };
 
-    if (catalogView && !isTvClient) await channelCache.set('catalog:list', payload);
+    if (catalogView && !isTvClient) await channelCache.set('catalog:list:presentation-v1', payload);
 
     res.json(payload);
   } catch (error) {
@@ -341,7 +346,7 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
     const catalogView = req.user.role === 'Admin' || req.user.allCatalog === true;
 
     if (catalogView) {
-      const cached = await channelCache.get('catalog:grouped');
+      const cached = await channelCache.get('catalog:grouped:presentation-v1');
       if (cached) return res.json(cached);
     }
 
@@ -360,12 +365,13 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
 
     // Group by channelGroup (dead/flagged alternates slimmed, same as /)
     const directSourceIds = await getDirectPlaybackSourceIds();
-    const grouped = channels.reduce((acc, channel) => {
-      const group = channel.channelGroup || 'Uncategorized';
+    const grouped = sortClientCatalogChannels(channels).reduce((acc, channel) => {
+      const presented = slimAlternates(channel, directSourceIds);
+      const group = presented.channelGroup || 'دولي · عام';
       if (!acc[group]) {
         acc[group] = [];
       }
-      acc[group].push(slimAlternates(channel, directSourceIds));
+      acc[group].push(presented);
       return acc;
     }, {});
 
@@ -374,7 +380,7 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
       data: grouped,
     };
 
-    if (catalogView) await channelCache.set('catalog:grouped', payload);
+    if (catalogView) await channelCache.set('catalog:grouped:presentation-v1', payload);
 
     res.json(payload);
   } catch (error) {
@@ -412,10 +418,10 @@ router.get('/playlist.m3u', async (req, res) => {
     }
 
     // Rendered playlist is identical for every caller — cache it (busted with catalog:* on mutations).
-    let m3uContent = await channelCache.get('catalog:m3u');
+    let m3uContent = await channelCache.get('catalog:m3u:presentation-v1');
     if (!m3uContent) {
       m3uContent = await Channel.generateM3UPlaylist();
-      await channelCache.set('catalog:m3u', m3uContent);
+      await channelCache.set('catalog:m3u:presentation-v1', m3uContent);
     }
     res.setHeader('Content-Type', 'application/x-mpegurl');
     res.setHeader('Content-Disposition', 'attachment; filename="playlist.m3u"');
@@ -457,13 +463,17 @@ router.get('/search', requireTvOrSessionAuth, async (req, res) => {
       searchFilter.ownerId = null;
     }
 
-    const channels = await Channel.find(searchFilter)
+    const channels = await Channel.find({
+      $and: [searchFilter, publicCatalogPresentationQuery()],
+    })
       .sort({ channelGroup: 1, order: 1 })
       .limit(TV_CHANNELS_MAX)
       .select(CHANNEL_LIST_FIELDS)
       .lean();
 
-    res.json({ success: true, count: channels.length, data: channels.map(slimAlternates) });
+    const directSourceIds = await getDirectPlaybackSourceIds();
+    const data = sortClientCatalogChannels(channels).map((channel) => slimAlternates(channel, directSourceIds));
+    res.json({ success: true, count: channels.length, data });
   } catch (error) {
     console.error('Error searching channels:', error);
     res.status(500).json({ success: false, error: 'Failed to search channels' });
@@ -602,10 +612,11 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
     }
 
     const channel = await Channel.findById(req.params.id).select('-channelDrmKey').lean();
-    if (!channel) {
+    if (!channel || hasRestrictedPresentationMarker(channel)) {
       return res.status(404).json({ success: false, error: 'Channel not found' });
     }
-    res.json({ success: true, data: slimAlternates(channel) });
+    const directSourceIds = await getDirectPlaybackSourceIds();
+    res.json({ success: true, data: slimAlternates(channel, directSourceIds) });
   } catch (error) {
     console.error('Error fetching channel:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch channel' });
@@ -781,7 +792,7 @@ router.get('/:id/with-fallbacks', requireAuth, async (req, res) => {
     }
 
     const channel = await Channel.findById(req.params.id).select('-channelDrmKey').lean();
-    if (!channel) {
+    if (!channel || hasRestrictedPresentationMarker(channel)) {
       return res.status(404).json({ success: false, error: 'Channel not found' });
     }
 
@@ -795,7 +806,8 @@ router.get('/:id/with-fallbacks', requireAuth, async (req, res) => {
       });
 
     channel.alternateStreams = viableAlternates;
-    res.json({ success: true, data: slimAlternates(channel) });
+    const directSourceIds = await getDirectPlaybackSourceIds();
+    res.json({ success: true, data: slimAlternates(channel, directSourceIds) });
   } catch (error) {
     console.error('Error fetching channel with fallbacks:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch channel' });
