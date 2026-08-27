@@ -277,16 +277,16 @@ class ChannelsViewModelTest {
     }
 
     @Test
-    fun `onResume triggers refresh on second call`() = runTest {
+    fun `onResume throttles refresh after recent initial refresh`() = runTest {
         val vm = createViewModel()
         advanceTimeBy(2_600)
         runCurrent()
 
         vm.onResume() // first — skipped
-        vm.onResume() // second — should refresh
+        vm.onResume() // second — throttled because init refresh was recent
         runCurrent()
 
-        coVerify(exactly = 2) { refreshChannelsUseCase(Unit) }
+        coVerify(exactly = 1) { refreshChannelsUseCase(Unit) }
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.presentation.viewmodel
 
 import android.graphics.Bitmap
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
@@ -60,6 +61,7 @@ private const val CATEGORY_UPDATE_DEBOUNCE_MS = 1_000L
 private const val GUIDE_URL = "https://github.com/mostafabonnif-beep/dzhoot/blob/main/android/docs/README.md"
 private const val INITIAL_REFRESH_DELAY_MS = 2_500L
 private const val DEFERRED_HOME_WORK_DELAY_MS = 5_000L
+private const val RESUME_REFRESH_COOLDOWN_MS = 30_000L
 
 @HiltViewModel
 class ChannelsViewModel @Inject constructor(
@@ -85,6 +87,7 @@ class ChannelsViewModel @Inject constructor(
     private var recentlyWatchedJob: Job? = null
     private var popularCategoriesJob: Job? = null
     private var hasResumedBefore = false
+    private var lastRefreshAt = 0L
 
     init {
         // The first frame only needs the cached channel catalogue. EPG parsing,
@@ -385,6 +388,7 @@ class ChannelsViewModel @Inject constructor(
 
     fun refresh() {
         if (refreshJob?.isActive == true) return
+        lastRefreshAt = SystemClock.elapsedRealtime()
         refreshJob = viewModelScope.launch {
             val hasContent = _uiState.value.channels.isNotEmpty()
             _uiState.update { it.copy(
@@ -428,6 +432,8 @@ class ChannelsViewModel @Inject constructor(
             hasResumedBefore = true
             return // Skip first resume — init{} already handles it
         }
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastRefreshAt < RESUME_REFRESH_COOLDOWN_MS) return
         refresh()
     }
 
