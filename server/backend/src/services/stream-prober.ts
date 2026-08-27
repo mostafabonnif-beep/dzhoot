@@ -66,7 +66,7 @@ export async function probeStream(url: string, options: ProbeOptions = {}): Prom
 
   // Pin DNS to prevent rebinding between validation and fetch
   // keepAlive: false ensures sockets are closed after each request
-  const pinnedLookup = createPinnedLookup(ssrfCheck.resolvedAddresses);
+  const pinnedLookup = createPinnedLookup(ssrfCheck.resolvedAddresses, new URL(url).hostname);
   const httpAgent = new http.Agent({ lookup: pinnedLookup, keepAlive: false });
   const httpsAgent = new https.Agent({ lookup: pinnedLookup, keepAlive: false });
 
