@@ -39,7 +39,7 @@ android {
         val buildVersionName = if (project.hasProperty("versionName")) {
             project.property("versionName") as String
         } else {
-            "1.0.29"
+            "1.0.30"
         }
         val buildVersionParts = buildVersionName
             .trim()

@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -81,6 +82,7 @@ internal fun Client2MobileHome(
     onNavigateToChannels: (String) -> Unit,
     onNavigateToSearch: () -> Unit,
     onNavigateToGuide: () -> Unit,
+    onNavigateToCatalog: () -> Unit,
     onNavigateToFavorites: () -> Unit,
     onToggleFavorite: (String) -> Unit,
     isDemo: Boolean,
@@ -147,6 +149,7 @@ internal fun Client2MobileHome(
             MobileShortcutRow(
                 onLiveClick = { onNavigateToChannels("") },
                 onGuideClick = onNavigateToGuide,
+                onCatalogClick = onNavigateToCatalog,
                 onFavoritesClick = onNavigateToFavorites
             )
         }
@@ -376,6 +379,7 @@ private fun MobileLiveLeadCard(
 private fun MobileShortcutRow(
     onLiveClick: () -> Unit,
     onGuideClick: () -> Unit,
+    onCatalogClick: () -> Unit,
     onFavoritesClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -395,6 +399,13 @@ private fun MobileShortcutRow(
             icon = Icons.Default.CalendarToday,
             tint = MaterialTheme.colorScheme.tertiary,
             onClick = onGuideClick,
+            modifier = Modifier.weight(1f)
+        )
+        MobileShortcut(
+            label = "الفيديو",
+            icon = Icons.Default.Movie,
+            tint = MaterialTheme.colorScheme.tertiary,
+            onClick = onCatalogClick,
             modifier = Modifier.weight(1f)
         )
         MobileShortcut(

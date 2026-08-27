@@ -92,6 +92,13 @@ fun DzhoofNavGraph(
                         restoreState = true
                     }
                 },
+                onNavigateToCatalog = {
+                    navController.navigate(Screen.Catalog.route) {
+                        popUpTo(Screen.Home.route) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
                 onNavigateToFavorites = {
                     navController.navigate(Screen.Favorites.route) {
                         popUpTo(Screen.Home.route) { saveState = true }

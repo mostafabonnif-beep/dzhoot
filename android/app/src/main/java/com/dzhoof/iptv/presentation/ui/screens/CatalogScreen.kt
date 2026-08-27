@@ -56,6 +56,7 @@ import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.Season
 import com.dzhoof.iptv.domain.model.Series
 import com.dzhoof.iptv.presentation.ui.components.AppTextField
+import com.dzhoof.iptv.presentation.ui.components.DzHoofMobileDesign
 import com.dzhoof.iptv.presentation.ui.components.EmptyState
 import com.dzhoof.iptv.presentation.ui.components.ErrorState
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
@@ -151,8 +152,8 @@ private fun CatalogToolbar(
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
 
     Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+        shape = DzHoofMobileDesign.PanelShape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -186,6 +187,12 @@ private fun CatalogToolbar(
 
 @Composable
 private fun CatalogToolbarHeading() {
+    Text(
+        text = "DZ HOOF / VOD",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        fontWeight = FontWeight.ExtraBold
+    )
     Text(
         text = "اكتشف المكتبة",
         style = MaterialTheme.typography.titleLarge,
@@ -235,7 +242,7 @@ private fun CatalogModeButton(
     var focused by remember { mutableStateOf(false) }
     val accent = MaterialTheme.colorScheme.primary
     Surface(
-        shape = MaterialTheme.shapes.large,
+        shape = DzHoofMobileDesign.ControlShape,
         color = when {
             focused || selected -> accent
             else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f)
@@ -245,7 +252,7 @@ private fun CatalogModeButton(
             if (focused) MaterialTheme.colorScheme.onPrimary else accent.copy(alpha = 0.18f)
         ),
         modifier = modifier
-            .tvFocusVisuals(focused = focused, shape = MaterialTheme.shapes.large, glowColor = accent)
+            .tvFocusVisuals(focused = focused, shape = DzHoofMobileDesign.ControlShape, glowColor = accent)
             .onFocusChanged { focused = it.isFocused }
             .clickable(onClick = onClick)
     ) {
@@ -278,7 +285,7 @@ private fun CatalogSearchField(
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
             modifier = Modifier.weight(1f)
         )
-        Button(onClick = onSearch, shape = MaterialTheme.shapes.large) { Text("بحث", fontWeight = FontWeight.Bold) }
+        Button(onClick = onSearch, shape = DzHoofMobileDesign.ControlShape) { Text("بحث", fontWeight = FontWeight.Bold) }
     }
 }
 
@@ -508,8 +515,9 @@ private fun PosterCard(
         onClick = onClick,
         modifier = Modifier
             .onFocusChanged { focused = it.isFocused }
-            .tvFocusVisuals(focused = focused, shape = MaterialTheme.shapes.medium),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            .tvFocusVisuals(focused = focused, shape = DzHoofMobileDesign.PanelShape),
+        shape = DzHoofMobileDesign.PanelShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         AsyncImage(
             model = imageUrl,
@@ -539,8 +547,9 @@ private fun EpisodeRow(
         modifier = Modifier
             .fillMaxWidth()
             .onFocusChanged { focused = it.isFocused }
-            .tvFocusVisuals(focused = focused, shape = MaterialTheme.shapes.small),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            .tvFocusVisuals(focused = focused, shape = DzHoofMobileDesign.ControlShape),
+        shape = DzHoofMobileDesign.ControlShape,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),

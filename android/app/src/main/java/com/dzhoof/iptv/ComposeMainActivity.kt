@@ -408,6 +408,7 @@ private val tvBottomNavItems = listOf(
  */
 private val phoneBottomNavItems = listOf(
     Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
+    Triple(Screen.Catalog, Icons.Default.Movie, "الفيديو"),
     Triple(Screen.Search, Icons.Default.Search, "بحث"),
     Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
@@ -423,8 +424,8 @@ private fun BottomNavBar(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val isPhone = screenWidthDp < 600
     val barHeight = if (isPhone) 74.dp else 64.dp
-    val iconSize = if (isPhone) 24.dp else 22.dp
-    val labelSize = if (isPhone) 11.sp else 10.sp
+    val iconSize = if (isPhone) 22.dp else 22.dp
+    val labelSize = if (isPhone) 10.sp else 10.sp
     val accent = MaterialTheme.colorScheme.primary
     val items = if (isPhone) phoneBottomNavItems else tvBottomNavItems
 
