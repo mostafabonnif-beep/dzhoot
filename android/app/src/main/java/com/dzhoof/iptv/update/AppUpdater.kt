@@ -1,7 +1,9 @@
 package com.dzhoof.iptv.update
 
 import android.app.DownloadManager
+import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -225,16 +227,42 @@ class AppUpdater @Inject constructor(
             }
 
             val apkUri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
+            val commonFlags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
             val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 data = apkUri
                 type = "application/vnd.android.package-archive"
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addCategory(Intent.CATEGORY_DEFAULT)
+                addFlags(commonFlags)
+                // Some Samsung package installers only honor the grant when the
+                // URI is also present in ClipData.
+                clipData = ClipData.newRawUri("DZ HOOF update", apkUri)
+                putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
             }
-            context.startActivity(installIntent)
+            try {
+                context.startActivity(installIntent)
+            } catch (_: ActivityNotFoundException) {
+                // Keep a compatibility fallback for vendor ROMs that do not
+                // expose ACTION_INSTALL_PACKAGE but do expose the generic APK
+                // viewer/installer activity.
+                val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+                    data = apkUri
+                    type = "application/vnd.android.package-archive"
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                    addFlags(commonFlags)
+                    clipData = ClipData.newRawUri("DZ HOOF update", apkUri)
+                }
+                context.startActivity(fallbackIntent)
+            }
             DownloadState.InstallLaunched
+        } catch (e: ActivityNotFoundException) {
+            Log.e(TAG, "No Android package installer activity is available", e)
+            DownloadState.Failed("لم يعثر Android على مثبت APK. افتح الملف من التنزيلات لتثبيته")
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Package installer rejected the update", e)
+            DownloadState.Failed("منع Android التثبيت. فعّل السماح بالتثبيت من هذا المصدر ثم أعد المحاولة")
         } catch (e: Exception) {
             Log.e(TAG, "Error installing update", e)
-            DownloadState.Failed("تعذر تثبيت التحديث")
+            DownloadState.Failed("تعذر فتح مثبت التحديث — أعد المحاولة أو افتح ملف APK من التنزيلات")
         }
     }
 
