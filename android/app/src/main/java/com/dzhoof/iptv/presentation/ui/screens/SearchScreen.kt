@@ -4,7 +4,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +23,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -36,6 +41,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import com.dzhoof.iptv.R
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -48,6 +54,7 @@ import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
 import com.dzhoof.iptv.presentation.ui.components.VoiceSearchButton
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.viewmodel.SearchViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -86,16 +93,18 @@ fun SearchScreen(
     }
 
     if (isMobile) {
-        ScreenScaffold(title = stringResource(R.string.search), modifier = modifier) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(
-                        horizontal = if (isCompact) Dimens.ScreenPaddingHorizontalMobile
-                                     else Dimens.ScreenPaddingHorizontalTv
-                    )
-            ) {
-                Row(
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(
+                    start = if (isCompact) Dimens.ScreenPaddingHorizontalMobile else Dimens.ScreenPaddingHorizontalTv,
+                    end = if (isCompact) Dimens.ScreenPaddingHorizontalMobile else Dimens.ScreenPaddingHorizontalTv,
+                    top = 16.dp
+                )
+        ) {
+            Client2MobileSearchHeading()
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(Dimens.Space3)
@@ -151,23 +160,22 @@ fun SearchScreen(
 
                 Spacer(modifier = Modifier.height(Dimens.Space5))
 
-                SearchResultsArea(
-                    uiState = uiState,
-                    searchQuery = searchQuery,
-                    isMobile = true,
-                    onChannelClick = onChannelClick,
-                    onFavoriteClick = { viewModel.toggleFavorite(it) },
-                    onMultiviewClick = onMultiviewClick,
-                    onMovieClick = onMovieClick,
-                    onSeriesClick = onSeriesClick,
-                    onProgramClick = onProgramClick,
-                    onRetry = { viewModel.onQueryChange(searchQuery) },
-                    onRecentSearchClick = { setQuery(it) },
-                    onClearHistory = { viewModel.clearHistory() },
-                    keyboardController = keyboardController,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            SearchResultsArea(
+                uiState = uiState,
+                searchQuery = searchQuery,
+                isMobile = true,
+                onChannelClick = onChannelClick,
+                onFavoriteClick = { viewModel.toggleFavorite(it) },
+                onMultiviewClick = onMultiviewClick,
+                onMovieClick = onMovieClick,
+                onSeriesClick = onSeriesClick,
+                onProgramClick = onProgramClick,
+                onRetry = { viewModel.onQueryChange(searchQuery) },
+                onRecentSearchClick = { setQuery(it) },
+                onClearHistory = { viewModel.clearHistory() },
+                keyboardController = keyboardController,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     } else {
         Column(
@@ -198,6 +206,40 @@ fun SearchScreen(
                 onRecentSearchClick = { setQuery(it) },
                 onClearHistory = { viewModel.clearHistory() },
                 firstKeyFocus = firstKeyFocus
+            )
+        }
+    }
+}
+
+@Composable
+private fun Client2MobileSearchHeading(modifier: Modifier = Modifier) {
+    Surface(
+        shape = CutCornerShape(topStart = 16.dp, topEnd = 4.dp, bottomEnd = 16.dp, bottomStart = 4.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, DzGreen300.copy(alpha = 0.34f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 13.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(DzGreen300)
+                )
+                Spacer(modifier = Modifier.size(8.dp))
+                Text(
+                    text = "DZ HOOF / SEARCH",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = DzGreen300,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
+                )
+            }
+            Spacer(modifier = Modifier.height(5.dp))
+            Text(
+                text = "ابحث في البث والمكتبة",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.ExtraBold
             )
         }
     }

@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.data.AppPreferences
+import com.dzhoof.iptv.DzhoofApplication
 import com.dzhoof.iptv.data.mapper.ChannelMapper
 import com.dzhoof.iptv.data.source.remote.NetworkException
 import com.dzhoof.iptv.data.source.remote.ServerException
@@ -89,9 +91,11 @@ class ChannelsViewModel @Inject constructor(
         // valuable but must never compete with the splash-to-home transition.
         loadChannels()
         refresh()
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(DEFERRED_HOME_WORK_DELAY_MS)
-            startDeferredHomeWork()
+        if (!DzhoofApplication.startupRecoveryMode) {
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(DEFERRED_HOME_WORK_DELAY_MS)
+                startDeferredHomeWork()
+            }
         }
     }
 

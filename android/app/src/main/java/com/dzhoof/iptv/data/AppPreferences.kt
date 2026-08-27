@@ -23,6 +23,8 @@ object AppPreferences {
     private const val XTREAM_PASS_KEY = "xtream_pass"
     private const val PARENTAL_PIN_HASH_KEY = "parental_pin_hash"
     private const val PARENTAL_LOCK_ENABLED_KEY = "parental_lock_enabled"
+    private const val STARTUP_IN_PROGRESS_KEY = "startup_in_progress"
+    private const val STARTUP_RECOVERY_MODE_KEY = "startup_recovery_mode"
     val DEFAULT_SERVER_URL: String
         get() = BuildConfig.API_BASE_URL.trimEnd('/')
 
@@ -37,6 +39,34 @@ object AppPreferences {
      */
     @Volatile
     private var parentalUnlockedThisSession = false
+
+    /**
+     * Marks the new process as starting. If the preceding process never reached
+     * the stable app state, recovery mode is enabled for this attempt so optional
+     * startup work can stay out of the critical path.
+     */
+    fun beginStartup(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val recoveryMode = prefs.getBoolean(STARTUP_IN_PROGRESS_KEY, false)
+        prefs.edit()
+            .putBoolean(STARTUP_IN_PROGRESS_KEY, true)
+            .putBoolean(STARTUP_RECOVERY_MODE_KEY, recoveryMode)
+            .apply()
+        return recoveryMode
+    }
+
+    fun isStartupRecoveryMode(context: Context): Boolean =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getBoolean(STARTUP_RECOVERY_MODE_KEY, false)
+
+    /** Clears the crash-loop marker only after the home experience remained alive. */
+    fun markStartupStable(context: Context) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(STARTUP_IN_PROGRESS_KEY, false)
+            .putBoolean(STARTUP_RECOVERY_MODE_KEY, false)
+            .apply()
+    }
 
     fun getServerUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

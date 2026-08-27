@@ -64,13 +64,25 @@ fun ChannelsScreen(
         uiState.channels.isEmpty() -> "empty"
         else -> "content"
     }
-    val isTv = isTvDevice(LocalContext.current)
+    val context = LocalContext.current
+    val isTv = isTvDevice(context)
+    val isMobile = isMobileDevice(context)
 
     // Client 2.0 gives television users a true three-pane Live TV hub while
     // phone/tablet and non-content states retain the proven responsive flow.
     if (isTv && contentState == "content") {
         Client2TvLiveHub(
             uiState = uiState,
+            onCategorySelected = viewModel::loadChannels,
+            onChannelClick = onChannelClick,
+            onToggleFavorite = viewModel::toggleFavorite,
+            modifier = modifier
+        )
+    } else if (isMobile && contentState == "content") {
+        Client2MobileChannelBrowser(
+            channels = uiState.channels,
+            categories = uiState.categories,
+            selectedCategory = uiState.selectedCategory,
             onCategorySelected = viewModel::loadChannels,
             onChannelClick = onChannelClick,
             onToggleFavorite = viewModel::toggleFavorite,

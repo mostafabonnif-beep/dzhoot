@@ -3,6 +3,7 @@ package com.dzhoof.iptv
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.worker.WorkManagerInitializer
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dagger.hilt.android.HiltAndroidApp
@@ -26,6 +27,7 @@ class DzhoofApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        startupRecoveryMode = AppPreferences.beginStartup(this)
 
         if (BuildConfig.FIREBASE_ENABLED) {
             runCatching {
@@ -42,12 +44,21 @@ class DzhoofApplication : Application(), Configuration.Provider {
             }
         }
 
-        WorkManagerInitializer.scheduleChannelSync(this)
-        WorkManagerInitializer.scheduleEpgSync(this)
+        // A process that failed before reaching the stable screen gets one
+        // recovery launch without background sync competition. Normal launches
+        // keep the scheduled channel and EPG synchronization unchanged.
+        if (!startupRecoveryMode) {
+            WorkManagerInitializer.scheduleChannelSync(this)
+            WorkManagerInitializer.scheduleEpgSync(this)
+        }
     }
 
     companion object {
         private lateinit var instance: DzhoofApplication
+
+        @Volatile
+        var startupRecoveryMode: Boolean = false
+            private set
 
         @JvmStatic
         fun getAppContext() = instance.applicationContext

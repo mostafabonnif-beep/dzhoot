@@ -3,6 +3,7 @@ package com.dzhoof.iptv.presentation.ui.screens.guide
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,10 +31,16 @@ import com.dzhoof.iptv.presentation.model.GuideFocusedProgram
 import com.dzhoof.iptv.presentation.model.GuideUiState
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
-import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.delay
+
+private val GuideSignalPanelShape = CutCornerShape(
+    topStart = 14.dp,
+    topEnd = 4.dp,
+    bottomEnd = 14.dp,
+    bottomStart = 4.dp
+)
 
 /**
  * Guide layout on the shared [ScreenScaffold]: "Guide" title band with the
@@ -116,7 +123,7 @@ private fun GuideHeaderDetail(
         // With no timeline there are no program cells to focus — show the
         // notice pill instead of the (always empty) program details.
         Surface(
-            shape = ShapeMedium,
+            shape = GuideSignalPanelShape,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.78f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
         ) {
@@ -134,7 +141,7 @@ private fun GuideHeaderDetail(
 
     if (focused == null) {
         Surface(
-            shape = ShapeMedium,
+            shape = GuideSignalPanelShape,
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.38f))
         ) {
@@ -152,7 +159,7 @@ private fun GuideHeaderDetail(
 
     val program = focused.program
     Surface(
-        shape = ShapeMedium,
+        shape = GuideSignalPanelShape,
         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
     ) {

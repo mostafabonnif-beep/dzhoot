@@ -186,6 +186,15 @@ class ComposeMainActivity : ComponentActivity() {
             CompositionLocalProvider(LocalPerfProfile provides perfProfile) {
                 DzHoofTheme(darkTheme = darkTheme) {
                     var showSplash by rememberSaveable { mutableStateOf(showSplashOnStart) }
+                    // A launch is considered stable only after the splash has ended
+                    // and the home shell remained alive briefly. Until then, the next
+                    // process can enter recovery mode if a fatal early stop occurs.
+                    LaunchedEffect(showSplash) {
+                        if (!showSplash) {
+                            delay(8_000L)
+                            AppPreferences.markStartupStable(this@ComposeMainActivity)
+                        }
+                    }
                     val navController = rememberNavController()
                     val startDestination = if (needsPairing) Screen.Pairing.route else Screen.Home.route
 
