@@ -15,7 +15,7 @@ import com.dzhoof.iptv.R
 import androidx.compose.ui.platform.LocalConfiguration
 import com.dzhoof.iptv.presentation.model.GuideFilter
 import com.dzhoof.iptv.presentation.ui.components.CategoryChip
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
@@ -58,7 +58,7 @@ internal fun GuideFilterBar(
                                     label = stringResource(R.string.guide_all),
 
                 isSelected = selectedFilter is GuideFilter.All,
-                selectedContainerColor = Amber,
+                selectedContainerColor = DzGreen300,
                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                 onClick = { onSelectFilter(GuideFilter.All) },
                 shape = ShapeMedium
@@ -69,7 +69,7 @@ internal fun GuideFilterBar(
                 CategoryChip(
                     label = stringResource(R.string.guide_favorites),
                     isSelected = selectedFilter is GuideFilter.Favorites,
-                    selectedContainerColor = Amber,
+                    selectedContainerColor = DzGreen300,
                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                     onClick = { onSelectFilter(GuideFilter.Favorites) },
                     shape = ShapeMedium

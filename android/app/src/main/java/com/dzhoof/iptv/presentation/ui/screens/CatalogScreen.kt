@@ -1,5 +1,7 @@
 package com.dzhoof.iptv.presentation.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -29,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -42,6 +45,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -144,48 +149,136 @@ private fun CatalogToolbar(
     onSearch: () -> Unit,
 ) {
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
-    val tabs: @Composable RowScope.() -> Unit = {
-        FilterChip(
+
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (isCompact) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CatalogToolbarHeading()
+                CatalogModeSelector(tab = tab, onTabSelected = onTabSelected)
+                CatalogSearchField(query = query, onQueryChanged = onQueryChanged, onSearch = onSearch)
+            }
+        } else {
+            Row(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.width(210.dp)) { CatalogToolbarHeading() }
+                CatalogModeSelector(tab = tab, onTabSelected = onTabSelected)
+                CatalogSearchField(
+                    query = query,
+                    onQueryChanged = onQueryChanged,
+                    onSearch = onSearch,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CatalogToolbarHeading() {
+    Text(
+        text = "اكتشف المكتبة",
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.ExtraBold
+    )
+    Text(
+        text = "أفلام ومسلسلات مختارة لك",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun CatalogModeSelector(
+    tab: CatalogTab,
+    onTabSelected: (CatalogTab) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        CatalogModeButton(
+            label = "أفلام",
             selected = tab == CatalogTab.MOVIES,
             onClick = { onTabSelected(CatalogTab.MOVIES) },
-            label = { Text("أفلام") },
+            modifier = Modifier.weight(1f, fill = false)
         )
-        FilterChip(
+        CatalogModeButton(
+            label = "مسلسلات",
             selected = tab == CatalogTab.SERIES,
             onClick = { onTabSelected(CatalogTab.SERIES) },
-            label = { Text("مسلسلات") },
+            modifier = Modifier.weight(1f, fill = false)
         )
     }
-    val searchField: @Composable RowScope.() -> Unit = {
+}
+
+@Composable
+private fun CatalogModeButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var focused by remember { mutableStateOf(false) }
+    val accent = MaterialTheme.colorScheme.primary
+    Surface(
+        shape = MaterialTheme.shapes.large,
+        color = when {
+            focused || selected -> accent
+            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f)
+        },
+        border = BorderStroke(
+            if (focused) 2.dp else 1.dp,
+            if (focused) MaterialTheme.colorScheme.onPrimary else accent.copy(alpha = 0.18f)
+        ),
+        modifier = modifier
+            .tvFocusVisuals(focused = focused, shape = MaterialTheme.shapes.large, glowColor = accent)
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(onClick = onClick)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = if (focused || selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 11.dp)
+        )
+    }
+}
+
+@Composable
+private fun CatalogSearchField(
+    query: String,
+    onQueryChanged: (String) -> Unit,
+    onSearch: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         AppTextField(
             value = query,
             onValueChange = onQueryChanged,
-            placeholder = "ابحث في المحتوى",
+            placeholder = "ابحث بالاسم أو النوع",
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f)
         )
-        Button(onClick = onSearch) { Text("بحث") }
-    }
-
-    if (isCompact) {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), content = tabs)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                content = searchField,
-            )
-        }
-    } else {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            tabs()
-            searchField()
-        }
+        Button(onClick = onSearch, shape = MaterialTheme.shapes.large) { Text("بحث", fontWeight = FontWeight.Bold) }
     }
 }
 

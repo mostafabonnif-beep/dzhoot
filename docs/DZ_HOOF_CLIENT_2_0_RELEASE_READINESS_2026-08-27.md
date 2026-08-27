@@ -259,3 +259,9 @@
 نجحت بوابة الجودة بعد هذه الدفعة: `assembleOfficialDebug` و`testOfficialDebugUnitTest` و`lintOfficialDebug`.
 
 يبقى اختبار D-pad وقياسات الـ 10-foot layout على Android TV فعلي أو AVD ضرورياً قبل اعتبار التصميم النهائي جاهزاً للزبائن.
+
+## Client 2.0: توحيد Live TV والكتالوج وGuide
+
+تمت متابعة دفعة Client 2.0 بعد Live TV Hub بإعادة تصميم لوحة اكتشاف الكتالوج. أصبحت شاشة الأفلام والمسلسلات تستخدم سطحاً موحداً مرتفعاً يحتوي عنوان اكتشاف واضحاً، اختياراً مرئياً للأفلام/المسلسلات، وبحثاً متجاوباً للهاتف والتلفاز مع حالات focus موحّدة. كما تم توحيد رمز اللون في فلاتر Guide مع التصميم الرسمي، واستفاد Guide وبقية شاشات `ScreenScaffold` من رأس Surface الجديد.
+
+هذه التغييرات presentation-only ولا تعدّل مصدر القنوات، EPG، الحسابات، Node.js API، أو بيانات Room. بعد الدمج اجتازت بوابة الجودة: `assembleOfficialDebug` و`testOfficialDebugUnitTest` و`lintOfficialDebug`.
