@@ -44,13 +44,25 @@ jobs:
             echo 'Firebase config not supplied; building with Firebase integrations disabled.'
           fi
 
-      - name: Validate Android identity and API URL
+      - name: Validate Android identity, API URL, and version monotonicity
         env:
           API_URL: ${{ inputs.api_url }}
+          VERSION_NAME: ${{ inputs.version_name }}
         run: |
           set -euo pipefail
           grep -q 'applicationId = "com.dzhoof.iptv"' android/app/build.gradle.kts
           case "$API_URL" in https://*) ;; *) echo 'api_url must use HTTPS' >&2; exit 1 ;; esac
+          base="${VERSION_NAME%%-*}"
+          if [[ ! "$base" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo 'version_name must start with major.minor.patch' >&2
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<< "$base"
+          version_code=$((major * 10000 + minor * 100 + patch))
+          if [ "$version_code" -le 10017 ]; then
+            echo "version_name must be newer than deployed versionCode 10017" >&2
+            exit 1
+          fi
 
       - name: Validate release secrets
         env:
@@ -83,10 +95,13 @@ jobs:
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           DZHOOF_API_URL: ${{ inputs.api_url }}
-        run: ./gradlew assembleRelease --stacktrace -PversionName=${{ inputs.version_name }}
+          VERSION_NAME: ${{ inputs.version_name }}
+        run: ./gradlew :app:assembleOfficialRelease --stacktrace -PversionName="$VERSION_NAME"
 
       - name: Verify and package official release APK
         working-directory: android
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
         run: |
           set -euo pipefail
           APK=app/build/outputs/apk/official/release/app-official-release.apk
@@ -94,7 +109,7 @@ jobs:
           SDK_BUILD_TOOLS="${ANDROID_SDK_ROOT}/build-tools/34.0.0"
           "$SDK_BUILD_TOOLS/apksigner" verify --verbose "$APK"
           "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "package: name='com.dzhoof.iptv'"
-          "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "versionName='${{ inputs.version_name }}'"
+          "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "versionName='$VERSION_NAME'"
           sha256sum "$APK" > app-official-release.apk.sha256
           ls -lh "$APK" app-official-release.apk.sha256
 
