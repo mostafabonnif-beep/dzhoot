@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -137,11 +138,8 @@ private fun CatalogToolbar(
     onQueryChanged: (String) -> Unit,
     onSearch: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val isCompact = LocalConfiguration.current.screenWidthDp < 600
+    val tabs: @Composable RowScope.() -> Unit = {
         FilterChip(
             selected = tab == CatalogTab.MOVIES,
             onClick = { onTabSelected(CatalogTab.MOVIES) },
@@ -152,6 +150,8 @@ private fun CatalogToolbar(
             onClick = { onTabSelected(CatalogTab.SERIES) },
             label = { Text("مسلسلات") },
         )
+    }
+    val searchField: @Composable RowScope.() -> Unit = {
         AppTextField(
             value = query,
             onValueChange = onQueryChanged,
@@ -160,6 +160,27 @@ private fun CatalogToolbar(
             modifier = Modifier.weight(1f),
         )
         Button(onClick = onSearch) { Text("بحث") }
+    }
+
+    if (isCompact) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), content = tabs)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                content = searchField,
+            )
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            tabs()
+            searchField()
+        }
     }
 }
 
