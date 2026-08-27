@@ -355,21 +355,8 @@ private fun DzhoofAppShell(
                         startDestination = startDestination,
                         modifier = Modifier.fillMaxSize()
                     )
-                    // Thumb-reachable Search on mobile across the browse screens
-                    if (isPortrait && isMobile && currentRoute in Screen.searchableRoutes) {
-                        FloatingActionButton(
-                            onClick = {
-                                navController.navigate(Screen.Search.route) { launchSingleTop = true }
-                            },
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(16.dp),
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        ) {
-                            Icon(Icons.Default.Search, contentDescription = "بحث")
-                        }
-                    }
+                    // Search is a permanent first-class destination in the Client 2.0
+                    // phone rail, so a floating duplicate no longer obscures content.
                 }
             }
             if (isPortrait && showNav) {
@@ -418,20 +405,22 @@ private fun BottomNavBar(
     val accent = MaterialTheme.colorScheme.primary
     val items = if (isPhone) phoneBottomNavItems else tvBottomNavItems
 
-    // شريط سفلي عائم حديث — حاوية دائرية مرتفعة مع مؤشر "حبة" للأيقونة النشطة
+    // Client 2.0 phone rail: one stable bottom edge, compact active indicator,
+    // and no oversized floating container competing with the browsing content.
     Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.985f),
         tonalElevation = 0.dp,
-        shadowElevation = 16.dp,
+        shadowElevation = 18.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
         modifier = modifier
-            .fillMaxWidth(0.95f)
+            .fillMaxWidth()
             .height(barHeight)
-            .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
@@ -442,26 +431,31 @@ private fun BottomNavBar(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                     modifier = Modifier
-                        .clip(RoundedCornerShape(18.dp))
-                        .background(
-                            if (isSelected) accent.copy(alpha = 0.16f)
-                            else Color.Transparent
-                        )
+                        .weight(1f)
+                        .clip(RoundedCornerShape(16.dp))
                         .clickable { onScreenSelected(screen) }
-                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                        .padding(vertical = 3.dp)
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = label,
-                        tint = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(iconSize)
-                    )
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(if (isSelected) 42.dp else 38.dp, 29.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(if (isSelected) accent.copy(alpha = 0.16f) else Color.Transparent)
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = label,
+                            tint = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(iconSize)
+                        )
+                    }
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = label,
                         maxLines = 1,
                         fontSize = labelSize,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         color = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

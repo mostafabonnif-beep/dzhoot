@@ -80,6 +80,29 @@ fun HomeContent(
         byWidth.coerceAtLeast(180f).coerceAtMost(cap).dp
     }
 
+    // The phone uses a purpose-built Client 2.0 landing page rather than a
+    // scaled-down TV layout. Keeping this branch here makes TV's focus-driven
+    // browse experience independent from the touch-first mobile information
+    // architecture.
+    if (isCompact) {
+        Client2MobileHome(
+            channels = channels,
+            featuredChannels = featuredChannels,
+            recentlyWatched = recentlyWatched,
+            forYou = forYou,
+            popularCategories = popularCategories,
+            onChannelClick = onChannelClick,
+            onNavigateToChannels = onNavigateToChannels,
+            onNavigateToSearch = onNavigateToSearch,
+            onNavigateToGuide = onNavigateToGuide,
+            onNavigateToFavorites = onNavigateToFavorites,
+            onToggleFavorite = onToggleFavorite,
+            isDemo = isDemo,
+            modifier = modifier
+        )
+        return
+    }
+
     val channelsByCategory = remember(channels) {
         channels.groupBy { it.category.ifBlank { "" } }
     }
