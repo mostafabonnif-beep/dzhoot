@@ -201,6 +201,12 @@ class AppUpdater @Inject constructor(
             val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), APK_FILENAME)
             if (!file.exists()) return DownloadState.Failed("تعذر الوصول إلى ملف التحديث")
 
+            if (!verifyApkIdentityAndVersion(file)) {
+                Log.e(TAG, "APK identity or version verification failed — refusing to install")
+                file.delete()
+                return DownloadState.Failed("ملف التحديث غير متوافق أو أقدم من النسخة الحالية")
+            }
+
             if (!verifyApkSignature(file)) {
                 Log.e(TAG, "APK signature verification failed — refusing to install")
                 file.delete()
@@ -229,6 +235,24 @@ class AppUpdater @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Error installing update", e)
             DownloadState.Failed("تعذر تثبيت التحديث")
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun verifyApkIdentityAndVersion(apkFile: File): Boolean {
+        return try {
+            val packageInfo = context.packageManager.getPackageArchiveInfo(apkFile.absolutePath, 0)
+                ?: return false
+            if (packageInfo.packageName != context.packageName) return false
+            val candidateVersionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode
+            } else {
+                packageInfo.versionCode.toLong()
+            }
+            candidateVersionCode > getVersionCode().toLong()
+        } catch (e: Exception) {
+            Log.e(TAG, "APK identity/version verification error", e)
+            false
         }
     }
 
