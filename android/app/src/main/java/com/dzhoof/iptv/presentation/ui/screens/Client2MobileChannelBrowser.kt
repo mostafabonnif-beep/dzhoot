@@ -246,7 +246,7 @@ private fun Client2MobileChannelRow(
             ) {
                 if (channel.logoUrl != null) {
                     AsyncImage(
-                        model = ImageRequest.Builder(context).data(channel.logoUrl).crossfade(true).build(),
+                        model = ImageRequest.Builder(context).data(channel.logoUrl).size(128).crossfade(false).build(),
                         contentDescription = title,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.padding(6.dp)

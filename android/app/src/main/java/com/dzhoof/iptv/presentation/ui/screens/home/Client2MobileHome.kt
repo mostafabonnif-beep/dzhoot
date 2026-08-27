@@ -368,7 +368,7 @@ private fun MobileLiveLeadCard(
                             modifier = Modifier.size(52.dp)
                         ) {
                             AsyncImage(
-                                model = ImageRequest.Builder(context).data(logo).crossfade(true).build(),
+                                model = ImageRequest.Builder(context).data(logo).size(128).crossfade(false).build(),
                                 contentDescription = cleanName,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.padding(6.dp)
@@ -662,7 +662,7 @@ private fun MobileChannelListItem(
             ) {
                 if (channel.logoUrl != null) {
                     AsyncImage(
-                        model = ImageRequest.Builder(context).data(channel.logoUrl).crossfade(true).build(),
+                        model = ImageRequest.Builder(context).data(channel.logoUrl).size(128).crossfade(false).build(),
                         contentDescription = cleanName,
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.padding(7.dp)

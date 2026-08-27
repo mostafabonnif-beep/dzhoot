@@ -115,7 +115,7 @@ class ChannelsViewModelTest {
     @Test
     fun `init calls refresh`() = runTest {
         val vm = createViewModel()
-        advanceTimeBy(600)
+        advanceTimeBy(2_600)
         runCurrent()
 
         coVerify { refreshChannelsUseCase(Unit) }
@@ -231,7 +231,7 @@ class ChannelsViewModelTest {
     @Test
     fun `refresh success clears loading state`() = runTest {
         val vm = createViewModel()
-        advanceTimeBy(600)
+        advanceTimeBy(2_600)
         runCurrent()
 
         assertFalse(vm.uiState.value.isRefreshing)
@@ -244,7 +244,7 @@ class ChannelsViewModelTest {
         coEvery { refreshChannelsUseCase(Unit) } returns Result.Error(NetworkException("offline"))
 
         val vm = createViewModel()
-        advanceTimeBy(600)
+        advanceTimeBy(2_600)
         runCurrent()
 
         assertEquals(ErrorType.NETWORK_ERROR, vm.uiState.value.errorType)
@@ -256,7 +256,7 @@ class ChannelsViewModelTest {
         coEvery { refreshChannelsUseCase(Unit) } returns Result.Error(NetworkException("offline"))
 
         val vm = createViewModel()
-        advanceTimeBy(600)
+        advanceTimeBy(2_600)
         runCurrent()
 
         // Has channels from successful loadChannels, so error should be cleared
@@ -267,7 +267,7 @@ class ChannelsViewModelTest {
     @Test
     fun `onResume skips first call`() = runTest {
         val vm = createViewModel()
-        advanceTimeBy(600)
+        advanceTimeBy(2_600)
         runCurrent()
 
         // First onResume should be skipped
@@ -279,7 +279,7 @@ class ChannelsViewModelTest {
     @Test
     fun `onResume triggers refresh on second call`() = runTest {
         val vm = createViewModel()
-        advanceTimeBy(600)
+        advanceTimeBy(2_600)
         runCurrent()
 
         vm.onResume() // first — skipped
@@ -336,7 +336,7 @@ class ChannelsViewModelTest {
         every { favoriteCategoryDao.getAllFavoriteCategoryNames() } returns favCatFlow
 
         val vm = createViewModel()
-        advanceTimeBy(1_300)
+        advanceTimeBy(5_100)
         runCurrent()
 
         favCatFlow.value = listOf("News", "Sports")

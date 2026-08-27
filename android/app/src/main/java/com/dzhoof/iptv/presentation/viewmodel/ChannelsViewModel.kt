@@ -55,10 +55,11 @@ private const val RECENTLY_WATCHED_LIMIT = 20
 private const val FEATURED_CHANNELS_LIMIT = 5
 private const val POPULAR_CATEGORIES_LIMIT = 10
 private const val FOR_YOU_LIMIT = 12
-private const val HEALTH_SCAN_DEBOUNCE_MS = 500L
+private const val HEALTH_SCAN_DEBOUNCE_MS = 3_000L
 private const val CATEGORY_UPDATE_DEBOUNCE_MS = 1_000L
 private const val GUIDE_URL = "https://github.com/mostafabonnif-beep/dzhoot/blob/main/android/docs/README.md"
-private const val DEFERRED_HOME_WORK_DELAY_MS = 1_200L
+private const val INITIAL_REFRESH_DELAY_MS = 2_500L
+private const val DEFERRED_HOME_WORK_DELAY_MS = 5_000L
 
 @HiltViewModel
 class ChannelsViewModel @Inject constructor(
@@ -89,9 +90,14 @@ class ChannelsViewModel @Inject constructor(
         // The first frame only needs the cached channel catalogue. EPG parsing,
         // recommendations, favourite-category observation and QR generation are
         // valuable but must never compete with the splash-to-home transition.
+        // Render the cached Room catalogue first. A network refresh, EPG parsing,
+        // image work and recommendations must not run on the splash-to-home path.
         loadChannels()
-        refresh()
         if (!DzhoofApplication.startupRecoveryMode) {
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(INITIAL_REFRESH_DELAY_MS)
+                refresh()
+            }
             viewModelScope.launch {
                 kotlinx.coroutines.delay(DEFERRED_HOME_WORK_DELAY_MS)
                 startDeferredHomeWork()
@@ -178,7 +184,14 @@ class ChannelsViewModel @Inject constructor(
                         // only this ready-made result instead of classifying while drawing.
                         // Any unexpected organizer failure leaves browse shelves empty but
                         // never prevents the channel catalogue itself from appearing.
-                        val browseCollections = if (category == null || isCuratedCollection) {
+                        // Health and favourite flows can emit repeatedly while the
+                        // user stays on the same catalogue. Their changes do not alter
+                        // country/brand membership, so retain the first safe index
+                        // instead of re-classifying thousands of channels per emission.
+                        val browseCollections = if (
+                            (category == null || isCuratedCollection) &&
+                            _uiState.value.browseCollections.isEmpty()
+                        ) {
                             runCatching { ChannelCollectionOrganizer.collections(allUiChannels) }
                                 .getOrDefault(emptyList())
                         } else {
