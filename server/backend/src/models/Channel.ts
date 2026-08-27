@@ -1,6 +1,12 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import { IAlternateStream, IChannelDocument, IChannelModel } from '@dzhoof/shared';
 
+const {
+  hasRestrictedPresentationMarker,
+  presentationForChannel,
+  publicCatalogPresentationQuery,
+} = require('../utils/catalog-presentation');
+
 const channelSchema = new Schema<IChannelDocument>(
   {
     // Ownership: null = shared admin catalog (browsable, servable to the demo);
@@ -210,10 +216,13 @@ function buildM3ULine(ch: {
       : String(rawLogo);
     m3uLine += ` tvg-logo="${esc(logo)}"`;
   }
-  if (ch.channelGroup) m3uLine += ` group-title="${esc(ch.channelGroup)}"`;
+  const presentation = presentationForChannel(ch);
+  m3uLine += ` group-title="${esc(presentation.group)}"`;
   if (ch.catchup?.type) {
     m3uLine += ` catchup="${esc(ch.catchup.type)}"`;
-    if (ch.catchup.source) m3uLine += ` catchup-source="${esc(ch.catchup.source)}"`;
+    // catchup.source is an upstream URL template and may carry credentials. It
+    // deliberately never leaves the server; only declared capability and days
+    // are safe for a customer playlist.
     if (ch.catchup.days) m3uLine += ` catchup-days="${ch.catchup.days}"`;
   }
 
@@ -231,7 +240,12 @@ channelSchema.methods.toM3U = function (this: IChannelDocument, logoProxyBase?: 
 // Streams via a lean cursor + field projection so we never hydrate tens of thousands
 // of full Mongoose documents into memory at once.
 channelSchema.statics.generateM3UPlaylist = async function (): Promise<string> {
-  const cursor = this.find({ ownerId: null })
+  const cursor = this.find({
+    $and: [
+      { ownerId: null, isActive: { $ne: false } },
+      publicCatalogPresentationQuery(),
+    ],
+  })
     .select(
       'channelId channelName channelUrl channelImg tvgLogo tvgName channelGroup ' +
         'catchup.type catchup.source catchup.days ' +
@@ -245,6 +259,9 @@ channelSchema.statics.generateM3UPlaylist = async function (): Promise<string> {
   let m3uContent = '#EXTM3U\n\n';
 
   for (let channel: any = await cursor.next(); channel != null; channel = await cursor.next()) {
+    // Defense in depth: retain an in-memory check in addition to the Mongo filter
+    // so unusual legacy documents can never reappear in a cached public export.
+    if (hasRestrictedPresentationMarker(channel)) continue;
     const primaryDead = channel.metadata?.isWorking === false;
     const primaryFlagged = channel.flaggedBad?.isFlagged === true;
 
