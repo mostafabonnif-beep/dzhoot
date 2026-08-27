@@ -402,16 +402,16 @@ private val tvBottomNavItems = listOf(
 )
 
 /**
- * Phone navigation intentionally stays focused on five high-frequency actions.
- * Search is a first-class destination rather than a floating-only shortcut;
- * Guide and VOD remain reachable from the catalog/categories flows.
+ * Phone navigation keeps the primary destinations visible in a stable order.
+ * Movies is placed immediately before Settings so the library is easy to find
+ * without competing with the live, search, favourites and categories actions.
  */
 private val phoneBottomNavItems = listOf(
     Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
-    Triple(Screen.Catalog, Icons.Default.Movie, "الفيديو"),
     Triple(Screen.Search, Icons.Default.Search, "بحث"),
     Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
+    Triple(Screen.Catalog, Icons.Default.Movie, "الأفلام"),
     Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
 )
 

@@ -188,18 +188,18 @@ private fun CatalogToolbar(
 @Composable
 private fun CatalogToolbarHeading() {
     Text(
-        text = "DZ HOOF / VOD",
+        text = "DZ HOOF / MOVIES",
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.ExtraBold
     )
     Text(
-        text = "اكتشف المكتبة",
+        text = "مكتبة الأفلام",
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.ExtraBold
     )
     Text(
-        text = "أفلام ومسلسلات مختارة لك",
+        text = "أفلام ومسلسلات مرتبة لك",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,

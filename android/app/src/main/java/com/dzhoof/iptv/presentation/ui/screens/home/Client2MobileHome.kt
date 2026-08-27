@@ -402,7 +402,7 @@ private fun MobileShortcutRow(
             modifier = Modifier.weight(1f)
         )
         MobileShortcut(
-            label = "الفيديو",
+            label = "الأفلام",
             icon = Icons.Default.Movie,
             tint = MaterialTheme.colorScheme.tertiary,
             onClick = onCatalogClick,
