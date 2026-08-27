@@ -23,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalConfiguration
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 
@@ -69,7 +70,8 @@ fun ScreenHeaderTitle(
             text = text,
             style = MaterialTheme.typography.headlineMedium,
             color = ScreenHeaderDefaults.titleColor,
-            maxLines = 1
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
