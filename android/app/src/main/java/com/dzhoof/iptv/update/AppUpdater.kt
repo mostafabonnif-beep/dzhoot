@@ -123,7 +123,7 @@ class AppUpdater @Inject constructor(
             onState(DownloadState.Failed("لا يتوفر رابط للتنزيل"))
             return
         }
-        if (!isAllowedDownloadUrl(updateInfo.downloadUrl)) {
+        if (!UpdateUrlPolicy.isAllowed(updateInfo.downloadUrl, configuredServerHost())) {
             Log.e(TAG, "Rejected update URL: scheme or host is not trusted")
             onState(DownloadState.Failed("رابط التحديث غير موثوق"))
             return
@@ -192,20 +192,9 @@ class AppUpdater @Inject constructor(
         }
     }
 
-    private fun isAllowedDownloadUrl(rawUrl: String): Boolean {
-        val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return false
-        if (uri.scheme != "https" || uri.host.isNullOrBlank()) return false
-
-        val configuredServerHost = runCatching {
-            Uri.parse(AppPreferences.getServerUrl(context)).host
-        }.getOrNull()
-        val host = uri.host!!.lowercase()
-        val isConfiguredServer = configuredServerHost?.lowercase() == host
-        val isGithubRelease = host == "github.com" ||
-            host == "objects.githubusercontent.com" ||
-            host.endsWith(".githubusercontent.com")
-        return isConfiguredServer || isGithubRelease
-    }
+    private fun configuredServerHost(): String? = runCatching {
+        Uri.parse(AppPreferences.getServerUrl(context)).host
+    }.getOrNull()
 
     private fun installUpdate(): DownloadState {
         return try {
