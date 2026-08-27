@@ -102,19 +102,28 @@ async function validateUrlForSSRF(urlStr) {
  *   const agent = new http.Agent({ lookup: createPinnedLookup(resolvedAddresses) });
  *   axios.get(url, { httpAgent: agent, httpsAgent: agent });
  */
-function createPinnedLookup(resolvedAddresses) {
-  return function pinnedLookup(_hostname, options, callback) {
+function createPinnedLookup(resolvedAddresses, pinnedHostname) {
+  return function pinnedLookup(hostname, options, callback) {
     if (typeof options === 'function') {
       callback = options;
       options = {};
     }
+    // Redirect to a different host: resolve it normally (pinning only guards the original URL).
+    if (pinnedHostname && hostname && hostname !== pinnedHostname) {
+      return dns.lookup(hostname, options, callback);
+    }
+
     const family = options.family || 0;
     const filtered = resolvedAddresses.filter((addr) => {
       if (family === 4) return addr.includes('.');
       if (family === 6) return addr.includes(':');
       return true;
     });
-    const address = filtered[0] || resolvedAddresses[0];
+    // Prefer IPv4: many VPSes lack IPv6; Cloudflare v6 then fails TLS (EPROTO).
+    const v4 = filtered.filter((addr) => addr.includes('.'));
+    const v6 = filtered.filter((addr) => addr.includes(':'));
+    const candidates = v4.length ? v4 : v6;
+    const address = candidates[0] || filtered[0] || resolvedAddresses[0];
     if (!address) {
       return callback(new Error('No pinned addresses available'));
     }
@@ -122,7 +131,7 @@ function createPinnedLookup(resolvedAddresses) {
     if (options.all) {
       return callback(
         null,
-        filtered.map((addr) => ({ address: addr, family: addr.includes(':') ? 6 : 4 })),
+        (v4.length ? v4 : v6).map((addr) => ({ address: addr, family: addr.includes(':') ? 6 : 4 })),
       );
     }
     return callback(null, address, addrFamily);
