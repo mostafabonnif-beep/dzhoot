@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.FloatingActionButton
@@ -408,11 +409,11 @@ private fun BottomNavBar(
     // Client 2.0 phone rail: one stable bottom edge, compact active indicator,
     // and no oversized floating container competing with the browsing content.
     Surface(
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.985f),
+        shape = RoundedCornerShape(topStart = 10.dp, topEnd = 10.dp),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
-        shadowElevation = 18.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        shadowElevation = 8.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)),
         modifier = modifier
             .fillMaxWidth()
             .height(barHeight)
@@ -432,25 +433,23 @@ private fun BottomNavBar(
                     verticalArrangement = Arrangement.Center,
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(16.dp))
                         .clickable { onScreenSelected(screen) }
                         .padding(vertical = 3.dp)
                 ) {
                     Box(
-                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(if (isSelected) 42.dp else 38.dp, 29.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(if (isSelected) accent.copy(alpha = 0.16f) else Color.Transparent)
-                    ) {
-                        Icon(
-                            imageVector = icon,
-                            contentDescription = label,
-                            tint = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(iconSize)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(2.dp))
+                            .width(28.dp)
+                            .height(2.dp)
+                            .background(if (isSelected) accent else Color.Transparent)
+                    )
+                    Spacer(modifier = Modifier.height(5.dp))
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = label,
+                        tint = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(iconSize)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
                         text = label,
                         maxLines = 1,

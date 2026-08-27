@@ -4,12 +4,15 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.CutCornerShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -56,6 +59,14 @@ import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import java.util.Locale
+
+private val BroadcastPanelShape = CutCornerShape(
+    topStart = 18.dp,
+    topEnd = 4.dp,
+    bottomEnd = 18.dp,
+    bottomStart = 4.dp
+)
+private val BroadcastActionShape = RoundedCornerShape(5.dp)
 
 /**
  * Phone-first Client 2.0 landing experience.
@@ -205,9 +216,9 @@ private fun MobileHomeIdentity(
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-        border = BorderStroke(1.dp, DzGreen300.copy(alpha = 0.22f)),
+        shape = BroadcastPanelShape,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, DzGreen300.copy(alpha = 0.34f)),
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
@@ -216,8 +227,9 @@ private fun MobileHomeIdentity(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
-                shape = MaterialTheme.shapes.medium,
-                color = DzGreen300.copy(alpha = 0.16f),
+                shape = BroadcastActionShape,
+                color = DzGreen300.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, DzGreen300.copy(alpha = 0.35f)),
                 modifier = Modifier.size(46.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -231,7 +243,7 @@ private fun MobileHomeIdentity(
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "DZ HOOF",
+                    text = "DZ HOOF  /  LIVE",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.ExtraBold,
@@ -248,8 +260,8 @@ private fun MobileHomeIdentity(
             }
             Surface(
                 onClick = onSearchClick,
-                shape = MaterialTheme.shapes.medium,
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.70f),
+                shape = BroadcastActionShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 modifier = Modifier.size(44.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
@@ -279,24 +291,23 @@ private fun MobileLiveLeadCard(
     Surface(
         onClick = onWatch,
         color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.extraLarge,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        shape = BroadcastPanelShape,
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.36f)),
         modifier = modifier.fillMaxWidth()
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(196.dp)
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface,
-                            accent.copy(alpha = 0.16f),
-                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
-                        )
-                    )
-                )
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f))
         ) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .fillMaxHeight()
+                    .width(5.dp)
+                    .background(accent)
+            )
             Icon(
                 imageVector = categoryIcon(channel.category),
                 contentDescription = null,
@@ -316,7 +327,7 @@ private fun MobileLiveLeadCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         color = DzRed400.copy(alpha = 0.14f),
-                        shape = MaterialTheme.shapes.small
+                        shape = BroadcastActionShape
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -385,6 +396,7 @@ private fun MobileLiveLeadCard(
 
                 Button(
                     onClick = onWatch,
+                    shape = BroadcastActionShape,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = DzGreen400,
                         contentColor = Color(0xFF052015)
@@ -450,9 +462,9 @@ private fun MobileShortcut(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.52f)),
-        modifier = modifier.height(68.dp)
+        shape = BroadcastActionShape,
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.28f)),
+        modifier = modifier.height(64.dp)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -510,8 +522,8 @@ private fun MobileCategoryTile(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, tint.copy(alpha = 0.28f)),
+        shape = BroadcastPanelShape,
+        border = BorderStroke(1.dp, tint.copy(alpha = 0.42f)),
         modifier = modifier.height(78.dp)
     ) {
         Row(
@@ -520,7 +532,7 @@ private fun MobileCategoryTile(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Surface(
-                shape = MaterialTheme.shapes.medium,
+                shape = BroadcastActionShape,
                 color = tint.copy(alpha = 0.14f),
                 modifier = Modifier.size(38.dp)
             ) {
@@ -625,8 +637,8 @@ private fun MobileChannelListItem(
     Surface(
         onClick = onClick,
         color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.large,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.48f)),
+        shape = BroadcastPanelShape,
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.30f)),
         modifier = modifier.fillMaxWidth()
     ) {
         Row(
@@ -636,9 +648,16 @@ private fun MobileChannelListItem(
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(52.dp)
+                    .background(accent)
+            )
+            Spacer(modifier = Modifier.width(9.dp))
             Surface(
                 color = Color.White.copy(alpha = 0.95f),
-                shape = MaterialTheme.shapes.medium,
+                shape = BroadcastActionShape,
                 modifier = Modifier.size(58.dp)
             ) {
                 if (channel.logoUrl != null) {
@@ -659,7 +678,7 @@ private fun MobileChannelListItem(
                     }
                 }
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(11.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = cleanName,
@@ -682,7 +701,7 @@ private fun MobileChannelListItem(
             Surface(
                 onClick = onFavoriteClick,
                 color = if (channel.isFavorite) DzRed400.copy(alpha = 0.14f) else Color.Transparent,
-                shape = MaterialTheme.shapes.medium,
+                shape = BroadcastActionShape,
                 modifier = Modifier.size(40.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
