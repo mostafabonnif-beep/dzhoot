@@ -3,6 +3,7 @@ package com.dzhoof.iptv.presentation.ui.player
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -137,7 +138,13 @@ class ErrorRecoveryManager(
                 "انقطع اتصال الشبكة"
             }
             PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> {
-                "خطأ في الخادم"
+                when (httpResponseCode(error)) {
+                    401, 403 -> "الوصول إلى المصدر مرفوض"
+                    404 -> "مصدر البث غير موجود"
+                    408, 429 -> "الخادم مشغول مؤقتًا"
+                    in 500..599 -> "خطأ مؤقت في خادم البث"
+                    else -> "استجابة غير صالحة من خادم البث"
+                }
             }
             PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
             PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED -> {
@@ -153,7 +160,7 @@ class ErrorRecoveryManager(
             return
         }
         when {
-            isNetworkError(error) -> {
+            isRetryableError(error) -> {
                 onError(errorMessage)
                 attemptReconnect()
             }
@@ -172,8 +179,26 @@ class ErrorRecoveryManager(
 
     private fun isNetworkError(error: PlaybackException): Boolean {
         return error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ||
-                error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS
+                error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+    }
+
+    private fun isRetryableError(error: PlaybackException): Boolean {
+        if (isNetworkError(error)) return true
+        if (error.errorCode != PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS) return false
+        return when (httpResponseCode(error)) {
+            408, 429 -> true
+            in 500..599 -> true
+            else -> false
+        }
+    }
+
+    private fun httpResponseCode(error: PlaybackException): Int? {
+        var cause = error.cause
+        while (cause != null) {
+            if (cause is HttpDataSource.InvalidResponseCodeException) return cause.responseCode
+            cause = cause.cause
+        }
+        return null
     }
 
     private fun isParsingError(error: PlaybackException): Boolean {
