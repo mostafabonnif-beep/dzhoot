@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
@@ -74,6 +75,7 @@ fun DeadStreamOverlay(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.85f))
+            .clickable(onClick = onDismiss)
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     onDismiss()
