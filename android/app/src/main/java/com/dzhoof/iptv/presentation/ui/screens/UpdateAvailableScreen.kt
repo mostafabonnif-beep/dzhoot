@@ -99,7 +99,7 @@ fun UpdateAvailableScreen(
             Spacer(modifier = Modifier.height(Dimens.Space5))
 
             Text(
-                text = "Update Available",
+                text = "يتوفر تحديث لـ DZ HOOF",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -110,9 +110,9 @@ fun UpdateAvailableScreen(
 
             Text(
                 text = buildString {
-                    append("Version ${updateInfo.versionName}")
+                    append("الإصدار ${updateInfo.versionName}")
                     if (updateInfo.fileSize.isNotEmpty()) append("  ·  ${updateInfo.fileSize}")
-                    if (updateInfo.isMandatory) append("  ·  Recommended")
+                    if (updateInfo.isMandatory) append("  ·  تحديث إلزامي")
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -149,7 +149,7 @@ fun UpdateAvailableScreen(
                     )
                     Spacer(modifier = Modifier.width(Dimens.Space3))
                     Text(
-                        text = "Downloading update…",
+                        text = "جارٍ تنزيل التحديث…",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -167,13 +167,13 @@ fun UpdateAvailableScreen(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
-                        Text("Update Now", fontWeight = FontWeight.SemiBold)
+                        Text("تحديث الآن", fontWeight = FontWeight.SemiBold)
                     }
                     FocusAwareOutlinedButton(
                         onClick = onDismiss,
                         modifier = if (stackButtons) Modifier.fillMaxWidth() else Modifier
                     ) {
-                        Text("Not Now")
+                        Text("ليس الآن")
                     }
                 }
 

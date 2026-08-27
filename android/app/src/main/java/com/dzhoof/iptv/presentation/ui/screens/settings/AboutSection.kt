@@ -33,7 +33,7 @@ internal fun AboutSection(
     val busy = isChecking || isDownloading
     val canInstall = updateInfo != null && updateInfo.downloadUrl.isNotEmpty()
 
-    SettingsCard(title = "About", modifier = modifier) {
+    SettingsCard(title = "حول التطبيق", modifier = modifier) {
         SettingRowLayout(
             text = {
                 if (updateInfo != null) {
@@ -59,10 +59,10 @@ internal fun AboutSection(
                     }
                     Text(
                         text = when {
-                            isChecking -> "Checking..."
-                            isDownloading -> "Downloading..."
-                            canInstall -> "Update Now"
-                            else -> "Check for Updates"
+                            isChecking -> "جارٍ الفحص…"
+                            isDownloading -> "جارٍ التنزيل…"
+                            canInstall -> "تحديث الآن"
+                            else -> "فحص التحديثات"
                         },
                         fontWeight = FontWeight.Medium
                     )
@@ -84,14 +84,14 @@ private fun VersionLabel(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Version",
+            text = "الإصدار",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(2.dp))
         StatusText(
-            text = if (upToDate) "$appVersion  ·  Up to date" else appVersion,
+            text = if (upToDate) "$appVersion  ·  التطبيق محدّث" else appVersion,
             status = if (upToDate) Status.SUCCESS else Status.NEUTRAL
         )
     }
@@ -105,7 +105,7 @@ private fun UpdateAvailableLabel(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Update available: v${updateInfo.versionName}",
+            text = "يتوفر تحديث: الإصدار ${updateInfo.versionName}",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary
@@ -113,9 +113,9 @@ private fun UpdateAvailableLabel(
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = buildString {
-                append("Current: $appVersion")
+                append("الحالي: $appVersion")
                 if (updateInfo.fileSize.isNotEmpty()) append("  ·  ${updateInfo.fileSize}")
-                if (updateInfo.isMandatory) append("  ·  Mandatory")
+                if (updateInfo.isMandatory) append("  ·  إلزامي")
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant

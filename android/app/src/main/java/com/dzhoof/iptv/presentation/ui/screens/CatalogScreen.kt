@@ -44,6 +44,7 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.dzhoof.iptv.domain.model.Episode
 import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.Season
@@ -89,7 +91,7 @@ fun CatalogScreen(
         }
     }
 
-    ScreenScaffold(title = "الأفلام والمسلسلات", modifier = modifier) {
+    ScreenScaffold(title = "الأفلام", modifier = modifier) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -188,7 +190,7 @@ private fun CatalogToolbar(
 @Composable
 private fun CatalogToolbarHeading() {
     Text(
-        text = "DZ HOOF / MOVIES",
+        text = "DZ HOOF / أفلام",
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.primary,
         fontWeight = FontWeight.ExtraBold
@@ -302,7 +304,11 @@ private fun CatalogContent(
     val posterHeight = if (isCompact) 172.dp else 210.dp
 
     if (state.isLoading && state.movies.isEmpty() && state.series.isEmpty()) {
-        CircularProgressIndicator(modifier = Modifier.fillMaxWidth())
+            CircularProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 32.dp),
+            )
         return
     }
     state.error?.let { error ->
@@ -379,6 +385,7 @@ private fun MovieDetails(
 ) {
     if (movie == null) return
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
+    val context = LocalContext.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         OutlinedButton(onClick = onBack) { Text("رجوع") }
         Spacer(modifier = Modifier.width(16.dp))
@@ -388,7 +395,11 @@ private fun MovieDetails(
     if (isCompact) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             AsyncImage(
-                model = movie.poster,
+                model = ImageRequest.Builder(context)
+                    .data(movie.poster)
+                    .size(480)
+                    .crossfade(false)
+                    .build(),
                 contentDescription = movie.title,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -401,7 +412,11 @@ private fun MovieDetails(
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             AsyncImage(
-                model = movie.poster,
+                model = ImageRequest.Builder(context)
+                    .data(movie.poster)
+                    .size(480)
+                    .crossfade(false)
+                    .build(),
                 contentDescription = movie.title,
                 modifier = Modifier
                     .width(180.dp)
@@ -511,6 +526,7 @@ private fun PosterCard(
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -520,7 +536,11 @@ private fun PosterCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         AsyncImage(
-            model = imageUrl,
+            model = ImageRequest.Builder(context)
+                .data(imageUrl)
+                .size(360)
+                .crossfade(false)
+                .build(),
             contentDescription = title,
             modifier = Modifier
                 .fillMaxWidth()
@@ -542,6 +562,7 @@ private fun EpisodeRow(
     onClick: () -> Unit,
 ) {
     var focused by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -556,7 +577,11 @@ private fun EpisodeRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             AsyncImage(
-                model = episode.thumbnail,
+                model = ImageRequest.Builder(context)
+                    .data(episode.thumbnail)
+                    .size(if (isCompact) 240 else 360)
+                    .crossfade(false)
+                    .build(),
                 contentDescription = episode.title,
                 modifier = Modifier
                     .width(if (isCompact) 112.dp else 180.dp)
