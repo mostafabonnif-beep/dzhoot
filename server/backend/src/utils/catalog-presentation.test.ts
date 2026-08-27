@@ -11,6 +11,7 @@ describe('catalog presentation', () => {
   it('marks decorative hash and supplier-name entries as not customer-visible', () => {
     expect(hasRestrictedPresentationMarker({ channelName: '##### beIN SPORTS HD #####' })).toBe(true);
     expect(hasRestrictedPresentationMarker({ channelGroup: 'AR| NEO 4K' })).toBe(true);
+    expect(hasRestrictedPresentationMarker({ tvgLogo: 'https://images.example/neo/channel.png' })).toBe(true);
     expect(hasRestrictedPresentationMarker({ channelName: 'قناة رياضية HD', channelGroup: 'AR| SPORT' })).toBe(false);
 
     const query = publicCatalogPresentationQuery();

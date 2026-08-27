@@ -4,6 +4,7 @@ import android.content.Context
 import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.mapper.ChannelMapper
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.data.presentation.CatalogPresentationPolicy
 import com.dzhoof.iptv.data.source.local.ChannelLocalDataSource
 import com.dzhoof.iptv.data.source.local.dao.FavoriteDao
 import com.dzhoof.iptv.data.source.local.entity.FavoriteEntity
@@ -74,7 +75,7 @@ class ChannelRepositoryImpl @Inject constructor(
         localDataSource.getAllChannels()
             .combine(favoriteDao.getAllFavorites()) { channels, favorites ->
                 val favoriteIds = favorites.map { it.channelId }.toSet()
-                channels.map { entity ->
+                channels.filter { CatalogPresentationPolicy.isCustomerVisible(it) }.map { entity ->
                     channelMapper.toDomain(
                         entity,
                         isFavorite = favoriteIds.contains(entity.id),
@@ -93,7 +94,7 @@ class ChannelRepositoryImpl @Inject constructor(
     override fun getChannelById(id: String): Flow<Result<Channel>> =
         localDataSource.getChannelById(id)
             .combine(favoriteDao.isFavorite(id)) { entity, isFavorite ->
-                if (entity != null) {
+                if (entity != null && CatalogPresentationPolicy.isCustomerVisible(entity)) {
                     Result.Success(channelMapper.toDomain(
                         entity,
                         isFavorite,
@@ -114,7 +115,7 @@ class ChannelRepositoryImpl @Inject constructor(
         localDataSource.getChannelsByCategory(category)
             .combine(favoriteDao.getAllFavorites()) { channels, favorites ->
                 val favoriteIds = favorites.map { it.channelId }.toSet()
-                channels.map { entity ->
+                channels.filter { CatalogPresentationPolicy.isCustomerVisible(it) }.map { entity ->
                     channelMapper.toDomain(
                         entity,
                         isFavorite = favoriteIds.contains(entity.id),
@@ -134,7 +135,7 @@ class ChannelRepositoryImpl @Inject constructor(
         localDataSource.searchChannels(query)
             .combine(favoriteDao.getAllFavorites()) { channels, favorites ->
                 val favoriteIds = favorites.map { it.channelId }.toSet()
-                channels.map { entity ->
+                channels.filter { CatalogPresentationPolicy.isCustomerVisible(it) }.map { entity ->
                     channelMapper.toDomain(
                         entity,
                         isFavorite = favoriteIds.contains(entity.id),
@@ -176,10 +177,13 @@ class ChannelRepositoryImpl @Inject constructor(
     private suspend fun refreshFromServer(): Result<Unit> {
         return when (val result = remoteDataSource.fetchChannels()) {
             is Result.Success -> {
+                // The server should already exclude restricted presentation markers.
+                // Keep this client-side guard for cached data and legacy deployments.
+                val visibleChannels = result.data.filter { CatalogPresentationPolicy.isCustomerVisible(it) }
                 // Build new alternates map and swap atomically
                 val newAlternates = mutableMapOf<String, List<String>>()
                 val newServerMetadata = mutableMapOf<String, ChannelServerMetadata>()
-                result.data.forEach { dto ->
+                visibleChannels.forEach { dto ->
                     val alts = dto.alternateStreams?.map { it.streamUrl } ?: emptyList()
                     if (alts.isNotEmpty()) newAlternates[dto.id] = alts
                     val health = dto.health
@@ -199,7 +203,7 @@ class ChannelRepositoryImpl @Inject constructor(
                 serverMetadataCache = newServerMetadata
                 // Paired server source has no playlist-derived guide — clear any stale one.
                 AppPreferences.setPlaylistEpgUrl(context, "")
-                localDataSource.replaceAllChannels(result.data.map { channelMapper.toEntity(it) })
+                localDataSource.replaceAllChannels(visibleChannels.map { channelMapper.toEntity(it) })
                 Result.Success(Unit)
             }
             is Result.Error -> Result.Error(result.exception)
@@ -220,7 +224,11 @@ class ChannelRepositoryImpl @Inject constructor(
         // Always refresh the playlist-derived EPG URL (empty when the new playlist has none),
         // stored separately so it never overwrites the user's manual EPG setting.
         AppPreferences.setPlaylistEpgUrl(context, fetched.epgUrl?.takeIf { it.isNotBlank() } ?: "")
-        localDataSource.replaceAllChannels(fetched.channels.map { channelMapper.toEntity(it) })
+        localDataSource.replaceAllChannels(
+            fetched.channels
+                .filter { CatalogPresentationPolicy.isCustomerVisible(it) }
+                .map { channelMapper.toEntity(it) }
+        )
         return Result.Success(Unit)
     }
     
