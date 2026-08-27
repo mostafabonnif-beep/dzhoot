@@ -68,11 +68,14 @@ internal fun Client2MobileChannelBrowser(
     onCategorySelected: (String?) -> Unit,
     onChannelClick: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
+    headerKicker: String = "DZ HOOF / CHANNELS",
+    defaultTitle: String = "كل القنوات",
+    countDescription: (Int) -> String = { "$it قناة جاهزة للمشاهدة" },
     modifier: Modifier = Modifier
 ) {
     val selectedTitle = selectedCategory?.let {
         ChannelCollectionOrganizer.titleFor(it) ?: CategoryLocalizer.localize(it)
-    } ?: "كل القنوات"
+    } ?: defaultTitle
 
     LazyColumn(
         modifier = modifier.fillMaxHeight(),
@@ -82,7 +85,7 @@ internal fun Client2MobileChannelBrowser(
         item(key = "browser_header") {
             Column {
                 Text(
-                    text = "DZ HOOF / CHANNELS",
+                    text = headerKicker,
                     style = MaterialTheme.typography.labelMedium,
                     color = DzGreen300,
                     fontWeight = FontWeight.ExtraBold
@@ -98,7 +101,7 @@ internal fun Client2MobileChannelBrowser(
                 )
                 Spacer(modifier = Modifier.height(7.dp))
                 Text(
-                    text = "${channels.size} قناة جاهزة للمشاهدة",
+                    text = countDescription(channels.size),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

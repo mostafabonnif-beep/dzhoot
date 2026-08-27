@@ -29,7 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.components.ThemeAwareQrCode
 import com.dzhoof.iptv.presentation.ui.screens.FocusAwareButton
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
 import com.dzhoof.iptv.presentation.ui.theme.softShadow
@@ -46,7 +46,7 @@ internal fun QrSection(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Scan with your phone to Pair",
+            text = "امسح الرمز بكاميرا هاتفك للربط",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
         )
@@ -65,7 +65,7 @@ internal fun QrSection(
             ) {
                 ThemeAwareQrCode(
                     bitmap = qrCodeBitmap,
-                    contentDescription = "QR Code for Pairing",
+                    contentDescription = "رمز QR لربط الجهاز",
                     size = qrSize
                 )
             }
@@ -81,7 +81,7 @@ internal fun QrSection(
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(32.dp),
-                    color = Amber,
+                    color = DzGreen300,
                     strokeWidth = 3.dp
                 )
             }
@@ -103,7 +103,7 @@ internal fun OpenBrowserSection(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Quick Pair",
+            text = "ربط سريع وآمن",
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
@@ -113,7 +113,7 @@ internal fun OpenBrowserSection(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Tap to open your browser and complete pairing",
+            text = "افتح صفحة الربط في المتصفح ثم سجّل الدخول",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center
@@ -130,7 +130,7 @@ internal fun OpenBrowserSection(
             },
             enabled = pairingUrl.isNotEmpty(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Amber,
+                containerColor = DzGreen300,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ),
             modifier = Modifier
@@ -144,7 +144,7 @@ internal fun OpenBrowserSection(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Pair in Browser",
+                text = "فتح صفحة الربط",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold
             )
@@ -153,7 +153,7 @@ internal fun OpenBrowserSection(
         Spacer(modifier = Modifier.height(14.dp))
 
         Text(
-            text = "Or enter PIN manually at $serverUrl",
+            text = "أو أدخل الرمز يدوياً من $serverUrl",
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center

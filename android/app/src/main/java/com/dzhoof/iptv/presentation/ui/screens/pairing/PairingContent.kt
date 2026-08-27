@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -41,7 +42,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.ScrimHeavy
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
@@ -134,7 +135,7 @@ internal fun PairingContent(
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(56.dp),
-                    color = Amber,
+                    color = DzGreen300,
                     strokeWidth = 4.dp
                 )
             }
@@ -164,7 +165,7 @@ private fun InfoColumn(
         horizontalAlignment = Alignment.Start
     ) {
         Text(
-            text = if (isTvDevice) "Pair Your TV" else "Pair Your Device",
+            text = if (isTvDevice) "وصّل التلفاز" else "وصّل جهازك",
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -172,13 +173,13 @@ private fun InfoColumn(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isTvDevice) {
-            StepText("1. Visit $serverUrl and sign in")
-            StepText("2. Enter the PIN below to link your TV")
-            StepText("3. Add channels and start watching!")
+            StepText("١. افتح $serverUrl وسجّل الدخول")
+            StepText("٢. أدخل رمز الربط الظاهر أدناه")
+            StepText("٣. أضف قنواتك وابدأ المشاهدة")
         } else {
-            StepText("1. Tap 'Pair in Browser' and sign in")
-            StepText("2. Your device links automatically")
-            StepText("3. Add channels and start watching!")
+            StepText("١. افتح الربط في المتصفح وسجّل الدخول")
+            StepText("٢. سيُربط جهازك تلقائياً")
+            StepText("٣. أضف قنواتك وابدأ المشاهدة")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -199,12 +200,12 @@ private fun InfoColumn(
 
         // Secondary paths, de-emphasized: pairing above is the primary flow.
         SecondaryLink(
-            text = "Just looking? Browse demo channels",
+            text = "استكشف القنوات التجريبية",
             onClick = onUseDefaultClick
         )
         Spacer(modifier = Modifier.height(8.dp))
         SecondaryLink(
-            text = "Use a different source  ▸",
+            text = "إعداد مصدر مختلف",
             onClick = onUseAdvancedClick
         )
     }
@@ -232,16 +233,16 @@ private fun PortraitLayout(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = if (isTvDevice) "Pair Your TV" else "Pair Your Device",
+            text = if (isTvDevice) "وصّل التلفاز" else "وصّل جهازك",
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(8.dp))
-        StepText("1. Visit $serverUrl and sign in", TextAlign.Center)
-        StepText("2. Enter this PIN to link your TV", TextAlign.Center)
-        StepText("3. Add channels and start watching!", TextAlign.Center)
+        StepText("١. افتح $serverUrl وسجّل الدخول", TextAlign.Center)
+        StepText("٢. أدخل رمز الربط الظاهر أدناه", TextAlign.Center)
+        StepText("٣. أضف قنواتك وابدأ المشاهدة", TextAlign.Center)
 
         Spacer(modifier = Modifier.height(20.dp))
         if (isTvDevice) {
@@ -263,9 +264,9 @@ private fun PortraitLayout(
         )
 
         Spacer(modifier = Modifier.height(20.dp))
-        SecondaryLink(text = "Just looking? Browse demo channels", onClick = onUseDefaultClick)
+        SecondaryLink(text = "استكشف القنوات التجريبية", onClick = onUseDefaultClick)
         Spacer(modifier = Modifier.height(6.dp))
-        SecondaryLink(text = "Use a different source  ▸", onClick = onUseAdvancedClick)
+        SecondaryLink(text = "إعداد مصدر مختلف", onClick = onUseAdvancedClick)
     }
 }
 
@@ -285,10 +286,10 @@ private fun SecondaryLink(text: String, onClick: () -> Unit) {
     )
     OutlinedButton(
         onClick = onClick,
-        shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, if (focused) Amber.copy(alpha = 0.6f) else subtleBorder),
+        shape = CutCornerShape(topStart = 10.dp, topEnd = 3.dp, bottomEnd = 10.dp, bottomStart = 3.dp),
+        border = BorderStroke(1.dp, if (focused) DzGreen300.copy(alpha = 0.70f) else subtleBorder),
         colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = if (focused) Amber else MaterialTheme.colorScheme.onSurfaceVariant
+            contentColor = if (focused) DzGreen300 else MaterialTheme.colorScheme.onSurfaceVariant
         ),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         modifier = Modifier

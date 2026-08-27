@@ -19,6 +19,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -29,6 +30,7 @@ import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
 import com.dzhoof.iptv.presentation.ui.components.*
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
+import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.viewmodel.FavoritesViewModel
 
 @Composable
@@ -92,6 +94,22 @@ private fun FavoritesContent(
     modifier: Modifier = Modifier
 ) {
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
+    val isMobile = isMobileDevice(LocalContext.current)
+    if (isMobile) {
+        Client2MobileChannelBrowser(
+            channels = favorites,
+            categories = favoriteCategories.map { it.name },
+            selectedCategory = null,
+            onCategorySelected = { category -> category?.let(onCategoryClick) },
+            onChannelClick = onChannelClick,
+            onToggleFavorite = onRemoveFavorite,
+            headerKicker = "DZ HOOF / FAVORITES",
+            defaultTitle = "مفضلاتي",
+            countDescription = { count -> "$count قناة محفوظة في قائمتك" },
+            modifier = modifier
+        )
+        return
+    }
     val gridGap = if (isCompact) Dimens.CardGapMobile else Dimens.GridGap
     LazyVerticalGrid(
         state = gridState,
