@@ -114,13 +114,14 @@ if sv:
             check("playback-token episode", ok, f"status={s} err={str(d.get('error',''))[:40]} mime={data.get('mimeType')}")
 
 s, d = call("/api/v1/categories")
-check("categories", s==200, f"count={len(d.get('data') or [])}")
+check("categories", s==200, f"count={len(d.get('categories') or [])}")
 s, d = call("/api/v1/favorites", "GET")
 check("favorites", s in (200,401), f"status={s}")
 s, d = call("/api/v1/channels/health-sync", "POST", {"reports":[]})
 check("health-sync", s in (200,400), f"status={s} err={str(d.get('error',''))[:50]}")
 if chid:
-    s, d = call("/api/v1/channels/%s/report-play" % chid, "POST", {"playbackStarted": True})
+    import time
+    s, d = call("/api/v1/channels/%s/report-play" % chid, "POST", {"deviceId": "contract-test", "timestamp": int(time.time()*1000), "proxyPlay": False})
     check("report-play", s in (200,202,429), f"status={s}")
 
 fails = [r for r in results if not r[1]]
