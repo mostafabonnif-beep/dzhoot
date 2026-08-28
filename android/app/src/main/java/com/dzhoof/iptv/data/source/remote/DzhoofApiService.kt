@@ -202,7 +202,7 @@ interface DzhoofApiService {
     @GET("api/v1/tv/epg/{channelListCode}/json")
     suspend fun getEpgGuide(
         @Path("channelListCode") channelListCode: String,
-        @Query("hours") hours: Int = 12
+        @Query("hours") hours: Int = 6
     ): Response<EpgGuideResponse>
 
     @GET("api/v1/app/demo-code")
