@@ -1,4 +1,4 @@
-import { issuePlaybackToken, verifyPlaybackToken } from './playback-token';
+import { issuePlaybackToken, verifyPlaybackToken, altStreamHash } from './playback-token';
 
 describe('playback tokens', () => {
   const originalPlaybackTokenSecret = process.env.PLAYBACK_TOKEN_SECRET;
@@ -82,5 +82,90 @@ describe('playback tokens', () => {
     jest.useFakeTimers().setSystemTime(new Date(issued.expiresAt + 1));
     expect(verifyPlaybackToken(issued.token)).toBeNull();
     jest.useRealTimers();
+  });
+});
+
+describe('v2 channel-reference playback tokens', () => {
+  const originalPlaybackTokenSecret = process.env.PLAYBACK_TOKEN_SECRET;
+
+  beforeEach(() => {
+    process.env.PLAYBACK_TOKEN_SECRET = 'test-playback-token-secret-for-ci-only-32bytes';
+  });
+
+  afterEach(() => {
+    if (originalPlaybackTokenSecret === undefined) {
+      delete process.env.PLAYBACK_TOKEN_SECRET;
+    } else {
+      process.env.PLAYBACK_TOKEN_SECRET = originalPlaybackTokenSecret;
+    }
+  });
+
+  const channelRefInput = {
+    userId: 'user-123',
+    channelListCode: 'ABC123',
+    channelRef: { channelId: 'xt:6a84dce7f6a082630f39a9c3:535919', hls: true },
+  };
+
+  it('issues a compact token that references the channel instead of embedding the URL', () => {
+    const { token } = issuePlaybackToken(channelRefInput);
+    const payload = verifyPlaybackToken(token);
+
+    // The v2 channel-reference token must be meaningfully smaller than the
+    // legacy v1 token for the same user/channel — that is the whole point of
+    // the slim list payload for low-end TV sticks.
+    const legacy = issuePlaybackToken({
+      userId: 'user-123',
+      channelListCode: 'ABC123',
+      streamUrl: 'https://provider.example/live/user/secret/channel.m3u8?token=secret-value',
+    });
+    expect(token.length).toBeLessThan(legacy.token.length);
+
+    expect(payload).toMatchObject({
+      v: 2,
+      userId: 'user-123',
+      channelListCode: 'ABC123',
+      channelId: 'xt:6a84dce7f6a082630f39a9c3:535919',
+      hls: true,
+    });
+    expect((payload as any).streamUrl).toBeUndefined();
+  });
+
+  it('round-trips an alternate stream fingerprint', () => {
+    const altUrl = 'https://provider.example/alt1/index.m3u8';
+    const { token } = issuePlaybackToken({
+      userId: 'user-123',
+      channelListCode: 'ABC123',
+      channelRef: { channelId: 'xt:src:42', altUrlHash: altStreamHash(altUrl) },
+    });
+    const payload = verifyPlaybackToken(token) as any;
+    expect(payload.altUrlHash).toBe(altStreamHash(altUrl));
+    expect(payload.altUrlHash).toMatch(/^[0-9a-f]{16}$/);
+  });
+
+  it('rejects tampered v2 tokens', () => {
+    const { token } = issuePlaybackToken(channelRefInput);
+    const parts = token.split('.');
+    const mangled = [parts[0], parts[1], parts[2], parts[3].slice(0, -4) + 'AAAA'].join('.');
+    expect(verifyPlaybackToken(mangled)).toBeNull();
+  });
+
+  it('rejects v2 tokens with an invalid alternate fingerprint', () => {
+    const { token } = issuePlaybackToken({
+      userId: 'user-123',
+      channelListCode: 'ABC123',
+      channelRef: { channelId: 'xt:src:42', altUrlHash: 'not-a-hash' },
+    });
+    expect(verifyPlaybackToken(token)).toBeNull();
+  });
+
+  it('still verifies legacy v1 tokens after the v2 change', () => {
+    const { token } = issuePlaybackToken({
+      userId: 'user-123',
+      channelListCode: 'ABC123',
+      streamUrl: 'https://provider.example/live/user/secret/channel.m3u8?token=secret-value',
+    });
+    const payload = verifyPlaybackToken(token) as any;
+    expect(payload.v).toBe(1);
+    expect(payload.streamUrl).toBe('https://provider.example/live/user/secret/channel.m3u8?token=secret-value');
   });
 });

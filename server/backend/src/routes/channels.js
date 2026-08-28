@@ -8,7 +8,7 @@ const { recordPlaybackEvent } = require('../services/playback-event-service');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('./auth');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
-const { issuePlaybackToken } = require('../services/playback-token');
+const { issuePlaybackToken, altStreamHash } = require('../services/playback-token');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { escapeRegex } = require('../utils/escapeRegex');
 const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
@@ -187,26 +187,43 @@ async function getDirectPlaybackSourceIds() {
  * for these pre-issued tokens is created lazily on first playback (tv.js),
  * so no Redis sessions are burned per list fetch. Upstream credentials never
  * leave the server.
+ *
+ * v2 channel-reference tokens: the token carries the catalog `channelId`
+ * (plus a fingerprint for alternates) instead of the full upstream URL, which
+ * keeps the ~16k-channel sync payload ~35% smaller — large payloads crash
+ * low-end TV sticks. tv.js resolves the current URL from the Channel doc.
  */
 function tokenizeListForClient(channels, user, req) {
   const baseUrl = getPublicBaseUrl(req);
-  const makeUrl = (raw) => {
+  const makeUrl = (channel, raw, altHash) => {
     if (!raw || !/^https?:\/\//i.test(String(raw))) return '';
-    const { token } = issuePlaybackToken({
-      userId: String(user.id),
-      channelListCode: user.channelListCode,
-      streamUrl: raw,
-      upstreamHeaders: {},
-    });
+    const channelId = String(channel?.channelId || '').trim();
+    const { token } = issuePlaybackToken(
+      channelId
+        ? {
+            userId: String(user.id),
+            channelListCode: user.channelListCode,
+            channelRef: { channelId, altUrlHash: altHash, hls: true },
+          }
+        : {
+            userId: String(user.id),
+            channelListCode: user.channelListCode,
+            streamUrl: raw,
+            upstreamHeaders: {},
+          },
+    );
     return `${baseUrl}/api/v1/tv/playback/${token}.m3u8`;
   };
   return channels.map((raw, i) => {
     const safe = { ...raw };
-    if (raw.channelUrl) safe.channelUrl = makeUrl(raw.channelUrl);
+    if (raw.channelUrl) safe.channelUrl = makeUrl(raw, raw.channelUrl);
     safe.alternateStreams = (raw.alternateStreams || [])
       .filter((a) => a.liveness?.status !== 'dead' && a.flaggedBad?.isFlagged !== true)
       .slice(0, 10)
-      .map((a) => ({ ...a, streamUrl: a.streamUrl ? makeUrl(a.streamUrl) : '' }));
+      .map((a) => ({
+        ...a,
+        streamUrl: a.streamUrl ? makeUrl(raw, a.streamUrl, altStreamHash(a.streamUrl)) : '',
+      }));
     return presentChannelForClient(safe);
   });
 }

@@ -5,7 +5,7 @@ const User = require('../models/User');
 const Channel = require('../models/Channel');
 const { requireAuth } = require('./auth');
 const { audit } = require('../services/audit-log');
-const { issuePlaybackToken } = require('../services/playback-token');
+const { issuePlaybackToken, altStreamHash } = require('../services/playback-token');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const {
   hasRestrictedPresentationMarker,
@@ -18,11 +18,20 @@ function tokenizeUserChannel(channel, user, baseUrl) {
   const safe = { ...source, channelUrl: '' };
   if (!user.channelListCode) return presentChannelForClient(safe);
   if (source.channelUrl) {
-    const { token } = issuePlaybackToken({
-      userId: String(user._id),
-      channelListCode: user.channelListCode,
-      streamUrl: source.channelUrl,
-    });
+    const channelId = String(source.channelId || '').trim();
+    const { token } = issuePlaybackToken(
+      channelId
+        ? {
+            userId: String(user._id),
+            channelListCode: user.channelListCode,
+            channelRef: { channelId, hls: true },
+          }
+        : {
+            userId: String(user._id),
+            channelListCode: user.channelListCode,
+            streamUrl: source.channelUrl,
+          },
+    );
     safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}.m3u8`;
   }
   safe.alternateStreams = (source.alternateStreams || [])
@@ -30,11 +39,24 @@ function tokenizeUserChannel(channel, user, baseUrl) {
     .slice(0, 10)
     .map((alternate) => {
       if (!alternate.streamUrl) return { ...alternate, streamUrl: '' };
-      const { token } = issuePlaybackToken({
-        userId: String(user._id),
-        channelListCode: user.channelListCode,
-        streamUrl: alternate.streamUrl,
-      });
+      const channelId = String(source.channelId || '').trim();
+      const { token } = issuePlaybackToken(
+        channelId
+          ? {
+              userId: String(user._id),
+              channelListCode: user.channelListCode,
+              channelRef: {
+                channelId,
+                altUrlHash: altStreamHash(alternate.streamUrl),
+                hls: true,
+              },
+            }
+          : {
+              userId: String(user._id),
+              channelListCode: user.channelListCode,
+              streamUrl: alternate.streamUrl,
+            },
+      );
       return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}.m3u8` };
     });
   return presentChannelForClient(safe);
