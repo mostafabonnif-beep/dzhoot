@@ -145,6 +145,10 @@ services:
     image: mongo:7.0.19
     container_name: dzhoof-mongodb
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2048m
     volumes:
       - mongodb_data:/data/db
     networks:
