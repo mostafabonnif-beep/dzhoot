@@ -51,7 +51,7 @@ describe('Channel model', () => {
     expect(m3u).toContain('#EXTINF');
     expect(m3u).toContain('News Channel');
     expect(m3u).toContain('http://example.com/news.m3u8');
-    expect(m3u).toContain('group-title="دولي · أخبار"');
+    expect(m3u).toContain('group-title="News"');
     expect(m3u).toContain('catchup="append"');
     expect(m3u).not.toContain('catchup-source=');
     expect(m3u).not.toContain('upstream.example');
