@@ -5,6 +5,8 @@ const {
   presentationForChannel,
   presentChannelForClient,
   sortClientCatalogChannels,
+  cleanDisplayText,
+  cleanVodTitle,
 } = require('./catalog-presentation');
 
 describe('catalog presentation', () => {
@@ -76,5 +78,25 @@ describe('catalog presentation', () => {
     // DZ| before FR|; FR| NEWS before FR| SPORT; within FR| SPORT: order 1
     // (A Prime, then B Prime by name) before order 2.
     expect(sorted.map((channel: { channelId: string }) => channel.channelId)).toEqual(['3', '1', '5', '4', '2']);
+  });
+});
+
+describe('display-name cleaning', () => {
+  it('strips unicode small-caps and decorative symbols from groups/names', () => {
+    expect(cleanDisplayText('AR| ARABIC SPORTS ⚽ رياضة ᴴᴰ/ᴿᴬᵂ')).toBe('AR| ARABIC SPORTS رياضة');
+    expect(cleanDisplayText('AFR| AFRICA ⱽᴵᴾ ᴴᴰ/ᴿᴬᵂ')).toBe('AFR| AFRICA');
+    expect(cleanDisplayText('UK| 24/7 ▶ ᴴᴰ/ᴿᴬᵂ')).toBe('UK| 24/7');
+    expect(cleanDisplayText('DZ| قنوات جزائرية ᴴᴰ')).toBe('DZ| قنوات جزائرية');
+  });
+
+  it('keeps readable French/Arabic characters and basic punctuation', () => {
+    expect(cleanDisplayText('FR| CANAL+ SPORT')).toBe('FR| CANAL+ SPORT');
+    expect(cleanDisplayText('TR| RADIO MIX')).toBe('TR| RADIO MIX');
+  });
+
+  it('cleans VOD source prefixes from titles', () => {
+    expect(cleanVodTitle('4K-AR: 12 Years a Slave (2013)')).toBe('12 Years a Slave (2013)');
+    expect(cleanVodTitle('100 Girls (2000)')).toBe('100 Girls (2000)');
+    expect(cleanVodTitle('4K-AR: (X مراتي) اكس مراتي')).toBe('(X مراتي) اكس مراتي');
   });
 });
