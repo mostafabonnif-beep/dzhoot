@@ -253,7 +253,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
 
     // The full-catalog cache is only valid for unpaginated requests.
     if (!wantsPagination && catalogView && !isTvClient) {
-      const cached = await channelCache.get('catalog:list:presentation-v1');
+      const cached = await channelCache.get('catalog:list:presentation-v2');
       if (cached) return res.json(cached);
     }
 
@@ -316,7 +316,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       data,
     };
 
-    if (catalogView && !isTvClient) await channelCache.set('catalog:list:presentation-v1', payload);
+    if (catalogView && !isTvClient) await channelCache.set('catalog:list:presentation-v2', payload);
 
     res.json(payload);
   } catch (error) {
