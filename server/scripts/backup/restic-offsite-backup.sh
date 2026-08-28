@@ -98,7 +98,10 @@ tar -C "$(dirname "$COMPOSE_DIR")" -czf "$STAGING/recovery/server-source.tar.gz"
   --exclude='server/downloads' \
   --exclude='server/.git' \
   "$(basename "$COMPOSE_DIR")"
-sha256sum "$STAGING/recovery/mongodb.archive.gz" "$STAGING/recovery/server-source.tar.gz" > "$STAGING/recovery/SHA256SUMS"
+(
+  cd "$STAGING/recovery"
+  sha256sum mongodb.archive.gz server-source.tar.gz > SHA256SUMS
+)
 
 say 'Uploading encrypted recovery snapshot to the configured off-site repository.'
 restic backup "$STAGING/recovery" --tag dzhoof --tag production --tag "created-$STAMP"
