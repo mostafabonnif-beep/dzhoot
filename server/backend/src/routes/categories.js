@@ -8,7 +8,10 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
   try {
     // Scope to what the caller can actually see: admin/demo → shared catalog (ownerId:null);
     // a user → their own selection. Mirrors GET /channels so counts line up.
-    const isAdmin = req.user.role === 'Admin';
+    // TV clients (channelListCode) are served the shared catalog by /channels —
+    // their personal `channels` array is empty, so categories must mirror the
+    // catalog for them too, otherwise the category list comes back empty.
+    const isAdmin = req.user.role === 'Admin' || req.user.allCatalog === true || Boolean(req.user.channelListCode);
     const match = isAdmin
       ? { isActive: { $ne: false }, ownerId: null }
       : {
