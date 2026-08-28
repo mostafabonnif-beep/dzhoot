@@ -52,7 +52,10 @@ describe('catalog presentation', () => {
       }],
     });
 
-    expect(presented.channelGroup).toBe('فرنسا · أخبار');
+    // The supplier's own (already clean) group label is preserved for the
+    // familiar channel structure; the neutral presentation label is only a
+    // fallback when a channel has no raw group.
+    expect(presented.channelGroup).toBe('FR| NEWS');
     expect(presented.catalog).toEqual({ countryCode: 'FR', country: 'فرنسا', category: 'أخبار' });
     expect(presented.metadata).toEqual({ country: 'فرنسا', countryCode: 'FR', language: 'fr', quality: 'HD' });
     expect(presented.alternateStreams).toEqual([{ streamUrl: 'https://iptv.example/playback/alternate.m3u8', quality: null, liveness: undefined, flaggedBad: undefined }]);
@@ -62,12 +65,16 @@ describe('catalog presentation', () => {
     expect(JSON.stringify(presented)).not.toContain('internal-drm-key');
   });
 
-  it('sorts visible channels by country, then category, then display name', () => {
+  it('sorts visible channels by supplier group, then per-group order, then name', () => {
     const sorted = sortClientCatalogChannels([
-      { channelId: '3', channelName: 'Z Sports', channelGroup: 'DZ| SPORT' },
-      { channelId: '1', channelName: 'B News', channelGroup: 'FR| NEWS' },
-      { channelId: '2', channelName: 'A Sports', channelGroup: 'FR| SPORT' },
+      { channelId: '3', channelName: 'Z Sports', channelGroup: 'DZ| SPORT', order: 10 },
+      { channelId: '1', channelName: 'B News', channelGroup: 'FR| NEWS', order: 1 },
+      { channelId: '2', channelName: 'A Sports', channelGroup: 'FR| SPORT', order: 2 },
+      { channelId: '4', channelName: 'B Prime', channelGroup: 'FR| SPORT', order: 1 },
+      { channelId: '5', channelName: 'A Prime', channelGroup: 'FR| SPORT', order: 1 },
     ]);
-    expect(sorted.map((channel: { channelId: string }) => channel.channelId)).toEqual(['3', '1', '2']);
+    // DZ| before FR|; FR| NEWS before FR| SPORT; within FR| SPORT: order 1
+    // (A Prime, then B Prime by name) before order 2.
+    expect(sorted.map((channel: { channelId: string }) => channel.channelId)).toEqual(['3', '1', '5', '4', '2']);
   });
 });

@@ -70,6 +70,11 @@ async function optionalAuth(req: Request, res: Response, next: NextFunction) {
 
   try {
     await resolveUser(req, res, () => undefined);
+    // resolveUser answers 401/500 directly (it does not throw); if it already
+    // sent a response, the route handler must not run — otherwise the handler's
+    // res.json() throws ERR_HTTP_HEADERS_SENT (seen on /api/v1/catalog/* with a
+    // stale session header) and the server logs an unhandled rejection.
+    if (res.headersSent) return;
     return next();
   } catch {
     (req as any).user = null;

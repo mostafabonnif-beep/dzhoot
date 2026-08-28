@@ -177,11 +177,16 @@ function presentChannelForClient(channel) {
   delete safeChannel.activeReferrer;
   delete safeChannel.channelDrmKey;
   const presentation = presentationForChannel(source);
+  // Prefer the supplier's own group label (already clean: the catalog query
+  // excludes ###/NEO-marked groups) so viewers keep the familiar channel
+  // structure and order; fall back to the neutral "country · category" label
+  // only when a channel has no raw group.
+  const rawGroup = asText(source?.channelGroup);
   return {
     ...safeChannel,
     channelName: asText(source?.channelName),
     tvgName: asText(source?.tvgName) || asText(source?.channelName),
-    channelGroup: presentation.group,
+    channelGroup: rawGroup || presentation.group,
     metadata: safeClientMetadata(source?.metadata, presentation),
     alternateStreams: safeClientAlternates(source?.alternateStreams),
     catalog: {
@@ -193,11 +198,15 @@ function presentChannelForClient(channel) {
 }
 
 function compareClientCatalogChannels(left, right) {
-  const leftPresentation = presentationForChannel(left);
-  const rightPresentation = presentationForChannel(right);
+  // Restore the supplier's intended ordering (group, then per-group order,
+  // then name) instead of re-sorting by the neutral presentation labels —
+  // the operator's curated channel structure must stay visible to viewers.
+  const groupCmp = asText(left?.channelGroup).localeCompare(asText(right?.channelGroup), 'ar');
+  if (groupCmp !== 0) return groupCmp;
+  const leftOrder = Number(left?.order) || 0;
+  const rightOrder = Number(right?.order) || 0;
+  if (leftOrder !== rightOrder) return leftOrder - rightOrder;
   return (
-    leftPresentation.country.localeCompare(rightPresentation.country, 'ar') ||
-    leftPresentation.category.localeCompare(rightPresentation.category, 'ar') ||
     asText(left?.channelName).localeCompare(asText(right?.channelName), 'ar') ||
     asText(left?.channelId).localeCompare(asText(right?.channelId))
   );
