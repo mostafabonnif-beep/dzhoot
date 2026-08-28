@@ -217,7 +217,12 @@ function buildM3ULine(ch: {
     m3uLine += ` tvg-logo="${esc(logo)}"`;
   }
   const presentation = presentationForChannel(ch);
-  m3uLine += ` group-title="${esc(presentation.group)}"`;
+  // Prefer the supplier's own (already clean) group label so customer
+  // playlists keep the familiar channel structure; fall back to the neutral
+  // presentation label only when the raw group is absent. Mirrors
+  // presentChannelForClient in utils/catalog-presentation.
+  const rawGroup = typeof ch.channelGroup === 'string' ? ch.channelGroup.trim() : '';
+  m3uLine += ` group-title="${esc(rawGroup || presentation.group)}"`;
   if (ch.catchup?.type) {
     m3uLine += ` catchup="${esc(ch.catchup.type)}"`;
     // catchup.source is an upstream URL template and may carry credentials. It
