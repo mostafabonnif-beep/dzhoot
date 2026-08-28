@@ -74,6 +74,66 @@ function asText(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+// ── Display-name cleaning ────────────────────────────────────────────────
+// Supplier catalogs decorate names with phonetic/small-caps unicode
+// (ᴴᴰ ᴿᴬᵂ ⱽᴵᴾ ᵗᵛ), geometric shapes (▶ ● ◆) and emoji (⚽ 🅻🅸🆅🅴 🔴). They
+// look broken on TV screens. Strip everything outside a conservative allowlist
+// (letters/digits + basic punctuation) while keeping the readable name and the
+// supplier's ordering intact.
+
+const DECORATIVE_RANGES = [
+  [0x1d00, 0x1d7f], // phonetic extensions (ᴬ ᴴᴰ ᴿ ...)
+  [0x1d80, 0x1dbf], // phonetic extensions supplement
+  [0x2070, 0x209f], // superscripts & subscripts (⁰ ᵃ ᵛ ...)
+  [0x2c60, 0x2c7f], // latin extended-C (ⱽ)
+  [0x2190, 0x21ff], // arrows (▶ is U+25B6, but keep ranges broad)
+  [0x25a0, 0x25ff], // geometric shapes (● ◆ ▸ ...)
+  [0x2600, 0x26ff], // misc symbols (⚽ ☑ ★ ...)
+  [0x2700, 0x27bf], // dingbats (✚ ❯ ✓ ...)
+  [0x2b00, 0x2bff], // misc symbols and arrows
+  [0x1f000, 0x1faff], // emoji / enclosed letters (🅻🅸🆅🅴 🔴 🏴 ...)
+  [0x1fb00, 0x1fbff], // symbols for legacy computing
+  [0x00a0, 0x00bf], // latin-1 punctuation/symbols (keep é? no — strip ª º « » © etc.)
+];
+
+const ALLOWED_PUNCTUATION = new Set('|:&/.,()-\'’–—+!?%#*[]');
+const DECORATIVE_EMOJI = new Set('⚽🏀🏆🎬🎵🎶📺🔥⭐🌟💎👑💯✅❌❤️💙💚🚀☑✔➤➥»«⏺⏩⏪⏸🅻🅸🆅🅴');
+
+function isAllowedCodePoint(code) {
+  if (DECORATIVE_EMOJI.has(String.fromCodePoint(code))) return false;
+  for (const [lo, hi] of DECORATIVE_RANGES) {
+    if (code >= lo && code <= hi) return false;
+  }
+  const cat = String.fromCodePoint(code);
+  if (ALLOWED_PUNCTUATION.has(cat)) return true;
+  // Letters (incl. Arabic), digits, and spaces survive.
+  return /[\p{L}\p{N}\p{Zs}]/u.test(cat);
+}
+
+/**
+ * Remove supplier decorations (small-caps unicode, symbols, emoji) from a
+ * display string while preserving the readable name. Falls back to the
+ * original text when the result would be blank.
+ */
+function cleanDisplayText(value) {
+  const raw = asText(value);
+  if (!raw) return '';
+  let out = '';
+  for (const ch of raw) {
+    const code = ch.codePointAt(0);
+    if (isAllowedCodePoint(code)) out += ch;
+  }
+  // Collapse runs of whitespace, drop leading/trailing separators.
+  const cleaned = out.replace(/\s+/g, ' ').replace(/^[\s|:,\-—/]+|[\s|:,\-—/]+$/g, '').trim();
+  return cleaned || raw.trim();
+}
+
+/** Strip a leading source label like "4K-AR: " from VOD titles. */
+function cleanVodTitle(value) {
+  const raw = asText(value);
+  return raw.replace(/^[A-Z0-9]{1,4}-?[A-Z]{0,3}:\s*/i, '');
+}
+
 function displayFields(channel) {
   return [
     asText(channel?.channelName),
@@ -177,15 +237,15 @@ function presentChannelForClient(channel) {
   delete safeChannel.activeReferrer;
   delete safeChannel.channelDrmKey;
   const presentation = presentationForChannel(source);
-  // Prefer the supplier's own group label (already clean: the catalog query
-  // excludes ###/NEO-marked groups) so viewers keep the familiar channel
-  // structure and order; fall back to the neutral "country · category" label
-  // only when a channel has no raw group.
-  const rawGroup = asText(source?.channelGroup);
+  // Prefer the supplier's own group label (already clean of ###/NEO markers;
+  // here additionally stripped of unicode decorations) so viewers keep the
+  // familiar channel structure and order; fall back to the neutral
+  // "country · category" label only when a channel has no raw group.
+  const rawGroup = cleanDisplayText(source?.channelGroup);
   return {
     ...safeChannel,
-    channelName: asText(source?.channelName),
-    tvgName: asText(source?.tvgName) || asText(source?.channelName),
+    channelName: cleanDisplayText(source?.channelName),
+    tvgName: cleanDisplayText(source?.tvgName) || cleanDisplayText(source?.channelName),
     channelGroup: rawGroup || presentation.group,
     metadata: safeClientMetadata(source?.metadata, presentation),
     alternateStreams: safeClientAlternates(source?.alternateStreams),
@@ -224,4 +284,6 @@ module.exports = {
   safeClientMetadata,
   safeClientAlternates,
   sortClientCatalogChannels,
+  cleanDisplayText,
+  cleanVodTitle,
 };

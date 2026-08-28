@@ -9,6 +9,7 @@ const EpgProgram = require('../models/EpgProgram');
 const { optionalAuth } = require('../middleware/resolveUser');
 const { escapeRegex } = require('../utils/escapeRegex');
 const { ensureSeriesSeasons, ensureSeasonEpisodes } = require('../services/xtream-service');
+const { cleanVodTitle, cleanDisplayText } = require('../utils/catalog-presentation');
 
 // Lazy upstream episode loading: a series whose seasons were never fetched is
 // fetched from the panel at most once per this window (the episodesFetchedAt
@@ -23,6 +24,16 @@ function episodeFetchStale(series) {
 // Auth is optional — anonymous browsing is allowed; subscription gating is
 // enforced separately at /streams/authorize.
 router.use(optionalAuth);
+
+
+// Strip supplier source labels/decorations from VOD display titles
+// (e.g. "4K-AR: 12 Years a Slave" → "12 Years a Slave").
+function presentVod(doc) {
+  if (!doc) return doc;
+  const out = { ...doc };
+  if (typeof out.title === 'string') out.title = cleanVodTitle(cleanDisplayText(out.title));
+  return out;
+}
 
 function parseId(id) {
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
@@ -76,7 +87,7 @@ router.get('/movies', async (req, res) => {
       Movie.countDocuments(filter),
       Movie.find(filter).select('-streamUrl').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     ]);
-    return res.json({ success: true, data, totalCount, page, limit });
+    return res.json({ success: true, data: data.map(presentVod), totalCount, page, limit });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
@@ -89,7 +100,7 @@ router.get('/movies/:id', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid movie id' });
     const movie = await Movie.findOne({ _id: id, isActive: true }).select('-streamUrl').lean();
     if (!movie) return res.status(404).json({ success: false, error: 'Movie not found' });
-    return res.json({ success: true, data: movie });
+    return res.json({ success: true, data: presentVod(movie) });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }

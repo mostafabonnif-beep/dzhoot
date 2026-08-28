@@ -5,6 +5,7 @@ const {
   hasRestrictedPresentationMarker,
   presentationForChannel,
   publicCatalogPresentationQuery,
+  cleanDisplayText,
 } = require('../utils/catalog-presentation');
 
 const channelSchema = new Schema<IChannelDocument>(
@@ -221,7 +222,7 @@ function buildM3ULine(ch: {
   // playlists keep the familiar channel structure; fall back to the neutral
   // presentation label only when the raw group is absent. Mirrors
   // presentChannelForClient in utils/catalog-presentation.
-  const rawGroup = typeof ch.channelGroup === 'string' ? ch.channelGroup.trim() : '';
+  const rawGroup = cleanDisplayText(ch.channelGroup);
   m3uLine += ` group-title="${esc(rawGroup || presentation.group)}"`;
   if (ch.catchup?.type) {
     m3uLine += ` catchup="${esc(ch.catchup.type)}"`;
@@ -231,7 +232,7 @@ function buildM3ULine(ch: {
     if (ch.catchup.days) m3uLine += ` catchup-days="${ch.catchup.days}"`;
   }
 
-  m3uLine += `,${ch.channelName}\n${ch.channelUrl}`;
+  m3uLine += `,${cleanDisplayText(ch.channelName) || ch.channelName}\n${ch.channelUrl}`;
 
   return m3uLine;
 }
