@@ -26,13 +26,25 @@ import {
   Bell,
   Video,
   Store,
+  ExternalLink,
+  type LucideIcon,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
 import SidebarVersion from './sidebar-version';
 import { BrandMark } from './brand-mark';
 import { useLocale } from '@/components/locale-provider';
 
-const adminLinks = [
+type NavigationLink = {
+  href: string;
+  labelKey: string;
+  icon: LucideIcon;
+  external?: boolean;
+};
+
+const dz1TvStudioUrl = process.env.NEXT_PUBLIC_DZ1_TV_STUDIO_URL?.trim();
+const hasSafeDz1TvStudioUrl = Boolean(dz1TvStudioUrl && /^https:\/\/[a-z0-9.-]+(?::\d+)?(?:\/|$)/i.test(dz1TvStudioUrl));
+
+const adminLinks: NavigationLink[] = [
   { href: '/admin', labelKey: 'nav.dashboard', icon: LayoutDashboard },
   { href: '/admin/quick-pick', labelKey: 'nav.quickPick', icon: Zap },
   { href: '/admin/channels', labelKey: 'nav.channels', icon: Tv },
@@ -58,7 +70,11 @@ const adminLinks = [
   { href: '/admin/settings', labelKey: 'nav.settings', icon: Settings },
 ];
 
-const userLinks = [
+const dz1TvStudioLinks: NavigationLink[] = hasSafeDz1TvStudioUrl
+  ? [{ href: dz1TvStudioUrl!, labelKey: 'nav.dz1TvStudio', icon: ExternalLink, external: true }]
+  : [];
+
+const userLinks: NavigationLink[] = [
   { href: '/user', labelKey: 'nav.dashboard', icon: LayoutDashboard },
   { href: '/user/quick-pick', labelKey: 'nav.quickPick', icon: Zap },
   { href: '/user/channels', labelKey: 'nav.myChannels', icon: Tv },
@@ -75,6 +91,7 @@ const adminNavigationGroups = [
   { labelKey: 'nav.section.customers', links: adminLinks.slice(5, 11) },
   { labelKey: 'nav.section.sources', links: adminLinks.slice(11, 16) },
   { labelKey: 'nav.section.operations', links: adminLinks.slice(16) },
+  ...(dz1TvStudioLinks.length ? [{ labelKey: 'nav.section.dz1Tv', links: dz1TvStudioLinks }] : []),
 ];
 
 export function Sidebar({ role }: { role: 'admin' | 'user' }) {
@@ -130,12 +147,14 @@ export function Sidebar({ role }: { role: 'admin' | 'user' }) {
               <div className="space-y-1.5">
                 {group.links.map((link) => {
                   const Icon = link.icon;
-                  const isActive = pathname === link.href || (link.href !== '/admin' && link.href !== '/user' && pathname.startsWith(link.href));
+                  const isActive = !link.external && (pathname === link.href || (link.href !== '/admin' && link.href !== '/user' && pathname.startsWith(link.href)));
 
                   return (
                     <Link
                       key={link.href}
                       href={link.href}
+                      target={link.external ? '_blank' : undefined}
+                      rel={link.external ? 'noopener noreferrer' : undefined}
                       onClick={() => setMobileSidebarOpen(false)}
                       title={sidebarCollapsed ? t(link.labelKey) : undefined}
                       className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium transition-all ${
