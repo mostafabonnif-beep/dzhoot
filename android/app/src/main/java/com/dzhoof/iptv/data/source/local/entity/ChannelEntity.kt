@@ -35,6 +35,9 @@ data class ChannelEntity(
     val country: String?,
     
     val groupTitle: String?,
+
+    /** Supplier sort order within its group (curated channel order). */
+    val order: Int = 0,
     
     val tvgId: String?,
     

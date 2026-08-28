@@ -8,6 +8,8 @@ data class ChannelUiModel(
     val logoUrl: String?,
     val streamUrl: String? = null,
     val category: String,
+    /** Supplier sort order within its group (curated channel order). */
+    val order: Int = 0,
     val isFavorite: Boolean,
     val tvgId: String? = null,
     val healthStatus: ChannelHealthStatus = ChannelHealthStatus.UNKNOWN,

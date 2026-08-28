@@ -22,6 +22,7 @@ class ChannelUiMapper @Inject constructor() {
             logoUrl = channel.logoUrl,
             streamUrl = channel.streamUrl,
             category = channel.category,
+            order = channel.order,
             tvgId = channel.tvgId,
             isFavorite = channel.isFavorite,
             healthStatus = healthStatus,

@@ -29,7 +29,11 @@ class ChannelUiMapperTest {
         tvgId: String? = "test.tvg",
         isFavorite: Boolean = false,
         alternateStreamUrls: List<String> = emptyList()
-    ) = Channel(id, name, streamUrl, logoUrl, category, language, country, tvgId, isFavorite, alternateStreamUrls)
+    ) = Channel(
+        id = id, name = name, streamUrl = streamUrl, logoUrl = logoUrl,
+        category = category, order = 0, language = language, country = country,
+        tvgId = tvgId, isFavorite = isFavorite, alternateStreamUrls = alternateStreamUrls,
+    )
 
     @Test
     fun `toUiModel maps all fields with defaults`() {

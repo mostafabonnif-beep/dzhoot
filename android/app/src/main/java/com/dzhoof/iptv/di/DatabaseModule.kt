@@ -49,7 +49,8 @@ object DatabaseModule {
                 DzhoofDatabase.MIGRATION_5_6,
                 DzhoofDatabase.MIGRATION_6_7,
                 DzhoofDatabase.MIGRATION_7_8,
-                DzhoofDatabase.MIGRATION_8_9
+                DzhoofDatabase.MIGRATION_8_9,
+                DzhoofDatabase.MIGRATION_9_10
             )
             .build()
     }

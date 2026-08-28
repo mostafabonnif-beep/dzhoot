@@ -406,9 +406,11 @@ class ChannelsViewModel @Inject constructor(
 
     private fun sortChannelsForTv(channels: List<ChannelUiModel>): List<ChannelUiModel> =
         channels.sortedWith(
+            // Favorites first, then the supplier's curated order within the group,
+            // then name. Health is shown as status dots, not used to scramble the
+            // channel order (the operator's curated structure must stay visible).
             compareByDescending<ChannelUiModel> { it.isFavorite }
-                .thenByDescending { healthRank(it) }
-                .thenByDescending { it.serverHealthScore ?: -1 }
+                .thenBy { it.order }
                 .thenBy { it.name.lowercase() }
         )
 
