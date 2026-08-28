@@ -246,7 +246,10 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     // Paginated browsing (web panel "Add from system"): server-side text search
     // + pagination so the browser never downloads the full ~16k-channel catalog.
     const p = Math.max(parseInt(req.query.page, 10) || 1, 1);
-    const ps = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 50, 1), 200);
+    // TV clients (the Android app's paged sync) get a generous page size so the
+    // ~16k catalog syncs in a handful of requests; web stays at 200 max.
+    const maxPageSize = isTvClient ? 5000 : 200;
+    const ps = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 50, 1), maxPageSize);
     const searchQ = typeof req.query.search === 'string' ? req.query.search.trim() : '';
     const wantsPagination =
       req.query.page !== undefined || req.query.pageSize !== undefined || searchQ !== '';
