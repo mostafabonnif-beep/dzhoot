@@ -32,11 +32,16 @@ esac
 : "${OFFSITE_RESTIC_PASSWORD_FILE:?OFFSITE_RESTIC_PASSWORD_FILE is required}"
 [ -f "$OFFSITE_RESTIC_PASSWORD_FILE" ] || die 'Restic password file is missing.'
 [ "$(stat -c '%a' "$OFFSITE_RESTIC_PASSWORD_FILE")" = '600' ] || die 'Restic password file must be chmod 600.'
+if [ -n "${OFFSITE_RCLONE_CONFIG:-}" ]; then
+  [ -f "$OFFSITE_RCLONE_CONFIG" ] || die 'Rclone configuration file is missing.'
+  [ "$(stat -c '%a' "$OFFSITE_RCLONE_CONFIG")" = '600' ] || die 'Rclone configuration file must be chmod 600.'
+fi
 command -v restic >/dev/null 2>&1 || die 'restic is not installed.'
 command -v docker >/dev/null 2>&1 || die 'docker is not installed.'
 
 export RESTIC_REPOSITORY="$OFFSITE_RESTIC_REPOSITORY"
 export RESTIC_PASSWORD_FILE="$OFFSITE_RESTIC_PASSWORD_FILE"
+[ -n "${OFFSITE_RCLONE_CONFIG:-}" ] && export RCLONE_CONFIG="$OFFSITE_RCLONE_CONFIG"
 # S3-compatible backends use these only when they are present in the protected
 # config. SFTP repositories need none of them.
 [ -n "${OFFSITE_AWS_ACCESS_KEY_ID:-}" ] && export AWS_ACCESS_KEY_ID="$OFFSITE_AWS_ACCESS_KEY_ID"
