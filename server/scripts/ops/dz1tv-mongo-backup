@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# نسخ احتياطي يومي لقاعدة DZ1 TV + تنظيف النسخ الأقدم من 14 يوماً
+set -u
+PROJECT=/opt/dz1-tv/current
+ENV_FILE=$PROJECT/deploy/.env.production
+export DZ1_BACKUP_DIR=/opt/dz1-tv/backups
+export DZ1_MONGO_APP_USER=$(grep "^DZ1_MONGO_APP_USER=" "$ENV_FILE" | cut -d= -f2-)
+export DZ1_MONGO_APP_PASSWORD=$(grep "^DZ1_MONGO_APP_PASSWORD=" "$ENV_FILE" | cut -d= -f2-)
+"$PROJECT/deploy/backup-mongodb.sh" || exit 1
+find /opt/dz1-tv/backups -name "dz1-tv-mongodb-*.archive.gz" -mtime +14 -delete
+find /opt/dz1-tv/backups -name "dz1-tv-mongodb-*.sha256" -mtime +14 -delete
