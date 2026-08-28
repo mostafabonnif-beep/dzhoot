@@ -8,8 +8,6 @@ const { recordPlaybackEvent } = require('../services/playback-event-service');
 const User = require('../models/User');
 const { requireAuth, requireAdmin } = require('./auth');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
-const { issuePlaybackToken, altStreamHash } = require('../services/playback-token');
-const { getPublicBaseUrl } = require('../utils/public-url');
 const { escapeRegex } = require('../utils/escapeRegex');
 const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
 const { audit } = require('../services/audit-log');
@@ -182,48 +180,21 @@ async function getDirectPlaybackSourceIds() {
 }
 
 /**
- * Replace raw upstream URLs with short-lived server playback tokens for TV
- * clients (the Android app plays the tokenized same-origin URL). The session
- * for these pre-issued tokens is created lazily on first playback (tv.js),
- * so no Redis sessions are burned per list fetch. Upstream credentials never
- * leave the server.
- *
- * v2 channel-reference tokens: the token carries the catalog `channelId`
- * (plus a fingerprint for alternates) instead of the full upstream URL, which
- * keeps the ~16k-channel sync payload ~35% smaller — large payloads crash
- * low-end TV sticks. tv.js resolves the current URL from the Channel doc.
+ * TV list presentation for the Android app. Playback URLs are intentionally
+ * NOT embedded: the app requests a short-lived token per play via
+ * POST /tv/playback-token (primary slot 0, alternates slots 1..3) and the
+ * health scanner treats blank/tokenized URLs as UNKNOWN (the server owns
+ * health via the watchdog + playback reports). Stripping the URLs shrinks the
+ * ~16k-channel sync payload by ~35% — large payloads crash low-end TV sticks
+ * and slow the app's initial load.
  */
 function tokenizeListForClient(channels, user, req) {
-  const baseUrl = getPublicBaseUrl(req);
-  const makeUrl = (channel, raw, altHash) => {
-    if (!raw || !/^https?:\/\//i.test(String(raw))) return '';
-    const channelId = String(channel?.channelId || '').trim();
-    const { token } = issuePlaybackToken(
-      channelId
-        ? {
-            userId: String(user.id),
-            channelListCode: user.channelListCode,
-            channelRef: { channelId, altUrlHash: altHash, hls: true },
-          }
-        : {
-            userId: String(user.id),
-            channelListCode: user.channelListCode,
-            streamUrl: raw,
-            upstreamHeaders: {},
-          },
-    );
-    return `${baseUrl}/api/v1/tv/playback/${token}.m3u8`;
-  };
-  return channels.map((raw, i) => {
-    const safe = { ...raw };
-    if (raw.channelUrl) safe.channelUrl = makeUrl(raw, raw.channelUrl);
+  return channels.map((raw) => {
+    const safe = { ...raw, channelUrl: '' };
     safe.alternateStreams = (raw.alternateStreams || [])
       .filter((a) => a.liveness?.status !== 'dead' && a.flaggedBad?.isFlagged !== true)
       .slice(0, 10)
-      .map((a) => ({
-        ...a,
-        streamUrl: a.streamUrl ? makeUrl(raw, a.streamUrl, altStreamHash(a.streamUrl)) : '',
-      }));
+      .map((a) => ({ ...a, streamUrl: '' }));
     return presentChannelForClient(safe);
   });
 }
