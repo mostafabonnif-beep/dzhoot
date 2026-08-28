@@ -52,7 +52,7 @@ import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
         StreamMetricsEntity::class,
         EpgProgramEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = true
 )
 abstract class DzhoofDatabase : RoomDatabase() {
@@ -217,6 +217,13 @@ abstract class DzhoofDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE `channels` ADD COLUMN `catchupType` TEXT DEFAULT NULL")
                 db.execSQL("ALTER TABLE `channels` ADD COLUMN `catchupDays` INTEGER DEFAULT NULL")
+            }
+        }
+
+        /** v9→v10: Add supplier order column to channels (curated ordering). */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `channels` ADD COLUMN `order` INTEGER NOT NULL DEFAULT 0")
             }
         }
     }

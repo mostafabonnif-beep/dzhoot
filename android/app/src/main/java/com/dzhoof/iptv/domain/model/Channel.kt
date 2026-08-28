@@ -23,6 +23,8 @@ data class Channel(
     val streamUrl: String,
     val logoUrl: String?,
     val category: String,
+    /** Supplier sort order within its group (curated channel order). */
+    val order: Int = 0,
     val language: String?,
     val country: String?,
     val tvgId: String? = null,

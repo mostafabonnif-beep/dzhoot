@@ -55,6 +55,12 @@ interface DzhoofApiService {
     @GET("api/v1/channels")
     suspend fun getChannels(): Response<ChannelsResponse>
 
+    @GET("api/v1/channels")
+    suspend fun getChannelsPage(
+        @Query("page") page: Int,
+        @Query("pageSize") pageSize: Int
+    ): Response<ChannelsResponse>
+
     @POST("api/v1/tv/playback-token")
     suspend fun issuePlaybackToken(
         @Body request: PlaybackTokenRequest

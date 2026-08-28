@@ -25,6 +25,9 @@ data class ChannelDto(
     @SerializedName("channelGroup")
     val groupTitle: String?,
 
+    /** Supplier sort order within its group (curated channel order). */
+    val order: Int = 0,
+
     @SerializedName("channelDrmKey")
     val drmKey: String? = null,
 

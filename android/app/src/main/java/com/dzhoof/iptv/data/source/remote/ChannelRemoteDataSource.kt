@@ -34,8 +34,28 @@ class ChannelRemoteDataSource @Inject constructor(
      */
     suspend fun fetchChannels(): Result<List<ChannelDto>> = withContext(dispatcher) {
         try {
-            val response = apiService.getChannels()
-            handleResponse(response) { it.data }
+            // Paged sync: fetch in chunks (server caps TV clients at 5000/page) so
+            // low-end TV boxes never parse one huge JSON payload at once. The sort
+            // is deterministic (group, order) so pages never overlap or gap.
+            val pageSize = 5000
+            val all = ArrayList<ChannelDto>()
+            var page = 1
+            while (true) {
+                val response = apiService.getChannelsPage(page, pageSize)
+                if (!response.isSuccessful) {
+                    return@withContext handleResponse(response) { it.data }
+                }
+                val body = response.body()
+                if (body == null) {
+                    return@withContext Result.Error(UnknownException("Response body is null", null))
+                }
+                val data = body.data ?: emptyList()
+                all.addAll(data)
+                if (data.size < pageSize) break
+                page++
+                if (page > 20) break // safety net — never loop forever
+            }
+            Result.Success(all)
         } catch (e: IOException) {
             Result.Error(
                 NetworkException("Network error: ${e.message}", e)

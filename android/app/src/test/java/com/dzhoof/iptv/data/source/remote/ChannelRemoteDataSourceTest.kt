@@ -54,7 +54,7 @@ class ChannelRemoteDataSourceTest {
             isActive = true
         )
         val response = ChannelsResponse(data = listOf(channelDto))
-        coEvery { apiService.getChannels() } returns Response.success(response)
+        coEvery { apiService.getChannelsPage(any(), any()) } returns Response.success(response)
         
         // When
         val result = dataSource.fetchChannels()
@@ -68,7 +68,7 @@ class ChannelRemoteDataSourceTest {
     @Test
     fun `fetchChannels returns error when response body is null`() = runTest {
         // Given
-        coEvery { apiService.getChannels() } returns Response.success(null)
+        coEvery { apiService.getChannelsPage(any(), any()) } returns Response.success(null)
         
         // When
         val result = dataSource.fetchChannels()
@@ -85,7 +85,7 @@ class ChannelRemoteDataSourceTest {
             404,
             "Not found".toResponseBody()
         )
-        coEvery { apiService.getChannels() } returns errorResponse
+        coEvery { apiService.getChannelsPage(any(), any()) } returns errorResponse
         
         // When
         val result = dataSource.fetchChannels()
@@ -102,7 +102,7 @@ class ChannelRemoteDataSourceTest {
             500,
             "Server error".toResponseBody()
         )
-        coEvery { apiService.getChannels() } returns errorResponse
+        coEvery { apiService.getChannelsPage(any(), any()) } returns errorResponse
         
         // When
         val result = dataSource.fetchChannels()
@@ -115,7 +115,7 @@ class ChannelRemoteDataSourceTest {
     @Test
     fun `fetchChannels returns error when network exception occurs`() = runTest {
         // Given
-        coEvery { apiService.getChannels() } throws IOException("Network error")
+        coEvery { apiService.getChannelsPage(any(), any()) } throws IOException("Network error")
         
         // When
         val result = dataSource.fetchChannels()
