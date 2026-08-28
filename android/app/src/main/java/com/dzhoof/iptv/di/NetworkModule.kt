@@ -53,8 +53,8 @@ object NetworkModule {
         // every ~90 days, which breaks a hardcoded pin), and BYO sources use arbitrary
         // hosts. Standard system-CA TLS validation still applies.
         return OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
 
             .addInterceptor(
