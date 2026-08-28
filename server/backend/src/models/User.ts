@@ -2,7 +2,7 @@ import mongoose, { Schema, Model } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { IUserDocument, IUserModel } from '@dzhoof/shared';
-import { issuePlaybackToken } from '../services/playback-token';
+import { issuePlaybackToken, altStreamHash } from '../services/playback-token';
 
 const {
   hasRestrictedPresentationMarker,
@@ -266,14 +266,30 @@ userSchema.methods.generateUserPlaylist = async function (
     );
     const sourceUrl = primaryDead || primaryFlagged ? viableAlternate?.streamUrl : channel.channelUrl;
     if (!sourceUrl || !this.channelListCode) continue;
-    const { token } = issuePlaybackToken({
-      userId: String(this._id),
-      channelListCode: this.channelListCode,
-      streamUrl: sourceUrl,
-      // Same master switch as the API: without ALLOW_DIRECT_PLAYBACK=true the
-      // playlist only ever emits server-relayed URLs (our sources stay hidden).
-      direct: isDirectSource && process.env.ALLOW_DIRECT_PLAYBACK === 'true' ? true : undefined,
-    });
+    const channelId = String((channel as any).channelId || '').trim();
+    const usedAlternate = sourceUrl !== (channel as any).channelUrl;
+    const direct = isDirectSource && process.env.ALLOW_DIRECT_PLAYBACK === 'true' ? true : undefined;
+    const { token } = issuePlaybackToken(
+      channelId
+        ? {
+            userId: String(this._id),
+            channelListCode: this.channelListCode,
+            channelRef: {
+              channelId,
+              altUrlHash: usedAlternate ? altStreamHash(sourceUrl) : undefined,
+              hls: true,
+            },
+            direct,
+          }
+        : {
+            userId: String(this._id),
+            channelListCode: this.channelListCode,
+            streamUrl: sourceUrl,
+            // Same master switch as the API: without ALLOW_DIRECT_PLAYBACK=true the
+            // playlist only ever emits server-relayed URLs (our sources stay hidden).
+            direct,
+          },
+    );
     const playbackUrl = `${baseUrl || ''}/api/v1/tv/playback/${token}.m3u8`;
     // toM3U(baseUrl) rewrites tvg-logo through our logo proxy as well.
     m3uContent += `${channel.toM3U(baseUrl).replace(channel.channelUrl, playbackUrl)}\n\n`;

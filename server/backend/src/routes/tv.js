@@ -12,7 +12,7 @@ const PairingRequest = require('../models/PairingRequest');
 const { isValidObjectId } = require('./catalog-helpers');
 const { epgService } = require('../services/epg-service');
 const { audit } = require('../services/audit-log');
-const { issuePlaybackToken, verifyPlaybackToken } = require('../services/playback-token');
+const { issuePlaybackToken, verifyPlaybackToken, altStreamHash } = require('../services/playback-token');
 const { proxyUpstreamStream, resolveSegmentUrlBySequence } = require('../services/upstream-proxy');
 const {
   isCatchupSupported,
@@ -135,6 +135,59 @@ function playbackTokenUrl(baseUrl, token, streamUrl) {
   return `${baseUrl}/api/v1/tv/playback/${token}${suffix}`;
 }
 
+// ── v2 channel-reference token resolution ─────────────────────────────────
+// v2 tokens carry `channelId` (+ optional alternate fingerprint) instead of
+// the upstream URL, so the ~16k-channel sync payload stays small enough for
+// low-end TV sticks. Resolve the CURRENT stream URL from the Channel document
+// at play time. Cache briefly: segment requests resolve per segment and a
+// 60s window is far beyond the live-window rotation granularity.
+
+const resolvedTargetCache = new Map(); // nonce -> { at, value }
+
+function cachedResolvedTarget(nonce) {
+  const hit = resolvedTargetCache.get(nonce);
+  if (hit && hit.at > Date.now() - 60_000) return hit.value;
+  resolvedTargetCache.delete(nonce);
+  return undefined;
+}
+
+async function resolvePlaybackTarget(payload) {
+  if (payload.v !== 2) {
+    // v1: the URL (and headers) were embedded at issue time.
+    return { streamUrl: payload.streamUrl, upstreamHeaders: payload.upstreamHeaders };
+  }
+  const cached = cachedResolvedTarget(payload.nonce);
+  if (cached) return cached;
+
+  const Channel = require('../models/Channel');
+  const channel = await Channel.findOne({ channelId: payload.channelId, ownerId: null })
+    .select('channelUrl activeUserAgent activeReferrer alternateStreams')
+    .lean();
+  if (!channel || !channel.channelUrl) return null;
+
+  let streamUrl = channel.channelUrl;
+  let upstreamHeaders = {
+    ...(channel.activeUserAgent ? { userAgent: channel.activeUserAgent } : {}),
+    ...(channel.activeReferrer ? { referrer: channel.activeReferrer } : {}),
+  };
+  if (payload.altUrlHash) {
+    const alternate = (channel.alternateStreams || []).find(
+      (a) => a.streamUrl && altStreamHash(a.streamUrl) === payload.altUrlHash,
+    );
+    if (!alternate || !alternate.streamUrl) return null;
+    streamUrl = alternate.streamUrl;
+    upstreamHeaders = {
+      ...(alternate.userAgent ? { userAgent: alternate.userAgent } : {}),
+      ...(alternate.referrer ? { referrer: alternate.referrer } : {}),
+    };
+  }
+
+  const value = { streamUrl, upstreamHeaders };
+  if (resolvedTargetCache.size > 4000) resolvedTargetCache.clear();
+  resolvedTargetCache.set(payload.nonce, { at: Date.now(), value });
+  return value;
+}
+
 async function ensurePlaybackSubscription(user, res) {
   const access = await checkPlaybackSubscription(String(user?._id || user?.id || ''), user?.role);
   if (access.allowed) return true;
@@ -173,15 +226,26 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
   // udp://) instead of letting one bad channel break the whole customer playlist.
   if (source.channelUrl && !/^https?:\/\//i.test(String(source.channelUrl))) return presentChannelForClient(safe);
   if (source.channelUrl) {
-    const { token } = issuePlaybackToken({
-      userId: String(user._id),
-      channelListCode: user.channelListCode,
-      streamUrl: source.channelUrl,
-      upstreamHeaders: {
-        userAgent: source.activeUserAgent || undefined,
-        referrer: source.activeReferrer || undefined,
-      },
-    });
+    const channelId = String(source.channelId || '').trim();
+    // v2 channel-reference token (slim — the list payload matters on TV sticks).
+    // Fall back to v1 (embedded URL) only when the catalog channelId is absent.
+    const { token } = issuePlaybackToken(
+      channelId
+        ? {
+            userId: String(user._id),
+            channelListCode: user.channelListCode,
+            channelRef: { channelId, hls: isHlsPlayback(source.channelUrl) },
+          }
+        : {
+            userId: String(user._id),
+            channelListCode: user.channelListCode,
+            streamUrl: source.channelUrl,
+            upstreamHeaders: {
+              userAgent: source.activeUserAgent || undefined,
+              referrer: source.activeReferrer || undefined,
+            },
+          },
+    );
     safe.channelUrl = playbackTokenUrl(baseUrl, token, source.channelUrl);
   }
   safe.alternateStreams = await Promise.all(
@@ -190,15 +254,28 @@ async function tokenizeChannelForClient(channel, user, baseUrl) {
       .slice(0, 10)
       .map(async (alternate) => {
         if (!alternate.streamUrl) return { ...alternate, streamUrl: '' };
-        const { token } = issuePlaybackToken({
-          userId: String(user._id),
-          channelListCode: user.channelListCode,
-          streamUrl: alternate.streamUrl,
-          upstreamHeaders: {
-            userAgent: alternate.userAgent || undefined,
-            referrer: alternate.referrer || undefined,
-          },
-        });
+        const channelId = String(source.channelId || '').trim();
+        const { token } = issuePlaybackToken(
+          channelId
+            ? {
+                userId: String(user._id),
+                channelListCode: user.channelListCode,
+                channelRef: {
+                  channelId,
+                  altUrlHash: altStreamHash(alternate.streamUrl),
+                  hls: isHlsPlayback(alternate.streamUrl),
+                },
+              }
+            : {
+                userId: String(user._id),
+                channelListCode: user.channelListCode,
+                streamUrl: alternate.streamUrl,
+                upstreamHeaders: {
+                  userAgent: alternate.userAgent || undefined,
+                  referrer: alternate.referrer || undefined,
+                },
+              },
+        );
         return { ...alternate, streamUrl: playbackTokenUrl(baseUrl, token, alternate.streamUrl) };
       }),
   );
@@ -704,6 +781,11 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
 
+    // v2 channel-reference tokens resolve the current upstream URL from the
+    // Channel document (cached briefly); v1 tokens carry it embedded.
+    const target = await resolvePlaybackTarget(payload);
+    if (!target) return res.status(404).send('Stream not found');
+
     const rootSessionId = payload.sessionId || token;
     if (!(await isStreamSessionActive(String(user._id), rootSessionId))) {
       const ttlMs = payload.expiresAt ? payload.expiresAt - Date.now() : 30 * 60 * 1000;
@@ -720,9 +802,9 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
     // Resolve the requested absolute sequence to an upstream segment URL by
     // re-reading the current upstream window (cached ~3s per stream).
     const segUrl = await resolveSegmentUrlBySequence(
-      payload.streamUrl,
+      target.streamUrl,
       seq,
-      payload.upstreamHeaders,
+      target.upstreamHeaders,
       // Resolve against the exact playlist snapshot this client received
       // (primed when its media playlist was served) — not a fresh re-fetch,
       // whose live window may have already rotated past this sequence.
@@ -735,7 +817,7 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
       channelListCode: user.channelListCode,
       sessionId: rootSessionId,
     };
-    return proxyUpstreamStream(req, res, segUrl, proxyContext, undefined, payload.upstreamHeaders);
+    return proxyUpstreamStream(req, res, segUrl, proxyContext, undefined, target.upstreamHeaders);
   } catch (error) {
     console.error('Segment proxy error:', error);
     if (!res.headersSent) res.status(502).send('Bad Gateway');
@@ -759,6 +841,11 @@ router.get('/playback/:token', async (req, res) => {
     }).select('_id channelListCode role');
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
+
+    // v2 channel-reference tokens resolve the current upstream URL from the
+    // Channel document (cached briefly); v1 tokens carry it embedded.
+    const target = await resolvePlaybackTarget(payload);
+    if (!target) return res.status(404).send('Stream not found');
 
     // A valid token is not sufficient by itself: the concurrency session must
     // still be active. This also makes administrative revocation effective.
@@ -798,7 +885,7 @@ router.get('/playback/:token', async (req, res) => {
         return proxyUpstreamStream(req, res, payload.streamUrl, proxyContext, undefined, payload.upstreamHeaders);
       }
 
-      const parsed = new URL(payload.streamUrl);
+      const parsed = new URL(target.streamUrl);
       if (!['http:', 'https:'].includes(parsed.protocol)) {
         return res.status(400).send('Unsupported upstream protocol');
       }
@@ -809,10 +896,10 @@ router.get('/playback/:token', async (req, res) => {
         Expires: '0',
         'Referrer-Policy': 'no-referrer',
       });
-      return res.redirect(302, payload.streamUrl);
+      return res.redirect(302, target.streamUrl);
     }
 
-    return proxyUpstreamStream(req, res, payload.streamUrl, proxyContext, undefined, payload.upstreamHeaders);
+    return proxyUpstreamStream(req, res, target.streamUrl, proxyContext, undefined, target.upstreamHeaders);
   } catch (error) {
     console.error('Tokenized TV proxy error:', error);
     if (!res.headersSent) res.status(502).send('Bad Gateway');
