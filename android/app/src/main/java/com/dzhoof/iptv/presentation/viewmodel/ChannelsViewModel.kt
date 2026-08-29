@@ -268,12 +268,18 @@ class ChannelsViewModel @Inject constructor(
                     )
                     val categoryChannels = uiChannels.groupBy { it.category }
 
-                    // Build popular categories: favorites first, then by play count
+                    // Build popular categories: favorites first, then by play count.
+                    // Keep the RAW category name here — several distinct supplier
+                    // groups can localize to the same Arabic label ("رياضة"), and the
+                    // home row uses `name` as the LazyRow item key. Storing the
+                    // localized string produced duplicate keys and crashed the home
+                    // screen with IllegalArgumentException ("Key X was already used").
+                    // The UI localizes at render time instead.
                     val allCatNames = (favNames + popularCatIds).distinct()
                     allCatNames.mapNotNull { catName ->
                         val catChannels = categoryChannels[catName] ?: return@mapNotNull null
                         PopularCategoryUiModel(
-                            name = CategoryLocalizer.localize(catName),
+                            name = catName,
                             channelCount = catChannels.size,
                             imageUrl = catChannels.firstOrNull { it.thumbnailPath != null }?.thumbnailPath
                                 ?: catChannels.firstOrNull { it.logoUrl != null }?.logoUrl,

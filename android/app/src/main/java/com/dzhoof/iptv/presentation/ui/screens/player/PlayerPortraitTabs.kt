@@ -137,7 +137,7 @@ private fun ChannelsZapTab(
         state = listState,
         contentPadding = PaddingValues(vertical = Dimens.Space2)
     ) {
-        itemsIndexed(channels, key = { _, ch -> ch.id }) { _, channel ->
+        itemsIndexed(channels, key = { i, ch -> "$i:${ch.id}" }) { _, channel ->
             val isCurrent = channel.id == currentChannelId
             Column(
                 modifier = Modifier

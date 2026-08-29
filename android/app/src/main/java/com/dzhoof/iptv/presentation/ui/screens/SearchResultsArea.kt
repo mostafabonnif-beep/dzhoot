@@ -136,7 +136,7 @@ internal fun SearchResultsArea(
                             horizontalArrangement = Arrangement.spacedBy(Dimens.GridGap),
                             verticalArrangement = Arrangement.spacedBy(Dimens.GridGap),
                         ) {
-                            itemsIndexed(uiState.results, key = { _, channel -> channel.id }) { index, channel ->
+                            itemsIndexed(uiState.results, key = { i, channel -> "$i:${channel.id}" }) { index, channel ->
                                 ChannelCard(
                                     channel = channel,
                                     onClick = { onChannelClick(channel.id) },

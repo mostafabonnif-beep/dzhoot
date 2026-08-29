@@ -193,7 +193,8 @@ private fun CatalogContent(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(state.movies, key = { it.id }) { movie ->
+            items(state.movies.size, key = { i -> "$i:${state.movies[i].id}" }) { i ->
+                val movie = state.movies[i]
                 PosterCard(
                     title = movie.title,
                     subtitle = movie.year?.toString() ?: movie.category,
@@ -216,7 +217,8 @@ private fun CatalogContent(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            items(state.series, key = { it.id }) { series ->
+            items(state.series.size, key = { i -> "$i:${state.series[i].id}" }) { i ->
+                val series = state.series[i]
                 PosterCard(
                     title = series.title,
                     subtitle = series.category,
@@ -315,7 +317,8 @@ private fun SeriesDetails(
         return
     }
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        items(seasons, key = { it.id }) { season ->
+        items(seasons.size, key = { i -> "$i:${seasons[i].id}" }) { i ->
+            val season = seasons[i]
             FilterChip(
                 selected = selectedSeason?.id == season.id,
                 onClick = { onSeasonSelected(season) },
@@ -330,7 +333,8 @@ private fun SeriesDetails(
         EmptyState(message = "لا توجد حلقات")
     } else {
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(episodes, key = { it.id }) { episode ->
+            items(episodes.size, key = { i -> "$i:${episodes[i].id}" }) { i ->
+                val episode = episodes[i]
                 EpisodeRow(episode = episode, onClick = { onEpisodeClick(episode) })
             }
         }

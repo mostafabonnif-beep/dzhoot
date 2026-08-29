@@ -113,7 +113,8 @@ private fun FavoritesContent(
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(if (isCompact) Dimens.CardGapMobile else Dimens.CategoryCardGap)
                     ) {
-                        items(favoriteCategories, key = { it.name }) { category ->
+                        items(favoriteCategories.size, key = { i -> "$i:${favoriteCategories[i].name}" }) { i ->
+                            val category = favoriteCategories[i]
                             CategoryCard(
                                 name = CategoryLocalizer.localize(category.name),
                                 channelCount = category.channelCount,
@@ -136,7 +137,7 @@ private fun FavoritesContent(
             }
         }
 
-        itemsIndexed(favorites, key = { _, channel -> channel.id }) { index, channel ->
+        itemsIndexed(favorites, key = { i, channel -> "$i:${channel.id}" }) { index, channel ->
             ChannelCard(
                 channel = channel,
                 onClick = { onChannelClick(channel.id) },

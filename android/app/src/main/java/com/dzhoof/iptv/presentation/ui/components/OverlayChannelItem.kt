@@ -140,7 +140,8 @@ internal fun OverlayCategoryChips(
                 onClick = { onCategorySelected(null) }
             )
         }
-        items(categories, key = { it }) { category ->
+        items(categories.size, key = { i -> "$i:${categories[i]}" }) { i ->
+            val category = categories[i]
             OverlayFilterChip(
                 label = category,
                 isSelected = selectedCategory == category,
