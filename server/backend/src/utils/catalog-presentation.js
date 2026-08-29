@@ -82,6 +82,7 @@ function asText(value) {
 // supplier's ordering intact.
 
 const DECORATIVE_RANGES = [
+  [0x02b0, 0x02ff], // spacing modifier letters (ʰ ˢ ˡ — HEVC/SD/low markers)
   [0x1d00, 0x1d7f], // phonetic extensions (ᴬ ᴴᴰ ᴿ ...)
   [0x1d80, 0x1dbf], // phonetic extensions supplement
   [0x2070, 0x209f], // superscripts & subscripts (⁰ ᵃ ᵛ ...)
@@ -194,6 +195,92 @@ function isHiddenGroup(channel) {
   const group = asText(channel?.channelGroup);
   if (!group) return false;
   return hiddenGroupRegexes().some((r) => r.test(group));
+}
+
+// ── Duplicate-channel dedup (operator-controlled) ─────────────────────────
+// Supplier catalogs list the SAME broadcast several times per visible group
+// under package/quality tags ("BE: beIN SPRTS 1", "NM: beIN SPRTS 1",
+// "8K: beIN SPRTS 1 SD", "beIN Sprts 1 ʰ"...). CATALOG_DEDUP=true (default)
+// hides every copy after the first per normalized name, per visible group —
+// nothing is deleted, keep-first follows the supplier's own order. Set
+// CATALOG_DEDUP=false to disable.
+function dedupEnabled() {
+  const raw = String(process.env.CATALOG_DEDUP ?? '').trim().toLowerCase();
+  if (raw === 'false' || raw === '0' || raw === 'none' || raw === 'off') return false;
+  return true;
+}
+
+/** Normalized identity of a channel copy: cleaned name, package/quality tags
+ *  (leading "BE:" / "8K:" prefixes and trailing SD/LQ/HEVC/RAW markers)
+ *  removed, case-folded. Two channels with the same key are the same
+ *  broadcast at different quality/package — keep one. */
+function dedupKeyForChannel(channel) {
+  const raw = asText(channel?.channelName) || asText(channel?.tvgName) || '';
+  if (!raw) return '';
+  const key = cleanDisplayText(raw)
+    .replace(/^[A-Z0-9+]{1,12}-?[A-Z0-9]{0,5}:\s*/i, '')
+    .replace(/\s*(?:SD|LQ|HEVC|FHD|UHD|8K|4K|RAW)\s*$/i, '');
+  return key.toLowerCase().trim();
+}
+
+/** Pure dedup decision: given all candidate channels, return the _ids to hide
+ *  (every copy after the first per normalized name within a visible group).
+ *  Keep-first uses the supplier's order (order asc, then _id) so the primary
+ *  copy is always the one that survives. */
+function selectCatalogDedup(channels) {
+  const byGroup = new Map();
+  for (const channel of channels) {
+    const group = cleanDisplayText(channel?.channelGroup || '');
+    if (!group) continue;
+    const list = byGroup.get(group) || [];
+    list.push(channel);
+    byGroup.set(group, list);
+  }
+  const hidden = [];
+  for (const list of byGroup.values()) {
+    const sorted = [...list].sort(
+      (a, b) =>
+        (Number(a?.order) || 0) - (Number(b?.order) || 0) ||
+        String(a?._id ?? '').localeCompare(String(b?._id ?? '')),
+    );
+    const seen = new Set();
+    for (const channel of sorted) {
+      const key = dedupKeyForChannel(channel);
+      if (!key) continue;
+      if (seen.has(key)) hidden.push(String(channel._id));
+      else seen.add(key);
+    }
+  }
+  return hidden;
+}
+
+/** Mongo condition hiding duplicate copies from customer-facing outputs
+ *  ({} when dedup is disabled or nothing to hide). Computed over the shared
+ *  catalog and cached; safe to call on every request. */
+async function publicCatalogDedupQuery() {
+  if (!dedupEnabled()) return {};
+  try {
+    const channelCache = require('../services/cache').channelCache;
+    let hidden = await channelCache.get('catalog:dedup:ids');
+    if (!hidden) {
+      const Channel = require('../models/Channel').default || require('../models/Channel');
+      const channels = await Channel.find({
+        $and: [
+          { ownerId: null, isActive: { $ne: false } },
+          publicCatalogPresentationQuery(),
+          publicCatalogHideQuery(),
+        ],
+      })
+        .select('channelGroup channelName tvgName order')
+        .lean();
+      hidden = selectCatalogDedup(channels);
+      await channelCache.set('catalog:dedup:ids', hidden, 600);
+    }
+    return hidden.length ? { _id: { $nin: hidden } } : {};
+  } catch (error) {
+    console.error('[catalog] dedup query failed:', error?.message);
+    return {};
+  }
 }
 
 function regionFromGroup(group) {
@@ -309,6 +396,9 @@ module.exports = {
   hasRestrictedPresentationMarker,
   publicCatalogPresentationQuery,
   publicCatalogHideQuery,
+  publicCatalogDedupQuery,
+  dedupKeyForChannel,
+  selectCatalogDedup,
   isHiddenGroup,
   presentationForChannel,
   presentChannelForClient,
