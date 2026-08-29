@@ -5,7 +5,11 @@ const auditLogSchema = new Schema<IAuditLogDocument>({
   userId: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    // Not required: pre-auth events (login failures, rate-limited attempts) and
+    // system actions have no authenticated user. Making it required turned every
+    // such audit call into a console error and silently dropped the event.
+    required: false,
+    default: null,
     // Covered by the { userId, timestamp } compound below — no standalone index.
   },
   action: {
