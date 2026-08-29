@@ -89,7 +89,11 @@ jobs:
           DZHOOF_API_URL: https://iptv.ld-11.net/
         run: ./gradlew assembleStagingDebug --stacktrace
       - name: Upload Android debug APK
+        # Best-effort: the APK is a CI convenience, not a release gate. Keep
+        # CI green when the account artifact-storage quota is exhausted; the
+        # build itself above remains the real check.
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: dzhoof-staging-production-apk
           path: android/app/build/outputs/apk/staging/debug/*.apk
