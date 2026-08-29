@@ -39,7 +39,7 @@ class CrashReporter(
     }
 
     private fun queue(thread: Thread, throwable: Throwable) {
-        val entry = buildReport(thread, throwable)
+        val entry = buildReport(context, thread, throwable)
         val queueFile = crashQueueFile(context)
         val list = runCatching {
             JSONArray(queueFile.readText())
@@ -58,7 +58,7 @@ class CrashReporter(
         fun crashQueueFile(context: Context): File =
             File(context.filesDir, "crashqueue.json")
 
-        fun buildReport(thread: Thread, throwable: Throwable): JSONObject {
+        fun buildReport(context: Context, thread: Thread, throwable: Throwable): JSONObject {
             val report = JSONObject()
             report.put("deviceId", deviceId(context))
             report.put("appVersion", BuildConfig.VERSION_NAME)
@@ -151,7 +151,7 @@ class CrashReporter(
                     "User-Agent",
                     "DZ-HOOF-Android/${BuildConfig.VERSION_NAME}",
                 )
-                opened.fixedLengthStreamingMode(body.size)
+                opened.setFixedLengthStreamingMode(body.size)
                 opened
             }.getOrElse { return false }
 
