@@ -91,6 +91,9 @@ router.get('/version', async (req, res) => {
       .lean();
     if (dbLatest) {
       const updateAvailable = dbLatest.versionCode > currentVersionCode;
+      // Legacy builds must move forward: any client older than the operator-set
+      // compatibility floor is forced to update (used to retire broken builds).
+      const floor = dbLatest.minCompatibleVersion || 1;
       return res.json({
         success: true,
         updateAvailable,
@@ -102,10 +105,10 @@ router.get('/version', async (req, res) => {
           downloadUrl: dbLatest.downloadUrl,
         },
         currentVersion: currentVersionCode,
-        isMandatory: dbLatest.isMandatory || currentVersionCode < dbLatest.minCompatibleVersion,
+        isMandatory: dbLatest.isMandatory || currentVersionCode < floor,
         releaseNotes: dbLatest.releaseNotes || '',
         downloadUrl: dbLatest.downloadUrl,
-        minCompatibleVersion: dbLatest.minCompatibleVersion || 1,
+        minCompatibleVersion: floor,
         source: 'db',
       });
     }
