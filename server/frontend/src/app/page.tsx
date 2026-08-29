@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { PlayCircle, Smartphone, ShieldCheck, Headset, Tv, Zap, MessagesSquare } from 'lucide-react';
+import { PlayCircle, Smartphone, ShieldCheck, Headset, Tv, Zap, MessagesSquare, Download } from 'lucide-react';
 import ShopPlans from '@/components/shop-plans';
 
 export const metadata: Metadata = {
@@ -52,6 +52,7 @@ export default function Home() {
             <a href="#features" className="hover:text-foreground">المميزات</a>
             <a href="#pricing" className="hover:text-foreground">الأسعار</a>
             <a href="#how" className="hover:text-foreground">طريقة الاشتراك</a>
+            <Link href="/download" className="hover:text-foreground">تحميل التطبيق</Link>
           </nav>
           <div className="flex items-center gap-2">
             <Link
@@ -98,6 +99,13 @@ export default function Home() {
             >
               <Tv className="h-5 w-5" aria-hidden="true" />
               مشاهدة فورية — أدخل كودك
+            </Link>
+            <Link
+              href="/download"
+              className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/5 px-7 py-3 text-base font-semibold text-primary transition hover:bg-primary/10"
+            >
+              <Download className="h-5 w-5" aria-hidden="true" />
+              حمّل التطبيق
             </Link>
             <a
               href="#pricing"

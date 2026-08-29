@@ -43,13 +43,13 @@ import com.dzhoof.iptv.presentation.ui.theme.Error
 import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 
 /**
- * Full-screen "Update Available" screen shown once at launch (over Home) when a
+ * Full-screen "تحديث جديد متوفر" screen shown once at launch (over Home) when a
  * newer app version is published. Stateless — the hosting composable owns the
  * [UpdateInfo] and download state and supplies the callbacks.
  *
  * [isDownloading] swaps the action buttons for a progress indicator;
  * [downloadError], if present, is shown below the actions. Both actions are
- * D-pad focusable; "Update Now" auto-focuses so a single OK press updates.
+ * D-pad focusable; "حدّث الآن" auto-focuses so a single OK press updates.
  */
 @Composable
 fun UpdateAvailableScreen(
@@ -99,7 +99,7 @@ fun UpdateAvailableScreen(
             Spacer(modifier = Modifier.height(Dimens.Space5))
 
             Text(
-                text = "Update Available",
+                text = "تحديث جديد متوفر",
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -149,7 +149,7 @@ fun UpdateAvailableScreen(
                     )
                     Spacer(modifier = Modifier.width(Dimens.Space3))
                     Text(
-                        text = "Downloading update…",
+                        text = "جارٍ تنزيل التحديث…",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -167,13 +167,13 @@ fun UpdateAvailableScreen(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
-                        Text("Update Now", fontWeight = FontWeight.SemiBold)
+                        Text("حدّث الآن", fontWeight = FontWeight.SemiBold)
                     }
                     FocusAwareOutlinedButton(
                         onClick = onDismiss,
                         modifier = if (stackButtons) Modifier.fillMaxWidth() else Modifier
                     ) {
-                        Text("Not Now")
+                        Text("ليس الآن")
                     }
                 }
 

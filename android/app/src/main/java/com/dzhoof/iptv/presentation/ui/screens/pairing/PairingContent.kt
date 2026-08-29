@@ -164,7 +164,7 @@ private fun InfoColumn(
         horizontalAlignment = Alignment.Start
     ) {
         Text(
-            text = if (isTvDevice) "Pair Your TV" else "Pair Your Device",
+            text = if (isTvDevice) "اربط جهاز التلفاز" else "اربط جهازك",
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onSurface
         )
@@ -172,13 +172,13 @@ private fun InfoColumn(
         Spacer(modifier = Modifier.height(12.dp))
 
         if (isTvDevice) {
-            StepText("1. Visit $serverUrl and sign in")
-            StepText("2. Enter the PIN below to link your TV")
-            StepText("3. Add channels and start watching!")
+            StepText("1. افتح $serverUrl وسجّل الدخول")
+            StepText("2. أدخل رمز الربط أدناه لربط التلفاز")
+            StepText("3. أضف القنوات وابدأ المشاهدة!")
         } else {
-            StepText("1. Tap 'Pair in Browser' and sign in")
-            StepText("2. Your device links automatically")
-            StepText("3. Add channels and start watching!")
+            StepText("1. اضغط 'ربط عبر المتصفح' وسجّل الدخول")
+            StepText("2. يتم ربط جهازك تلقائياً")
+            StepText("3. أضف القنوات وابدأ المشاهدة!")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -199,12 +199,12 @@ private fun InfoColumn(
 
         // Secondary paths, de-emphasized: pairing above is the primary flow.
         SecondaryLink(
-            text = "Just looking? Browse demo channels",
+            text = "تتصفح فقط؟ جرّب قنوات العرض التجريبي",
             onClick = onUseDefaultClick
         )
         Spacer(modifier = Modifier.height(8.dp))
         SecondaryLink(
-            text = "Use a different source  ▸",
+            text = "استخدم مصدراً مختلفاً  ▸",
             onClick = onUseAdvancedClick
         )
     }
@@ -232,16 +232,16 @@ private fun PortraitLayout(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = if (isTvDevice) "Pair Your TV" else "Pair Your Device",
+            text = if (isTvDevice) "اربط جهاز التلفاز" else "اربط جهازك",
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(modifier = Modifier.height(8.dp))
-        StepText("1. Visit $serverUrl and sign in", TextAlign.Center)
-        StepText("2. Enter this PIN to link your TV", TextAlign.Center)
-        StepText("3. Add channels and start watching!", TextAlign.Center)
+        StepText("1. افتح $serverUrl وسجّل الدخول", TextAlign.Center)
+        StepText("2. أدخل رمز الربط لربط التلفاز", TextAlign.Center)
+        StepText("3. أضف القنوات وابدأ المشاهدة!", TextAlign.Center)
 
         Spacer(modifier = Modifier.height(20.dp))
         if (isTvDevice) {
@@ -263,9 +263,9 @@ private fun PortraitLayout(
         )
 
         Spacer(modifier = Modifier.height(20.dp))
-        SecondaryLink(text = "Just looking? Browse demo channels", onClick = onUseDefaultClick)
+        SecondaryLink(text = "تتصفح فقط؟ جرّب قنوات العرض التجريبي", onClick = onUseDefaultClick)
         Spacer(modifier = Modifier.height(6.dp))
-        SecondaryLink(text = "Use a different source  ▸", onClick = onUseAdvancedClick)
+        SecondaryLink(text = "استخدم مصدراً مختلفاً  ▸", onClick = onUseAdvancedClick)
     }
 }
 
