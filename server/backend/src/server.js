@@ -204,6 +204,14 @@ app.use(cookieParser());
 // Route-specific larger body limit for M3U import (must be BEFORE the global 5MB parser)
 app.use('/api/v1/admin/channels/import-m3u', express.json({ limit: '50mb' }));
 
+// Chargily Pay webhook: signature verification requires the EXACT raw bytes
+// Chargily sent (HMAC over the un-reparsed body) — must run BEFORE the global
+// JSON parser below, which would otherwise consume the body and normalize it.
+app.use(
+  '/api/v1/payments/chargily/webhook',
+  express.raw({ type: 'application/json', limit: '1mb' }),
+);
+
 // Default body limit is 5MB for all other routes
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: true, limit: '5mb' }));
@@ -422,6 +430,18 @@ const activationRedeemLimiter = rateLimit({
 });
 app.use('/api/v1/activation/redeem', activationRedeemLimiter);
 
+// Checkout creation is public (customer hasn't signed in yet) — throttle by IP
+// to prevent someone from hammering the Chargily API through our proxy.
+const paymentCheckoutLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: clientIp,
+  message: { success: false, error: 'Too many checkout attempts, please try again later', code: 'RATE_LIMITED' },
+});
+app.use('/api/v1/payments/chargily/checkout', paymentCheckoutLimiter);
+
 // Static files for uploads
 app.use('/uploads', express.static(path.join(PROJECT_ROOT, 'uploads')));
 
@@ -460,6 +480,7 @@ app.use('/api/v1/catalog', require('./routes/catalog'));
 app.use('/api/v1/streams', require('./routes/streams'));
 app.use('/api/v1/home', require('./routes/home'));
 app.use('/api/v1/shop', require('./routes/public-shop'));
+app.use('/api/v1/payments', require('./routes/payments'));
 app.use('/api/v1/admin/notifications', require('./routes/admin-notifications'));
 app.use('/api/v1/admin/app-settings', require('./routes/admin-app-settings'));
 app.use('/api/v1/admin/vod', require('./routes/admin-vod'));
