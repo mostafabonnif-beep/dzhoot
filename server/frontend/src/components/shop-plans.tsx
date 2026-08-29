@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { MessageCircle, Loader2 } from 'lucide-react';
+import { MessageCircle, Loader2, CreditCard } from 'lucide-react';
 
 type Plan = { _id: string; name: string; durationDays: number; price: number };
 type ShopData = { brand: string; whatsapp: string; shop: { name: string; phone: string } | null; plans: Plan[] };
@@ -18,6 +18,9 @@ function durationLabel(days: number): string {
 export default function ShopPlans({ shopId, compact }: { shopId?: string; compact?: boolean }) {
   const [data, setData] = useState<ShopData | null>(null);
   const [error, setError] = useState(false);
+  const [cardPayEnabled, setCardPayEnabled] = useState(false);
+  const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -34,6 +37,40 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    fetch('/api/v1/payments/chargily/config', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((j) => {
+        if (j?.success && j.data?.enabled) setCardPayEnabled(true);
+      })
+      .catch(() => {});
+  }, []);
+
+  const payByCard = useCallback(
+    async (plan: Plan) => {
+      setPayError(null);
+      setPayingPlanId(plan._id);
+      try {
+        const r = await fetch('/api/v1/payments/chargily/checkout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ planId: plan._id, shopId }),
+        });
+        const j = await r.json();
+        if (j.success && j.data?.checkoutUrl) {
+          window.location.href = j.data.checkoutUrl;
+          return;
+        }
+        setPayError(j.error || 'تعذّر بدء عملية الدفع، حاول مرة أخرى.');
+      } catch {
+        setPayError('تعذّر الاتصال بخادم الدفع، حاول مرة أخرى.');
+      } finally {
+        setPayingPlanId(null);
+      }
+    },
+    [shopId],
+  );
 
   if (error) {
     return (
@@ -65,6 +102,11 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
           🏪 أنت تطلب من محل <strong>{data.shop.name}</strong>
         </div>
       )}
+      {payError && (
+        <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {payError}
+        </div>
+      )}
       <div className={`grid gap-4 ${compact ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-4'}`}>
         {data.plans.length === 0 && (
           <p className="col-span-full text-center text-muted-foreground">لا توجد باقات متاحة حالياً.</p>
@@ -80,24 +122,43 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
               <span className="text-3xl font-extrabold text-primary">{plan.price.toLocaleString('fr-DZ')}</span>
               <span className="text-sm text-muted-foreground">دج</span>
             </div>
-            {waNumber ? (
-              <a
-                href={waLink(plan)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1fb958]"
-              >
-                <MessageCircle className="h-4 w-4" aria-hidden="true" />
-                اطلب عبر واتساب
-              </a>
-            ) : (
-              <a
-                href="/buy"
-                className="mt-5 inline-flex items-center justify-center rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
-              >
-                اطلب الاشتراك
-              </a>
-            )}
+            <div className="mt-5 flex flex-col gap-2">
+              {cardPayEnabled && (
+                <button
+                  type="button"
+                  onClick={() => payByCard(plan)}
+                  disabled={payingPlanId === plan._id}
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90 disabled:opacity-60"
+                >
+                  {payingPlanId === plan._id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <CreditCard className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  الدفع بالبطاقة (EDAHABIA / CIB)
+                </button>
+              )}
+              {waNumber ? (
+                <a
+                  href={waLink(plan)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#1fb958]"
+                >
+                  <MessageCircle className="h-4 w-4" aria-hidden="true" />
+                  اطلب عبر واتساب
+                </a>
+              ) : (
+                !cardPayEnabled && (
+                  <a
+                    href="/buy"
+                    className="inline-flex items-center justify-center rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+                  >
+                    اطلب الاشتراك
+                  </a>
+                )
+              )}
+            </div>
           </div>
         ))}
       </div>
