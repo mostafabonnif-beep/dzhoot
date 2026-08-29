@@ -53,12 +53,20 @@ export default function Home() {
             <a href="#pricing" className="hover:text-foreground">الأسعار</a>
             <a href="#how" className="hover:text-foreground">طريقة الاشتراك</a>
           </nav>
-          <Link
-            href="/buy"
-            className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
-          >
-            اشترك الآن
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/watch"
+              className="rounded-full border border-border px-5 py-2 text-sm font-semibold transition hover:bg-card"
+            >
+              مشاهدة الآن
+            </Link>
+            <Link
+              href="/buy"
+              className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground transition hover:opacity-90"
+            >
+              اشترك الآن
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -83,6 +91,13 @@ export default function Home() {
             >
               <PlayCircle className="h-5 w-5" aria-hidden="true" />
               اشترك الآن
+            </Link>
+            <Link
+              href="/watch"
+              className="inline-flex items-center gap-2 rounded-full border border-border px-7 py-3 text-base font-semibold transition hover:bg-card"
+            >
+              <Tv className="h-5 w-5" aria-hidden="true" />
+              مشاهدة فورية — أدخل كودك
             </Link>
             <a
               href="#pricing"
