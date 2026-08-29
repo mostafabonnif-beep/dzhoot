@@ -129,3 +129,52 @@ describe('catalog curation (CATALOG_HIDE_GROUPS)', () => {
     expect(isHiddenGroup({ channelGroup: 'TR| RADIO MIX' })).toBe(false);
   });
 });
+
+describe('duplicate-channel dedup (CATALOG_DEDUP)', () => {
+  const { dedupKeyForChannel, selectCatalogDedup } = require('./catalog-presentation');
+
+  it('strips spacing-modifier quality markers from display text', () => {
+    const { cleanDisplayText } = require('./catalog-presentation');
+    expect(cleanDisplayText('AR| BEIN SPORTS ʰᵉᵛᶜ ⭐')).toBe('AR| BEIN SPORTS');
+    expect(cleanDisplayText('AR| ALGERIA ˢ')).toBe('AR| ALGERIA');
+    expect(cleanDisplayText('AR| BEIN SPORTS ˢˢ')).toBe('AR| BEIN SPORTS');
+    expect(cleanDisplayText('AR| ECHOUROUK TV +6H')).toBe('AR| ECHOUROUK TV +6H');
+  });
+
+  it('normalizes copies that differ only by package/quality tags', () => {
+    expect(dedupKeyForChannel({ channelName: 'beIN Sprts 1' })).toBe('bein sprts 1');
+    expect(dedupKeyForChannel({ channelName: 'BE: beIN SPRTS 1' })).toBe('bein sprts 1');
+    expect(dedupKeyForChannel({ channelName: '8K: beIN SPRTS 1 SD' })).toBe('bein sprts 1');
+    expect(dedupKeyForChannel({ channelName: 'NM: beIN SPRTS 1 ʰ' })).toBe('bein sprts 1');
+    // Distinct channels stay distinct
+    expect(dedupKeyForChannel({ channelName: 'AR: Al Jazeera' })).toBe('al jazeera');
+    expect(dedupKeyForChannel({ channelName: 'AR: Al Jazeera Mubasher' })).toBe('al jazeera mubasher');
+    // Timeshift feeds are NOT duplicates of the base channel
+    expect(dedupKeyForChannel({ channelName: 'AR: ECHOUROUK TV +6H' })).toBe('echourouk tv +6h');
+  });
+
+  it('hides every copy after the first per normalized name within a group', () => {
+    const rows = [
+      { _id: 'a1', channelGroup: 'AR| BEIN SPORTS', channelName: 'beIN Sprts 1', order: 1 },
+      { _id: 'a2', channelGroup: 'AR| BEIN SPORTS', channelName: '8K: beIN SPRTS 1 SD', order: 2 },
+      { _id: 'a3', channelGroup: 'AR| BEIN SPORTS', channelName: 'BE: beIN SPRTS 1', order: 3 },
+      { _id: 'a4', channelGroup: 'AR| BEIN SPORTS', channelName: 'beIN Sprts 2', order: 4 },
+      { _id: 'a5', channelGroup: 'AR| BEIN SPORTS', channelName: 'NM: beIN SPRTS 2 ʰ', order: 5 },
+      { _id: 'b1', channelGroup: 'AR| ALGERIA الجزائر', channelName: 'AR: Echourouk TV', order: 1 },
+      { _id: 'b2', channelGroup: 'AR| ALGERIA الجزائر', channelName: 'AR: Echourouk TV', order: 2 },
+      { _id: 'b3', channelGroup: 'AR| ALGERIA ˢ', channelName: 'AR: Echourouk TV +6H', order: 1 },
+    ];
+    const hidden = selectCatalogDedup(rows);
+    expect(hidden.sort()).toEqual(['a2', 'a3', 'a5', 'b2']);
+  });
+
+  it('keeps the first copy per normalized name even when order ties', () => {
+    const rows = [
+      { _id: 'x2', channelGroup: 'FR| MAX PPV', channelName: 'FR: MAX PPV 2', order: 0 },
+      { _id: 'x1', channelGroup: 'FR| MAX PPV', channelName: 'FR: MAX PPV 1', order: 0 },
+      { _id: 'x3', channelGroup: 'FR| MAX PPV', channelName: 'VIP: MAX PPV 1', order: 0 },
+    ];
+    const hidden = selectCatalogDedup(rows);
+    expect(hidden).toEqual(['x3']);
+  });
+});

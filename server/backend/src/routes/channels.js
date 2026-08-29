@@ -17,6 +17,7 @@ const {
   hasRestrictedPresentationMarker,
   publicCatalogPresentationQuery,
   publicCatalogHideQuery,
+  publicCatalogDedupQuery,
   presentChannelForClient,
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
@@ -33,7 +34,7 @@ function invalidateCatalogCache() {
 // Direct-playback / customer-visible sources are exempt: their isWorking flag
 // reflects the server's datacenter IP (blocked upstream), not the customer's
 // network — the same policy as the playlist routes (tv.js / User.ts).
-async function verifiedXtreamChannelQuery(baseQuery) {
+async function verifiedXtreamChannelQuery(baseQuery, options = {}) {
   const verifiedSourceIds = (await XtreamSource.find({
     $or: [
       { status: 'Active', verificationStatus: 'verified' },
@@ -44,6 +45,7 @@ async function verifiedXtreamChannelQuery(baseQuery) {
   const directPlaybackSourceIds = (await XtreamSource.find({
     directPlayback: true,
   }).distinct('_id')).map((id) => String(id));
+  const dedupQuery = options.dedup ? await publicCatalogDedupQuery() : {};
   return {
     $and: [
       baseQuery,
@@ -53,6 +55,7 @@ async function verifiedXtreamChannelQuery(baseQuery) {
       },
       publicCatalogPresentationQuery(),
       publicCatalogHideQuery(),
+      dedupQuery,
       {
         $nor: [
           // Sources that are neither verified nor operator-visible are hidden.
@@ -232,10 +235,13 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     // Demo mode: curated catalog only (e.g. Algerian channels) — never the
     // full catalog, and always tokenized like any TV client.
     if (isDemoRequest(req)) {
-      const demoQuery = await verifiedXtreamChannelQuery({
-        isActive: { $ne: false },
-        channelGroup: { $in: DEMO_CHANNEL_GROUPS },
-      });
+      const demoQuery = await verifiedXtreamChannelQuery(
+        {
+          isActive: { $ne: false },
+          channelGroup: { $in: DEMO_CHANNEL_GROUPS },
+        },
+        { dedup: true },
+      );
       const channels = await Channel.find(demoQuery)
         .sort({ channelGroup: 1, order: 1 })
         .limit(DEMO_CHANNELS_MAX)
@@ -267,7 +273,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       const baseQuery = catalogView
         ? { ownerId: null }
         : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
-      const query = await verifiedXtreamChannelQuery(baseQuery);
+      const query = await verifiedXtreamChannelQuery(baseQuery, { dedup: req.user.role !== 'Admin' });
       if (searchQ) {
         const regex = new RegExp(escapeRegex(searchQ), 'i');
         query.$or = [{ channelName: regex }, { channelGroup: regex }];
@@ -301,7 +307,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     const baseQuery = catalogView
       ? { ownerId: null }
       : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
-    const query = await verifiedXtreamChannelQuery(baseQuery);
+    const query = await verifiedXtreamChannelQuery(baseQuery, { dedup: req.user.role !== 'Admin' });
 
     const channels = await Channel.find(query)
       .sort({ channelGroup: 1, order: 1 })
@@ -347,7 +353,7 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
     const baseQuery = catalogView
       ? { ownerId: null }
       : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
-    const query = await verifiedXtreamChannelQuery(baseQuery);
+    const query = await verifiedXtreamChannelQuery(baseQuery, { dedup: req.user.role !== 'Admin' });
 
     const channels = await Channel.find(query)
       .sort({ channelGroup: 1, order: 1 })
@@ -457,7 +463,12 @@ router.get('/search', requireTvOrSessionAuth, async (req, res) => {
     }
 
     const channels = await Channel.find({
-      $and: [searchFilter, publicCatalogPresentationQuery(), publicCatalogHideQuery()],
+      $and: [
+        searchFilter,
+        publicCatalogPresentationQuery(),
+        publicCatalogHideQuery(),
+        ...(req.user.role !== 'Admin' ? [await publicCatalogDedupQuery()] : []),
+      ],
     })
       .sort({ channelGroup: 1, order: 1 })
       .limit(TV_CHANNELS_MAX)

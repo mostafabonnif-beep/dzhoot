@@ -12,13 +12,15 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     // their personal `channels` array is empty, so categories must mirror the
     // catalog for them too, otherwise the category list comes back empty.
     const isAdmin = req.user.role === 'Admin' || req.user.allCatalog === true || Boolean(req.user.channelListCode);
-    const { publicCatalogHideQuery } = require('../utils/catalog-presentation');
+    const { publicCatalogHideQuery, publicCatalogDedupQuery } = require('../utils/catalog-presentation');
+    const dedupMatch = req.user.role !== 'Admin' ? await publicCatalogDedupQuery() : {};
     const match = isAdmin
-      ? { isActive: { $ne: false }, ownerId: null, ...publicCatalogHideQuery() }
+      ? { isActive: { $ne: false }, ownerId: null, ...publicCatalogHideQuery(), ...dedupMatch }
       : {
           isActive: { $ne: false },
           _id: { $in: (req.user.channels || []).filter(Boolean) },
           ...publicCatalogHideQuery(),
+          ...dedupMatch,
         };
 
     const groups = await Channel.aggregate([

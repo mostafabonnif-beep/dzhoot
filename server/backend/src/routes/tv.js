@@ -28,6 +28,7 @@ const {
   hasRestrictedPresentationMarker,
   publicCatalogPresentationQuery,
   publicCatalogHideQuery,
+  publicCatalogDedupQuery,
   presentChannelForClient,
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
@@ -297,6 +298,7 @@ async function loadEpgChannelIds(user) {
       baseQuery,
       publicCatalogPresentationQuery(),
       publicCatalogHideQuery(),
+      ...(user.role !== 'Admin' ? [await publicCatalogDedupQuery()] : []),
       {
         $nor: [
           {
