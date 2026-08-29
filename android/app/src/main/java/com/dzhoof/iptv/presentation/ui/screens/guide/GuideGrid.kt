@@ -162,7 +162,7 @@ internal fun GuideGrid(
                 state = listState,
                 modifier = Modifier.fillMaxSize()
             ) {
-                itemsIndexed(rows, key = { _, r -> r.channelId }) { index, row ->
+                itemsIndexed(rows, key = { i, r -> "$i:${r.channelId}" }) { index, row ->
                     GuideRow(
                         row = row,
                         rowIndex = index,

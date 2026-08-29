@@ -112,7 +112,7 @@ fun UpdateAvailableScreen(
                 text = buildString {
                     append("Version ${updateInfo.versionName}")
                     if (updateInfo.fileSize.isNotEmpty()) append("  ·  ${updateInfo.fileSize}")
-                    if (updateInfo.isMandatory) append("  ·  Recommended")
+                    if (updateInfo.isMandatory) append("  ·  تحديث إلزامي")
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -169,11 +169,15 @@ fun UpdateAvailableScreen(
                     ) {
                         Text("حدّث الآن", fontWeight = FontWeight.SemiBold)
                     }
-                    FocusAwareOutlinedButton(
-                        onClick = onDismiss,
-                        modifier = if (stackButtons) Modifier.fillMaxWidth() else Modifier
-                    ) {
-                        Text("ليس الآن")
+                    // A mandatory update (server minCompatibleVersion) can't be
+                    // skipped — hiding "ليس الآن" is the whole point of the flag.
+                    if (!updateInfo.isMandatory) {
+                        FocusAwareOutlinedButton(
+                            onClick = onDismiss,
+                            modifier = if (stackButtons) Modifier.fillMaxWidth() else Modifier
+                        ) {
+                            Text("ليس الآن")
+                        }
                     }
                 }
 

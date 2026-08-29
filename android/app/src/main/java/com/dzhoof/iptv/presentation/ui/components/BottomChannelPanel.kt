@@ -199,7 +199,7 @@ internal fun BottomChannelPanel(
                         } else false
                     }
             ) {
-                itemsIndexed(displayChannels, key = { _, ch -> ch.id }) { index, channel ->
+                itemsIndexed(displayChannels, key = { i, ch -> "$i:${ch.id}" }) { index, channel ->
                     OverlayChannelItem(
                         channel = channel,
                         isCurrentChannel = channel.id == currentChannel?.id,

@@ -32,6 +32,7 @@ import com.dzhoof.iptv.presentation.ui.components.ChannelCard
 import com.dzhoof.iptv.presentation.ui.components.SectionHeader
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
+import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 
 internal const val COMPACT_WIDTH_DP = 600
 
@@ -96,7 +97,8 @@ internal fun FeaturedRow(
             contentPadding = PaddingValues(vertical = if (isCompact) Dimens.Space1 else 12.dp),
             horizontalArrangement = Arrangement.spacedBy(cardGap)
         ) {
-            items(channels, key = { it.id }) { channel ->
+            items(channels.size, key = { i -> "$i:${channels[i].id}" }) { i ->
+                val channel = channels[i]
                 ChannelCard(
                     channel = channel,
                     onClick = { onChannelClick(channel.id) },
@@ -143,7 +145,9 @@ internal fun PopularCategoriesSlider(
         ) {
             items(categories, key = { it.name }) { category ->
                 CategoryCard(
-                    name = category.name,
+                    // `name` stays raw (it's the LazyRow key + navigation arg);
+                    // localize only what the user sees.
+                    name = CategoryLocalizer.localize(category.name),
                     channelCount = category.channelCount,
                     imageUrl = category.imageUrl,
                     isFavorite = category.isFavorite,
@@ -203,7 +207,8 @@ internal fun ChannelRow(
             contentPadding = PaddingValues(vertical = if (isCompact) Dimens.Space1 else 12.dp),
             horizontalArrangement = Arrangement.spacedBy(cardGap)
         ) {
-            items(channels, key = { it.id }) { channel ->
+            items(channels.size, key = { i -> "$i:${channels[i].id}" }) { i ->
+                val channel = channels[i]
                 ChannelCard(
                     channel = channel,
                     onClick = { onChannelClick(channel.id) },
