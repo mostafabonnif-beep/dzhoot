@@ -27,6 +27,7 @@ const { checkPlaybackSubscription } = require('../services/playback-access-servi
 const {
   hasRestrictedPresentationMarker,
   publicCatalogPresentationQuery,
+  publicCatalogHideQuery,
   presentChannelForClient,
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
