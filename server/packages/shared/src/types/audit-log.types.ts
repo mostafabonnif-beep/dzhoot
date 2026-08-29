@@ -1,7 +1,8 @@
 import { Types, Document } from 'mongoose';
 
 export interface IAuditLog {
-  userId: Types.ObjectId;
+  // Optional: pre-auth events (login failures) and system actions have no user.
+  userId?: Types.ObjectId | null;
   action: string;
   resource: string;
   resourceId?: string;

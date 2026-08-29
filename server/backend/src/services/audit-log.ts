@@ -1,7 +1,8 @@
 import AuditLog from '../models/AuditLog';
 
 interface LogOptions {
-  userId: string;
+  /** Optional: pre-auth/system events have no authenticated user. */
+  userId?: string | null;
   action: string;
   resource: string;
   resourceId?: string;
