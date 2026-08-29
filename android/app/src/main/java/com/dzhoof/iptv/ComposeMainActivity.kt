@@ -291,7 +291,8 @@ class ComposeMainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         pipController.detach()
-        channelHealthScanner.destroy()
+        // ChannelHealthScanner is application-scoped. Cancelling it here leaves the
+        // singleton unusable after an Activity recreation; process teardown cleans it up.
     }
 
     private fun markFirstLaunchComplete() {
