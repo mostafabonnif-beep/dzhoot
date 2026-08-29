@@ -28,6 +28,11 @@ function LoginContent() {
   const [adminEmail, setAdminEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  // Two-factor step: after the server confirms credentials are valid but the
+  // account has TOTP enabled (code TWO_FACTOR_REQUIRED), swap the form to a
+  // 6-digit code entry and resubmit with totpToken.
+  const [twoFactor, setTwoFactor] = useState(false);
+  const [totpCode, setTotpCode] = useState('');
   // Capability flags from /config/defaults (audit-remediation-v1): hide OAuth
   // buttons and the signup link when the operator has not configured them.
   const [capabilities, setCapabilities] = useState({
@@ -120,7 +125,11 @@ function LoginContent() {
     setLoading(true);
 
     try {
-      const res = await api.post('/auth/login', { username, password });
+      const res = await api.post('/auth/login', {
+        username,
+        password,
+        ...(twoFactor ? { totpToken: totpCode } : {}),
+      });
       const { user, sessionId } = res.data;
       setSession(user, sessionId);
 
@@ -146,6 +155,12 @@ function LoginContent() {
           'تم تعطيل حسابك. يُرجى التواصل مع مسؤول الخادم لإعادة تفعيله.',
         );
         if (resp.data.adminEmail) setAdminEmail(resp.data.adminEmail);
+      } else if (resp?.status === 401 && resp?.data?.code === 'TWO_FACTOR_REQUIRED') {
+        // Credentials are valid — prompt for the authenticator code.
+        setTwoFactor(true);
+        setError('');
+      } else if (resp?.status === 401 && resp?.data?.code === 'TWO_FACTOR_INVALID') {
+        setError('رمز التحقق الثنائي غير صحيح. جرّب رمزًا أحدث.');
       } else {
         setError('اسم المستخدم أو كلمة المرور غير صحيحة');
       }
@@ -221,68 +236,116 @@ function LoginContent() {
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <label
-            htmlFor="username"
-            className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-          >
-            اسم المستخدم
-          </label>
-          <input
-            id="username"
-            type="text"
-            value={username}
-            onChange={(e) => {
-              setUsername(e.target.value);
-              setError('');
-            }}
-            required
-            disabled={loading}
-            autoComplete="username"
-            aria-required="true"
-            className="flex h-12 w-full rounded-xl border border-border/80 bg-background/70 px-4 py-2 text-sm transition-all placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
-            aria-label="اسم المستخدم"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <label
-            htmlFor="password"
-            className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-          >
-            كلمة المرور
-          </label>
-          <div className="relative">
+        {twoFactor ? (
+          <div className="space-y-1.5">
+            <label
+              htmlFor="totp"
+              className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              رمز التحقق (2FA)
+            </label>
             <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              value={password}
+              id="totp"
+              type="text"
+              inputMode="numeric"
+              maxLength={8}
+              value={totpCode}
               onChange={(e) => {
-                setPassword(e.target.value);
+                setTotpCode(e.target.value.replace(/\D/g, ''));
                 setError('');
               }}
               required
               disabled={loading}
-              autoComplete="current-password"
+              autoComplete="one-time-code"
+              autoFocus
               aria-required="true"
-              className="flex h-12 w-full rounded-xl border border-border/80 bg-background/70 px-4 py-2 text-sm transition-all placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
-              aria-label="كلمة المرور"
+              placeholder="رمز من 6 أرقام"
+              className="flex h-12 w-full rounded-xl border border-border/80 bg-background/70 px-4 py-2 text-center font-mono text-lg tracking-[0.4em] transition-all placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
+              aria-label="رمز التحقق الثنائي"
             />
+            <p className="text-xs leading-5 text-muted-foreground">
+              تم التحقق من كلمة المرور. أدخل الرمز المكوَّن من 6 أرقام من تطبيق
+              المصادقة (Google Authenticator أو ما شابه).
+            </p>
             <button
               type="button"
-              className="absolute right-1 top-1/2 -translate-y-1/2 p-2.5"
-              onClick={() => setShowPassword(!showPassword)}
-              aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-              title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              onClick={() => {
+                setTwoFactor(false);
+                setTotpCode('');
+                setError('');
+              }}
+              disabled={loading}
+              className="text-xs font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline disabled:opacity-50"
             >
-              {showPassword ? (
-                <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-              ) : (
-                <Eye className="h-4 w-4 text-muted-foreground hover:text-foreground" />
-              )}
+              تغيير اسم المستخدم أو كلمة المرور
             </button>
           </div>
-        </div>
+        ) : (
+          <>
+            <div className="space-y-1.5">
+              <label
+                htmlFor="username"
+                className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                اسم المستخدم
+              </label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setError('');
+                }}
+                required
+                disabled={loading}
+                autoComplete="username"
+                aria-required="true"
+                className="flex h-12 w-full rounded-xl border border-border/80 bg-background/70 px-4 py-2 text-sm transition-all placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
+                aria-label="اسم المستخدم"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="password"
+                className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+              >
+                كلمة المرور
+              </label>
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError('');
+                  }}
+                  required
+                  disabled={loading}
+                  autoComplete="current-password"
+                  aria-required="true"
+                  className="flex h-12 w-full rounded-xl border border-border/80 bg-background/70 px-4 py-2 text-sm transition-all placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary focus-visible:ring-4 focus-visible:ring-primary/10 disabled:cursor-not-allowed disabled:text-muted-foreground"
+                  aria-label="كلمة المرور"
+                />
+                <button
+                  type="button"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-2.5"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                  title={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  ) : (
+                    <Eye className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                  )}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         <button
           type="submit"
@@ -290,7 +353,11 @@ function LoginContent() {
           aria-busy={loading}
           className="flex h-12 w-full items-center justify-center rounded-xl bg-primary text-sm font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 hover:bg-primary/90 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
         >
-          {loading ? 'جارٍ التحقق...' : 'تسجيل الدخول'}
+          {loading
+            ? 'جارٍ التحقق...'
+            : twoFactor
+              ? 'تحقق وتسجيل الدخول'
+              : 'تسجيل الدخول'}
         </button>
       </form>
 
