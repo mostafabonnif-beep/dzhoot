@@ -12,7 +12,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     // their personal `channels` array is empty, so categories must mirror the
     // catalog for them too, otherwise the category list comes back empty.
     const isAdmin = req.user.role === 'Admin' || req.user.allCatalog === true || Boolean(req.user.channelListCode);
-    const { publicCatalogHideQuery, publicCatalogDedupQuery } = require('../utils/catalog-presentation');
+    const { publicCatalogHideQuery, publicCatalogDedupQuery, cleanDisplayText } = require('../utils/catalog-presentation');
     const dedupMatch = req.user.role !== 'Admin' ? await publicCatalogDedupQuery() : {};
     const match = isAdmin
       ? { isActive: { $ne: false }, ownerId: null, ...publicCatalogHideQuery(), ...dedupMatch }
@@ -34,12 +34,16 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       { $sort: { _id: 1 } },
     ]);
 
-    const categories = groups.map((g, index) => ({
-      id: g._id || 'uncategorized',
-      name: g._id || 'Uncategorized',
-      display_order: index,
-      channel_count: g.channel_count,
-    }));
+    const categories = groups.map((g, index) => {
+      const rawGroup = g._id || '';
+      const displayName = cleanDisplayText(rawGroup) || 'Uncategorized';
+      return {
+        id: rawGroup || 'uncategorized',
+        name: displayName,
+        display_order: index,
+        channel_count: g.channel_count,
+      };
+    });
 
     res.json({
       success: true,
