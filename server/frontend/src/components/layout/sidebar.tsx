@@ -51,6 +51,7 @@ const adminLinks: NavigationLink[] = [
   { href: '/admin/movies', labelKey: 'nav.movies', icon: Film },
   { href: '/admin/series', labelKey: 'nav.series', icon: MonitorPlay },
   { href: '/admin/users', labelKey: 'nav.users', icon: Users },
+  { href: '/admin/live-viewers', labelKey: 'nav.liveViewers', icon: Activity },
   { href: '/admin/devices', labelKey: 'nav.devices', icon: Smartphone },
   { href: '/admin/plans', labelKey: 'nav.plans', icon: CreditCard },
   { href: '/admin/codes', labelKey: 'nav.codes', icon: KeyRound },
@@ -88,9 +89,9 @@ const userLinks: NavigationLink[] = [
 const adminNavigationGroups = [
   { labelKey: 'nav.section.overview', links: adminLinks.slice(0, 1) },
   { labelKey: 'nav.section.content', links: adminLinks.slice(1, 5) },
-  { labelKey: 'nav.section.customers', links: adminLinks.slice(5, 11) },
-  { labelKey: 'nav.section.sources', links: adminLinks.slice(11, 16) },
-  { labelKey: 'nav.section.operations', links: adminLinks.slice(16) },
+  { labelKey: 'nav.section.customers', links: adminLinks.slice(5, 12) },
+  { labelKey: 'nav.section.sources', links: adminLinks.slice(12, 17) },
+  { labelKey: 'nav.section.operations', links: adminLinks.slice(17) },
   ...(dz1TvStudioLinks.length ? [{ labelKey: 'nav.section.dz1Tv', links: dz1TvStudioLinks }] : []),
 ];
 
