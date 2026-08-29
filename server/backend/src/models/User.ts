@@ -3,11 +3,11 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { IUserDocument, IUserModel } from '@dzhoof/shared';
 import { issuePlaybackToken, altStreamHash } from '../services/playback-token';
-import { publicCatalogHideQuery, publicCatalogDedupQuery } from '../utils/catalog-presentation';
 
 const {
   hasRestrictedPresentationMarker,
   publicCatalogPresentationQuery,
+  publicCatalogHideQuery,
 } = require('../utils/catalog-presentation');
 
 const userSchema = new Schema<IUserDocument>(
@@ -235,15 +235,14 @@ userSchema.methods.generateUserPlaylist = async function (
   };
 
   let channels;
-  const dedup = this.role !== 'Admin' ? await publicCatalogDedupQuery() : {};
   if (this.role === 'Admin' || this.allCatalog === true) {
     // Admin and trial users with allCatalog receive the shared catalog only.
     channels = await ChannelModel.find({
-      $and: [{ ownerId: null, isActive: { $ne: false } }, publicCatalogPresentationQuery(), publicCatalogHideQuery(), xtreamVisibilityGuard, dedup],
+      $and: [{ ownerId: null, isActive: { $ne: false } }, publicCatalogPresentationQuery(), publicCatalogHideQuery(), xtreamVisibilityGuard],
     }).sort({ channelGroup: 1, order: 1 });
   } else {
     channels = await ChannelModel.find({
-      $and: [{ _id: { $in: this.channels } }, xtreamVisibilityGuard, dedup],
+      $and: [{ _id: { $in: this.channels } }, xtreamVisibilityGuard],
     }).sort({ channelGroup: 1, order: 1 });
   }
 
