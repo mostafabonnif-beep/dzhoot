@@ -295,6 +295,7 @@ async function loadEpgChannelIds(user) {
     $and: [
       baseQuery,
       publicCatalogPresentationQuery(),
+      publicCatalogHideQuery(),
       {
         $nor: [
           {

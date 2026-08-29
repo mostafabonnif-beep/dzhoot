@@ -5,6 +5,7 @@ const {
   hasRestrictedPresentationMarker,
   presentationForChannel,
   publicCatalogPresentationQuery,
+  publicCatalogHideQuery,
   cleanDisplayText,
 } = require('../utils/catalog-presentation');
 
@@ -250,6 +251,7 @@ channelSchema.statics.generateM3UPlaylist = async function (): Promise<string> {
     $and: [
       { ownerId: null, isActive: { $ne: false } },
       publicCatalogPresentationQuery(),
+      publicCatalogHideQuery(),
     ],
   })
     .select(
