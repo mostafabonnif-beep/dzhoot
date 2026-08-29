@@ -47,6 +47,9 @@ services:
       EPG_MAX_PROGRAMS_PER_SOURCE: ${EPG_MAX_PROGRAMS_PER_SOURCE:-50000}
       EPG_HEAP_GUARD_MB: ${EPG_HEAP_GUARD_MB:-768}
       EPG_COUNTRY_FILTER: ${EPG_COUNTRY_FILTER:-}
+      # Curated hide list (comma-separated regex patterns on channelGroup).
+      # Default hides radio streams (filler); set CATALOG_HIDE_GROUPS=none to disable.
+      CATALOG_HIDE_GROUPS: ${CATALOG_HIDE_GROUPS:-RADIO}
       EPG_EXTRA_SOURCES: ${EPG_EXTRA_SOURCES:-}
       MONGODB_URI: mongodb://mongodb:27017/dzhoof-iptv
       # container_name, not the service name: the api/frontend also sit on the shared
@@ -209,6 +212,9 @@ services:
       EPG_MAX_PROGRAMS_PER_SOURCE: ${EPG_MAX_PROGRAMS_PER_SOURCE:-50000}
       EPG_HEAP_GUARD_MB: ${EPG_HEAP_GUARD_MB:-768}
       EPG_COUNTRY_FILTER: ${EPG_COUNTRY_FILTER:-}
+      # Curated hide list (comma-separated regex patterns on channelGroup).
+      # Default hides radio streams (filler); set CATALOG_HIDE_GROUPS=none to disable.
+      CATALOG_HIDE_GROUPS: ${CATALOG_HIDE_GROUPS:-RADIO}
       EPG_EXTRA_SOURCES: ${EPG_EXTRA_SOURCES:-}
       # Scheduler-driven M3U/Xtream syncs decrypt stored URLs/credentials, and the
       # Xtream import signs playback URLs — without these secrets every scheduled

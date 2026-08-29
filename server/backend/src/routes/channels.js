@@ -16,6 +16,7 @@ const { buildChannelHealth } = require('../utils/channel-health');
 const {
   hasRestrictedPresentationMarker,
   publicCatalogPresentationQuery,
+  publicCatalogHideQuery,
   presentChannelForClient,
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
@@ -51,6 +52,7 @@ async function verifiedXtreamChannelQuery(baseQuery) {
         'flaggedBad.isFlagged': { $ne: true },
       },
       publicCatalogPresentationQuery(),
+      publicCatalogHideQuery(),
       {
         $nor: [
           // Sources that are neither verified nor operator-visible are hidden.
@@ -455,7 +457,7 @@ router.get('/search', requireTvOrSessionAuth, async (req, res) => {
     }
 
     const channels = await Channel.find({
-      $and: [searchFilter, publicCatalogPresentationQuery()],
+      $and: [searchFilter, publicCatalogPresentationQuery(), publicCatalogHideQuery()],
     })
       .sort({ channelGroup: 1, order: 1 })
       .limit(TV_CHANNELS_MAX)

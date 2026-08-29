@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { IUserDocument, IUserModel } from '@dzhoof/shared';
 import { issuePlaybackToken, altStreamHash } from '../services/playback-token';
+import { publicCatalogHideQuery } from '../utils/catalog-presentation';
 
 const {
   hasRestrictedPresentationMarker,
@@ -237,7 +238,7 @@ userSchema.methods.generateUserPlaylist = async function (
   if (this.role === 'Admin' || this.allCatalog === true) {
     // Admin and trial users with allCatalog receive the shared catalog only.
     channels = await ChannelModel.find({
-      $and: [{ ownerId: null, isActive: { $ne: false } }, publicCatalogPresentationQuery(), xtreamVisibilityGuard],
+      $and: [{ ownerId: null, isActive: { $ne: false } }, publicCatalogPresentationQuery(), publicCatalogHideQuery(), xtreamVisibilityGuard],
     }).sort({ channelGroup: 1, order: 1 });
   } else {
     channels = await ChannelModel.find({

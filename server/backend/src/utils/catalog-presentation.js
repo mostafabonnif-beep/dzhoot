@@ -167,6 +167,35 @@ function publicCatalogPresentationQuery() {
   };
 }
 
+// ── Catalog curation (operator-controlled) ────────────────────────────────
+// CATALOG_HIDE_GROUPS = comma-separated regex patterns of channel groups to
+// hide from ALL customer-facing outputs (TV list, EPG, categories, M3U,
+// search). Nothing is deleted — the data stays for the operator. Default
+// hides radio streams (filler); set CATALOG_HIDE_GROUPS=none to disable.
+function hiddenGroupRegexes() {
+  const raw = String(process.env.CATALOG_HIDE_GROUPS || 'RADIO').trim();
+  if (!raw || raw.toLowerCase() === 'none') return [];
+  return raw
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => new RegExp(p, 'i'));
+}
+
+/** Mongo condition hiding curated groups ({} when nothing to hide). */
+function publicCatalogHideQuery() {
+  const regexes = hiddenGroupRegexes();
+  if (!regexes.length) return {};
+  return { $nor: regexes.map((r) => ({ channelGroup: r })) };
+}
+
+/** True when a channel's group is hidden by curation (client-side guard). */
+function isHiddenGroup(channel) {
+  const group = asText(channel?.channelGroup);
+  if (!group) return false;
+  return hiddenGroupRegexes().some((r) => r.test(group));
+}
+
 function regionFromGroup(group) {
   const raw = asText(group);
   const [prefix] = raw.split('|', 1);
@@ -279,6 +308,8 @@ function sortClientCatalogChannels(channels) {
 module.exports = {
   hasRestrictedPresentationMarker,
   publicCatalogPresentationQuery,
+  publicCatalogHideQuery,
+  isHiddenGroup,
   presentationForChannel,
   presentChannelForClient,
   safeClientMetadata,

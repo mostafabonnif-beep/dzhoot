@@ -100,3 +100,32 @@ describe('display-name cleaning', () => {
     expect(cleanVodTitle('4K-AR: (X مراتي) اكس مراتي')).toBe('(X مراتي) اكس مراتي');
   });
 });
+
+describe('catalog curation (CATALOG_HIDE_GROUPS)', () => {
+  const originalEnv = process.env.CATALOG_HIDE_GROUPS;
+
+  afterEach(() => {
+    if (originalEnv === undefined) delete process.env.CATALOG_HIDE_GROUPS;
+    else process.env.CATALOG_HIDE_GROUPS = originalEnv;
+  });
+
+  it('hides curated groups from the customer query by default (radio)', () => {
+    delete process.env.CATALOG_HIDE_GROUPS;
+    const { publicCatalogHideQuery, isHiddenGroup } = require('./catalog-presentation');
+    const q = publicCatalogHideQuery();
+    const regex = (q as any).$nor[0].channelGroup;
+    expect(regex instanceof RegExp).toBe(true);
+    expect(regex.test('TR| RADIO MIX')).toBe(true);
+    expect(isHiddenGroup({ channelGroup: 'TR| RADIO MIX' })).toBe(true);
+    expect(isHiddenGroup({ channelGroup: 'AR| ARABIC SPORTS' })).toBe(false);
+  });
+
+  it('honors a custom hide list and "none" disables hiding', () => {
+    const { publicCatalogHideQuery, isHiddenGroup } = require('./catalog-presentation');
+    process.env.CATALOG_HIDE_GROUPS = 'RADIO,24/7';
+    expect(isHiddenGroup({ channelGroup: 'UK| 24/7' })).toBe(true);
+    process.env.CATALOG_HIDE_GROUPS = 'none';
+    expect(publicCatalogHideQuery()).toEqual({});
+    expect(isHiddenGroup({ channelGroup: 'TR| RADIO MIX' })).toBe(false);
+  });
+});
