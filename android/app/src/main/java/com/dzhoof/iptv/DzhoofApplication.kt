@@ -3,6 +3,7 @@ package com.dzhoof.iptv
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.dzhoof.iptv.crash.CrashReporter
 import com.dzhoof.iptv.worker.WorkManagerInitializer
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dagger.hilt.android.HiltAndroidApp
@@ -26,6 +27,16 @@ class DzhoofApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // Capture every uncaught exception locally and upload it to the DZ HOOF
+        // API on the next launch. Firebase/Sentry are not wired for production
+        // builds, so this is the only crash visibility we have.
+        Thread.setDefaultUncaughtExceptionHandler(
+            CrashReporter(this, Thread.getDefaultUncaughtExceptionHandler()),
+        )
+        Thread {
+            CrashReporter.uploadPending(applicationContext)
+        }.start()
 
         if (BuildConfig.FIREBASE_ENABLED) {
             runCatching {

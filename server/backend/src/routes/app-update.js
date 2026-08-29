@@ -317,5 +317,67 @@ router.get('/demo-code', (req, res) => {
   return res.json({ code });
 });
 
+// ---------------------------------------------------------------------------
+// Crash reports from the Android app (v1.0.39+). A crashed app often has no
+// session, so this endpoint is intentionally public; it is rate-limited per IP
+// and every field is trimmed/sized so the payload can never be abused.
+// ---------------------------------------------------------------------------
+const rateLimit = require('express-rate-limit');
+const CrashReport = require('../models/CrashReport');
+
+const crashReportLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many crash reports, try again later' },
+});
+
+function cleanReportField(value, max) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().slice(0, max);
+  return trimmed === '' ? null : trimmed;
+}
+
+function cleanReportNumber(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.floor(parsed);
+}
+
+router.post('/crash-report', crashReportLimiter, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const stackTrace =
+      typeof body.stackTrace === 'string' && body.stackTrace.length > 0
+        ? body.stackTrace.slice(0, 50000)
+        : null;
+
+    const report = await CrashReport.create({
+      deviceId: cleanReportField(body.deviceId, 128),
+      appVersion: cleanReportField(body.appVersion, 40),
+      appVersionCode: cleanReportNumber(body.appVersionCode),
+      platform: cleanReportField(body.platform, 30),
+      deviceModel: cleanReportField(body.deviceModel, 80),
+      deviceBrand: cleanReportField(body.deviceBrand, 80),
+      androidVersion: cleanReportField(body.androidVersion, 40),
+      sdkInt: cleanReportNumber(body.sdkInt),
+      totalRamMb: cleanReportNumber(body.totalRamMb),
+      freeRamMb: cleanReportNumber(body.freeRamMb),
+      freeStorageMb: cleanReportNumber(body.freeStorageMb),
+      exceptionType: cleanReportField(body.exceptionType, 200),
+      exceptionMessage: cleanReportField(body.exceptionMessage, 2000),
+      stackTrace,
+      threadName: cleanReportField(body.threadName, 100),
+      screen: cleanReportField(body.screen, 100),
+    });
+
+    return res.status(201).json({ ok: true, id: String(report._id) });
+  } catch (error) {
+    console.error('[app-crash] failed to store crash report:', error.message || error);
+    return res.status(500).json({ error: 'Failed to store crash report' });
+  }
+});
+
 module.exports = router;
 module.exports._private = { normalizeVersion, compareVersions, versionNameToCode };
