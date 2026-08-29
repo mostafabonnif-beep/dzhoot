@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -42,6 +44,12 @@ class AppUpdater @Inject constructor(
 
     private var downloadId: Long = -1
     private var downloadReceiver: BroadcastReceiver? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+
+    private fun unregisterDownloadReceiver() {
+        downloadReceiver?.let { runCatching { context.unregisterReceiver(it) } }
+        downloadReceiver = null
+    }
 
     /** Blocking network check — call from a background dispatcher. */
     fun check(): UpdateInfo? = checkFromServer() ?: checkFromGitHub()
@@ -124,7 +132,8 @@ class AppUpdater @Inject constructor(
             return
         }
         try {
-            downloadReceiver?.let { runCatching { context.unregisterReceiver(it) } }
+            unregisterDownloadReceiver()
+            downloadId = -1
 
             val oldFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), APK_FILENAME)
             if (oldFile.exists()) oldFile.delete()
@@ -152,7 +161,12 @@ class AppUpdater @Inject constructor(
                         if (cursor.moveToFirst()) {
                             val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                             if (status == DownloadManager.STATUS_SUCCESSFUL) {
-                                onState(installUpdate())
+                                // Archive signature parsing can be slow for a large APK. Keep it
+                                // off the broadcast receiver's main-thread path to avoid ANRs.
+                                Thread {
+                                    val state = installUpdate()
+                                    mainHandler.post { onState(state) }
+                                }.start()
                             } else {
                                 val reason = cursor.getString(
                                     cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
@@ -161,6 +175,11 @@ class AppUpdater @Inject constructor(
                                     if (reason.isNullOrBlank()) "فشل تنزيل التحديث" else "فشل تنزيل التحديث (رمز $reason)"
                                 ))
                             }
+                            // A singleton updater can be used by either the startup screen or
+                            // Settings. Remove the receiver only after this matching download is
+                            // terminal; an unrelated ViewModel being cleared must not interrupt it.
+                            unregisterDownloadReceiver()
+                            downloadId = -1
                         }
                     } finally {
                         cursor.close()
@@ -183,6 +202,8 @@ class AppUpdater @Inject constructor(
             onState(DownloadState.Started)
         } catch (e: Exception) {
             Log.e(TAG, "Error downloading update", e)
+            unregisterDownloadReceiver()
+            downloadId = -1
             onState(DownloadState.Failed("تعذر بدء التنزيل"))
         }
     }
@@ -211,8 +232,9 @@ class AppUpdater @Inject constructor(
 
             val apkUri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
             val installIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                data = apkUri
-                type = "application/vnd.android.package-archive"
+                // Intent.setType() clears a previously set data URI. Use the atomic
+                // variant so Android's package installer receives the APK FileProvider URI.
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             context.startActivity(installIntent)
@@ -255,10 +277,13 @@ class AppUpdater @Inject constructor(
         }
     }
 
-    /** Unregister the download receiver — call from the owner's onCleared. */
+    /**
+     * Release an idle receiver. AppUpdater is a singleton shared by the launch overlay
+     * and Settings, so a ViewModel being cleared must never cancel another owner's
+     * in-flight DownloadManager operation.
+     */
     fun cleanup() {
-        downloadReceiver?.let { runCatching { context.unregisterReceiver(it) } }
-        downloadReceiver = null
+        if (downloadId == -1L) unregisterDownloadReceiver()
     }
 
     private fun getAppVersionName(): String = try {
