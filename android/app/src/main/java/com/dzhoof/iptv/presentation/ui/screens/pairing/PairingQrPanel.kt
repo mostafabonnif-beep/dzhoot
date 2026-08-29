@@ -46,7 +46,7 @@ internal fun QrSection(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Scan with your phone to Pair",
+            text = "امسح الرمز بهاتفك للربط",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium
         )
@@ -103,7 +103,7 @@ internal fun OpenBrowserSection(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Quick Pair",
+            text = "ربط سريع",
             color = MaterialTheme.colorScheme.onSurface,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
@@ -113,7 +113,7 @@ internal fun OpenBrowserSection(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Tap to open your browser and complete pairing",
+            text = "اضغط لفتح المتصفح وإكمال الربط",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center
@@ -144,7 +144,7 @@ internal fun OpenBrowserSection(
             )
             Spacer(modifier = Modifier.width(8.dp))
             Text(
-                text = "Pair in Browser",
+                text = "ربط عبر المتصفح",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold
             )
@@ -153,7 +153,7 @@ internal fun OpenBrowserSection(
         Spacer(modifier = Modifier.height(14.dp))
 
         Text(
-            text = "Or enter PIN manually at $serverUrl",
+            text = "أو أدخل الرمز يدوياً في $serverUrl",
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center

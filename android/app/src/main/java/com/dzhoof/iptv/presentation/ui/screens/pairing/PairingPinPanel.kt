@@ -45,7 +45,7 @@ internal fun PinSection(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Your PIN",
+            text = "رمز الربط الخاص بك",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelLarge
         )
@@ -106,7 +106,7 @@ internal fun PinSection(
                 )
             ) {
                 Text(
-                    text = "Generate New PIN",
+                    text = "إنشاء رمز جديد",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold
                 )
