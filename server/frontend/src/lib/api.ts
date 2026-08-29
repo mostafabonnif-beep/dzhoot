@@ -32,6 +32,13 @@ api.interceptors.request.use((config) => {
     config.headers['x-session-id'] = sessionId;
   }
 
+  // Customer web player (/watch): a stored TV channel-list code authenticates
+  // every API call (same contract as the Android TV app).
+  if (typeof window !== 'undefined') {
+    const tvCode = window.localStorage.getItem('watch_tv_code');
+    if (tvCode) config.headers['X-TV-Code'] = tvCode;
+  }
+
   return config;
 });
 
