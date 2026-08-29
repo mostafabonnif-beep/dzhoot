@@ -588,7 +588,7 @@ const common = {
 
 const navigation: Dictionary = {
   'nav.dashboard': 'لوحة التحكم', 'nav.quickPick': 'اختيار سريع', 'nav.channels': 'القنوات المباشرة',
-  'nav.movies': 'الأفلام (VOD)', 'nav.series': 'المسلسلات', 'nav.users': 'المستخدمون', 'nav.devices': 'الأجهزة',
+  'nav.movies': 'الأفلام (VOD)', 'nav.series': 'المسلسلات', 'nav.users': 'المستخدمون', 'nav.liveViewers': 'المشاهدون الآن', 'nav.devices': 'الأجهزة',
   'nav.plans': 'الباقات', 'nav.codes': 'أكواد التفعيل', 'nav.resellers': 'المحلات', 'nav.codeBatches': 'الدفعات', 'nav.import': 'استيراد IPTV',
   'nav.m3uSources': 'مصادر M3U التلقائية', 'nav.xtreamSources': 'مصادر Xtream', 'nav.sources': 'مصادر أخرى',
   'nav.epg': 'دليل البرامج (EPG)', 'nav.versions': 'إصدارات التطبيق', 'nav.stats': 'الإحصائيات',
@@ -611,7 +611,7 @@ const dictionaries: Record<Locale, Dictionary> = {
   ar: buildDictionary(0, navigation),
   en: buildDictionary(1, {
     'nav.dashboard': 'Dashboard', 'nav.quickPick': 'Quick pick', 'nav.channels': 'Live channels', 'nav.movies': 'Movies (VOD)',
-    'nav.series': 'Series', 'nav.users': 'Users', 'nav.devices': 'Devices', 'nav.plans': 'Plans', 'nav.codes': 'Activation codes', 'nav.resellers': 'Resellers', 'nav.codeBatches': 'Batches',
+    'nav.series': 'Series', 'nav.users': 'Users', 'nav.liveViewers': 'Live viewers', 'nav.devices': 'Devices', 'nav.plans': 'Plans', 'nav.codes': 'Activation codes', 'nav.resellers': 'Resellers', 'nav.codeBatches': 'Batches',
     'nav.import': 'IPTV import', 'nav.m3uSources': 'Automatic M3U sources', 'nav.xtreamSources': 'Xtream sources', 'nav.sources': 'Other sources',
     'nav.epg': 'Programme guide (EPG)', 'nav.versions': 'App releases', 'nav.stats': 'Statistics', 'nav.activity': 'Activity log',
     'nav.scheduler': 'Task scheduler', 'nav.notifications': 'Notifications', 'nav.recordings': 'Recordings', 'nav.settings': 'Settings', 'nav.section.overview': 'Overview', 'nav.section.content': 'Content',
@@ -623,7 +623,7 @@ const dictionaries: Record<Locale, Dictionary> = {
   }),
   fr: buildDictionary(2, {
     'nav.dashboard': 'Tableau de bord', 'nav.quickPick': 'Sélection rapide', 'nav.channels': 'Chaînes en direct', 'nav.movies': 'Films (VOD)',
-    'nav.series': 'Séries', 'nav.users': 'Utilisateurs', 'nav.devices': 'Appareils', 'nav.plans': 'Forfaits', 'nav.codes': "Codes d’activation", 'nav.resellers': 'Revendeurs', 'nav.codeBatches': 'Lots',
+    'nav.series': 'Séries', 'nav.users': 'Utilisateurs', 'nav.liveViewers': 'Spectateurs en direct', 'nav.devices': 'Appareils', 'nav.plans': 'Forfaits', 'nav.codes': "Codes d’activation", 'nav.resellers': 'Revendeurs', 'nav.codeBatches': 'Lots',
     'nav.import': 'Import IPTV', 'nav.m3uSources': 'Sources M3U automatiques', 'nav.xtreamSources': 'Sources Xtream', 'nav.sources': 'Autres sources',
     'nav.epg': 'Guide des programmes (EPG)', 'nav.versions': 'Versions de l’application', 'nav.stats': 'Statistiques', 'nav.activity': 'Journal d’activité',
     'nav.scheduler': 'Planificateur de tâches', 'nav.notifications': 'Notifications', 'nav.recordings': 'Enregistrements', 'nav.settings': 'Paramètres', 'nav.section.overview': 'Aperçu', 'nav.section.content': 'Contenu',
