@@ -29,6 +29,7 @@ const {
   reconcileChannelIdentities,
 } = require('../services/channel-identity-service');
 const { channelCache, statsCache } = require('../services/cache');
+const { listActiveStreamSessions, revokeStreamSession } = require('../services/stream-session-service');
 const {
   resolveChannelGroups,
   clubByChannelId,
@@ -1553,6 +1554,68 @@ router.get('/stats/scheduler', async (req, res) => {
   } catch (error) {
     console.error('Error fetching scheduler stats:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch scheduler stats' });
+  }
+});
+
+// Live Viewers — "who's watching now" (impress-me dashboard feature).
+// Reads active Redis playback sessions and enriches them with the username
+// so admins get a real-time view of concurrent viewers, what they're
+// watching, and can force-disconnect a session (e.g. a shared/leaked code).
+router.get('/live-viewers', async (req, res) => {
+  try {
+    const sessions = await listActiveStreamSessions();
+    const userIds = [...new Set(sessions.map((s) => s.userId).filter(Boolean))];
+    const users = userIds.length
+      ? await User.find({ _id: { $in: userIds } }).select('username email channelListCode').lean()
+      : [];
+    const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+    const viewers = sessions.map((s) => {
+      const user = userMap.get(String(s.userId));
+      return {
+        sessionId: s.sessionId,
+        userId: s.userId || null,
+        username: user?.username || s.username || null,
+        channelListCode: user?.channelListCode || s.channelListCode || null,
+        contentType: s.contentType || null,
+        contentName: s.contentName || null,
+        contentGroup: s.contentGroup || null,
+        platform: s.platform || null,
+        startedAt: s.startedAt ? new Date(s.startedAt).toISOString() : null,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        count: viewers.length,
+        viewers: viewers.sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || '')),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching live viewers:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch live viewers' });
+  }
+});
+
+// Force-disconnect an active playback session (e.g. a shared/leaked code).
+router.delete('/live-viewers/:userId/:sessionId', async (req, res) => {
+  try {
+    const { userId, sessionId } = req.params;
+    const revoked = await revokeStreamSession(userId, sessionId);
+    audit({
+      userId: req.user.id,
+      action: 'revoke_live_session',
+      resource: 'stream_session',
+      resourceId: sessionId,
+      status: revoked ? 'success' : 'failure',
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+    res.json({ success: true, data: { revoked } });
+  } catch (error) {
+    console.error('Error revoking live session:', error);
+    res.status(500).json({ success: false, error: 'Failed to revoke session' });
   }
 });
 

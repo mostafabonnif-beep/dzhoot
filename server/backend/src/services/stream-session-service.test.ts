@@ -92,6 +92,7 @@ describe('registerStreamSession', () => {
       600,
       86_400,
       'dz:stream:sess:',
+      '1',
     ]]);
   });
 

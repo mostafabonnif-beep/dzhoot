@@ -547,6 +547,13 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         userId: String(user.id),
         sessionId: rootSessionId,
         ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+        metadata: {
+          username: user.username,
+          channelListCode: user.channelListCode,
+          contentType: vodKind,
+          contentName: vodDoc.title || '',
+          platform: String(req.headers['x-platform'] || req.headers['user-agent'] || '').slice(0, 40),
+        },
       });
       return res.json({
         success: true,
@@ -695,6 +702,14 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       sessionId: rootSessionId,
       ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
       maxConcurrentStreams: playbackAccess.plan?.maxConcurrentStreams,
+      metadata: {
+        username: user.username,
+        channelListCode: user.channelListCode,
+        contentType: 'live',
+        contentName: channel.channelName || '',
+        contentGroup: channel.channelGroup || '',
+        platform: String(req.headers['x-platform'] || req.headers['user-agent'] || '').slice(0, 40),
+      },
     });
     if (!session.allowed) {
       return res.status(429).json({
