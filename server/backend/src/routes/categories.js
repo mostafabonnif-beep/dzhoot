@@ -34,16 +34,25 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       { $sort: { _id: 1 } },
     ]);
 
-    const categories = groups.map((g, index) => {
+    // Merge raw supplier groups that clean to the same display label (the
+    // channel payloads carry the cleaned label too, so the sidebar group list
+    // must mirror client-side grouping exactly — otherwise decorated variants
+    // like "AR| BEIN SPORTS ᴮᴱ ⚽" show as phantom groups that never match).
+    const mergedByName = new Map();
+    for (const g of groups) {
       const rawGroup = g._id || '';
       const displayName = cleanDisplayText(rawGroup) || 'Uncategorized';
-      return {
-        id: rawGroup || 'uncategorized',
-        name: displayName,
-        display_order: index,
-        channel_count: g.channel_count,
-      };
-    });
+      const existing = mergedByName.get(displayName);
+      if (existing) existing.channel_count += g.channel_count;
+      else mergedByName.set(displayName, { channel_count: g.channel_count });
+    }
+
+    const categories = [...mergedByName.entries()].map(([name, meta], index) => ({
+      id: name,
+      name,
+      display_order: index,
+      channel_count: meta.channel_count,
+    }));
 
     res.json({
       success: true,
