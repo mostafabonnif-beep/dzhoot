@@ -241,7 +241,8 @@ class ComposeMainActivity : ComponentActivity() {
 
                             val update = updateState.updateInfo
                             if (!showSplash && update != null && !updateState.dismissed) {
-                                BackHandler(enabled = !updateState.isDownloading) {
+                                // Mandatory updates swallow Back; optional ones dismiss.
+                                BackHandler(enabled = !updateState.isDownloading && !update.isMandatory) {
                                     updateViewModel.dismiss()
                                 }
                                 UpdateAvailableScreen(

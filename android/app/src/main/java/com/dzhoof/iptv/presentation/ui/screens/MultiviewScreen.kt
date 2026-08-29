@@ -384,7 +384,7 @@ private fun ChannelPickerOverlay(
                 modifier = Modifier.weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                itemsIndexed(channels, key = { _, ch -> ch.id }) { index, ch ->
+                itemsIndexed(channels, key = { i, ch -> "$i:${ch.id}" }) { index, ch ->
                     PickerRow(
                         label = ch.name,
                         selected = ch.id == currentId,

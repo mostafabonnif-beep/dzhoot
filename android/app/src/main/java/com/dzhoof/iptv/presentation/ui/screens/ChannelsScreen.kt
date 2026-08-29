@@ -198,7 +198,8 @@ private fun CategoryChips(
                 )
             }
         }
-        items(categories, key = { it }) { category ->
+        items(categories.size, key = { i -> "$i:${categories[i]}" }) { i ->
+            val category = categories[i]
             CategoryChip(
                 label = CategoryLocalizer.localize(category),
                 isSelected = selectedCategory == category,
@@ -235,7 +236,7 @@ private fun ChannelsGrid(
         horizontalArrangement = Arrangement.spacedBy(gridGap),
         verticalArrangement = Arrangement.spacedBy(gridGap)
     ) {
-        itemsIndexed(channels, key = { _, channel -> channel.id }) { index, channel ->
+        itemsIndexed(channels, key = { i, channel -> "$i:${channel.id}" }) { index, channel ->
             ChannelCard(
                 channel = channel,
                 onClick = { onChannelClick(channel.id) },

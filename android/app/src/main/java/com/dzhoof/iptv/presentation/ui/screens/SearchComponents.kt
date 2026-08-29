@@ -64,7 +64,8 @@ internal fun CategoryMatchHints(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(Dimens.Space2)
     ) {
-        items(categories, key = { it }) { category ->
+        items(categories.size, key = { i -> "$i:${categories[i]}" }) { i ->
+            val category = categories[i]
             val catColor = categoryColor(category)
             Surface(
                 shape = MaterialTheme.shapes.small,
@@ -187,7 +188,8 @@ internal fun RecentSearches(
         LazyRow(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(searches, key = { it }) { search ->
+            items(searches.size, key = { i -> "$i:${searches[i]}" }) { i ->
+            val search = searches[i]
                 var chipFocused by remember { mutableStateOf(false) }
                 Surface(
                     shape = MaterialTheme.shapes.small,

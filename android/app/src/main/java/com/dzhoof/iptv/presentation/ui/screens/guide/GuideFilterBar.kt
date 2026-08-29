@@ -76,7 +76,7 @@ internal fun GuideFilterBar(
                 )
             }
         }
-        items(categories.size, key = { categories[it] }) { i ->
+        items(categories.size, key = { i -> "$i:${categories[i]}" }) { i ->
             val category = categories[i]
             CategoryChip(
                 label = category,
