@@ -315,11 +315,20 @@ async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group
     },
     $setOnInsert: { tvgId: String(item.epg_channel_id || '').trim() },
   };
-  return Channel.findOneAndUpdate(
+  const channel = await Channel.findOneAndUpdate(
     { ownerId: null, channelId },
     update,
-    { upsert: true, setDefaultsOnInsert: true },
+    { upsert: true, setDefaultsOnInsert: true, new: true },
   ).exec();
+  // Backfill only when still empty: the provider's epg_channel_id is the EPG
+  // lifeline for xtream channels — without it the channel is guide-less. Never
+  // overwrites an operator-assigned tvgId (only fills blank ones).
+  const providerTvgId = String(item.epg_channel_id || '').trim();
+  if (providerTvgId && channel && !String((channel as any).tvgId || '').trim()) {
+    (channel as any).tvgId = providerTvgId;
+    await (channel as any).save();
+  }
+  return channel;
 }
 
 async function upsertMovie(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials) {
