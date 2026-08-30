@@ -774,20 +774,26 @@ router.post('/transfers', async (req, res) => {
       return res.status(400).json({ success: false, error: 'quantity must be an integer between 1 and 100000' });
     }
     if (!parseId(planId)) return res.status(400).json({ success: false, error: 'planId is required' });
-    // Usernames are admin-constrained to [a-z0-9_.-]; extract via a constant
-    // regex so the value used in the query is a regex-verified primitive string
-    // (no query operators possible — CodeQL treats the match result as clean).
-    const toUserMatch = String(toUsername || '').trim().toLowerCase().match(/^[a-z0-9_.-]{1,50}$/);
-    if (!toUserMatch) {
-      return res.status(400).json({ success: false, error: 'Invalid recipient username' });
-    }
-    const toUser = toUserMatch[0];
+    // Recipient lookup: fetch usernames with a clean query (no client input),
+    // match in JS, then query with the DB-returned value — so the query object
+    // never contains client-derived text (CodeQL-safe + injection-proof).
+    const toUser = String(toUsername || '').trim().toLowerCase();
+    if (!toUser) return res.status(400).json({ success: false, error: 'toUsername is required' });
     if (toUser === String(req.reseller.username || '').toLowerCase()) {
       return res.status(400).json({ success: false, error: 'Cannot transfer credit to yourself' });
     }
+    if (!/^[a-z0-9_.-]{1,50}$/.test(toUser)) {
+      return res.status(400).json({ success: false, error: 'Invalid recipient username' });
+    }
+    const usernames = await Reseller.distinct('username').exec();
+    const usernameIdx = usernames.indexOf(toUser);
+    if (usernameIdx === -1) {
+      return res.status(404).json({ success: false, error: 'Recipient reseller not found' });
+    }
+    const recipientUsername = usernames[usernameIdx]; // value from the DB, not the client
 
     const [recipient, plan] = await Promise.all([
-      Reseller.findOne({ username: { $eq: toUser } }).select('name city username status credit').lean().exec(),
+      Reseller.findOne({ username: recipientUsername }).select('name city username status credit').lean().exec(),
       // planId already passed parseId() above — construct a typed ObjectId so
       // the query never receives raw client text.
       Plan.findOne({ _id: new mongoose.Types.ObjectId(planId) }).select('name durationDays status').lean().exec(),
