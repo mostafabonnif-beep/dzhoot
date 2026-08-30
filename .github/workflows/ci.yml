@@ -69,7 +69,7 @@ jobs:
             echo 'google-services.json must not be committed; use CI secrets instead.' >&2
             exit 1
           fi
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '17'
