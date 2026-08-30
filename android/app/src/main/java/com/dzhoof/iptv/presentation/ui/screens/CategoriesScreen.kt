@@ -59,7 +59,8 @@ fun CategoriesScreen(
                     onRetry = { viewModel.loadChannels() }
                 )
                 else -> {
-                    val categoriesData = remember(uiState.channels) {
+                    val categoriesData = remember(uiState.channels, uiState.favoriteCategoryNames) {
+                        val favorites = uiState.favoriteCategoryNames
                         uiState.channels
                             .groupBy { it.category.ifBlank { "Other" } }
                             .map { (name, channels) ->
@@ -70,9 +71,12 @@ fun CategoriesScreen(
                                         ?: channels.firstOrNull { it.logoUrl != null }?.logoUrl
                                 )
                             }
-                            // التنظيم: الأكبر أولًا + تجاهل التصنيفات الصغيرة جدًا (ضجيج)
+                            // التنظيم: المفضلة أولًا ثم الأكبر عددًا + تجاهل التصنيفات الصغيرة جدًا (ضجيج)
                             .filter { it.second >= 3 }
-                            .sortedByDescending { it.second }
+                            .sortedWith(
+                                compareByDescending<Triple<String, Int, String?>> { it.first in favorites }
+                                    .thenByDescending { it.second }
+                            )
                     }
 
                     Column(modifier = Modifier.fillMaxSize()) {
