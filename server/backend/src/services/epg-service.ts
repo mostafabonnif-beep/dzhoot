@@ -48,6 +48,18 @@ const EPG_MAX_PROGRAMS_PER_SOURCE = Math.max(
   parseInt(process.env.EPG_MAX_PROGRAMS_PER_SOURCE || '50000', 10) || 50000,
 );
 
+// Auto-disable a source after this many CONSECUTIVE size-limit failures.
+// A guide that decompresses beyond EPG_MAX_DECOMPRESSED_MB will never succeed
+// without raising the cap, and re-downloading it every refresh cycle wastes
+// bandwidth, disk and memory. After the threshold the source is disabled with
+// a durable note; an operator can re-enable it from the admin UI after
+// capacity tests (see EPG_MAX_DECOMPRESSED_MB comment).
+const EPG_AUTO_DISABLE_CONSECUTIVE_FAILURES = Math.max(
+  2,
+  parseInt(process.env.EPG_AUTO_DISABLE_CONSECUTIVE_FAILURES || '3', 10) || 3,
+);
+const EPG_OVERSIZED_ERROR_RE = /exceeds maximum decompressed size/i;
+
 // Heap/RSS guard: before starting each source, if the process RESIDENT memory
 // (what the container cgroup actually counts) is above this threshold the
 // source is skipped and recorded as an error instead of letting the process
@@ -134,6 +146,8 @@ interface EpgSourceInfo {
   source: string;
   /** Operator-set override state (merged at discovery time). */
   disabled?: boolean;
+  /** Consecutive failures counter (used for auto-disable of chronic failures). */
+  consecutiveFailures?: number;
   lastOkAt?: Date | null;
   lastFailedAt?: Date | null;
   lastError?: string | null;
@@ -483,11 +497,21 @@ export class EpgService {
     return sources.map((s) => {
       const ov = overrideByUrl.get(s.url);
       if (!ov) {
-        return { ...s, disabled: false, lastOkAt: null, lastFailedAt: null, lastError: null, lastTestedAt: null, lastTestResult: null };
+        return {
+          ...s,
+          disabled: false,
+          consecutiveFailures: 0,
+          lastOkAt: null,
+          lastFailedAt: null,
+          lastError: null,
+          lastTestedAt: null,
+          lastTestResult: null,
+        };
       }
       return {
         ...s,
         disabled: Boolean(ov.disabled),
+        consecutiveFailures: ov.consecutiveFailures ?? 0,
         lastOkAt: ov.lastOkAt ?? null,
         lastFailedAt: ov.lastFailedAt ?? null,
         lastError: ov.lastError ?? null,
@@ -506,19 +530,37 @@ export class EpgService {
       if (ok) {
         await EpgSourceOverride.updateOne(
           { url: safeUrl },
-          { $set: { lastOkAt: new Date() }, $unset: { lastFailedAt: 1, lastError: 1 } },
-          { upsert: true },
-        );
-      } else {
-        await EpgSourceOverride.updateOne(
-          { url: safeUrl },
           {
-            $set: {
-              lastFailedAt: new Date(),
-              lastError: sanitizeUrlForStorage(String(error || 'unknown error')).slice(0, 500),
-            },
+            $set: { lastOkAt: new Date(), consecutiveFailures: 0 },
+            $unset: { lastFailedAt: 1, lastError: 1 },
           },
           { upsert: true },
+        );
+        return;
+      }
+      const updated = await EpgSourceOverride.findOneAndUpdate(
+        { url: safeUrl },
+        {
+          $set: {
+            lastFailedAt: new Date(),
+            lastError: sanitizeUrlForStorage(String(error || 'unknown error')).slice(0, 500),
+          },
+          $inc: { consecutiveFailures: 1 },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+      // A guide that permanently exceeds the decompressed size limit (e.g. a
+      // country file that expands to several times the memory budget) fails on
+      // every refresh. Auto-disable it once the threshold is reached so the
+      // scheduler stops re-downloading a guide it can never process — the admin
+      // UI keeps the override visible and can re-enable it after capacity tests.
+      const errText = String(error || '');
+      const consecutive = updated?.consecutiveFailures ?? 0;
+      if (consecutive >= EPG_AUTO_DISABLE_CONSECUTIVE_FAILURES && EPG_OVERSIZED_ERROR_RE.test(errText)) {
+        await this.setSourceDisabled(
+          safeUrl,
+          true,
+          `Auto-disabled after ${consecutive} consecutive size-limit failures (guide exceeds the maximum decompressed EPG size; re-enable only after capacity tests)`,
         );
       }
     } catch (err) {
