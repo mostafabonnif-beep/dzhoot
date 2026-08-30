@@ -52,6 +52,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build:backend
+      - name: Test operational readiness guard
+        run: bash scripts/ops/test-operational-readiness.sh
       - run: npm audit --omit=dev --audit-level=high
       - run: npm run test:backend
       - name: E2E smoke (subscription loop)
