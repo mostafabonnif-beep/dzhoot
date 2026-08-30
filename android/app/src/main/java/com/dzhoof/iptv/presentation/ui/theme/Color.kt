@@ -108,7 +108,7 @@ val Sand100 = Color(0xFFECF2EE)   // content areas
 val Sand200 = Color(0xFFE2EAE4)   // card background
 val Sand300 = Color(0xFFD4DED7)   // borders, dividers
 val Sand500 = Color(0xFFB4C2BA)   // strong borders
-val Sand700 = Color(0xFF8A9B90)   // icons, inactive elements
+val Sand700 = Color(0xFF72867B)   // icons, inactive elements
 
 // ── Backward-compatible aliases (deprecated — replaced by Sand) ──────
 @Deprecated("Replaced by Sand50", ReplaceWith("Sand50"))
@@ -133,8 +133,8 @@ val TextDisabledDark  = Color(0xFF2E3A33)
 // ── Text — light mode ────────────────────────────────────────────────
 val TextPrimaryLight   = Color(0xFF14201A)
 val TextSecondaryLight = Color(0xFF3E5A4C)
-val TextDimLight       = Color(0xFF75887D)
-val TextDisabledLight  = Color(0xFFB4C2BA)
+val TextDimLight       = Color(0xFF5F7268)
+val TextDisabledLight  = Color(0xFF87948C)
 
 // ── Backward-compatible aliases (resolves to dark defaults) ──────────
 val TextPrimary   = TextPrimaryDark
