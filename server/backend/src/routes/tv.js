@@ -1195,12 +1195,15 @@ router.post('/pairing/request', async (req, res) => {
     audit({
       action: 'pairing_request',
       resource: 'pairing',
-      resourceId: pin,
+      resourceId: String(pairingRequest._id),
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
 
-    console.log(`Pairing request created: PIN ${pin}, expires at ${expiresAt}`);
+    console.info('Pairing request created', {
+      pairingRequestId: String(pairingRequest._id),
+      expiresAt,
+    });
 
     res.json({
       success: true,
@@ -1223,14 +1226,13 @@ router.post('/pairing/confirm', async (req, res) => {
   try {
     const { pin } = req.body;
 
-    console.log('Pairing confirmation attempt:', {
-      pin,
+    console.info('Pairing confirmation attempt', {
       hasBody: !!req.body,
-      hasHeader: !!req.headers['x-session-id'],
+      hasSessionHeader: !!req.headers['x-session-id'],
     });
 
     if (!pin || pin.length !== 6) {
-      console.warn('Invalid PIN format:', pin);
+      console.warn('Invalid pairing PIN format');
       return res.status(400).json({
         success: false,
         error: 'Invalid PIN format. PIN must be 6 digits.',
@@ -1253,7 +1255,7 @@ router.post('/pairing/confirm', async (req, res) => {
     const session = await Session.findOne({ sessionId }).populate('userId');
 
     if (!session || !session.userId) {
-      console.warn('Session not found or has no user:', sessionId);
+      console.warn('Pairing session not found or has no user');
       return res.status(401).json({
         success: false,
         error: 'Invalid or expired session. Please log in again.',
@@ -1262,7 +1264,7 @@ router.post('/pairing/confirm', async (req, res) => {
 
     // Check if session is still valid
     if (!session.isValid()) {
-      console.warn('Session expired for user:', session.username);
+      console.warn('Pairing session expired', { userId: String(session.userId?._id || '') });
       await Session.deleteOne({ sessionId });
       return res.status(401).json({
         success: false,
@@ -1271,7 +1273,7 @@ router.post('/pairing/confirm', async (req, res) => {
     }
 
     const user = session.userId;
-    console.log(`User authenticated for pairing: ${user.username} (${user.role})`);
+    console.info('Pairing user authenticated', { userId: String(user._id), role: user.role });
 
     // Find pairing request
     const pairingRequest = await PairingRequest.findOne({
@@ -1280,7 +1282,7 @@ router.post('/pairing/confirm', async (req, res) => {
     });
 
     if (!pairingRequest) {
-      console.warn('PIN not found or not pending:', pin);
+      console.warn('Pairing PIN not found or not pending');
       return res.status(404).json({
         success: false,
         error:
@@ -1290,7 +1292,7 @@ router.post('/pairing/confirm', async (req, res) => {
 
     // Check if expired
     if (pairingRequest.isExpired()) {
-      console.warn('PIN expired:', pin);
+      console.warn('Pairing PIN expired');
       await pairingRequest.markExpired();
       return res.status(400).json({
         success: false,
@@ -1315,13 +1317,15 @@ router.post('/pairing/confirm', async (req, res) => {
       userId: String(user._id),
       action: 'pairing_confirm',
       resource: 'pairing',
-      resourceId: pin,
+      resourceId: String(pairingRequest._id),
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
-    console.log(
-      `✅ Pairing confirmed: PIN ${pin} linked to user ${user.username} (${user.channelListCode})`,
-    );
+    console.info('Pairing confirmed', {
+      pairingRequestId: String(pairingRequest._id),
+      userId: String(user._id),
+      role: user.role,
+    });
 
     res.json({
       success: true,
