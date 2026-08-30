@@ -473,6 +473,7 @@ app.use('/api/v1/admin', require('./routes/admin'));
 app.use('/api/v1/admin/plans', require('./routes/admin-plans'));
 app.use('/api/v1/admin/activation-codes', require('./routes/admin-activation-codes'));
 app.use('/api/v1/admin/resellers', require('./routes/admin-resellers'));
+app.use('/api/v1/admin/tickets', require('./routes/admin-tickets'));
 app.use('/api/v1/admin/reseller-debts', require('./routes/admin-reseller-debts'));
 app.use('/api/v1/admin/code-batches', require('./routes/admin-code-batches'));
 app.use('/api/v1/reseller/auth', require('./routes/reseller-auth'));

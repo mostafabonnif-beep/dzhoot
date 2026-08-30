@@ -21,10 +21,15 @@ interface ResellerData {
   credit?: { planId: string; quantity: number }[];
   username?: string;
   prefix?: string;
+  permissions?: Partial<Record<PermissionKey, boolean>>;
   stats?: { total: number; activated: number; remaining: number };
   purchasedValue?: number;
   createdAt?: string;
 }
+
+type PermissionKey = 'generateCodes' | 'transfers' | 'renew' | 'changePackage' | 'suspend' | 'exportM3U' | 'viewHistory';
+
+const PERMISSION_KEYS: PermissionKey[] = ['generateCodes', 'transfers', 'renew', 'changePackage', 'suspend', 'exportM3U', 'viewHistory'];
 
 interface ResellerForm {
   name: string;
@@ -37,6 +42,7 @@ interface ResellerForm {
   username: string;
   password: string;
   prefix: string;
+  permissions: Record<PermissionKey, boolean>;
 }
 
 const emptyForm: ResellerForm = {
@@ -50,6 +56,15 @@ const emptyForm: ResellerForm = {
   username: '',
   password: '',
   prefix: '',
+  permissions: {
+    generateCodes: true,
+    transfers: true,
+    renew: true,
+    changePackage: true,
+    suspend: true,
+    exportM3U: true,
+    viewHistory: true,
+  },
 };
 
 interface CreditDebtItem {
@@ -142,6 +157,15 @@ export default function ResellersPage() {
       username: r.username || '',
       password: '',
       prefix: r.prefix || '',
+      permissions: {
+        generateCodes: r.permissions?.generateCodes !== false,
+        transfers: r.permissions?.transfers !== false,
+        renew: r.permissions?.renew !== false,
+        changePackage: r.permissions?.changePackage !== false,
+        suspend: r.permissions?.suspend !== false,
+        exportM3U: r.permissions?.exportM3U !== false,
+        viewHistory: r.permissions?.viewHistory !== false,
+      },
     });
     setFormError('');
     setFormOpen(true);
@@ -166,6 +190,7 @@ export default function ResellersPage() {
         username: form.username.trim() || undefined,
         password: form.password || undefined,
         prefix: form.prefix.trim() ? form.prefix.trim().toUpperCase() : undefined,
+        permissions: { ...form.permissions },
         creditPaid,
       };
       if (editingId) {
@@ -753,6 +778,26 @@ export default function ResellersPage() {
               <option value="Active">{t('resellers.active')}</option>
               <option value="Inactive">{t('resellers.inactive')}</option>
             </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              {t('resellers.permissions')}
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-border p-3">
+              {PERMISSION_KEYS.map((key) => (
+                <label key={key} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.permissions[key]}
+                    onChange={(e) =>
+                      setForm({ ...form, permissions: { ...form.permissions, [key]: e.target.checked } })
+                    }
+                    className="h-4 w-4 accent-primary"
+                  />
+                  {t(`resellers.perm.${key}`)}
+                </label>
+              ))}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
