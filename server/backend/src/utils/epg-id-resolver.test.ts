@@ -19,7 +19,7 @@ function makeInput(overrides: Partial<EpgIdResolverInput> = {}): EpgIdResolverIn
   const nameToId = new Map<string, string>();
   for (const id of GUIDE_IDS) {
     const key = epgIdName(id);
-    if (key.length >= 4) nameToId.set(key, id);
+    if (key.length >= 3) nameToId.set(key, id);
   }
   return {
     channelName: '',

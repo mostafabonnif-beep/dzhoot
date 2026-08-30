@@ -60,7 +60,7 @@ async function run(): Promise<void> {
   const nameToId = new Map<string, string>();
   for (const id of availableIds) {
     const key = epgIdName(id);
-    if (!key || key.length < 4) continue;
+    if (!key || key.length < 3) continue;
     const existing = nameToId.get(key);
     if (!existing || /\.tr$/.test(existing)) nameToId.set(key, id);
   }
