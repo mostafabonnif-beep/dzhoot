@@ -13,6 +13,9 @@ export interface IEpgSourceOverrideDocument extends Document {
   lastFailedAt?: Date | null;
   /** Last error message (bounded). */
   lastError?: string | null;
+  /** Consecutive fetch/parse failures (reset on success). Used to auto-disable
+   *  chronic failures such as guides that permanently exceed the size limit. */
+  consecutiveFailures?: number;
   /** Last manual test timestamp + result. */
   lastTestedAt?: Date | null;
   lastTestResult?: {
@@ -59,6 +62,10 @@ const epgSourceOverrideSchema = new Schema<IEpgSourceOverrideDocument>(
     lastTestResult: {
       type: Schema.Types.Mixed,
       default: null,
+    },
+    consecutiveFailures: {
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true },
