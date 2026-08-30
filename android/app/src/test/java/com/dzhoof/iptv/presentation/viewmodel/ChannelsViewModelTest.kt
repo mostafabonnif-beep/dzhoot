@@ -13,6 +13,7 @@ import com.dzhoof.iptv.data.source.remote.NetworkException
 import com.dzhoof.iptv.data.source.remote.UnauthorizedException
 import com.dzhoof.iptv.data.source.remote.ServerException
 import com.dzhoof.iptv.domain.model.Channel
+import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.usecase.GetChannelsByCategoryUseCase
 import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
@@ -56,6 +57,7 @@ class ChannelsViewModelTest {
     private val channelUiMapper = ChannelUiMapper()
     private val channelMapper: ChannelMapper = mockk()
     private val epgRepository: EpgRepository = mockk()
+    private val catalogRepository: CatalogRepository = mockk()
     private val channelHealthDao: ChannelHealthDao = mockk()
     private val channelDao: ChannelDao = mockk()
     private val favoriteDao: FavoriteDao = mockk()
@@ -107,6 +109,7 @@ class ChannelsViewModelTest {
         channelUiMapper = channelUiMapper,
         channelMapper = channelMapper,
         epgRepository = epgRepository,
+        catalogRepository = catalogRepository,
         channelHealthDao = channelHealthDao,
         channelDao = channelDao,
         favoriteDao = favoriteDao,
