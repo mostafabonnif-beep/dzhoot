@@ -95,3 +95,26 @@ describe('epg-id-resolver', () => {
     expect(canonicalKey('8K: beIN SP⚽RTS 5 ᴴᴰ')).toBe('bein sports 5');
   });
 });
+
+describe('epg-id-resolver: non-sports beIN brands', () => {
+  it('never maps beIN CINEMA/FILM/OD/ARABIC channels to a Sports guide id', () => {
+    const input = makeInput();
+    for (const name of [
+      'BEIN CINEMA COMEDY 2',
+      'BEIN CINEMA FILM 3',
+      'BEIN OD FILMS 4',
+      'BEIN DOCUMENTARY 2',
+      'BEIN ACTION 2',
+      'BEIN ARABIC 1',
+      'BEIN FRENCH 1',
+    ]) {
+      expect(resolveEpgIdForChannel(makeInput({ channelName: name }))).toBeNull();
+    }
+  });
+
+  it('still maps real beIN SPORTS feeds', () => {
+    expect(resolveEpgIdForChannel(makeInput({ channelName: 'BEIN SPORTS 1' }))).not.toBeNull();
+    expect(resolveEpgIdForChannel(makeInput({ channelName: 'BEIN SPORT TOD 5' }))).toBeNull(); // guide lacks beIN 5
+    expect(resolveEpgIdForChannel(makeInput({ channelName: 'BEIN 1' }))).not.toBeNull();
+  });
+});

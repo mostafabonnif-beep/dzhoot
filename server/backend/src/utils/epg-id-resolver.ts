@@ -93,6 +93,14 @@ export function resolveEpgIdForChannel(input: EpgIdResolverInput): EpgIdResoluti
   // ─── beIN family ───────────────────────────────────────────────
   if (/BEIN/.test(clean)) {
     if (/\bMAX\b/.test(clean)) return null; // guide has no MAX feeds
+    // Only beIN *SPORTS* feeds map to the beIN SPORTS guide ids. beIN's other
+    // brands (CINEMA/FILM/ACTION/DOCUMENTARY/OD/ARABIC/FRENCH/…) must NOT be
+    // stamped with a Sports schedule — a channel named "BEIN CINEMA COMEDY 2"
+    // is not beIN Sports 2.
+    const isSportsFeed =
+      /SPORT/.test(clean) ||
+      !/CINEMA|FILM|MOVIES|ACTION|DOCUMENTARY|SERIES|\bOD\b|ARABIC|FRENCH|ENGLISH|KIDS|\bPLUS\b|24\s*\/?\s*7/.test(clean);
+    if (!isSportsFeed) return null;
     const beinMatch = extractBeinNumber(name);
     if (beinMatch) {
       // A number is present: map to THAT channel only. Never fall back to 1 —
