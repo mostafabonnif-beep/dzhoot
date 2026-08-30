@@ -35,7 +35,15 @@ API_IMAGE_ID=""
 FRONTEND_IMAGE_ID=""
 
 say() { printf '[atomic-deploy] %s\n' "$*"; }
-die() { printf '[atomic-deploy][ABORT] %s\n' "$*" >&2; exit 1; }
+die() {
+  printf '[atomic-deploy][ABORT] %s\n' "$*" >&2
+  # An explicit exit does NOT fire the ERR trap, so a die() here would
+  # otherwise skip the rollback and leave production on a broken release
+  # (seen 2026-08-30: API crash-looped with 'find requires authentication'
+  # because the swapped-in repo compose dropped the mongo auth URI).
+  rollback
+  exit 1
+}
 
 rollback() {
   code=$?
