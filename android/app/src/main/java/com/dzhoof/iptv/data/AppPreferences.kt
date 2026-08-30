@@ -22,6 +22,11 @@ object AppPreferences {
     private const val XTREAM_USER_KEY = "xtream_user"
     private const val XTREAM_PASS_KEY = "xtream_pass"
     private const val PARENTAL_PIN_HASH_KEY = "parental_pin_hash"
+
+private const val PARENTAL_PIN_FAILED_ATTEMPTS_KEY = "parental_pin_failed_attempts"
+private const val PARENTAL_PIN_LOCK_UNTIL_KEY = "parental_pin_lock_until"
+private const val PARENTAL_PIN_MAX_ATTEMPTS = 5
+private const val PARENTAL_PIN_LOCK_MS = 30_000L
     private const val PARENTAL_LOCK_ENABLED_KEY = "parental_lock_enabled"
     val DEFAULT_SERVER_URL: String
         get() = BuildConfig.API_BASE_URL.trimEnd('/')
@@ -242,8 +247,38 @@ object AppPreferences {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(PARENTAL_PIN_HASH_KEY, null)
 
-    fun verifyParentalPin(context: Context, pin: String): Boolean =
-        ParentalPinUtils.verifyPin(pin, getParentalPinHash(context))
+    fun verifyParentalPin(context: Context, pin: String): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val lockUntil = prefs.getLong(PARENTAL_PIN_LOCK_UNTIL_KEY, 0L)
+        if (lockUntil > now) return false
+
+        val storedHash = getParentalPinHash(context)
+        val valid = ParentalPinUtils.verifyPin(pin, storedHash)
+        if (valid) {
+            // Successful unlock clears the local failure counter.
+            prefs.edit()
+                .remove(PARENTAL_PIN_FAILED_ATTEMPTS_KEY)
+                .remove(PARENTAL_PIN_LOCK_UNTIL_KEY)
+                .apply()
+
+            // Seamlessly upgrade hashes created by older releases after a successful
+            // unlock, without ever persisting the raw PIN.
+            if (storedHash != null && ParentalPinUtils.isLegacySha256(storedHash)) {
+                setParentalPin(context, pin)
+            }
+            return true
+        }
+
+        val attempts = prefs.getInt(PARENTAL_PIN_FAILED_ATTEMPTS_KEY, 0) + 1
+        val editor = prefs.edit().putInt(PARENTAL_PIN_FAILED_ATTEMPTS_KEY, attempts)
+        if (attempts >= PARENTAL_PIN_MAX_ATTEMPTS) {
+            editor.putLong(PARENTAL_PIN_LOCK_UNTIL_KEY, now + PARENTAL_PIN_LOCK_MS)
+                .putInt(PARENTAL_PIN_FAILED_ATTEMPTS_KEY, 0)
+        }
+        editor.apply()
+        return false
+    }
 
     fun isParentalLockEnabled(context: Context): Boolean =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
