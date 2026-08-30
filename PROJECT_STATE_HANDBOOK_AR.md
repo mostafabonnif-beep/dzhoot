@@ -35,7 +35,7 @@
 - **الحاويات** (6): `dzhoof-api` (3000، حد ذاكرة 2048m)، `dzhoof-scheduler` (2048m)، `dzhoof-frontend` (3000)، `dzhoof-mongodb` (27017)، `dzhoof-redis` (6379)، `dzhoof-caddy` (80/443)
 - **الشبكات**: `dzhoof-network` (داخلية) + **`dzhoof-shared-network` خارجية مشتركة مع حاويات مستأجرين آخرين** (api/frontend مرتبطان بها — ملاحظة أمنية معروفة، لم تُعالج بعد؛ Redis/Mongo بلا كلمات مرور لكن غير مكشوفة للعامة)
 - **الأسرار**: `/etc/dzhoot/.env.production` (perm 600) — لا شيء منها في Git. يوجد أيضًا `/etc/dzhoot/github.token` (صلاحيات كاملة للمستودع) و`android-signing/` (مفاتيح التوقيع)
-- **النسخ الاحتياطي**: mongodump يومي 03:15 UTC + restic مشفّر محلي (استبقاء 7أ/4أ/6ش) + `dzhoof-healthcheck.timer`. **النسخ البعيد غير مفعّل بعد**
+- **النسخ الاحتياطي**: mongodump يومي 03:15 UTC + restic مشفّر محلي (استبقاء 7أ/4أ/6ش) + `dzhoof-healthcheck.timer`. **النسخ البعيد restic مفعّل ويعمل**: `dzhoof-restic-local-backup.timer` يومي 02:36 UTC، `dzhoof-restic-offsite-backup.timer` يومي 03:20 UTC، `dzhoof-restic-offsite-check.timer` أسبوعي — آخر نجاح offsite 2026-08-30 03:43 UTC (مُتحقق 2026-08-30)
 - **الوصول من الصندوق**: مفتاح SSH + سكربت `ssh_vps.py` + نسخة github.token في مساحة العمل المحلية (perm 600)
 
 ## 4. مصادر المحتوى (الوضع الفعلي 2026-08-23)
@@ -143,7 +143,7 @@ sudo env ENV_FILE=/etc/dzhoot/.env.production ./scripts/deploy/deploy-production
 - [ ] "Certificate pinning" معلن لكن غير منفذ فعليًا
 
 ### تشغيلية
-- [ ] النسخ الاحتياطي البعيد غير مفعّل (يتطلب بيانات مزود تخزين)
+- [x] النسخ الاحتياطي البعيد (restic offsite) مفعّل ويعمل — آخر نجاح 2026-08-30 03:43 UTC (مُتحقق 2026-08-30)
 - [ ] ملاحظة قانونية: المصادر الحالية (Upstream) إعادة بث لمحتوى غير مرخّص — قرار استراتيجي للمالك (البقاء مقابل التحول لمحتوى مرخّص)
 
 ## 9. وثائق مفيدة داخل المستودع
