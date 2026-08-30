@@ -975,6 +975,15 @@ router.post('/pair', async (req, res) => {
       });
     }
 
+    // A revoked list code must not pair new devices — same guard as
+    // findUserByCode() for playlist/verify/stream.
+    if (user.codeRevokedAt) {
+      return res.status(403).json({
+        success: false,
+        error: 'This channel list code has been revoked. Please regenerate your code.',
+      });
+    }
+
     // Update device metadata
     user.metadata = user.metadata || {};
     user.metadata.lastPairedDevice = deviceName || 'Unknown Device';
@@ -1027,6 +1036,17 @@ router.get('/verify/:code', async (req, res) => {
     });
 
     if (!user) {
+      return res.json({
+        success: false,
+        valid: false,
+        message: 'Invalid or inactive code',
+      });
+    }
+
+    // Revoked codes are reported as invalid without disclosing the reason —
+    // this endpoint stays a tight oracle (no username/role/catalog leak), and
+    // /pair already tells the legitimate user to regenerate their code.
+    if (user.codeRevokedAt) {
       return res.json({
         success: false,
         valid: false,
