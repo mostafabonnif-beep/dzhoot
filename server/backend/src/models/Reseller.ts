@@ -1,6 +1,23 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+export interface IResellerPermissions {
+  /** Self-service code generation from plan credit. */
+  generateCodes: boolean;
+  /** Transfer code credit to another reseller. */
+  transfers: boolean;
+  /** Renew an activated code (extends its subscription). */
+  renew: boolean;
+  /** Switch an activated code to another plan. */
+  changePackage: boolean;
+  /** Suspend / reactivate a customer's subscription. */
+  suspend: boolean;
+  /** Export the customer's playlist (m3u) for a code. */
+  exportM3U: boolean;
+  /** View code history (activation, devices, subscription window). */
+  viewHistory: boolean;
+}
+
 export interface IResellerDocument extends Document {
   name: string;
   city: string;
@@ -17,6 +34,8 @@ export interface IResellerDocument extends Document {
   /** Unique code prefix (3-6 chars) printed on this reseller's codes. */
   prefix?: string;
   passwordHash?: string;
+  /** Per-feature capability flags (مصفوفة الصلاحيات). Default: everything on. */
+  permissions?: Partial<IResellerPermissions>;
   lastLoginAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -98,6 +117,22 @@ const resellerSchema = new Schema<IResellerDocument>(
       type: String,
       default: '',
       select: false,
+    },
+    // Per-feature capability matrix (مصفوفة صلاحيات الموزع). Every flag
+    // defaults to true so existing resellers keep full access; admins can
+    // switch features off per shop from the admin panel.
+    permissions: {
+      type: {
+        generateCodes: { type: Boolean, default: true },
+        transfers: { type: Boolean, default: true },
+        renew: { type: Boolean, default: true },
+        changePackage: { type: Boolean, default: true },
+        suspend: { type: Boolean, default: true },
+        exportM3U: { type: Boolean, default: true },
+        viewHistory: { type: Boolean, default: true },
+      },
+      _id: false,
+      default: () => ({}),
     },
     lastLoginAt: {
       type: Date,

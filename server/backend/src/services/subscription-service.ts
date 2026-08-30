@@ -242,7 +242,7 @@ export async function redeemCode(
 export async function getUserSubscription(userId: string) {
   const subscription = await Subscription.findOne({
     userId,
-    status: { $in: ['ACTIVE', 'EXPIRED'] },
+    status: { $in: ['ACTIVE', 'EXPIRED', 'SUSPENDED'] },
   })
     .sort({ expiresAt: -1 })
     .lean()
@@ -444,13 +444,15 @@ export async function getCodeExpiryDays(): Promise<number> {
 export async function recordCreditTx(opts: {
   resellerId: string;
   planId: string;
-  type: 'GRANT' | 'CONSUME' | 'RETURN' | 'EXPIRE_RETURN';
+  type: 'GRANT' | 'CONSUME' | 'RETURN' | 'EXPIRE_RETURN' | 'TRANSFER_OUT' | 'TRANSFER_IN';
   quantity: number;
   balanceAfter: number;
   note?: string;
   createdBy?: string | null;
   /** Wholesale unit price at transaction time — purchase value = quantity × unitPrice */
   unitPrice?: number;
+  /** Other reseller for TRANSFER_OUT/TRANSFER_IN rows */
+  counterpartyId?: string | null;
 }): Promise<void> {
   const unitPrice = Math.max(Number(opts.unitPrice) || 0, 0);
   try {
@@ -464,6 +466,7 @@ export async function recordCreditTx(opts: {
       amount: Math.abs(opts.quantity) * unitPrice,
       note: opts.note || '',
       createdBy: opts.createdBy ? new mongoose.Types.ObjectId(opts.createdBy) : null,
+      counterpartyId: opts.counterpartyId ? new mongoose.Types.ObjectId(opts.counterpartyId) : null,
     });
   } catch (err) {
     console.error('[credit] recordCreditTx error:', (err as Error).message);

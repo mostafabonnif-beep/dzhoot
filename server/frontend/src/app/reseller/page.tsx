@@ -30,6 +30,9 @@ import { useAuthStore } from '@/store/auth-store';
 import { useToast } from '@/hooks/use-toast';
 import Modal from '@/components/ui/modal';
 import { useLocale } from '@/components/locale-provider';
+import TransfersSection from '@/components/reseller/transfers-section';
+import TicketsSection from '@/components/reseller/tickets-section';
+import CodeToolsModal, { CodeToolsTarget } from '@/components/reseller/code-tools';
 
 interface CreditItem {
   planId: string;
@@ -104,6 +107,15 @@ export default function ResellerDashboardPage() {
     name: string;
     city: string;
     prefix?: string;
+    permissions?: {
+      generateCodes: boolean;
+      transfers: boolean;
+      renew: boolean;
+      changePackage: boolean;
+      suspend: boolean;
+      exportM3U: boolean;
+      viewHistory: boolean;
+    };
     stats: { total: number; activated: number; activatedThisMonth: number; remaining: number };
     credit: CreditItem[];
     prices?: Array<{ planId: string; price: number; currency: string; plan: { name: string; durationDays: number } }>;
@@ -160,12 +172,15 @@ export default function ResellerDashboardPage() {
     activatedCount: number;
     nextExpiry: string | null;
     expiringSoon: boolean;
-    codes: Array<{ _id: string; code: string; planName: string; status: string; activatedAt: string | null; expiresAt: string | null; customDurationDays: number | null }>;
+    codes: Array<{ _id: string; code: string; planName: string; planId?: string; status: string; activatedAt: string | null; expiresAt: string | null; customDurationDays: number | null }>;
   }>>([]);
   const [clientsSummary, setClientsSummary] = useState({ totalClients: 0, totalCodes: 0, activatedCodes: 0, expiringSoon: 0 });
   const [clientsLoading, setClientsLoading] = useState(false);
   const [clientsSearch, setClientsSearch] = useState('');
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
+
+  // Code tools (renew / change plan / suspend / m3u / history)
+  const [toolCode, setToolCode] = useState<CodeToolsTarget | null>(null);
 
   // Customer debts (ديون الزبائن)
   const [debts, setDebts] = useState<DebtItem[]>([]);
@@ -577,7 +592,8 @@ export default function ResellerDashboardPage() {
                       setGenQty(1);
                       setGenResult(null);
                     }}
-                    disabled={c.quantity < 1}
+                    disabled={c.quantity < 1 || me?.permissions?.generateCodes === false}
+                    title={me?.permissions?.generateCodes === false ? t('portal.featureDisabled') : undefined}
                     className="inline-flex items-center justify-center gap-1.5 text-xs px-2.5 py-1.5 border border-primary/40 text-primary hover:bg-primary/5 disabled:opacity-40 disabled:pointer-events-none"
                   >
                     <Wand2 className="h-3.5 w-3.5" /> {t('portal.generateCodes')}
@@ -766,6 +782,7 @@ export default function ResellerDashboardPage() {
                                 <th className="text-right p-2">{t('portal.ledgerPlan')}</th>
                                 <th className="text-right p-2">{t('portal.ledgerStatus')}</th>
                                 <th className="text-right p-2">{t('portal.clientExpiryCol')}</th>
+                                <th className="text-right p-2"></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -783,6 +800,24 @@ export default function ResellerDashboardPage() {
                                   <td className="p-2 text-xs">{statusBadge(cd.status as CodeItem['status'])}</td>
                                   <td className="p-2 text-xs text-muted-foreground">
                                     {cd.expiresAt ? new Date(cd.expiresAt).toLocaleDateString() : '—'}
+                                  </td>
+                                  <td className="p-2">
+                                    <button
+                                      onClick={() =>
+                                        setToolCode({
+                                          codeId: cd._id,
+                                          code: cd.code,
+                                          planName: cd.planName,
+                                          planId: cd.planId,
+                                          status: cd.status,
+                                          expiresAt: cd.expiresAt,
+                                        })
+                                      }
+                                      className="inline-flex items-center gap-1 text-[11px] px-2 py-1 border border-border hover:border-primary/40 hover:text-primary transition-colors"
+                                      title={t('portal.codeDetail')}
+                                    >
+                                      <Wand2 className="h-3 w-3" /> {t('portal.codeDetail')}
+                                    </button>
                                   </td>
                                 </tr>
                               ))}
@@ -972,6 +1007,12 @@ export default function ResellerDashboardPage() {
             </button>
           </div>
         </section>
+
+        {/* Credit transfers (تحويل رصيد بين الموزعين) */}
+        {me?.permissions?.transfers !== false && <TransfersSection credit={credit} />}
+
+        {/* Support tickets (تذاكر الدعم) */}
+        <TicketsSection />
 
         {/* Customer debts (ديون الزبائن) */}
         <section className="border border-border bg-card p-4">
@@ -1447,6 +1488,26 @@ export default function ResellerDashboardPage() {
           </div>
         )}
       </Modal>
+
+      {/* Code tools modal (renew / change plan / suspend / m3u / history) */}
+      <CodeToolsModal
+        open={!!toolCode}
+        target={toolCode}
+        credit={credit}
+        permissions={{
+          renew: me?.permissions?.renew !== false,
+          changePackage: me?.permissions?.changePackage !== false,
+          suspend: me?.permissions?.suspend !== false,
+          exportM3U: me?.permissions?.exportM3U !== false,
+          viewHistory: me?.permissions?.viewHistory !== false,
+        }}
+        onClose={() => setToolCode(null)}
+        onChanged={() => {
+          // Refresh clients + batches so expiry/status changes are visible.
+          loadClients();
+          load();
+        }}
+      />
       </div>
     </div>
   );

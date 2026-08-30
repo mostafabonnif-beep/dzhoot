@@ -1927,3 +1927,53 @@ Mounted at `/api/v1/activity`, all Admin-only. Backed by the `auditlogs` collect
 | GET    | `/activity?page=&pageSize=&action=&resource=&userId=&status=&search=&from=&to=` | Paginated, filterable audit log                      |
 | GET    | `/activity/recent`                                                              | Last 15 entries for dashboard widgets                |
 | GET    | `/activity/filter-options`                                                      | Distinct `action`/`resource` values + status options |
+
+## Reseller Portal (بوابة الموزعين)
+
+Base path: `/api/v1/reseller` — Bearer JWT with `role: reseller` (from `/api/v1/reseller/auth/login`).
+
+### Core
+- `GET /me` — profile, code stats, per-plan credit, wholesale prices, and the **permissions** matrix.
+- `GET /credit` — remaining code credit per plan.
+- `GET /ledger` — credit movements (paged).
+- `GET /statement?format=csv` — financial statement + CSV export.
+- `GET /clients` — customers (codes grouped by name/phone) with expiry.
+- `POST /codes/generate` — self-service code generation (deducts per-plan credit). Body: `{ planId, quantity, customerName?, customerPhone?, customDays? }`.
+- `GET /batches` · `GET /batches/:id/codes` · `GET /batches/:id/export` — batch management.
+- `GET/POST /debts`, `PATCH/DELETE /debts/:id` — customer debts.
+
+### Credit transfers (تحويل رصيد بين الموزعين) — v1.2
+- `GET /transfers` — this reseller's transfer history (in + out, newest first).
+- `POST /transfers` — send plan credit to another reseller. Body: `{ toUsername, planId, quantity }`.
+  - Sender's credit is deducted atomically; the recipient's is incremented (or a new entry is created).
+  - Two ledger rows are recorded: `TRANSFER_OUT` (sender) and `TRANSFER_IN` (recipient) with `counterpartyId`.
+  - Requires the `transfers` permission. Errors: `INSUFFICIENT_CREDIT`, `PERMISSION_DENIED`.
+
+### Code actions (إدارة الاشتراك لكل كود) — v1.2
+All scoped to codes owned by the authenticated reseller.
+- `GET /codes/:id` — full detail: plan, customer, subscription window, redemption history, bound devices. Requires `viewHistory`.
+- `POST /codes/:id/renew` — extend subscription by the code's plan duration (or `customDays` when the plan allows). Consumes 1 credit of the code's plan; re-activates EXPIRED/SUSPENDED. Requires `renew`.
+- `POST /codes/:id/change-plan` — body `{ planId }`; switches the code and extends the subscription by the new plan's duration. Consumes 1 credit of the new plan. Requires `changePackage`.
+- `POST /codes/:id/suspend` — sets the subscription to `SUSPENDED` (playback denied). Requires `suspend`.
+- `POST /codes/:id/reactivate` — lifts a suspension (only if not expired). Requires `suspend`.
+- `GET /codes/:id/m3u` — the customer's full M3U playlist (tokenized playback URLs). Requires `exportM3U`.
+
+### Support tickets (تذاكر الدعم) — v1.2
+- `GET /tickets?status=` — own tickets (OPEN/PENDING/CLOSED).
+- `POST /tickets` — open a ticket: `{ subject, body, priority? }` (LOW/MEDIUM/HIGH).
+- `GET /tickets/:id` — full thread (own ticket only).
+- `POST /tickets/:id/reply` — append a message (reopens a closed ticket).
+- `POST /tickets/:id/close` — close.
+
+### Admin tickets — v1.2
+Base path: `/api/v1/admin/tickets` (admin role).
+- `GET /?status=&resellerId=` — all tickets with reseller info + status counts.
+- `GET /:id` — full thread with reseller.
+- `POST /:id/reply` — admin reply (reopens).
+- `POST /:id/close` · `POST /:id/reopen`.
+
+### Reseller permissions (مصفوفة الصلاحيات) — v1.2
+The `Reseller` document gains a `permissions` subdocument; every flag defaults to **true** so existing shops keep full access:
+`generateCodes`, `transfers`, `renew`, `changePackage`, `suspend`, `exportM3U`, `viewHistory`.
+Admin sets them via `POST/PUT /api/v1/admin/resellers`. Disabled features return `403 { code: 'PERMISSION_DENIED' }`.
+The subscription status enum now also includes `SUSPENDED` (playback gate treats anything non-`ACTIVE` as blocked).

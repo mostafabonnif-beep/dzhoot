@@ -27,6 +27,7 @@ import {
   Video,
   Store,
   ExternalLink,
+  MessageSquare,
   type LucideIcon,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
@@ -56,6 +57,7 @@ const adminLinks: NavigationLink[] = [
   { href: '/admin/plans', labelKey: 'nav.plans', icon: CreditCard },
   { href: '/admin/codes', labelKey: 'nav.codes', icon: KeyRound },
   { href: '/admin/resellers', labelKey: 'nav.resellers', icon: Store },
+  { href: '/admin/tickets', labelKey: 'nav.tickets', icon: MessageSquare },
   { href: '/admin/code-batches', labelKey: 'nav.codeBatches', icon: Package },
   { href: '/admin/import', labelKey: 'nav.import', icon: Globe },
   { href: '/admin/m3u-sources', labelKey: 'nav.m3uSources', icon: Link2 },
