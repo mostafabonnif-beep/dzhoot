@@ -107,14 +107,24 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
           {payError}
         </div>
       )}
-      <div className={`grid gap-4 ${compact ? 'sm:grid-cols-2 lg:grid-cols-3' : 'sm:grid-cols-2 lg:grid-cols-4'}`}>
+      <div
+        className={`grid gap-4 ${
+          compact
+            ? 'sm:grid-cols-2 lg:grid-cols-3'
+            : data.plans.length === 3
+              ? 'sm:grid-cols-2 lg:grid-cols-3'
+              : data.plans.length === 2
+                ? 'sm:grid-cols-2'
+                : 'sm:grid-cols-2 lg:grid-cols-4'
+        }`}
+      >
         {data.plans.length === 0 && (
           <p className="col-span-full text-center text-muted-foreground">لا توجد باقات متاحة حالياً.</p>
         )}
         {data.plans.map((plan) => (
           <div
             key={plan._id}
-            className="group flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm transition hover:shadow-md"
+            className="group flex flex-col rounded-2xl border border-border bg-card p-6 shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-lg"
           >
             <div className="text-lg font-bold text-foreground">{plan.name}</div>
             <div className="mt-1 text-sm text-muted-foreground">{durationLabel(plan.durationDays)}</div>
