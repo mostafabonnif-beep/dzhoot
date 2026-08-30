@@ -763,9 +763,12 @@ router.post('/transfers', async (req, res) => {
   if (!hasPerm(req.reseller, 'transfers')) return deny(res, 'transfers');
   let creditDeducted = false;
   let planId = null;
+  let planObjId = null; // typed after validation — used in queries/rollback
   let qty = 0;
   const rollback = () =>
-    Reseller.updateOne({ _id: req.reseller._id, 'credit.planId': planId }, { $inc: { 'credit.$.quantity': qty } }).exec();
+    planObjId
+      ? Reseller.updateOne({ _id: req.reseller._id, 'credit.planId': planObjId }, { $inc: { 'credit.$.quantity': qty } }).exec()
+      : Promise.resolve();
   try {
     const { toUsername, planId: bodyPlanId, quantity } = req.body || {};
     planId = bodyPlanId ?? null;
@@ -774,6 +777,7 @@ router.post('/transfers', async (req, res) => {
       return res.status(400).json({ success: false, error: 'quantity must be an integer between 1 and 100000' });
     }
     if (!parseId(planId)) return res.status(400).json({ success: false, error: 'planId is required' });
+    planObjId = new mongoose.Types.ObjectId(planId);
     // Recipient lookup: fetch usernames with a clean query (no client input),
     // match in JS, then query with the DB-returned value — so the query object
     // never contains client-derived text (CodeQL-safe + injection-proof).
@@ -814,7 +818,6 @@ router.post('/transfers', async (req, res) => {
     creditDeducted = true;
 
     // Credit the recipient: increment an existing entry or create a new one.
-    const planObjId = new mongoose.Types.ObjectId(planId);
     const recipientUpdated = await Reseller.findOneAndUpdate(
       { _id: recipient._id, 'credit.planId': planObjId },
       { $inc: { 'credit.$.quantity': qty } },
@@ -827,7 +830,7 @@ router.post('/transfers', async (req, res) => {
     if (!recipientUpdated) {
       await Reseller.updateOne(
         { _id: recipient._id },
-        { $push: { credit: { planId: new mongoose.Types.ObjectId(String(planId)), quantity: qty } } },
+        { $push: { credit: { planId: planObjId, quantity: qty } } },
       ).exec();
     } else {
       recipientBalance =
