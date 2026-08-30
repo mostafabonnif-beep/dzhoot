@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { PlayCircle, Smartphone, ShieldCheck, Headset, Tv, Zap, MessagesSquare, Download } from 'lucide-react';
+import { PlayCircle, Smartphone, ShieldCheck, Headset, Tv, Zap, Download } from 'lucide-react';
 import ShopPlans from '@/components/shop-plans';
 import WhatsAppButton from '@/components/whatsapp-button';
 
