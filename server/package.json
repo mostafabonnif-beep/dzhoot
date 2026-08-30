@@ -39,7 +39,7 @@
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
     "concurrently": "^10.0.5",
-    "eslint": "^9.39.1",
+    "eslint": "^10.9.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.1"
