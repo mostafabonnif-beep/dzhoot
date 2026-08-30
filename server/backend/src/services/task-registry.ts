@@ -58,6 +58,11 @@ const CODE_EXPIRY_INTERVAL = intervalMs(process.env.CODE_EXPIRY_INTERVAL_MS, 864
 const NOTIFICATION_DISPATCH_INTERVAL = intervalMs(process.env.NOTIFICATION_DISPATCH_INTERVAL_MS, 60000);
 const SOURCE_WATCHDOG_INTERVAL = intervalMs(process.env.SOURCE_WATCHDOG_INTERVAL_MS, 60000);
 const DISK_WATCHDOG_INTERVAL = intervalMs(process.env.DISK_WATCHDOG_INTERVAL_MS, 600000); // 10 min
+const SYNC_WATCHDOG_INTERVAL = intervalMs(process.env.SYNC_WATCHDOG_INTERVAL_MS, 1800000); // 30 min
+// A sync is "stale" once its age passes 2× the sync interval (6h) plus margin.
+const SYNC_STALENESS_THRESHOLD_MS = intervalMs(process.env.SYNC_STALENESS_THRESHOLD_MS, 13 * 3600000);
+// At most one fast-retry per source within this window (avoids hammering a down upstream).
+const SYNC_RETRY_BACKOFF_MS = intervalMs(process.env.SYNC_RETRY_BACKOFF_MS, 30 * 60000);
 
 /** Daily operations report to admins (codes activated per reseller, new users, …). */
 async function dailyReportHandler(): Promise<TaskResult> {
@@ -544,6 +549,113 @@ async function diskWatchdogHandler(): Promise<TaskResult> {
 }
 
 
+// ── Source sync watchdog ─────────────────────────────────────────────────────
+// Closes two gaps in the interval-driven sync pipeline:
+//   1. A source stuck in syncStatus:'error' would otherwise wait up to 6h for
+//      the next scheduled attempt — retry it here on a short backoff instead.
+//   2. If a sync silently stops (scheduler hiccup, upstream hangs, task crash),
+//      the operator learns within ~30 minutes via webhook instead of finding a
+//      stale catalog days later by opening the dashboard.
+const syncAlerted = new Map<string, boolean>(); // sourceId -> staleness alert armed
+const lastSyncRetryAt = new Map<string, number>(); // sourceId -> last fast-retry ts
+
+async function sourceSyncWatchdogHandler(): Promise<TaskResult> {
+  const start = Date.now();
+  const subtasks: SubtaskResult[] = [];
+  const now = Date.now();
+
+  const syncModels: Array<{ kind: 'm3u' | 'xtream'; model: any }> = [
+    { kind: 'm3u', model: M3USource },
+    { kind: 'xtream', model: XtreamSource },
+  ];
+
+  for (const { kind, model } of syncModels) {
+    const sources: Array<{
+      _id: unknown;
+      name?: string | null;
+      syncStatus?: string;
+      lastSyncAt?: Date | null;
+      lastError?: string | null;
+    }> = await model
+      .find({ status: 'Active' }, { _id: 1, name: 1, syncStatus: 1, lastSyncAt: 1, lastError: 1 })
+      .lean()
+      .exec();
+
+    for (const source of sources) {
+      const id = String(source._id);
+      const name = String(source.name || id);
+      const lastSyncMs = source.lastSyncAt ? new Date(source.lastSyncAt).getTime() : 0;
+      const stale = source.syncStatus === 'error' || lastSyncMs === 0 ||
+        now - lastSyncMs >= SYNC_STALENESS_THRESHOLD_MS;
+
+      // 1) Fast retry for sources whose last sync attempt failed.
+      if (source.syncStatus === 'error') {
+        const lastRetry = lastSyncRetryAt.get(id) || 0;
+        if (now - lastRetry >= SYNC_RETRY_BACKOFF_MS) {
+          lastSyncRetryAt.set(id, now);
+          const retryStarted = Date.now();
+          try {
+            if (kind === 'xtream') {
+              const verification = await verifyXtreamSource(id, 1);
+              if (!verification.decision.verified) {
+                throw new Error(verification.decision.reason || 'source verification failed');
+              }
+              await syncXtreamSource(id);
+            } else {
+              await syncM3USource(id);
+            }
+            subtasks.push({
+              name: `${kind}:${name}`,
+              status: 'completed',
+              durationMs: Date.now() - retryStarted,
+              result: { action: 'retry', outcome: 'synced' },
+            });
+            console.log(`[sync-watchdog] ${kind} «${name}» retried after failure → synced`);
+          } catch (err: any) {
+            subtasks.push({
+              name: `${kind}:${name}`,
+              status: 'failed',
+              durationMs: Date.now() - retryStarted,
+              error: String(err?.message || err).slice(0, 300),
+            });
+          }
+        }
+      }
+
+      // 2) Staleness alert, re-armed when the source syncs again.
+      const wasAlerted = syncAlerted.get(id) || false;
+      if (stale && !wasAlerted) {
+        const reason = source.syncStatus === 'error'
+          ? `فشل آخر مزامنة (${String(source.lastError || 'خطأ غير معروف').slice(0, 100)})`
+          : lastSyncMs === 0
+            ? 'لم تتم أي مزامنة ناجحة بعد'
+            : `آخر مزامنة ناجحة قبل ${Math.max(1, Math.round((now - lastSyncMs) / 3600000))} ساعة`;
+        const ok = await sendOperationalAlert({
+          event: 'source-sync-stale',
+          severity: 'warning',
+          message: `مزامنة مصدر ${kind.toUpperCase()} «${name}» متوقفة: ${reason}`,
+          details: { sourceId: id, kind, lastSyncAt: source.lastSyncAt, syncStatus: source.syncStatus },
+        }).catch((e: any) => {
+          console.error(`[sync-watchdog] alert failed: ${e?.message}`);
+          return false;
+        });
+        syncAlerted.set(id, true);
+        console.log(`[sync-watchdog] ${kind} «${name}» stale → alert ${ok ? 'sent' : 'queued (no webhook configured)'}`);
+      } else if (!stale && wasAlerted) {
+        syncAlerted.set(id, false);
+        console.log(`[sync-watchdog] ${kind} «${name}» recovered — staleness alert re-armed`);
+      }
+    }
+  }
+
+  const completed = subtasks.filter((s) => s.status === 'completed').length;
+  const failed = subtasks.filter((s) => s.status === 'failed').length;
+  return {
+    summary: { checked: subtasks.length, completed, failed, durationMs: Date.now() - start },
+    subtasks,
+  };
+}
+
 const tasks: TaskDefinition[] = [
   {
     name: 'liveness-check',
@@ -637,6 +749,14 @@ const tasks: TaskDefinition[] = [
     description: 'Light-probe active Xtream sources and drive the backup-source failover state',
     intervalMs: SOURCE_WATCHDOG_INTERVAL,
     handler: sourceWatchdogHandler,
+  },
+  {
+    name: 'source-sync-watchdog',
+    displayName: 'Source Sync Watchdog (fast retry + staleness alert)',
+    description:
+      'Retry failed catalog syncs on a short backoff and alert when an active source sync stops entirely',
+    intervalMs: SYNC_WATCHDOG_INTERVAL,
+    handler: sourceSyncWatchdogHandler,
   },
 ];
 
