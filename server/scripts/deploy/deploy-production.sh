@@ -59,10 +59,20 @@ step "2/7  Verifiable backup (mongodump + checksum)"
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 OUT="/var/backups/dzhoot/mongodb/deploy-$STAMP"
 run "mkdir backup dir" mkdir -p "$OUT"
-run "mongodump" docker exec dzhoof-mongodb mongodump --uri=mongodb://127.0.0.1:27017/dzhoof-iptv --gzip --archive=/tmp/deploy.archive.gz
-run "copy archive" docker cp dzhoof-mongodb:/tmp/deploy.archive.gz "$OUT/dzhoof-iptv.archive.gz"
-run "cleanup tmp" docker exec dzhoof-mongodb rm -f /tmp/deploy.archive.gz
-run "checksum" sh -c "cd '$OUT' && sha256sum dzhoof-iptv.archive.gz > SHA256SUMS && sha256sum -c SHA256SUMS"
+# Mongo has been auth-protected since 2026-08-30. The old unauthenticated URI
+# silently produced 23-byte (empty) archives on every deploy. Pull the app's
+# authenticated URI from the running API container so the pre-deploy backup is
+# real, and fail the deploy if the backup cannot be verified (no silent gaps).
+MONGODB_URI_BACKUP="$(docker exec dzhoof-api printenv MONGODB_URI 2>/dev/null || true)"
+if [ -z "$MONGODB_URI_BACKUP" ]; then
+  die "could not obtain authenticated MONGODB_URI from dzhoof-api — refusing to deploy without a verifiable backup"
+fi
+run "mongodump" docker exec dzhoof-mongodb mongodump --uri="$MONGODB_URI_BACKUP" --gzip --archive=/tmp/deploy.archive.gz || die "mongodump failed — refusing to deploy without a verifiable backup"
+run "copy archive" docker cp dzhoof-mongodb:/tmp/deploy.archive.gz "$OUT/dzhoof-iptv.archive.gz" || die "failed to copy backup archive to $OUT"
+run "cleanup tmp" docker exec dzhoof-mongodb rm -f /tmp/deploy.archive.gz || true
+run "checksum" sh -c "cd '$OUT' && sha256sum dzhoof-iptv.archive.gz > SHA256SUMS && sha256sum -c SHA256SUMS" || die "backup checksum verification failed"
+# A real archive is far larger than 1KB; the pre-fix empty backups were 23 bytes.
+run "archive sanity" sh -c "test \"\$(stat -c %s '$OUT/dzhoof-iptv.archive.gz')\" -gt 1024" || die "backup archive is suspiciously small — refusing to deploy"
 say "backup target: $OUT"
 
 step "3/7  Build images (tagged, not latest) + promote :current"
