@@ -15,17 +15,19 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
     // 1. Try TV code auth first
     const tvCode = req.headers['x-tv-code'] as string | undefined;
     if (tvCode) {
-      // Demo mode — a fixed public code lets anyone browse the curated demo
-      // catalog without a real account (configurable via DEMO_TV_CODE).
-      const DEMO_TV_CODE = (process.env.DEMO_TV_CODE || 'DEMO').toUpperCase();
-      if (tvCode.toUpperCase() === DEMO_TV_CODE) {
+      // Demo mode is opt-in. Never expose a known/default credential in production.
+      // A configured DEMO_TV_CODE may be used to browse the bounded demo catalog.
+      // Demo access is strictly opt-in in every environment. There is no
+      // implicit/default credential (including the historical `DEMO` value).
+      const demoTvCode = String(process.env.DEMO_TV_CODE || '').trim();
+      if (demoTvCode && tvCode.trim().toUpperCase() === demoTvCode.toUpperCase()) {
         req.user = {
           id: 'demo',
           username: 'demo',
           email: '',
           role: 'Demo',
           channels: [],
-          channelListCode: DEMO_TV_CODE,
+          channelListCode: demoTvCode.toUpperCase(),
           isActive: true,
           emailVerified: true,
           allCatalog: false,

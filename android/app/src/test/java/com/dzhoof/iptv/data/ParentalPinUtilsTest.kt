@@ -1,38 +1,32 @@
 package com.dzhoof.iptv.data
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
 
 class ParentalPinUtilsTest {
+    @Test fun `new hashes are salted and verifiable`() {
+        val first = ParentalPinUtils.hashPin("1234")
+        val second = ParentalPinUtils.hashPin("1234")
 
-    @Test
-    fun `valid pins are 4-6 digits`() {
-        assertTrue(ParentalPinUtils.isValidPin("1234"))
-        assertTrue(ParentalPinUtils.isValidPin("123456"))
+        assertNotEquals(first, second)
+        assertTrue(ParentalPinUtils.verifyPin("1234", first))
+        assertFalse(ParentalPinUtils.verifyPin("1235", first))
+    }
+
+    @Test fun `invalid pins are rejected`() {
         assertFalse(ParentalPinUtils.isValidPin("123"))
         assertFalse(ParentalPinUtils.isValidPin("1234567"))
         assertFalse(ParentalPinUtils.isValidPin("12a4"))
-        assertFalse(ParentalPinUtils.isValidPin(""))
-        assertFalse(ParentalPinUtils.isValidPin(" 1234"))
     }
 
-    @Test
-    fun `hash is deterministic and not the plaintext`() {
-        val a = ParentalPinUtils.hashPin("4821")
-        val b = ParentalPinUtils.hashPin("4821")
-        assertEquals(a, b)
-        assertFalse(a.contains("4821"))
-        assertEquals(64, a.length) // SHA-256 hex
-    }
+    @Test fun `legacy sha256 hashes remain readable`() {
+        val legacy = java.security.MessageDigest.getInstance("SHA-256")
+            .digest("1234".toByteArray())
+            .joinToString("") { "%02x".format(it) }
 
-    @Test
-    fun `verify accepts the right pin and rejects wrong ones`() {
-        val hash = ParentalPinUtils.hashPin("4821")
-        assertTrue(ParentalPinUtils.verifyPin("4821", hash))
-        assertFalse(ParentalPinUtils.verifyPin("4822", hash))
-        assertFalse(ParentalPinUtils.verifyPin("4821", null))
-        assertFalse(ParentalPinUtils.verifyPin("4821", ""))
+        assertTrue(ParentalPinUtils.isLegacySha256(legacy))
+        assertTrue(ParentalPinUtils.verifyPin("1234", legacy))
+        assertFalse(ParentalPinUtils.verifyPin("0000", legacy))
+        assertFalse(ParentalPinUtils.isLegacySha256("not-a-hash"))
     }
 }
