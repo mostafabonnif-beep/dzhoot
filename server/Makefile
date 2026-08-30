@@ -169,5 +169,8 @@ preflight: ## Deploy preflight (read-only): ENV_FILE=/path/.env.production make 
 verify-backup: ## Verify a backup archive: make verify-backup ARCHIVE=/path/archive.gz
 	./scripts/backup/verify-backup.sh $(ARCHIVE)
 
+ops-readiness: ## Read-only runtime readiness: make ops-readiness
+	./scripts/ops/operational-readiness.sh
+
 secure-ssh: ## Print the optional SSH hardening plan (does NOT apply changes)
 	bash scripts/security/secure-ssh-setup.sh
