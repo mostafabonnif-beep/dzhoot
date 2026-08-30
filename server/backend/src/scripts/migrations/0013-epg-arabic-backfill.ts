@@ -35,7 +35,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../../.env') });
 
 import Channel from '../../models/Channel';
 import EpgProgram from '../../models/EpgProgram';
-import { resolveEpgIdForChannel, epgIdName, extractBeinNumber } from '../../utils/epg-id-resolver';
+import { resolveEpgIdForChannel, epgIdName, extractBeinNumber, isBeinSportsFeed } from '../../utils/epg-id-resolver';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 const COMMIT = process.argv.includes('--commit');
@@ -87,7 +87,12 @@ async function run(): Promise<void> {
     // re-map it because the guide has no beIN 5 id).
     const tvgBein = currentTvg.match(BEIN_TVG_ID);
     const nameBein = extractBeinNumber(name);
-    if (tvgBein && nameBein && nameBein !== tvgBein[1]) {
+    // Clear a beIN tvgId when the channel name contradicts it: a different
+    // channel number, or a non-sports beIN brand (CINEMA/FILM/…) that must
+    // never carry a Sports schedule — even when the numbers happen to match
+    // ("BEIN CINEMA COMEDY 1" is not beIN Sports 1).
+    const brandMismatch = !isBeinSportsFeed(name);
+    if (tvgBein && ((nameBein && nameBein !== tvgBein[1]) || brandMismatch)) {
       unsets.push({ _id: ch._id, name, oldTvgId: currentTvg, via: 'bein-misassign' });
       continue;
     }
