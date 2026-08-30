@@ -45,8 +45,16 @@ router.get('/', async (req, res) => {
   try {
     const { status, resellerId } = req.query;
     const filter = {};
-    if (['OPEN', 'PENDING', 'CLOSED'].includes(status)) filter.status = status;
-    if (parseId(resellerId)) filter.resellerId = resellerId;
+    // Status comes from a constant lookup (never echoed from the client), so
+    // the query object cannot be influenced by operator injection.
+    const STATUS_VALUES = { OPEN: 'OPEN', PENDING: 'PENDING', CLOSED: 'CLOSED' };
+    if (typeof status === 'string' && STATUS_VALUES[status]) filter.status = STATUS_VALUES[status];
+    // ResellerId must be a plain 24-hex ObjectId; resolve it through the DB and
+    // use the DB-returned value (never the raw client string) in the query.
+    if (typeof resellerId === 'string' && /^[0-9a-fA-F]{24}$/.test(resellerId)) {
+      const target = await Reseller.exists({ _id: new mongoose.Types.ObjectId(resellerId) }).lean().exec();
+      if (target) filter.resellerId = target._id;
+    }
     const tickets = await SupportTicket.find(filter).sort({ createdAt: -1 }).limit(500).lean().exec();
     const data = await enrichTickets(tickets);
     const counts = await SupportTicket.aggregate([

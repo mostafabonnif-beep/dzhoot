@@ -779,10 +779,17 @@ router.post('/transfers', async (req, res) => {
     if (toUser === String(req.reseller.username || '').toLowerCase()) {
       return res.status(400).json({ success: false, error: 'Cannot transfer credit to yourself' });
     }
+    // Usernames are admin-constrained to [a-z0-9_.-]; enforce the same shape
+    // here so the lookup value is a plain safe string (no query operators).
+    if (!/^[a-z0-9_.-]{1,50}$/.test(toUser)) {
+      return res.status(400).json({ success: false, error: 'Invalid recipient username' });
+    }
 
     const [recipient, plan] = await Promise.all([
-      Reseller.findOne({ username: toUser }).select('name city username status credit').lean().exec(),
-      Plan.findById(planId).select('name durationDays status').lean().exec(),
+      Reseller.findOne({ username: { $eq: toUser } }).select('name city username status credit').lean().exec(),
+      // planId already passed parseId() above — construct a typed ObjectId so
+      // the query never receives raw client text.
+      Plan.findOne({ _id: new mongoose.Types.ObjectId(planId) }).select('name durationDays status').lean().exec(),
     ]);
     if (!recipient) return res.status(404).json({ success: false, error: 'Recipient reseller not found' });
     if (recipient.status !== 'Active') {
@@ -800,8 +807,9 @@ router.post('/transfers', async (req, res) => {
     creditDeducted = true;
 
     // Credit the recipient: increment an existing entry or create a new one.
+    const planObjId = new mongoose.Types.ObjectId(planId);
     const recipientUpdated = await Reseller.findOneAndUpdate(
-      { _id: recipient._id, 'credit.planId': planId },
+      { _id: recipient._id, 'credit.planId': planObjId },
       { $inc: { 'credit.$.quantity': qty } },
       { new: true },
     )
@@ -1055,7 +1063,9 @@ router.post('/codes/:id/change-plan', async (req, res) => {
     if (String(newPlanId) === String(code.planId)) {
       return res.status(400).json({ success: false, error: 'Code is already on this plan' });
     }
-    const newPlan = await Plan.findById(newPlanId).lean().exec();
+    // newPlanId passed parseId() above — typed ObjectId keeps raw client text out of queries.
+    const newPlanObjId = new mongoose.Types.ObjectId(newPlanId);
+    const newPlan = await Plan.findOne({ _id: newPlanObjId }).lean().exec();
     if (!newPlan || newPlan.status !== 'Active') {
       return res.status(400).json({ success: false, error: 'Plan not found or inactive' });
     }
@@ -1208,7 +1218,9 @@ router.get('/tickets', async (req, res) => {
   try {
     const { status } = req.query;
     const filter = { resellerId: req.reseller._id };
-    if (['OPEN', 'PENDING', 'CLOSED'].includes(status)) filter.status = status;
+    // Whitelisted via a constant lookup — the query never contains client text.
+    const STATUS_VALUES = { OPEN: 'OPEN', PENDING: 'PENDING', CLOSED: 'CLOSED' };
+    if (typeof status === 'string' && STATUS_VALUES[status]) filter.status = STATUS_VALUES[status];
     const tickets = await SupportTicket.find(filter)
       .sort({ createdAt: -1 })
       .limit(200)
