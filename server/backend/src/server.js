@@ -605,6 +605,10 @@ app.get('/health', async (req, res) => {
   const response = {
     status: healthy ? 'ok' : 'degraded',
     version: process.env.APP_VERSION || '0.0.0',
+    release: {
+      commit: process.env.RELEASE_COMMIT || null,
+      builtAt: process.env.RELEASE_BUILT_AT || null,
+    },
     requestId: req.requestId,
   };
   if (req.query.details === 'true') {

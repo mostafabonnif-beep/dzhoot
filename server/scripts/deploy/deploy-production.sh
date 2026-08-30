@@ -66,13 +66,22 @@ run "checksum" sh -c "cd '$OUT' && sha256sum dzhoof-iptv.archive.gz > SHA256SUMS
 say "backup target: $OUT"
 
 step "3/7  Build images (tagged, not latest) + promote :current"
-BUILD_TAG="v$(grep -E '^APP_VERSION=' "$ENV_FILE" | cut -d= -f2- || echo 1.0.1)-$STAMP"
+APP_VERSION="$(sed -n 's/^APP_VERSION=//p' "$ENV_FILE" | tail -n 1)"
+APP_VERSION="${APP_VERSION:-1.0.1}"
+RELEASE_COMMIT="${RELEASE_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+RELEASE_BUILT_AT="${RELEASE_BUILT_AT:-$(date -u +%FT%TZ)}"
+if [[ "$RELEASE_COMMIT" != "unknown" && ! "$RELEASE_COMMIT" =~ ^[0-9a-fA-F]{7,64}$ ]]; then
+  die "RELEASE_COMMIT must be a Git SHA or 'unknown'"
+fi
+export RELEASE_COMMIT RELEASE_BUILT_AT
+BUILD_TAG="v${APP_VERSION}-$STAMP"
 OLD_API="$(grep -E '^DOCKER_IMAGE=' "$ENV_FILE" | cut -d= -f2-)"
 OLD_FE="$(grep -E '^DOCKER_FRONTEND_IMAGE=' "$ENV_FILE" | cut -d= -f2-)"
 say "previous images: ${OLD_API:-<unset>} / ${OLD_FE:-<unset>} (kept for rollback)"
-run "build api" docker build -t "dzhoof-api:${BUILD_TAG}" . || die "api build failed"
+say "release metadata: commit=${RELEASE_COMMIT}, built_at=${RELEASE_BUILT_AT}"
+run "build api" docker build --build-arg "APP_VERSION=${APP_VERSION}" --build-arg "RELEASE_COMMIT=${RELEASE_COMMIT}" --build-arg "RELEASE_BUILT_AT=${RELEASE_BUILT_AT}" -t "dzhoof-api:${BUILD_TAG}" . || die "api build failed"
 run "tag api current" docker tag "dzhoof-api:${BUILD_TAG}" "dzhoof-api:current" || die "api tag failed"
-run "build frontend" docker build -f Dockerfile.frontend -t "dzhoof-frontend:${BUILD_TAG}" . || die "frontend build failed"
+run "build frontend" docker build -f Dockerfile.frontend --build-arg "APP_VERSION=${APP_VERSION}" --build-arg "RELEASE_COMMIT=${RELEASE_COMMIT}" --build-arg "RELEASE_BUILT_AT=${RELEASE_BUILT_AT}" -t "dzhoof-frontend:${BUILD_TAG}" . || die "frontend build failed"
 run "tag frontend current" docker tag "dzhoof-frontend:${BUILD_TAG}" "dzhoof-frontend:current" || die "frontend tag failed"
 
 step "3b/7  Point compose at :current (old refs recorded above for rollback)"
@@ -97,6 +106,9 @@ DOMAIN="$(sed -n 's/^DOMAIN=//p' "$ENV_FILE" | tr -d '"' | tr -d "'")"
 [ -n "$DOMAIN" ] || die "DOMAIN missing from $ENV_FILE — cannot verify public health"
 run "docker health api" sh -c 'docker inspect -f "{{.State.Health.Status}}" dzhoof-api | grep -qx healthy'
 run "public health" curl -fsS "https://${DOMAIN}/health"
+if [ "$RELEASE_COMMIT" != "unknown" ]; then
+  run "release trace health" sh -c "curl -fsS 'https://${DOMAIN}/health' | grep -F '\"commit\":\"${RELEASE_COMMIT}\"' >/dev/null"
+fi
 run "details health" sh -c "curl -fsS 'https://${DOMAIN}/health?details=true' | head -c 400; echo"
 run "compose ps" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
 
@@ -113,7 +125,7 @@ else
 fi
 
 step "7/7  Record deploy"
-run "record deploy" sh -c "printf '%s\t%s\t%s\n' \"$(date -u +%FT%TZ)\" \"${BUILD_TAG}\" \"$OUT\" >> /var/log/dzhoof-deploys.log"
+run "record deploy" sh -c "printf '%s\t%s\t%s\t%s\t%s\n' \"$(date -u +%FT%TZ)\" \"${BUILD_TAG}\" \"${RELEASE_COMMIT}\" \"${RELEASE_BUILT_AT}\" \"$OUT\" >> /var/log/dzhoof-deploys.log"
 say "deploy log target: /var/log/dzhoof-deploys.log"
 
 if [ "$APPLY" -eq 0 ]; then
