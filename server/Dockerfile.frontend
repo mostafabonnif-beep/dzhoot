@@ -18,6 +18,14 @@ RUN npx -w @dzhoof/shared tsc
 # Copy frontend source and build
 COPY frontend/ ./frontend/
 
+# SEO/social metadata + API proxy destination are baked at build time.
+# Defaults match the production deployment (single tenant); CI/deploy can
+# override via --build-arg NEXT_PUBLIC_SITE_URL / NEXT_PUBLIC_API_URL.
+ARG NEXT_PUBLIC_SITE_URL=https://iptv.ld-11.net
+ARG NEXT_PUBLIC_API_URL=https://iptv.ld-11.net
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+
 RUN mkdir -p frontend/public && npm run build -w @dzhoof/frontend
 
 # --- Production stage ---

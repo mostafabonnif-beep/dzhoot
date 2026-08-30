@@ -68,7 +68,7 @@ say "backup target: $OUT"
 step "3/7  Build images (tagged, not latest) + promote :current"
 APP_VERSION="$(sed -n 's/^APP_VERSION=//p' "$ENV_FILE" | tail -n 1)"
 APP_VERSION="${APP_VERSION:-1.0.1}"
-RELEASE_COMMIT="${RELEASE_COMMIT:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+RELEASE_COMMIT="${RELEASE_COMMIT:-$(git rev-parse HEAD 2>/dev/null || cat .commit 2>/dev/null || echo unknown)}"
 RELEASE_BUILT_AT="${RELEASE_BUILT_AT:-$(date -u +%FT%TZ)}"
 if [[ "$RELEASE_COMMIT" != "unknown" && ! "$RELEASE_COMMIT" =~ ^[0-9a-fA-F]{7,64}$ ]]; then
   die "RELEASE_COMMIT must be a Git SHA or 'unknown'"
@@ -81,7 +81,7 @@ say "previous images: ${OLD_API:-<unset>} / ${OLD_FE:-<unset>} (kept for rollbac
 say "release metadata: commit=${RELEASE_COMMIT}, built_at=${RELEASE_BUILT_AT}"
 run "build api" docker build --build-arg "APP_VERSION=${APP_VERSION}" --build-arg "RELEASE_COMMIT=${RELEASE_COMMIT}" --build-arg "RELEASE_BUILT_AT=${RELEASE_BUILT_AT}" -t "dzhoof-api:${BUILD_TAG}" . || die "api build failed"
 run "tag api current" docker tag "dzhoof-api:${BUILD_TAG}" "dzhoof-api:current" || die "api tag failed"
-run "build frontend" docker build -f Dockerfile.frontend --build-arg "APP_VERSION=${APP_VERSION}" --build-arg "RELEASE_COMMIT=${RELEASE_COMMIT}" --build-arg "RELEASE_BUILT_AT=${RELEASE_BUILT_AT}" -t "dzhoof-frontend:${BUILD_TAG}" . || die "frontend build failed"
+run "build frontend" docker build -f Dockerfile.frontend --build-arg "APP_VERSION=${APP_VERSION}" --build-arg "RELEASE_COMMIT=${RELEASE_COMMIT}" --build-arg "RELEASE_BUILT_AT=${RELEASE_BUILT_AT}" --build-arg "NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://iptv.ld-11.net}" -t "dzhoof-frontend:${BUILD_TAG}" . || die "frontend build failed"
 run "tag frontend current" docker tag "dzhoof-frontend:${BUILD_TAG}" "dzhoof-frontend:current" || die "frontend tag failed"
 
 step "3b/7  Point compose at :current (old refs recorded above for rollback)"
