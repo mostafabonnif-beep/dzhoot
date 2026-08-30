@@ -24,8 +24,13 @@ const notoArabic = Noto_Kufi_Arabic({
   display: 'swap',
 });
 
+// Production deployment is single-tenant on iptv.ld-11.net; the env var is
+// injected at build time (Dockerfile.frontend) and this fallback only guards
+// local/dev builds against leaking localhost URLs into SEO/social metadata.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://iptv.ld-11.net';
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001'),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: 'DZ HOOF IPTV — منصة إدارة وتشغيل القنوات',
     template: '%s | DZ HOOF IPTV',
@@ -69,7 +74,7 @@ export const metadata: Metadata = {
     title: 'DZ HOOF IPTV — منصة IPTV قانونية ومدارة ذاتيًا',
     description:
       'منصة لإدارة مصادر IPTV المصرح بها، والأجهزة، والقنوات والاشتراكات من واجهة واحدة.',
-    url: process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3001',
+    url: SITE_URL,
     siteName: 'DZ HOOF IPTV',
     images: [
       {
