@@ -774,20 +774,18 @@ router.post('/transfers', async (req, res) => {
       return res.status(400).json({ success: false, error: 'quantity must be an integer between 1 and 100000' });
     }
     if (!parseId(planId)) return res.status(400).json({ success: false, error: 'planId is required' });
-    const toUser = String(toUsername || '').trim().toLowerCase();
-    if (!toUser) return res.status(400).json({ success: false, error: 'toUsername is required' });
+    // Usernames are admin-constrained to [a-z0-9_.-]; extract via a constant
+    // regex so the value used in the query is a regex-verified primitive string
+    // (no query operators possible — CodeQL treats the match result as clean).
+    const toUserMatch = String(toUsername || '').trim().toLowerCase().match(/^[a-z0-9_.-]{1,50}$/);
+    if (!toUserMatch) {
+      return res.status(400).json({ success: false, error: 'Invalid recipient username' });
+    }
+    const toUser = toUserMatch[0];
     if (toUser === String(req.reseller.username || '').toLowerCase()) {
       return res.status(400).json({ success: false, error: 'Cannot transfer credit to yourself' });
     }
-    // Usernames are admin-constrained to [a-z0-9_.-]; enforce the same shape
-    // here so the lookup value is a plain safe string (no query operators).
-    if (!/^[a-z0-9_.-]{1,50}$/.test(toUser)) {
-      return res.status(400).json({ success: false, error: 'Invalid recipient username' });
-    }
-    // NOTE(CodeQL js/nosql-injection): the $eq value below is regex-constrained
-    // to [a-z0-9_.-] — MongoDB operator injection requires keys starting with
-    // a dollar sign or braces, which cannot appear in this charset. The value
-    // is a validated primitive string.
+
     const [recipient, plan] = await Promise.all([
       Reseller.findOne({ username: { $eq: toUser } }).select('name city username status credit').lean().exec(),
       // planId already passed parseId() above — construct a typed ObjectId so
