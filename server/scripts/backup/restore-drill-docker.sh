@@ -16,6 +16,11 @@
 #   MONGO_CONTAINER=dzhoof-mongodb (default)
 #   DRILL_DB=restore_drill (default; dropped afterwards)
 #   ALERT_WEBHOOK_URL (optional; alert on failure)
+#   MongoDB auth (required once the instance runs with --auth):
+#     MONGO_AUTH_USER=dzhoof-admin (default)
+#     MONGO_AUTH_DB=admin (default)
+#     MONGO_AUTH_PASSWORD_FILE=/etc/dzhoot/mongo-admin-password (default; 0600 file)
+#     MONGO_AUTH_PASSWORD= (explicit override; prefer the file)
 set -Eeuo pipefail
 
 ALLOW_RESTORE_DRILL="${ALLOW_RESTORE_DRILL:-false}"
@@ -23,6 +28,17 @@ BACKUP_FILE="${1:-}"
 MONGO_CONTAINER="${MONGO_CONTAINER:-dzhoof-mongodb}"
 DRILL_DB="${DRILL_DB:-restore_drill}"
 ALERT_WEBHOOK_URL="${ALERT_WEBHOOK_URL:-}"
+MONGO_AUTH_USER="${MONGO_AUTH_USER:-dzhoof-admin}"
+MONGO_AUTH_DB="${MONGO_AUTH_DB:-admin}"
+MONGO_AUTH_PASSWORD="${MONGO_AUTH_PASSWORD:-}"
+MONGO_AUTH_PASSWORD_FILE="${MONGO_AUTH_PASSWORD_FILE:-/etc/dzhoot/mongo-admin-password}"
+if [ -z "$MONGO_AUTH_PASSWORD" ] && [ -n "$MONGO_AUTH_PASSWORD_FILE" ] && [ -f "$MONGO_AUTH_PASSWORD_FILE" ]; then
+  MONGO_AUTH_PASSWORD="$(tr -d '\r\n' < "$MONGO_AUTH_PASSWORD_FILE")"
+fi
+AUTH_ARGS=()
+if [ -n "$MONGO_AUTH_PASSWORD" ]; then
+  AUTH_ARGS=(--username "$MONGO_AUTH_USER" --password "$MONGO_AUTH_PASSWORD" --authenticationDatabase "$MONGO_AUTH_DB")
+fi
 
 say()  { printf '[restore-drill] %s\n' "$*"; }
 die()  { printf '[restore-drill][ABORT] %s\n' "$*" >&2; exit 1; }
@@ -47,7 +63,7 @@ docker cp "$BACKUP_FILE" "$MONGO_CONTAINER:$IN_CONTAINER"
 
 # --drop gives a clean slate: re-runs must not trip unique indexes.
 DOCS="$(docker exec "$MONGO_CONTAINER" mongorestore \
-  --uri="mongodb://127.0.0.1:27017" \
+  --uri="mongodb://127.0.0.1:27017" "${AUTH_ARGS[@]}" \
   --archive="$IN_CONTAINER" --gzip --drop \
   --nsFrom="dzhoof-iptv.*" --nsTo="${DRILL_DB}.*" 2>&1 \
   | grep -oE '[0-9]+ document\(s\) restored successfully' | grep -oE '[0-9]+' | tail -1)"
@@ -55,10 +71,10 @@ docker exec "$MONGO_CONTAINER" rm -f "$IN_CONTAINER"
 
 [ -n "$DOCS" ] && [ "$DOCS" -gt 0 ] || die "restore returned 0 documents — drill FAILED"
 
-COLS="$(docker exec "$MONGO_CONTAINER" mongosh --quiet --eval "print(db.getSiblingDB(\"$DRILL_DB\").getCollectionNames().length)" 2>/dev/null | tail -1)"
+COLS="$(docker exec "$MONGO_CONTAINER" mongosh --quiet "${AUTH_ARGS[@]}" --eval "print(db.getSiblingDB(\"$DRILL_DB\").getCollectionNames().length)" 2>/dev/null | tail -1)"
 [ -n "$COLS" ] && [ "$COLS" -gt 0 ] || die "drill database has no collections — drill FAILED"
 
 say "restored $DOCS documents across $COLS collections"
-docker exec "$MONGO_CONTAINER" mongosh --quiet --eval "db.getSiblingDB(\"$DRILL_DB\").dropDatabase()" >/dev/null 2>&1
+docker exec "$MONGO_CONTAINER" mongosh --quiet "${AUTH_ARGS[@]}" --eval "db.getSiblingDB(\"$DRILL_DB\").dropDatabase()" >/dev/null 2>&1
 say "drill database dropped"
 say "RESTORE DRILL OK ($DOCS documents)"
