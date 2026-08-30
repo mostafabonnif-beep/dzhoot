@@ -73,6 +73,20 @@ export function extractBeinNumber(name: string): string | null {
   return m ? m[1] : null;
 }
 
+
+/**
+ * True when a beIN-branded name looks like a SPORTS feed (contains "SPORT"
+ * or is a bare "BEIN n"). Non-sports beIN brands (CINEMA/FILM/ACTION/…) must
+ * never map to the Sports guide ids.
+ */
+export function isBeinSportsFeed(name: string): boolean {
+  const clean = cleanDisplayChannelName(String(name || '').replace(BALL_EMOJI_SPORTS, 'SPORTS')).toUpperCase();
+  return (
+    /SPORT/.test(clean) ||
+    !/CINEMA|FILM|MOVIES|ACTION|DOCUMENTARY|SERIES|\bOD\b|ARABIC|FRENCH|ENGLISH|KIDS|\bPLUS\b|24\s*\/?\s*7/.test(clean)
+  );
+}
+
 function lookup(byLower: Map<string, string>, ...candidates: string[]): string | null {
   for (const c of candidates) {
     const hit = byLower.get(c.toLowerCase());
@@ -93,6 +107,11 @@ export function resolveEpgIdForChannel(input: EpgIdResolverInput): EpgIdResoluti
   // ─── beIN family ───────────────────────────────────────────────
   if (/BEIN/.test(clean)) {
     if (/\bMAX\b/.test(clean)) return null; // guide has no MAX feeds
+    // Only beIN *SPORTS* feeds map to the beIN SPORTS guide ids. beIN's other
+    // brands (CINEMA/FILM/ACTION/DOCUMENTARY/OD/ARABIC/FRENCH/…) must NOT be
+    // stamped with a Sports schedule — a channel named "BEIN CINEMA COMEDY 2"
+    // is not beIN Sports 2.
+    if (!isBeinSportsFeed(name)) return null;
     const beinMatch = extractBeinNumber(name);
     if (beinMatch) {
       // A number is present: map to THAT channel only. Never fall back to 1 —
