@@ -188,6 +188,15 @@ curl --fail --silent --show-error 'https://ld-11.net/health?details=true'
 
 ### التحقق من هوية الإصدار
 
+## 6ب. تجاوز compose الإنتاج (Operator compose override)
+
+الإنتاج يعمل بنسخة compose معدّلة محلياً (تفعيل auth لـ Mongo/Redis عبر `mongod --auth` و`--requirepass`، وربط شبكة `gkz-network` المشتركة) غير الموجودة في المستودع — وهي حالة مقصودة: المستودع هو الخط الأساسي، والإنتاج له تجاوزاته.
+
+عند النشر عبر `atomic-deploy.sh`:
+- إذا وُجد ملف `/etc/dzhoot/docker-compose.production.yml` (مثبّت بصلاحيات 600) يُنسخ تلقائياً فوق compose الإصدار قبل `compose up`.
+- **لا تحذف هذا الملف**: نسخة التاربال (بلا auth) على Mongo مفعّل auth تجعل API في حلقة إعادة تشغيل (`find requires authentication`) — حصل ذلك 2026-08-30 وأُصلح بهذه الآلية.
+- لتحديث التجاوز: عدّل الملف في `/etc/dzhoot/` ثم أعد النشر (أو انسخ من `/opt/dzhoot/server/docker-compose.production.yml`).
+
 عند النشر عبر `stage-release.sh` ثم `atomic-deploy.sh`، يمرر النشر SHA الذي تحقق منه إلى `RELEASE_COMMIT` ووقت البناء إلى `RELEASE_BUILT_AT`. يجب أن يطابق commit الظاهر في health قيمة الإصدار المستهدف، وأن تحمل صور API وfrontend labels OCI نفسها. هذه القيم لا تعد أسراراً، وهي ضرورية للتحقيق والتراجع.
 
 ```bash

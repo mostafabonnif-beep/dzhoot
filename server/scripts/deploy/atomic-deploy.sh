@@ -102,6 +102,21 @@ mv "$ACTIVE" "$PREVIOUS"
 mv "$RELEASE" "$ACTIVE"
 SWAPPED=1
 
+# Production operator overrides: the deployed docker-compose.production.yml may
+# carry environment-specific hardening (mongo --auth + credentials, redis
+# requirepass, shared-network wiring) that is intentionally NOT in the repo.
+# If the operator keeps that file at PROD_COMPOSE_OVERRIDE (default
+# /etc/dzhoot/docker-compose.production.yml), apply it to the release BEFORE
+# compose up — otherwise a fresh tarball compose (no auth) would make the API
+# crash-loop against an auth-enabled mongo (seen 2026-08-30: rollback skipped).
+PROD_COMPOSE_OVERRIDE="${PROD_COMPOSE_OVERRIDE:-/etc/dzhoot/docker-compose.production.yml}"
+if [ -f "$PROD_COMPOSE_OVERRIDE" ]; then
+  say "applying production compose override: $PROD_COMPOSE_OVERRIDE"
+  install -m 644 "$PROD_COMPOSE_OVERRIDE" "$ACTIVE/server/docker-compose.production.yml"
+else
+  say "no production compose override at $PROD_COMPOSE_OVERRIDE — deploying the repo compose as-is"
+fi
+
 # stage-release.sh verified this full SHA before staging it. Pass only this
 # non-secret provenance metadata into compose and image labels for the deploy.
 export RELEASE_COMMIT="$SHA"
