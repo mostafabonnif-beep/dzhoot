@@ -30,7 +30,7 @@
     "recharts": "^3.8.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
-    "zustand": "^5.0.11"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@tanstack/react-query-devtools": "^5.102.6",
