@@ -33,6 +33,17 @@ function parseId(id) {
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
 }
 
+// Demo mode: the same curated group set the browsing endpoint (channels.js)
+// exposes. Demo callers can browse these groups but previously could never
+// play anything — playback failed the subscription gate (CastError on the
+// 'demo' id) and then the ownership check. Short-circuit demo here and scope
+// LIVE playback to the curated set.
+const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA الجزائر')
+  .split(',')
+  .map((g) => g.trim())
+  .filter(Boolean);
+const isDemoRequest = (req) => req.user?.demo === true;
+
 // POST /authorize — { contentType: 'LIVE'|'MOVIE'|'EPISODE', contentId }
 router.post('/authorize', async (req, res) => {
   try {
@@ -44,10 +55,15 @@ router.post('/authorize', async (req, res) => {
     const id = parseId(contentId);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid contentId' });
 
-    const playbackAccess = await checkPlaybackSubscription(
-      req.user?.id ? String(req.user.id) : undefined,
-      req.user?.role,
-    );
+    // Demo callers skip the subscription gate (they have no account, and the
+    // 'demo' id would otherwise crash the ObjectId lookup with a CastError).
+    const isDemo = isDemoRequest(req);
+    const playbackAccess = isDemo
+      ? { required: false, allowed: true, subscription: null }
+      : await checkPlaybackSubscription(
+          req.user?.id ? String(req.user.id) : undefined,
+          req.user?.role,
+        );
     const isAdmin = req.user?.role === 'Admin';
     const subscriptionRequired = playbackAccess.required;
     const subscription = playbackAccess.subscription;
@@ -72,9 +88,12 @@ router.post('/authorize', async (req, res) => {
     const directPlaybackEnabled = process.env.ALLOW_DIRECT_PLAYBACK === 'true';
 
     if (contentType === 'LIVE') {
-      content = await Channel.findOne({ _id: id, isActive: { $ne: false } }).lean();
+      // Demo: restrict to the curated groups the browsing endpoint exposes.
+      const liveQuery = { _id: id, isActive: { $ne: false } };
+      if (isDemo) liveQuery.channelGroup = { $in: DEMO_CHANNEL_GROUPS };
+      content = await Channel.findOne(liveQuery).lean();
       if (content) {
-        const canAccessCatalog = isAdmin || req.user?.allCatalog === true;
+        const canAccessCatalog = isAdmin || req.user?.allCatalog === true || isDemo;
         const assigned = (req.user?.channels || []).some((channelId) => String(channelId) === String(content._id));
         if (!canAccessCatalog && !assigned) {
           return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });

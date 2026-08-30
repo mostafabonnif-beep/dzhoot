@@ -14,13 +14,19 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     const isAdmin = req.user.role === 'Admin' || req.user.allCatalog === true || Boolean(req.user.channelListCode);
     const { publicCatalogHideQuery, publicCatalogDedupQuery, cleanDisplayText } = require('../utils/catalog-presentation');
     const dedupMatch = req.user.role !== 'Admin' ? await publicCatalogDedupQuery() : {};
+    // Demo callers must see only the curated groups, not the whole shared
+    // catalog structure (which would leak every supplier group name + count).
+    const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA الجزائر')
+      .split(',').map((g) => g.trim()).filter(Boolean);
+    const demoScope = req.user.demo === true ? { channelGroup: { $in: DEMO_CHANNEL_GROUPS } } : {};
     const match = isAdmin
-      ? { isActive: { $ne: false }, ownerId: null, ...publicCatalogHideQuery(), ...dedupMatch }
+      ? { isActive: { $ne: false }, ownerId: null, ...publicCatalogHideQuery(), ...dedupMatch, ...demoScope }
       : {
           isActive: { $ne: false },
           _id: { $in: (req.user.channels || []).filter(Boolean) },
           ...publicCatalogHideQuery(),
           ...dedupMatch,
+          ...demoScope,
         };
 
     const groups = await Channel.aggregate([

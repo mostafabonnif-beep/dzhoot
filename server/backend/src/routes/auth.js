@@ -256,11 +256,13 @@ router.post('/login', async (req, res) => {
       userAgent,
     });
 
-    await session.save();
+    // Update user's last login with a validation-free write. A full-document
+    // `user.save()` re-validates the whole schema and fails for legacy users
+    // created before `channelListCode` became required, returning HTTP 500 and
+    // blocking their login entirely.
+    await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
 
-    // Update user's last login
-    user.lastLogin = new Date();
-    await user.save();
+    await session.save();
 
     audit({
       userId: user._id,
