@@ -87,6 +87,13 @@ router.post('/authorize', async (req, res) => {
     // the DZ HOOF VPS.
     const directPlaybackEnabled = process.env.ALLOW_DIRECT_PLAYBACK === 'true';
 
+    // Demo is a curated LIVE-only preview. Movies/episodes are paid content —
+    // never authorize them for the public demo code, otherwise the whole VOD
+    // catalog becomes playable for free.
+    if (isDemo && contentType !== 'LIVE') {
+      return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
+    }
+
     if (contentType === 'LIVE') {
       // Demo: restrict to the curated groups the browsing endpoint exposes.
       const liveQuery = { _id: id, isActive: { $ne: false } };
