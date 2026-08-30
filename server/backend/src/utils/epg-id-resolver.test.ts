@@ -94,6 +94,20 @@ describe('epg-id-resolver', () => {
   it('canonicalKey strips the provider decoration that broke the beIN capture', () => {
     expect(canonicalKey('8K: beIN SP⚽RTS 5 ᴴᴰ')).toBe('bein sports 5');
   });
+
+  it('epgIdName strips any 2-letter country suffix, not just the legacy allowlist', () => {
+    // Legacy allowlisted suffixes keep working.
+    expect(epgIdName('TF1.fr')).toBe('tf1');
+    expect(epgIdName('beIN_SPORTS1_DIGITAL_Mono_AR.bein')).toBe('bein sports1 digital mono ar');
+    // Suffixes the fixed allowlist missed (epgshare01 country files).
+    expect(epgIdName('MBC.MASR.2.eg')).toBe('mbc masr 2');
+    expect(epgIdName('ART.Aflam.1.eg')).toBe('art aflam 1');
+    expect(epgIdName('MBC.1.ae')).toBe('mbc 1');
+    expect(epgIdName('IL.Sport.il')).toBe('il sport');
+    expect(epgIdName('beIN.Sports.1.qa')).toBe('bein sports 1');
+    // Ids without a country-like suffix stay untouched.
+    expect(epgIdName('CARTOON.NETWORK')).toBe('cartoon network');
+  });
 });
 
 describe('epg-id-resolver: non-sports beIN brands', () => {
