@@ -22,7 +22,8 @@ const PROVIDER_SUPERSCRIPT_STRIP = /[ᴿᴬᵂᴮᴷ⁰¹²³⁴⁵⁶⁷⁸⁹�
 const SUPERS_HD = /ᴴ/gu;
 const SUPER_D = /ᴰ/gu;
 
-const DECORATIVE_WRAPPER = /#{2,}|[✦★☆•·◆◇►▶]|[\u{1F300}-\u{1FAFF}\u{2190}-\u{21FF}]/gu;
+const DECORATIVE_WRAPPER =
+  /#{2,}|[✦★☆•·◆◇►▶]|[\u{1F300}-\u{1FAFF}\u{2190}-\u{21FF}\u{2600}-\u{27BF}\u{2B50}\u{1F170}-\u{1F1FF}]/gu;
 const BRACED_JUNK = /\s*[([]\s*(raw|bk|60fps)\s*[\])]\s*/giu;
 
 // Curated country/language prefixes, only stripped when followed by an
