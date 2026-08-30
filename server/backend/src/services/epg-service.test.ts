@@ -3,6 +3,7 @@ import axios from 'axios';
 import Channel from '../models/Channel';
 import EpgProgram from '../models/EpgProgram';
 import { EpgService } from './epg-service';
+import EpgSourceOverride from '../models/EpgSourceOverride';
 
 jest.mock('axios');
 jest.mock('../utils/ssrf-guard', () => ({
@@ -15,6 +16,8 @@ jest.mock('../utils/ssrf-guard', () => ({
 }));
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+
 
 describe('EpgService XMLTV ingestion', () => {
   beforeEach(() => {
@@ -99,5 +102,45 @@ describe('EpgService XMLTV ingestion', () => {
       new EpgService().fetchAndParseXmltv('http://127.0.0.1/guide.xml', ['news.dz']),
     ).rejects.toThrow('EPG URL rejected');
     expect(mockedAxios.get).not.toHaveBeenCalled();
+  });
+});
+
+describe('EpgService auto-disable of oversized sources', () => {
+  const URL_US = 'https://iptv-epg.org/files/epg-us.xml.gz';
+
+  it('increments consecutiveFailures on failure and resets on success', async () => {
+    const service = new EpgService();
+    await service.recordSourceResult(URL_US, false, 'EPG XML exceeds maximum decompressed size (100MB)');
+    let doc = await EpgSourceOverride.findOne({ url: URL_US });
+    expect(doc?.consecutiveFailures).toBe(1);
+    expect(doc?.disabled).toBe(false);
+
+    await service.recordSourceResult(URL_US, true);
+    doc = await EpgSourceOverride.findOne({ url: URL_US });
+    expect(doc?.consecutiveFailures).toBe(0);
+    expect(doc?.lastOkAt).toBeTruthy();
+  });
+
+  it('auto-disables a source after repeated oversized-guide failures', async () => {
+    const service = new EpgService();
+    await EpgSourceOverride.create({ url: URL_US, consecutiveFailures: 2, disabled: false });
+
+    await service.recordSourceResult(URL_US, false, 'EPG XML exceeds maximum decompressed size (100MB)');
+
+    const doc = await EpgSourceOverride.findOne({ url: URL_US });
+    expect(doc?.consecutiveFailures).toBe(3);
+    expect(doc?.disabled).toBe(true);
+    expect(doc?.note).toContain('Auto-disabled');
+  });
+
+  it('does NOT auto-disable for unrelated (transient) errors', async () => {
+    const service = new EpgService();
+    await EpgSourceOverride.create({ url: URL_US, consecutiveFailures: 5, disabled: false });
+
+    await service.recordSourceResult(URL_US, false, 'Request failed with status code 503');
+
+    const doc = await EpgSourceOverride.findOne({ url: URL_US });
+    expect(doc?.consecutiveFailures).toBe(6);
+    expect(doc?.disabled).toBe(false);
   });
 });
