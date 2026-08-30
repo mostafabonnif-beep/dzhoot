@@ -8,9 +8,19 @@ const Session = require('../models/Session');
 const ActivationCode = require('../models/ActivationCode');
 const Plan = require('../models/Plan');
 const { hashActivationCode, normalizeActivationCode } = require('../utils/code-generator');
+const { computeClientRedeemSessionExpiry } = require('../utils/client-redeem-session');
 
 const REDEEM_WINDOW_MS = 10 * 60 * 1000;
 const REDEEM_MAX_ATTEMPTS = 10;
+// IP-level budget that deviceId rotation CANNOT bypass: the per-(ip, deviceId)
+// key is client-controlled, so a single attacker could otherwise rotate
+// deviceIds and try unlimited codes. The IP budget tolerates carrier NAT
+// households (a handful of activations per window) while stopping guessing
+// floods from one address.
+const REDEEM_MAX_IP_ATTEMPTS = Math.max(
+  REDEEM_MAX_ATTEMPTS,
+  parseInt(process.env.REDEEM_MAX_IP_ATTEMPTS || '30', 10) || 30,
+);
 const redeemAttempts = new Map();
 const redeemCleanupTimer = setInterval(() => {
   const cutoff = Date.now() - REDEEM_WINDOW_MS;
@@ -43,6 +53,16 @@ router.post('/client-redeem', async (req, res) => {
       return res.status(429).json({ success: false, error: 'Too many activation attempts. Try again later.', code: 'ACTIVATION_RATE_LIMITED' });
     }
     redeemAttempts.set(rateLimitKey, [...recentAttempts, Date.now()]);
+
+    // IP-level budget (see REDEEM_MAX_IP_ATTEMPTS) — recorded for EVERY request,
+    // including invalid codes, so rotating deviceIds cannot flush it.
+    const ipRateLimitKey = `ip:${req.ip || 'unknown'}`;
+    const recentIpAttempts = (redeemAttempts.get(ipRateLimitKey) || []).filter((timestamp) => timestamp > cutoff);
+    if (recentIpAttempts.length >= REDEEM_MAX_IP_ATTEMPTS) {
+      res.set('Retry-After', String(Math.ceil(REDEEM_WINDOW_MS / 1000)));
+      return res.status(429).json({ success: false, error: 'Too many activation attempts. Try again later.', code: 'ACTIVATION_RATE_LIMITED' });
+    }
+    redeemAttempts.set(ipRateLimitKey, [...recentIpAttempts, Date.now()]);
 
     const activation = await ActivationCode.findOne({ codeHash: hashActivationCode(normalized) }).exec();
     if (!activation) return res.status(400).json({ success: false, error: 'Invalid code', code: 'INVALID_CODE' });
@@ -86,6 +106,7 @@ router.post('/client-redeem', async (req, res) => {
       }
     }
 
+    const data = await getUserSubscription(user._id.toString());
     const sessionId = crypto.randomBytes(32).toString('hex');
     await Session.create({
       sessionId,
@@ -93,12 +114,16 @@ router.post('/client-redeem', async (req, res) => {
       username: user.username,
       email: user.email,
       role: user.role,
-      expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      // Bound the bootstrap session to the subscription instead of minting a
+      // fixed year: expiresAt = min(now + 365d, subscriptionEnd + 7d grace),
+      // floored at 1h so an expired-subscription re-registration still works
+      // briefly instead of failing at the first API call.
+      expiresAt: computeClientRedeemSessionExpiry(data?.subscription?.expiresAt),
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
-    const data = await getUserSubscription(user._id.toString());
     redeemAttempts.delete(rateLimitKey);
+    redeemAttempts.delete(ipRateLimitKey);
     return res.json({
       success: true,
       sessionId,
