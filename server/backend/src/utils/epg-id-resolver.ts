@@ -23,7 +23,7 @@ const QUALITY_TOKENS = /\b(hd|hdtv|fhd|uhd|4k|8k|sd|hevc|h265|x265|h264|avc|raw|
  * ("SP⚽RTS"). Fix the raw token before cleaning so the digit capture and
  * canonical matching actually see "SPORTS".
  */
-const BALL_EMOJI_SPORTS = /SP\s*[⚽🏀🏈🎾⚾🥅]\s*RTS/gi;
+const BALL_EMOJI_SPORTS = /SP\s*[⚽🏀🏈🎾⚾🥅]\s*RTS/giu;
 
 /** Canonical, comparison-safe form of a catalog channel name. */
 export function canonicalKey(value: string): string {
