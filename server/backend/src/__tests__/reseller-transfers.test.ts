@@ -70,8 +70,12 @@ describe('Reseller credit transfers (تحويل رصيد بين الموزعين
 
     const txns = await CreditTransaction.find({}).sort({ createdAt: 1 }).lean().exec();
     expect(txns).toHaveLength(2);
-    expect(txns[0]).toMatchObject({ type: 'TRANSFER_OUT', quantity: -3, resellerId: sender._id, counterpartyId: recipient._id });
-    expect(txns[1]).toMatchObject({ type: 'TRANSFER_IN', quantity: 3, resellerId: recipient._id, counterpartyId: sender._id });
+    // Order between the two ledger rows is not deterministic (same-ms writes) —
+    // match each row by type instead of index.
+    const out = txns.find((t: any) => t.type === 'TRANSFER_OUT');
+    const inn = txns.find((t: any) => t.type === 'TRANSFER_IN');
+    expect(out).toMatchObject({ type: 'TRANSFER_OUT', quantity: -3, resellerId: sender._id, counterpartyId: recipient._id });
+    expect(inn).toMatchObject({ type: 'TRANSFER_IN', quantity: 3, resellerId: recipient._id, counterpartyId: sender._id });
   });
 
   it('creates the recipient credit entry when they had none for that plan', async () => {
