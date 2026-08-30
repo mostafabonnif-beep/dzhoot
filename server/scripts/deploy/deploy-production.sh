@@ -104,8 +104,8 @@ run "sleep" sleep 20
 # deploy even when the stack is perfectly healthy.
 DOMAIN="$(sed -n 's/^DOMAIN=//p' "$ENV_FILE" | tr -d '"' | tr -d "'")"
 [ -n "$DOMAIN" ] || die "DOMAIN missing from $ENV_FILE — cannot verify public health"
-run "docker health api" sh -c 'docker inspect -f "{{.State.Health.Status}}" dzhoof-api | grep -qx healthy'
-run "public health" curl -fsS "https://${DOMAIN}/health"
+run "docker health api" sh -c 'docker inspect -f "{{.State.Health.Status}}" dzhoof-api | grep -qx healthy' || die "dzhoof-api not healthy after compose up"
+run "public health" curl -fsS "https://${DOMAIN}/health" || die "public health check failed after deploy"
 if [ "$RELEASE_COMMIT" != "unknown" ]; then
   run "release trace health" sh -c "curl -fsS 'https://${DOMAIN}/health' | grep -F '\"commit\":\"${RELEASE_COMMIT}\"' >/dev/null"
 fi
