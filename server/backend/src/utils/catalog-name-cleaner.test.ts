@@ -52,3 +52,12 @@ describe('catalog-name-cleaner', () => {
     expect(variantRank('TF1 4K')).toBe(10);
   });
 });
+
+describe('catalog-name-cleaner: sports emoji', () => {
+  it('strips ball emoji and star decorations used as provider markers', () => {
+    expect(cleanDisplayChannelName('8K: beIN SP⚽RTS 5 ᴴᴰ')).toBe('8K: beIN SP RTS 5 HD');
+    expect(cleanDisplayChannelName('GOLD: beIN SP⚽RTS 5 ᴴᴰ')).toBe('GOLD: beIN SP RTS 5 HD');
+    expect(cleanDisplayChannelName('⭐ SPORTS ⭐')).toBe('SPORTS');
+    expect(cleanDisplayChannelName('🅰 MOVIES')).toBe('MOVIES');
+  });
+});
