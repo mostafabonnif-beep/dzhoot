@@ -26,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import com.dzhoof.iptv.R
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
+import com.dzhoof.iptv.presentation.model.CatalogPosterItem
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
@@ -49,11 +50,15 @@ fun HomeContent(
     recentlyWatched: List<ChannelUiModel>,
     forYou: List<ChannelUiModel>,
     popularCategories: List<PopularCategoryUiModel>,
+    latestMovies: List<CatalogPosterItem>,
+    latestSeries: List<CatalogPosterItem>,
     lastPlayedChannelId: String?,
     onChannelClick: (String) -> Unit,
     onNavigateToChannels: (String) -> Unit,
     onToggleFavorite: (String) -> Unit,
     onMultiviewClick: (String) -> Unit,
+    onMovieClick: (String) -> Unit = {},
+    onSeriesClick: (String) -> Unit = {},
     isDemo: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -235,6 +240,34 @@ fun HomeContent(
             }
         }
 
+        if (latestMovies.isNotEmpty()) {
+            item(key = "latest_movies") {
+                CatalogPosterRow(
+                    title = "أحدث الأفلام",
+                    items = latestMovies,
+                    onItemClick = onMovieClick,
+                    horizontalPadding = horizontalPadding,
+                    modifier = Modifier
+                        .padding(bottom = rowGap)
+                        .animateItemEntrance(index = categoryRowOffset)
+                )
+            }
+        }
+
+        if (latestSeries.isNotEmpty()) {
+            item(key = "latest_series") {
+                CatalogPosterRow(
+                    title = "المسلسلات",
+                    items = latestSeries,
+                    onItemClick = onSeriesClick,
+                    horizontalPadding = horizontalPadding,
+                    modifier = Modifier
+                        .padding(bottom = rowGap)
+                        .animateItemEntrance(index = categoryRowOffset + 1)
+                )
+            }
+        }
+
         itemsIndexed(
             items = categoryEntries,
             key = { _, entry -> "category_${entry.key}" }
@@ -252,7 +285,7 @@ fun HomeContent(
                 horizontalPadding = horizontalPadding,
                 modifier = Modifier
                     .padding(bottom = rowGap)
-                    .animateItemEntrance(index = categoryRowOffset + index)
+                    .animateItemEntrance(index = categoryRowOffset + index + 2)
             )
         }
     }

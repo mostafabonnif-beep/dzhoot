@@ -18,6 +18,7 @@ import com.dzhoof.iptv.data.source.local.dao.FavoriteDao
 import com.dzhoof.iptv.data.source.local.dao.PlaybackPositionDao
 import com.dzhoof.iptv.data.source.local.entity.FavoriteCategoryEntity
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
+import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.usecase.GetChannelsByCategoryUseCase
 import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
@@ -25,6 +26,7 @@ import com.dzhoof.iptv.domain.usecase.RefreshChannelsUseCase
 import com.dzhoof.iptv.domain.usecase.ToggleFavoriteUseCase
 import com.dzhoof.iptv.presentation.mapper.ChannelUiMapper
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
+import com.dzhoof.iptv.presentation.model.CatalogPosterItem
 import com.dzhoof.iptv.presentation.model.ChannelsUiState
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
@@ -65,6 +67,7 @@ class ChannelsViewModel @Inject constructor(
     private val channelUiMapper: ChannelUiMapper,
     private val channelMapper: ChannelMapper,
     private val epgRepository: EpgRepository,
+    private val catalogRepository: CatalogRepository,
     private val channelHealthDao: ChannelHealthDao,
     private val channelDao: ChannelDao,
     private val favoriteDao: FavoriteDao,
@@ -305,6 +308,25 @@ class ChannelsViewModel @Inject constructor(
         }
     }
 
+    /** Best-effort fetch of the latest movies/series for the home poster rows. */
+    private fun loadCatalogRows() {
+        viewModelScope.launch {
+            runCatching {
+                val movies = catalogRepository.getMovies(page = 1, limit = 12)
+                val series = catalogRepository.getSeries(page = 1, limit = 12)
+                movies to series
+            }.onSuccess { (moviesResult, seriesResult) ->
+                val movieItems = (moviesResult as? Result.Success)?.data?.items.orEmpty()
+                    .map { CatalogPosterItem(key = it.id, title = it.title, subtitle = it.year?.toString() ?: it.category, imageUrl = it.poster) }
+                val seriesItems = (seriesResult as? Result.Success)?.data?.items.orEmpty()
+                    .map { CatalogPosterItem(key = it.id, title = it.title, subtitle = it.category, imageUrl = it.poster) }
+                _uiState.update { it.copy(latestMovies = movieItems, latestSeries = seriesItems) }
+            }.onFailure {
+                // Non-critical — rows just stay hidden if the catalog is unavailable
+            }
+        }
+    }
+
     fun toggleCategoryFavorite(categoryName: String) {
         viewModelScope.launch {
             val isFav = favoriteCategoryDao.isFavorite(categoryName)
@@ -351,6 +373,7 @@ class ChannelsViewModel @Inject constructor(
 
     fun refresh() {
         if (refreshJob?.isActive == true) return
+        loadCatalogRows() // best-effort refresh of the home VOD rows
         refreshJob = viewModelScope.launch {
             val hasContent = _uiState.value.channels.isNotEmpty()
             _uiState.update { it.copy(
