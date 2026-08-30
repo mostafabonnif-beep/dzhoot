@@ -36,14 +36,20 @@ export function canonicalKey(value: string): string {
     .trim();
 }
 
-/** Derive a canonical name from an EPG id: 'AL.JAZEERA.ARABIC.tr' → 'al jazeera arabic'. */
+/**
+ * Derive a canonical name from an EPG id: 'AL.JAZEERA.ARABIC.tr' → 'al jazeera arabic'.
+ *
+ * The trailing token is stripped when it looks like a country/brand suffix:
+ *   - any ISO-style 2-letter code (`.tr`, `.eg`, `.qa`, `.il`, …) — a fixed
+ *     allowlist previously missed guides like epgshare01's `.eg`/`.il`/`.pk`
+ *     files, so their ids never matched ("MBC.MASR.2.eg" → 'mbc masr 2 eg');
+ *   - the legacy multi-letter brand TLDs (`.bein`, `.com`) that guides append.
+ */
 export function epgIdName(id: string): string {
   const s = id
     .toLowerCase()
-    .replace(
-      /\.(tr|fr|uk|de|bein|com|dz|sa|ae|ma|tn|us|nl|be|ch|ru|it|es|pt|pl|in|za|mu|cm)$/i,
-      '',
-    );
+    .replace(/\.(bein|com)$/i, '')
+    .replace(/\.[a-z]{2}$/i, '');
   return s.replace(/[^a-z0-9\u0600-\u06FF]+/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
