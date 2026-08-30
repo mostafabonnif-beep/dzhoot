@@ -12,6 +12,30 @@ const CreditTransaction = require('../models/CreditTransaction');
 const ResellerCreditDebt = require('../models/ResellerCreditDebt');
 const { recordCreditTx, returnUnusedCreditForReseller } = require('../services/subscription-service');
 
+// Permission flags that admins can toggle per reseller (مصفوفة الصلاحيات).
+const PERMISSION_KEYS = [
+  'generateCodes',
+  'transfers',
+  'renew',
+  'changePackage',
+  'suspend',
+  'exportM3U',
+  'viewHistory',
+];
+
+function cleanPermissions(raw) {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out = {};
+  let changed = false;
+  for (const key of PERMISSION_KEYS) {
+    if (typeof raw[key] === 'boolean') {
+      out[key] = raw[key];
+      changed = true;
+    }
+  }
+  return changed ? out : undefined;
+}
+
 // Admin-only reseller management: /api/v1/admin/resellers
 const { requireAuth, requireAdmin } = require('./auth');
 router.use(requireAuth);
@@ -97,7 +121,7 @@ router.get('/', async (req, res) => {
 // POST / — create reseller
 router.post('/', async (req, res) => {
   try {
-    const { name, city, phone, notes, status, prices, username, password, credit, prefix } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password, credit, prefix, permissions } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'name is required' });
     }
@@ -107,6 +131,7 @@ router.post('/', async (req, res) => {
     if (password && String(password).length < 6) {
       return res.status(400).json({ success: false, error: 'password must be at least 6 characters' });
     }
+    const cleanPerms = cleanPermissions(permissions);
     const cleanPrefix = prefix ? String(prefix).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) : undefined;
     if (prefix && (!cleanPrefix || cleanPrefix.length < 3)) {
       return res.status(400).json({ success: false, error: 'prefix must be 3-6 letters/numbers' });
@@ -128,6 +153,7 @@ router.post('/', async (req, res) => {
       username: username ? String(username).trim().toLowerCase() : undefined,
       passwordHash: password ? String(password) : undefined,
       prefix: cleanPrefix,
+      permissions: cleanPerms,
     });
     // Ledger: record every initial credit grant (balanceAfter = granted qty).
     for (const c of cleanCredit(credit)) {
@@ -169,7 +195,7 @@ router.put('/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
-    const { name, city, phone, notes, status, prices, username, password, credit, prefix } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password, credit, prefix, permissions } = req.body || {};
     const update = {};
     if (username !== undefined) {
       if (username && !/^[a-z0-9_.-]{3,50}$/i.test(String(username).trim())) {
@@ -211,6 +237,8 @@ router.put('/:id', async (req, res) => {
     }
     if (update.name) update.name = String(update.name).trim();
     if (credit !== undefined) update.credit = cleanCredit(credit);
+    const cleanPerms = cleanPermissions(permissions);
+    if (cleanPerms !== undefined) update.permissions = cleanPerms;
     const prev = await Reseller.findById(id).select('credit').lean().exec();
     const doc = await Reseller.findByIdAndUpdate(id, { $set: update }, { new: true }).exec();
     if (!doc) return res.status(404).json({ success: false, error: 'Reseller not found' });

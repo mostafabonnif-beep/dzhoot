@@ -1,11 +1,17 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type CreditTxType = 'GRANT' | 'CONSUME' | 'RETURN' | 'EXPIRE_RETURN';
+export type CreditTxType =
+  | 'GRANT'
+  | 'CONSUME'
+  | 'RETURN'
+  | 'EXPIRE_RETURN'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN';
 
 export interface ICreditTransactionDocument extends Document {
   resellerId: mongoose.Types.ObjectId;
   planId: mongoose.Types.ObjectId;
-  /** GRANT = admin added credit · CONSUME = codes generated · RETURN = manual reclaim · EXPIRE_RETURN = auto reclaim after code expiry */
+  /** GRANT = admin added credit · CONSUME = codes generated · RETURN = manual reclaim · EXPIRE_RETURN = auto reclaim after code expiry · TRANSFER_OUT/IN = reseller-to-reseller credit transfer */
   type: CreditTxType;
   /** Signed quantity: +grant, -consume, +return */
   quantity: number;
@@ -19,6 +25,8 @@ export interface ICreditTransactionDocument extends Document {
   note?: string;
   /** Who performed it (admin user id, or null for system/reseller actions) */
   createdBy?: mongoose.Types.ObjectId | null;
+  /** The other reseller for TRANSFER_OUT/TRANSFER_IN rows */
+  counterpartyId?: mongoose.Types.ObjectId | null;
   createdAt: Date;
 }
 
@@ -38,7 +46,7 @@ const creditTransactionSchema = new Schema<ICreditTransactionDocument>(
     },
     type: {
       type: String,
-      enum: ['GRANT', 'CONSUME', 'RETURN', 'EXPIRE_RETURN'],
+      enum: ['GRANT', 'CONSUME', 'RETURN', 'EXPIRE_RETURN', 'TRANSFER_OUT', 'TRANSFER_IN'],
       required: true,
       index: true,
     },
@@ -72,6 +80,13 @@ const creditTransactionSchema = new Schema<ICreditTransactionDocument>(
       type: Schema.Types.ObjectId,
       ref: 'User',
       default: null,
+    },
+    /** Other side of a reseller-to-reseller transfer (TRANSFER_OUT/IN). */
+    counterpartyId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Reseller',
+      default: null,
+      index: true,
     },
   },
   { timestamps: { createdAt: true, updatedAt: false } },

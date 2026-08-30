@@ -1,6 +1,6 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type SubscriptionStatus = 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+export type SubscriptionStatus = 'ACTIVE' | 'EXPIRED' | 'CANCELLED' | 'SUSPENDED';
 
 export interface ISubscriptionDocument extends Document {
   userId: mongoose.Types.ObjectId;
@@ -35,7 +35,7 @@ const subscriptionSchema = new Schema<ISubscriptionDocument>(
     },
     status: {
       type: String,
-      enum: ['ACTIVE', 'EXPIRED', 'CANCELLED'],
+      enum: ['ACTIVE', 'EXPIRED', 'CANCELLED', 'SUSPENDED'],
       default: 'ACTIVE',
       index: true,
     },
