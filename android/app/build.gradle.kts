@@ -121,15 +121,12 @@ android {
 
     buildTypes {
         release {
-            // R8/minify is DISABLED for the production build. Media3 1.4.1 discovers
-            // the HLS/DASH module factories via Class.forName("...HlsMediaSource$Factory")
-            // (DelegateFactoryLoader), which R8 cannot trace: the release APK silently
-            // lost HLS support and every m3u8 stream failed with
-            // ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED (no segment fetches ever started).
-            // Until R8 keeps those classes by name, ship the unshrunk dex — playback
-            // reliability is worth more than a smaller APK.
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // R8 is enabled for production. The project-specific rules below keep
+            // Media3 HLS/DASH service-loaded factories and the reflection-heavy SDKs
+            // required by the player. Release builds must be tested with a real HLS
+            // manifest before publication.
+            isMinifyEnabled = true
+            isShrinkResources = true
             manifestPlaceholders["sentryEnvironment"] = "production"
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

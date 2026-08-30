@@ -1,6 +1,15 @@
 # DZ HOOF — خارطة تطوير المشروع
 
-آخر تحديث: 2026-08-21 (تحقق من بيئة الإنتاج الفعلية)
+آخر تحديث: 2026-08-30 (Final engineering pass; live acceptance tests remain environment-dependent)
+
+## 0.1 — Security/Release Hardening Pass (2026-08-30)
+
+- [x] إزالة أي fallback ضمني لـ`DEMO` في جميع البيئات؛ Demo TV access أصبح opt-in فقط عبر `DEMO_TV_CODE`.
+- [x] رفض `DEMO_TV_CODE` الضعيف/المتوقع أثناء إقلاع Production.
+- [x] تقوية Parental PIN إلى PBKDF2-HMAC-SHA256 (210,000 iterations) مع salt عشوائي وformat versioned، مع قراءة hashes القديمة والتحديث التلقائي، وإضافة throttling محلي.
+- [x] تفعيل R8 وresource shrinking في Release مع قواعد Media3/HLS/DASH الموجودة في `proguard-rules.pro`.
+- [x] إضافة اختبارات regression لمنع عودة Demo credential المعروف.
+- [ ] تشغيل اختبارات Release/Android وE2E الحية على جهاز فعلي وبيئة إنتاج تحتوي dependencies ومصدر HLS مصرحًا به.
 
 ## 0. الوضع الراهن المُتحقق (2026-08-21)
 

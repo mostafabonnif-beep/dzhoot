@@ -91,6 +91,13 @@ if (process.env.NODE_ENV === 'production') {
   if (isPlaceholder(process.env.SUPER_ADMIN_EMAIL))
     problems.push('SUPER_ADMIN_EMAIL is a placeholder address');
 
+  // Demo access is intentionally opt-in. If configured in production, reject
+  // predictable/demo credentials so a deployment cannot accidentally expose
+  // the catalog through a well-known code.
+  const demoCode = String(process.env.DEMO_TV_CODE || '').trim();
+  if (demoCode && (demoCode.length < 16 || /^(demo|change[-_]?me|test|default)/i.test(demoCode)))
+    problems.push('DEMO_TV_CODE must be at least 16 characters and must not be a predictable demo/default value');
+
   if (problems.length > 0) {
     console.error(`[SECURITY] Refusing to start in production:\n  - ${problems.join('\n  - ')}`);
     process.exit(1);
