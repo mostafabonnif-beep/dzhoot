@@ -46,6 +46,9 @@ rollback() {
     if [ -d "$ACTIVE" ]; then mv "$ACTIVE" "$FAILED" || true; fi
     if [ -d "$PREVIOUS" ]; then mv "$PREVIOUS" "$ACTIVE" || true; fi
     if [ -d "$ACTIVE" ]; then
+      # Do not retain release metadata from the failed deploy when starting the
+      # restored source. Older releases fall back to compose's safe `unknown` value.
+      unset RELEASE_COMMIT RELEASE_BUILT_AT
       cd "$ACTIVE/server"
       docker compose -f docker-compose.production.yml --env-file "$ENV_FILE" up -d --no-deps api frontend scheduler || true
     fi
@@ -90,6 +93,11 @@ say "switching active source to release $SHA"
 mv "$ACTIVE" "$PREVIOUS"
 mv "$RELEASE" "$ACTIVE"
 SWAPPED=1
+
+# stage-release.sh verified this full SHA before staging it. Pass only this
+# non-secret provenance metadata into compose and image labels for the deploy.
+export RELEASE_COMMIT="$SHA"
+export RELEASE_BUILT_AT="$(date -u +%FT%TZ)"
 
 say "running verified production deployment"
 cd "$ACTIVE/server"

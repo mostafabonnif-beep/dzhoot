@@ -28,6 +28,8 @@ describe('health endpoints', () => {
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('ok');
     expect(response.body).toHaveProperty('version');
+    expect(response.body.release).toHaveProperty('commit');
+    expect(response.body.release).toHaveProperty('builtAt');
     expect(response.body).toHaveProperty('requestId');
     // Operational details are not part of the public payload (audit-remediation-v1).
     expect(response.body).not.toHaveProperty('mongodb');
