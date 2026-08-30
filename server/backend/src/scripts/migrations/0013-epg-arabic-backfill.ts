@@ -3,21 +3,26 @@
  * fetched XMLTV guides (epgshare beIN, iptv-epg.org, .tr guide) actually
  * populate the app guide.
  *
- * Problem found live: the EPG pipeline works (122k+ programs in DB) but only
- * ~1.1k of 16.6k channels have a tvgId that exists in the fetched guides —
- * the French channels were matched, the big Arabic families were not.
+ * Problem found live: the EPG pipeline works (120k+ programs in DB) but only
+ * ~2.5k of 16.6k channels have a tvgId that resolves to an existing guide id.
  *
  * Strategy (all data-driven from the ids that ACTUALLY exist in EpgProgram):
  *   1. beIN family: BEIN SPORTS n → beIN_SPORTS{n}_DIGITAL_Mono_AR.bein
- *      (fallback beINSPORTS{n}.tr); ALKASS n → Alkass_{n}_AR.bein;
+ *      (fallback beINSP{n}.tr); ALKASS n → Alkass_{n}_AR.bein;
  *      AL JAZEERA ARABIC → AL.JAZEERA.ARABIC.tr (+ INTERNATIONAL variant).
  *   2. Generic exact match: catalog display name (cleaned) == epg-id-derived
- *      name (cleaned) — e.g. 'CARTOON NETWORK' → CARTOON.NETWORK.tr,
- *      'DISNEY CHANNEL' → DISNEY.CHANNEL.tr, 'CNN INTERNATIONAL' →
- *      CNN.INTERNATIONAL.tr. Only exact normalized matches, so no wrong links.
+ *      name (cleaned) — e.g. 'CARTOON NETWORK' → CARTOON.NETWORK.tr.
+ *      Only exact normalized matches, so no wrong links.
  *
- * Channels whose tvgId already resolves to an existing guide id are skipped.
- * Nothing is deleted; only tvgId is set.
+ * Fixes applied in this version (2026-08-30):
+ *   - Family matching now runs on the CLEANED name ("SP⚽RTS" → "SPORTS") and
+ *     never silently falls back to beIN 1 when the guide lacks the requested
+ *     number ("beIN SP⚽RTS 5" previously resolved to beIN_SPORTS1).
+ *   - Channels whose existing tvgId contradicts the cleaned name (e.g. a
+ *     beIN 5 channel stamped with the beIN 1 guide id) get tvgId cleared so
+ *     the app stops showing the wrong schedule.
+ *
+ * Logic lives in src/utils/epg-id-resolver.ts (unit-tested).
  *
  * Usage (from backend/):
  *   npx tsx src/scripts/migrations/0013-epg-arabic-backfill.ts            # DRY-RUN (default)
@@ -30,31 +35,13 @@ require('dotenv').config({ path: path.resolve(__dirname, '../../../../.env') });
 
 import Channel from '../../models/Channel';
 import EpgProgram from '../../models/EpgProgram';
-import { cleanDisplayChannelName } from '../../utils/catalog-name-cleaner';
+import { resolveEpgIdForChannel, epgIdName, extractBeinNumber } from '../../utils/epg-id-resolver';
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/dzhoof-iptv';
 const COMMIT = process.argv.includes('--commit');
 
-/** Strip quality/mode tokens so 'CARTOON NETWORK HD' ≡ 'cartoon network'. */
-const QUALITY_TOKENS =
-  /\b(hd|hdtv|fhd|uhd|4k|8k|sd|hevc|h265|x265|h264|avc|raw|60fps|full|lq|hq)\b/g;
-
-function canonicalKey(value: string): string {
-  return cleanDisplayChannelName(value)
-    .toLowerCase()
-    .replace(QUALITY_TOKENS, ' ')
-    .replace(/[^a-z0-9\u0600-\u06FF]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/** Derive a canonical name from an EPG id: 'AL.JAZEERA.ARABIC.tr' → 'al jazeera arabic'. */
-function epgIdName(id: string): string {
-  const s = id
-    .toLowerCase()
-    .replace(/\.(tr|fr|uk|de|bein|com|dz|sa|ae|ma|tn|us|nl|be|ch|ru|it|es|pt|pl|in|za|mu|cm)$/i, '');
-  return s.replace(/[^a-z0-9\u0600-\u06FF]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
+/** A tvgId pointing at a beIN guide id, e.g. beIN_SPORTS2_DIGITAL_Mono_AR.bein. */
+const BEIN_TVG_ID = /^bein[_\s]?sports?(\d{1,2})/i;
 
 async function run(): Promise<void> {
   console.log(`\n=== Migration 0013: EPG Arabic/international backfill (${COMMIT ? 'COMMIT' : 'DRY-RUN'}) ===`);
@@ -85,6 +72,7 @@ async function run(): Promise<void> {
   console.log(`Catalog channels: ${channels.length}`);
 
   const updates: { _id: any; name: string; tvgId: string; via: string }[] = [];
+  const unsets: { _id: any; name: string; oldTvgId: string; via: string }[] = [];
   const stats = new Map<string, number>();
 
   for (const ch of channels as any[]) {
@@ -92,74 +80,33 @@ async function run(): Promise<void> {
     if (!name) continue;
 
     const currentTvg = String(ch.tvgId || '');
+
+    // ─── Fix misassigned beIN ids ──────────────────────────────────
+    // A channel named "beIN ... 5" stamped with a beIN 1 guide id shows the
+    // wrong schedule. Detect and clear it (the resolver below will not
+    // re-map it because the guide has no beIN 5 id).
+    const tvgBein = currentTvg.match(BEIN_TVG_ID);
+    const nameBein = extractBeinNumber(name);
+    if (tvgBein && nameBein && nameBein !== tvgBein[1]) {
+      unsets.push({ _id: ch._id, name, oldTvgId: currentTvg, via: 'bein-misassign' });
+      continue;
+    }
+
     if (currentTvg && available.has(currentTvg.toLowerCase())) continue; // already covered
 
-    const canon = canonicalKey(name);
-    const upper = name.toUpperCase();
-    let tvgId: string | null = null;
-    let via = '';
+    const resolution = resolveEpgIdForChannel({
+      channelName: name,
+      availableIds: available,
+      byLower,
+      nameToId,
+    });
+    if (!resolution) continue;
 
-    // --- beIN family ---
-    const beinMatch = upper.match(/BEIN\s*(?:SPORTS\s*)?(\d{1,2})/);
-    if (/BEIN/.test(upper)) {
-      if (/\bMAX\b/.test(upper)) {
-        // guide has no MAX feeds in the fetched sets — leave for a later source
-        continue;
-      }
-      const n = beinMatch ? beinMatch[1] : '1';
-      const ar = byLower.get(`bein_sports${n}_digital_mono_ar.bein`);
-      const tr = byLower.get(`beinsp${n}.tr`);
-      if (ar) {
-        tvgId = ar;
-        via = 'bein-ar';
-      } else if (tr) {
-        tvgId = tr;
-        via = 'bein-tr';
-      } else if (n === '1' && byLower.has('beinsports.tr')) {
-        tvgId = byLower.get('beinsports.tr')!;
-        via = 'bein-tr';
-      }
-    } else if (/ALKASS/.test(upper)) {
-      const m = upper.match(/ALKASS\s*(\d{1,2})/);
-      const n = m ? m[1] : '1';
-      const ar = byLower.get(`alkass_${n}_ar.bein`);
-      const en = byLower.get(`alkass_${n}_en.bein`);
-      if (ar) {
-        tvgId = ar;
-        via = 'alkass-ar';
-      } else if (en) {
-        tvgId = en;
-        via = 'alkass-en';
-      }
-    } else if (/AL\s*JAZEERA/.test(upper)) {
-      const ar = byLower.get('al.jazeera.arabic.tr');
-      const en = byLower.get('al.jazeera.international.tr');
-      if (/ARABIC/.test(upper) && ar) {
-        tvgId = ar;
-        via = 'jazeera-ar';
-      } else if (/INTERNATIONAL|INTL|EN/.test(upper) && en) {
-        tvgId = en;
-        via = 'jazeera-en';
-      } else if (ar) {
-        tvgId = ar;
-        via = 'jazeera-ar';
-      }
-    }
+    const { tvgId, via } = resolution;
+    if (!byLower.has(tvgId.toLowerCase())) continue; // never write an id not in the guides
 
-    // --- generic exact match (international families: cartoon, disney, cnn…) ---
-    if (!tvgId && canon && nameToId.has(canon)) {
-      tvgId = nameToId.get(canon)!;
-      via = 'generic';
-    }
-
-    if (tvgId && !byLower.has(tvgId.toLowerCase())) {
-      tvgId = null; // never write an id that is not actually in the guides
-    }
-
-    if (tvgId) {
-      updates.push({ _id: ch._id, name, tvgId, via });
-      stats.set(via, (stats.get(via) || 0) + 1);
-    }
+    updates.push({ _id: ch._id, name, tvgId, via });
+    stats.set(via, (stats.get(via) || 0) + 1);
   }
 
   console.log(`\nChannels to backfill: ${updates.length}`);
@@ -167,15 +114,26 @@ async function run(): Promise<void> {
     console.log(`  ${via}: ${n}`);
   }
   updates.slice(0, 12).forEach((u) => console.log(`  "${u.name.slice(0, 42)}" → ${u.tvgId} (${u.via})`));
+  console.log(`Misassigned tvgIds to clear: ${unsets.length}`);
+  unsets.slice(0, 12).forEach((u) => console.log(`  "${u.name.slice(0, 42)}" — was ${u.oldTvgId} (${u.via})`));
 
   if (!COMMIT) {
     console.log(`\nDry-run complete — no changes written. Re-run with --commit to apply.`);
-  } else if (updates.length) {
-    const res = await Channel.bulkWrite(
-      updates.map((u) => ({ updateOne: { filter: { _id: u._id }, update: { $set: { tvgId: u.tvgId } } } })),
-      { ordered: false },
-    );
-    console.log(`\nUpdated ${res.modifiedCount} channels.`);
+  } else {
+    if (updates.length) {
+      const res = await Channel.bulkWrite(
+        updates.map((u) => ({ updateOne: { filter: { _id: u._id }, update: { $set: { tvgId: u.tvgId } } } })),
+        { ordered: false },
+      );
+      console.log(`\nUpdated ${res.modifiedCount} channels.`);
+    }
+    if (unsets.length) {
+      const res = await Channel.bulkWrite(
+        unsets.map((u) => ({ updateOne: { filter: { _id: u._id }, update: { $unset: { tvgId: 1 } } } })),
+        { ordered: false },
+      );
+      console.log(`Cleared ${res.modifiedCount} misassigned tvgIds.`);
+    }
     const covered = await Channel.countDocuments({ tvgId: { $in: availableIds } });
     console.log(`Channels with tvgId inside the guides now: ${covered}`);
   }
