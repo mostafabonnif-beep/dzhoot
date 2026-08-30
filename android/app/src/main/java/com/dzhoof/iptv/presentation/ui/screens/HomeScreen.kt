@@ -34,6 +34,8 @@ fun HomeScreen(
     onChannelClick: (String) -> Unit,
     onPairDevice: () -> Unit = {},
     onMultiviewClick: (String) -> Unit = {},
+    onMovieClick: (String) -> Unit = {},
+    onSeriesClick: (String) -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: ChannelsViewModel = hiltViewModel()
 ) {
@@ -98,11 +100,15 @@ fun HomeScreen(
                     recentlyWatched = uiState.recentlyWatched,
                     forYou = uiState.forYou,
                     popularCategories = uiState.popularCategories,
+                    latestMovies = uiState.latestMovies,
+                    latestSeries = uiState.latestSeries,
                     lastPlayedChannelId = uiState.lastPlayedChannelId,
                     onChannelClick = openChannel,
                     onNavigateToChannels = onNavigateToChannels,
                     onToggleFavorite = viewModel::toggleFavorite,
                     onMultiviewClick = onMultiviewClick,
+                    onMovieClick = onMovieClick,
+                    onSeriesClick = onSeriesClick,
                     isDemo = isDemo
                 )
             }

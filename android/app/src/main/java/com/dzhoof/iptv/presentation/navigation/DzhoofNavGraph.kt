@@ -114,6 +114,12 @@ fun DzhoofNavGraph(
                 },
                 onMultiviewClick = { channelId ->
                     navController.navigate(Screen.Multiview.createRoute(channelId))
+                },
+                onMovieClick = { movieId ->
+                    navController.navigate(Screen.MovieDetails.createRoute(movieId))
+                },
+                onSeriesClick = { seriesId ->
+                    navController.navigate(Screen.SeriesDetails.createRoute(seriesId))
                 }
             )
         }

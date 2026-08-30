@@ -28,6 +28,9 @@ data class ChannelsUiState(
     val lastPlayedChannelId: String? = null,
     // HomeScreen: Popular categories slider
     val popularCategories: List<PopularCategoryUiModel> = emptyList(),
+    // HomeScreen: latest VOD rows (movies / series)
+    val latestMovies: List<CatalogPosterItem> = emptyList(),
+    val latestSeries: List<CatalogPosterItem> = emptyList(),
     // Category logos (category name → up to 4 channel logo URLs for collage)
     val categoryLogos: Map<String, List<String>> = emptyMap(),
     // Category favorite names
