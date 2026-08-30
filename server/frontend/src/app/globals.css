@@ -109,7 +109,10 @@
   }
   html,
   body {
-    @apply h-full overflow-hidden;
+    /* NOTE: do NOT lock body scroll here — the dashboard shell (app-shell.tsx)
+       manages its own overflow. Customer-facing pages (landing, buy, download,
+       watch, pair) rely on native page scrolling. */
+    @apply h-full;
   }
   body {
     @apply bg-background text-foreground font-body;

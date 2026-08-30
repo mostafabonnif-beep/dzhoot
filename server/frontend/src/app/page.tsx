@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { PlayCircle, Smartphone, ShieldCheck, Headset, Tv, Zap, MessagesSquare, Download } from 'lucide-react';
 import ShopPlans from '@/components/shop-plans';
+import WhatsAppButton from '@/components/whatsapp-button';
 
 export const metadata: Metadata = {
   title: 'DZ HOOF — تلفزيون ذكي بلا حدود',
@@ -176,15 +177,7 @@ export default function Home() {
             >
               اشترك الآن
             </Link>
-            <a
-              href="https://wa.me/213000000000"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-full border border-primary-foreground/40 px-7 py-3 text-base font-semibold transition hover:bg-primary-foreground/10"
-            >
-              <MessagesSquare className="h-5 w-5" aria-hidden="true" />
-              تواصل معنا
-            </a>
+            <WhatsAppButton label="تواصل معنا" variant="outline" message="مرحباً DZ HOOF، أريد الاستفسار عن الاشتراك." />
           </div>
         </div>
       </section>

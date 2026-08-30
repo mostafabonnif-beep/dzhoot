@@ -48,8 +48,9 @@ router.post('/login', async (req, res) => {
         return res.status(401).json({ success: false, error: 'Invalid two-factor authentication code', code: 'TWO_FACTOR_INVALID' });
       }
     }
-    user.lastLogin = new Date();
-    await user.save();
+    // Validation-free lastLogin update — see auth.js (legacy users without the
+    // now-required channelListCode must not get a 500 on login).
+    await User.updateOne({ _id: user._id }, { $set: { lastLogin: new Date() } });
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
     await persistRefreshToken(refreshToken, user, req);

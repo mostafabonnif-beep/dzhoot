@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Tv, KeyRound, MessageCircle } from 'lucide-react';
 import ShopPlans from '@/components/shop-plans';
+import WhatsAppButton from '@/components/whatsapp-button';
 
 export const metadata: Metadata = {
   title: 'اشترك الآن — DZ HOOF',
@@ -78,14 +79,9 @@ export default function BuyPage({
               <p className="mt-1 text-sm text-muted-foreground">
                 راسلنا على واتساب — نرشح لك الباقة المناسبة ونجيبك على كل أسئلتك.
               </p>
-              <a
-                href="https://wa.me/213000000000"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#25D366] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#1fb958]"
-              >
-                راسلنا الآن
-              </a>
+              <div className="mt-3">
+                <WhatsAppButton label="راسلنا الآن" message="مرحباً DZ HOOF، أحتاج مساعدة في اختيار الباقة." />
+              </div>
             </div>
           </div>
         </div>

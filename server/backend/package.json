@@ -22,6 +22,7 @@
     "migrate:fix-names": "tsx src/scripts/migrations/0009-fix-channel-names.ts",
     "migrate:catchup-backfill": "tsx src/scripts/migrations/0010-catchup-backfill.ts",
     "migrate:tvgid-backfill": "tsx src/scripts/migrations/0011-tvgid-backfill.ts",
+    "migrate:user-channellistcode": "tsx src/scripts/migrations/0014-user-channellistcode-backfill.ts",
     "audit:catalog-presentation": "tsx src/scripts/catalog-presentation-audit.ts"
   },
   "dependencies": {

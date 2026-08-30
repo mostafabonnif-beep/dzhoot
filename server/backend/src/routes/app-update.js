@@ -3,12 +3,6 @@ const router = express.Router();
 const axios = require('axios');
 const AppVersion = require('../models/AppVersion');
 
-// Demo mode: returns the public demo code the app pairs with to browse the
-// curated demo catalog without an account. Configurable via DEMO_TV_CODE.
-router.get('/demo-code', (_req, res) => {
-  res.json({ code: process.env.DEMO_TV_CODE || 'DEMO' });
-});
-
 // GitHub APK update routes
 
 const GITHUB_OWNER = process.env.GH_APP_OWNER || 'mostafabonnif-beep';
