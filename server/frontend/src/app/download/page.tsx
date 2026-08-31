@@ -112,7 +112,7 @@ export default function DownloadPage() {
   useEffect(() => {
     if (!version?.downloadUrl) return;
     let cancelled = false;
-    QRCode.toDataURL(version.downloadUrl, {
+    QRCode.toDataURL(`${window.location.origin}/download`, {
       width: 220,
       margin: 2,
       errorCorrectionLevel: 'M',
@@ -206,7 +206,7 @@ export default function DownloadPage() {
                 ) : null}
 
                 <a
-                  href={version.downloadUrl}
+                  href="/download"
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-base font-bold text-primary-foreground transition hover:opacity-90"
                 >
                   <Download className="h-5 w-5" aria-hidden="true" />
