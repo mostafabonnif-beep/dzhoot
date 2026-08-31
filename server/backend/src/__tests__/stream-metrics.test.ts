@@ -1,0 +1,377 @@
+/**
+ * Tests for stream metrics routes:
+ *   POST /channels/:id/report-status
+ *   POST /channels/:id/report-play
+ *   POST /channels/health-sync
+ */
+
+import request from 'supertest';
+import express from 'express';
+import mongoose from 'mongoose';
+import Channel from '../models/Channel';
+import PlaybackEvent from '../models/PlaybackEvent';
+
+// Pass-through auth middleware
+jest.mock('../middleware/requireTvOrSessionAuth', () => ({
+  requireTvOrSessionAuth: (_req: any, _res: any, next: any) => next(),
+}));
+jest.mock('../routes/auth', () => ({
+  requireAuth: (_req: any, _res: any, next: any) => next(),
+  requireAdmin: (_req: any, _res: any, next: any) => next(),
+}));
+jest.mock('../services/audit-log', () => ({ audit: jest.fn() }));
+jest.mock('../utils/ssrf-guard', () => ({
+  validateUrlForSSRF: jest.fn(),
+  isPrivateIP: jest.fn(() => false),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const channelsRouter = require('../routes/channels');
+
+function buildApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/channels', channelsRouter);
+  return app;
+}
+
+async function createChannel(overrides: Record<string, unknown> = {}) {
+  const ch = new Channel({
+    channelId: `ch-${Date.now()}-${Math.random()}`,
+    channelName: 'Test Channel',
+    channelUrl: 'http://example.com/primary.m3u8',
+    ...overrides,
+  });
+  return (await ch.save()) as any;
+}
+
+// ─── POST /:id/report-status ────────────────────────────────────────────────
+
+describe('POST /channels/:id/report-status', () => {
+  const app = buildApp();
+
+  it('returns 400 when status is invalid', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-status`)
+      .send({ status: 'broken', deviceId: 'dev-1' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 when deviceId is missing', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-status`)
+      .send({ status: 'dead' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 404 when channel does not exist', async () => {
+    const fakeId = new mongoose.Types.ObjectId();
+    const res = await request(app)
+      .post(`/channels/${fakeId}/report-status`)
+      .send({ status: 'dead', deviceId: 'dev-1' });
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('increments deadCount for status=dead', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-status`)
+      .send({ status: 'dead', deviceId: 'dev-dead' });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.status).toBe('dead');
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.deadCount).toBe(1);
+  });
+
+  it('increments aliveCount for status=alive', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-status`)
+      .send({ status: 'alive', deviceId: 'dev-alive' });
+    expect(res.status).toBe(200);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.aliveCount).toBe(1);
+  });
+
+  it('increments unresponsiveCount for status=unresponsive', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-status`)
+      .send({ status: 'unresponsive', deviceId: 'dev-unresponsive' });
+    expect(res.status).toBe(200);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.unresponsiveCount).toBe(1);
+  });
+
+  it('updates an M3U channel reported by its external text identifier', async () => {
+    const externalId = `m3u:status:${Date.now()}`;
+    const ch = await createChannel({ channelId: externalId });
+    const res = await request(app)
+      .post(`/channels/${encodeURIComponent(externalId)}/report-status`)
+      .send({ status: 'alive', deviceId: 'dev-status-m3u' });
+    expect(res.status).toBe(200);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.aliveCount).toBe(1);
+  });
+
+  it('returns 429 on second report within 5 minutes from same device', async () => {
+    const ch = await createChannel();
+    await request(app)
+      .post(`/channels/${ch._id}/report-status`)
+      .send({ status: 'dead', deviceId: 'dev-rate' });
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-status`)
+      .send({ status: 'dead', deviceId: 'dev-rate' });
+    expect(res.status).toBe(429);
+    expect(res.body.success).toBe(false);
+  });
+});
+
+// ─── POST /:id/report-play ──────────────────────────────────────────────────
+
+describe('POST /channels/:id/report-play', () => {
+  const app = buildApp();
+
+  it('returns 400 when deviceId is missing', async () => {
+    const ch = await createChannel();
+    const res = await request(app).post(`/channels/${ch._id}/report-play`).send({});
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 404 when channel does not exist', async () => {
+    const fakeId = new mongoose.Types.ObjectId();
+    const res = await request(app)
+      .post(`/channels/${fakeId}/report-play`)
+      .send({ deviceId: 'dev-1' });
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('increments playCount on successful play', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-play`)
+      .send({ deviceId: 'dev-play' });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.playCount).toBe(1);
+  });
+
+  it('increments proxyPlayCount when proxyPlay=true', async () => {
+    const ch = await createChannel();
+    await request(app)
+      .post(`/channels/${ch._id}/report-play`)
+      .send({ deviceId: 'dev-proxy', proxyPlay: true });
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.proxyPlayCount).toBe(1);
+  });
+
+  it('does not promote alternate from report-play (scheduler-only promotion)', async () => {
+    const altUrl = 'http://example.com/alt.m3u8';
+    const ch = await createChannel({
+      alternateStreams: [
+        {
+          streamUrl: altUrl,
+          quality: '1080p',
+          liveness: { status: 'alive' },
+          flaggedBad: { isFlagged: false },
+        },
+      ],
+    });
+    await request(app)
+      .post(`/channels/${ch._id}/report-play`)
+      .send({ deviceId: 'dev-promote', streamUrl: altUrl });
+    const updated: any = await Channel.findById(ch._id).lean();
+    // Primary should remain unchanged — promotion is now handled only by the scheduler
+    expect(updated.channelUrl).toBe('http://example.com/primary.m3u8');
+    // Metrics should still be updated
+    expect(updated.metrics.playCount).toBe(1);
+  });
+
+  it('increments playCount when an M3U external text identifier is reported', async () => {
+    const externalId = `m3u:play:${Date.now()}`;
+    const ch = await createChannel({ channelId: externalId });
+    const res = await request(app)
+      .post(`/channels/${encodeURIComponent(externalId)}/report-play`)
+      .send({ deviceId: 'dev-play-m3u' });
+    expect(res.status).toBe(200);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.playCount).toBe(1);
+  });
+
+  it('returns 429 on second play report within 1 minute from same device', async () => {
+    const ch = await createChannel();
+    await request(app).post(`/channels/${ch._id}/report-play`).send({ deviceId: 'dev-rate-play' });
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-play`)
+      .send({ deviceId: 'dev-rate-play' });
+    expect(res.status).toBe(429);
+  });
+});
+
+// ─── POST /channels/:id/report-playback-event ────────────────────────────────
+
+describe('POST /channels/:id/report-playback-event', () => {
+  const app = buildApp();
+
+  it('validates the event type and numeric fields', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-playback-event`)
+      .send({ eventType: 'rebuffer', startupMs: -1 });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('stores only the anonymous QoE event fields', async () => {
+    const ch = await createChannel();
+    const res = await request(app)
+      .post(`/channels/${ch._id}/report-playback-event`)
+      .send({
+        eventType: 'startup_success',
+        startupMs: 1450,
+        rebufferCount: 2,
+        fallbackUsed: true,
+        fallbackSucceeded: true,
+        errorCode: 'ignored-on-success',
+        platform: 'android_tv',
+        appVersion: '1.2.3',
+        deviceId: 'must-not-be-stored',
+        streamUrl: 'https://secret.example/stream.m3u8',
+      });
+    expect(res.status).toBe(202);
+    expect(res.body.data.accepted).toBe(true);
+
+    const event: any = await PlaybackEvent.findOne({ channelId: ch._id }).lean();
+    expect(event).toEqual(expect.objectContaining({
+      eventType: 'startup_success',
+      startupMs: 1450,
+      rebufferCount: 2,
+      fallbackUsed: true,
+      fallbackSucceeded: true,
+      platform: 'android_tv',
+      appVersion: '1.2.3',
+    }));
+    expect(event.deviceId).toBeUndefined();
+    expect(event.streamUrl).toBeUndefined();
+  });
+
+  it('stores QoE for an M3U channel reported by its external text identifier', async () => {
+    const externalId = `m3u:qoe:${Date.now()}`;
+    const ch = await createChannel({ channelId: externalId });
+    const res = await request(app)
+      .post(`/channels/${encodeURIComponent(externalId)}/report-playback-event`)
+      .send({ eventType: 'startup_success', startupMs: 200 });
+    expect(res.status).toBe(202);
+    const event: any = await PlaybackEvent.findOne({ channelId: ch._id }).lean();
+    expect(event).toEqual(expect.objectContaining({ eventType: 'startup_success', startupMs: 200 }));
+  });
+
+  it('returns 404 for an unknown channel', async () => {
+    const res = await request(app)
+      .post(`/channels/${new mongoose.Types.ObjectId()}/report-playback-event`)
+      .send({ eventType: 'startup_failure' });
+    expect(res.status).toBe(404);
+  });
+
+  it('limits noisy clients without persisting their throttle key', async () => {
+    const ch = await createChannel();
+    const payload = { eventType: 'startup_failure', errorCode: 'timeout' };
+    const responses = [];
+    for (let index = 0; index < 13; index += 1) {
+      responses.push(await request(app).post(`/channels/${ch._id}/report-playback-event`).send(payload));
+    }
+    expect(responses.slice(0, 12).every((response) => response.status === 202)).toBe(true);
+    expect(responses[12].status).toBe(429);
+    const event: any = await PlaybackEvent.findOne({ channelId: ch._id }).lean();
+    expect(event).not.toHaveProperty('rateLimitKey');
+  });
+});
+
+// ─── POST /channels/health-sync ───────────────────────────────────────────────
+
+describe('POST /channels/health-sync', () => {
+  const app = buildApp();
+
+  it('returns 400 when deviceId is missing', async () => {
+    const res = await request(app)
+      .post('/channels/health-sync')
+      .send({ reports: [{ channelId: 'x', status: 'dead' }] });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 when reports is missing', async () => {
+    const res = await request(app).post('/channels/health-sync').send({ deviceId: 'dev-1' });
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  it('returns 400 when reports is empty array', async () => {
+    const res = await request(app)
+      .post('/channels/health-sync')
+      .send({ deviceId: 'dev-1', reports: [] });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 when reports exceeds 100 entries', async () => {
+    const reports = Array.from({ length: 101 }, (_, i) => ({
+      channelId: `ch-${i}`,
+      status: 'dead',
+    }));
+    const res = await request(app)
+      .post('/channels/health-sync')
+      .send({ deviceId: 'dev-1', reports });
+    expect(res.status).toBe(400);
+  });
+
+  it('updates matched channels and counts skipped invalid entries', async () => {
+    const ch = await createChannel();
+    const reports = [
+      { channelId: ch._id.toString(), status: 'alive' },
+      { channelId: ch._id.toString(), status: 'invalid-status' }, // skipped
+      { status: 'dead' }, // missing channelId, skipped
+    ];
+    const res = await request(app)
+      .post('/channels/health-sync')
+      .send({ deviceId: 'dev-sync', reports });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.updated).toBe(1);
+    expect(res.body.data.skipped).toBe(2);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.aliveCount).toBe(1);
+  });
+
+  it('updates an M3U channel reported by its external text identifier', async () => {
+    const externalId = `m3u:source:${Date.now()}`;
+    const ch = await createChannel({ channelId: externalId });
+    const res = await request(app)
+      .post('/channels/health-sync')
+      .send({ deviceId: 'dev-sync-m3u', reports: [{ channelId: externalId, status: 'alive' }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.updated).toBe(1);
+    const updated: any = await Channel.findById(ch._id).lean();
+    expect(updated.metrics.aliveCount).toBe(1);
+  });
+
+  it('returns 429 on second sync within 5 minutes from same device', async () => {
+    const ch = await createChannel();
+    const reports = [{ channelId: ch._id.toString(), status: 'dead' }];
+    await request(app).post('/channels/health-sync').send({ deviceId: 'dev-sync-rate', reports });
+    const res = await request(app)
+      .post('/channels/health-sync')
+      .send({ deviceId: 'dev-sync-rate', reports });
+    expect(res.status).toBe(429);
+  });
+});

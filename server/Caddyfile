@@ -1,0 +1,52 @@
+# MIRROR_DOMAIN (optional, env): a second public hostname served by the same
+# stack (ISP-block resilience). Empty by default — the header stays "{$DOMAIN}".
+# When set, use a LEADING COMMA (docker compose trims whitespace in env values):
+#   MIRROR_DOMAIN=, mirror.example.com   ->  "{$DOMAIN}, mirror.example.com".
+{$DOMAIN}{$MIRROR_DOMAIN} {
+    encode gzip zstd
+    tls {$ACME_EMAIL}
+
+    # File access log → watched by fail2ban (dzhoof-http jail: 401 floods).
+    log {
+        output file /data/access.log {
+            roll_size 50MiB
+            roll_keep 3
+        }
+        format json
+    }
+
+    @api path /api/* /health /health/* /ready /ready/*
+    handle @api {
+        reverse_proxy api:3000
+    }
+
+    handle_path /downloads/* {
+        root * /downloads
+        file_server
+    }
+
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    # Defense-in-depth headers. CSP remains application-owned because Next.js
+    # emits framework scripts whose nonces/hashes must stay aligned with builds.
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        X-Permitted-Cross-Domain-Policies "none"
+        Permissions-Policy "accelerometer=(), autoplay=(self), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()"
+        # NOTE: no global X-Robots-Tag — the marketing pages must be indexable
+        # for market entry. Private areas are blocked via /robots.txt instead
+        # (the Next.js app also emits index,follow meta on public pages).
+        # Conservative CSP for the Next.js admin dashboard (audit-remediation-v1).
+        # 'unsafe-inline' is required for Next.js hydration payloads; everything
+        # else is scoped to self / explicit Google domains (reCAPTCHA) and
+        # blob/https media.
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://www.google.com https://www.gstatic.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https:; font-src 'self' data:; frame-src https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+        -Server
+        -X-Powered-By
+    }
+}

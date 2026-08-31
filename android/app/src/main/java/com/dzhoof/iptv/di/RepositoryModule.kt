@@ -1,0 +1,131 @@
+package com.dzhoof.iptv.di
+
+import com.dzhoof.iptv.data.repository.CategoryRepositoryImpl
+import com.dzhoof.iptv.data.repository.CatalogRepositoryImpl
+import com.dzhoof.iptv.data.repository.ChannelRepositoryImpl
+import com.dzhoof.iptv.data.repository.EpgRepositoryImpl
+import com.dzhoof.iptv.data.repository.FavoriteRepositoryImpl
+import com.dzhoof.iptv.data.repository.PlaybackRepositoryImpl
+import com.dzhoof.iptv.data.repository.SearchHistoryRepositoryImpl
+import com.dzhoof.iptv.data.repository.StreamMetricsRepositoryImpl
+import com.dzhoof.iptv.data.repository.SubscriptionRepositoryImpl
+import com.dzhoof.iptv.data.repository.UserPreferencesRepositoryImpl
+import com.dzhoof.iptv.domain.repository.CategoryRepository
+import com.dzhoof.iptv.domain.repository.CatalogRepository
+import com.dzhoof.iptv.domain.repository.ChannelRepository
+import com.dzhoof.iptv.domain.repository.EpgRepository
+import com.dzhoof.iptv.domain.repository.FavoriteRepository
+import com.dzhoof.iptv.domain.repository.PlaybackRepository
+import com.dzhoof.iptv.domain.repository.SearchHistoryRepository
+import com.dzhoof.iptv.domain.repository.StreamMetricsRepository
+import com.dzhoof.iptv.domain.repository.SubscriptionRepository
+import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
+import dagger.Binds
+import dagger.Module
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Singleton
+
+/**
+ * Hilt module for providing repository implementations.
+ * 
+ * This module binds repository interfaces to their implementations,
+ * enabling dependency injection throughout the app. Using @Binds
+ * instead of @Provides is more efficient as it generates less code.
+ * 
+ * Requirements: TR-003 (Clean Architecture - dependency injection)
+ */
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class RepositoryModule {
+    
+    /**
+     * Binds ChannelRepositoryImpl to ChannelRepository interface.
+     * 
+     * This allows the app to depend on the interface while Hilt
+     * provides the concrete implementation.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindChannelRepository(
+        impl: ChannelRepositoryImpl
+    ): ChannelRepository
+    
+    /**
+     * Binds CategoryRepositoryImpl to CategoryRepository interface.
+     * 
+     * This allows the app to depend on the interface while Hilt
+     * provides the concrete implementation.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindCategoryRepository(
+        impl: CategoryRepositoryImpl
+    ): CategoryRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindCatalogRepository(
+        impl: CatalogRepositoryImpl
+    ): CatalogRepository
+    
+    /**
+     * Binds FavoriteRepositoryImpl to FavoriteRepository interface.
+     * 
+     * This allows the app to depend on the interface while Hilt
+     * provides the concrete implementation.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindFavoriteRepository(
+        impl: FavoriteRepositoryImpl
+    ): FavoriteRepository
+    
+    /**
+     * Binds SearchHistoryRepositoryImpl to SearchHistoryRepository interface.
+     * 
+     * This allows the app to depend on the interface while Hilt
+     * provides the concrete implementation.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindSearchHistoryRepository(
+        impl: SearchHistoryRepositoryImpl
+    ): SearchHistoryRepository
+    
+    /**
+     * Binds PlaybackRepositoryImpl to PlaybackRepository interface.
+     * 
+     * This allows the app to depend on the interface while Hilt
+     * provides the concrete implementation.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindPlaybackRepository(
+        impl: PlaybackRepositoryImpl
+    ): PlaybackRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindUserPreferencesRepository(
+        impl: UserPreferencesRepositoryImpl
+    ): UserPreferencesRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindStreamMetricsRepository(
+        impl: StreamMetricsRepositoryImpl
+    ): StreamMetricsRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindEpgRepository(
+        impl: EpgRepositoryImpl
+    ): EpgRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSubscriptionRepository(
+        impl: SubscriptionRepositoryImpl
+    ): SubscriptionRepository
+}

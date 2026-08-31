@@ -1,0 +1,6 @@
+# Copy this file to local.properties and adjust the SDK path locally.
+# Do not commit local.properties.
+sdk.dir=/absolute/path/to/Android/Sdk
+
+# Optional build-time API override. The build requires HTTPS.
+# Use: ./gradlew assembleDebug -PdzhoofApiUrl=https://your-domain.example/

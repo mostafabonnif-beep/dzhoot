@@ -1,0 +1,240 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Filter, Search, X } from 'lucide-react';
+import { useLocale } from '@/components/locale-provider';
+
+export interface ColumnFilterProps {
+  /** Label shown as column header text */
+  label: string;
+  /** All available options to choose from */
+  options: string[];
+  /** Currently selected values */
+  selected: string[];
+  /** Callback when selection changes */
+  onChange: (selected: string[]) => void;
+  /** Optional: show a search box inside the dropdown (useful for many options) */
+  searchable?: boolean;
+}
+
+export default function ColumnFilter({
+  label,
+  options,
+  selected,
+  onChange,
+  searchable = false,
+}: ColumnFilterProps) {
+  const { locale } = useLocale();
+  const labelFor = (ar: string, en: string, fr: string) => locale === 'ar' ? ar : locale === 'fr' ? fr : en;
+  const [open, setOpen] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const isActive = selected.length > 0 && selected.length < options.length;
+  const dropdownId = `filter-dropdown-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setFilterSearch('');
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  // Reposition dropdown if it goes off-screen (batched reads then writes)
+  useEffect(() => {
+    if (!open || !dropdownRef.current || !containerRef.current) return;
+    const dropdown = dropdownRef.current;
+    const minMargin = 8;
+
+    // Batch all reads first
+    const rect = dropdown.getBoundingClientRect();
+    const isOffRight = rect.right > window.innerWidth - minMargin;
+    const isOffBottom = rect.bottom > window.innerHeight - minMargin;
+
+    // Batch all writes
+    if (isOffRight) {
+      dropdown.style.left = 'auto';
+      dropdown.style.right = '0';
+    }
+    if (isOffBottom) {
+      dropdown.style.top = 'auto';
+      dropdown.style.bottom = '100%';
+      dropdown.style.marginBottom = '2px';
+      dropdown.style.marginTop = '0';
+    }
+  }, [open]);
+
+  // Close on Escape key
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setOpen(false);
+      setFilterSearch('');
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [open, handleKeyDown]);
+
+  const filteredOptions = useMemo(
+    () =>
+      filterSearch
+        ? options.filter((o) => o.toLowerCase().includes(filterSearch.toLowerCase()))
+        : options,
+    [options, filterSearch],
+  );
+
+  function toggleOption(opt: string) {
+    if (selected.includes(opt)) {
+      onChange(selected.filter((s) => s !== opt));
+    } else {
+      onChange([...selected, opt]);
+    }
+  }
+
+  function selectAll() {
+    onChange([...options]);
+  }
+
+  function clearAll() {
+    onChange([]);
+  }
+
+  return (
+    <div ref={containerRef} className="relative inline-flex items-center gap-1.5">
+      {label && (
+        <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+          {label}
+        </span>
+      )}
+      <button
+        onClick={() => {
+          setOpen((prev) => !prev);
+          setFilterSearch('');
+        }}
+        className={`flex items-center justify-center rounded-sm transition-colors ${
+          isActive
+            ? 'text-primary bg-primary/10'
+            : 'text-muted-foreground/50 hover:text-muted-foreground'
+        }`}
+        aria-label={`${labelFor('فلترة حسب', 'Filter by', 'Filtrer par')} ${label}`}
+        aria-expanded={open}
+        aria-controls={dropdownId}
+        title={
+          isActive ? `${labelFor('مفلتر:', 'Filtered:', 'Filtré :')} ${selected.length} ${labelFor('من', 'of', 'sur')} ${options.length}` : `${labelFor('فلترة حسب', 'Filter by', 'Filtrer par')} ${label}`
+        }
+      >
+        <Filter className="h-3 w-3" />
+      </button>
+
+      {open && (
+        <div
+          ref={dropdownRef}
+          id={dropdownId}
+          role="dialog"
+          aria-label={`${labelFor('خيارات فلترة', 'Filter options for', 'Options de filtre pour')} ${label}`}
+          className="absolute top-full left-0 mt-1 z-50 min-w-[min(200px,calc(100vw-2rem))] max-w-[280px] bg-card border-2 border-border shadow-lg animate-fade-up"
+          style={{ animationDuration: '100ms' }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+            <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+              {labelFor('فلترة:', 'Filter:', 'Filtre :')} {label}
+            </span>
+            <button
+              onClick={() => {
+                setOpen(false);
+                setFilterSearch('');
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label={labelFor('إغلاق الفلتر', 'Close filter', 'Fermer le filtre')}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+
+          {/* Search within filter */}
+          {(searchable || options.length > 8) && (
+            <div className="px-2 pt-2">
+              <div className="relative">
+                <Search className="absolute start-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <input
+                  type="text"
+                  value={filterSearch}
+                  onChange={(e) => setFilterSearch(e.target.value)}
+                  placeholder={labelFor('بحث…', 'Search…', 'Rechercher…')}
+                  aria-label={`${labelFor('بحث في خيارات', 'Search', 'Rechercher dans')} ${label}`}
+                  aria-controls={`${dropdownId}-options`}
+                  className="w-full h-7 ps-7 pe-2 text-xs border border-border bg-background placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Select All / Clear */}
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border">
+            <button
+              onClick={selectAll}
+              className="text-xs uppercase tracking-[0.1em] text-primary hover:text-primary/80 font-medium transition-colors"
+            >
+              {labelFor('تحديد الكل', 'Select all', 'Tout sélectionner')}
+            </button>
+            <span className="text-muted-foreground/30">|</span>
+            <button
+              onClick={clearAll}
+              className="text-xs uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground font-medium transition-colors"
+            >
+              {labelFor('مسح', 'Clear', 'Effacer')}
+            </button>
+            {isActive && (
+              <span className="ms-auto text-xs text-muted-foreground">
+                {selected.length}/{options.length}
+              </span>
+            )}
+          </div>
+
+          {/* Options list */}
+          <div
+            id={`${dropdownId}-options`}
+            className="max-h-[240px] overflow-y-auto py-1"
+            role="group"
+            aria-label={`${label} options`}
+          >
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-2 text-xs text-muted-foreground">{labelFor('لا توجد نتائج', 'No matches', 'Aucun résultat')}</div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isChecked = selected.includes(opt);
+                return (
+                  <label
+                    key={opt}
+                    className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-muted/50 transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleOption(opt)}
+                      className="accent-primary h-4 w-4 shrink-0 focus-visible:ring-2 focus-visible:ring-primary"
+                    />
+                    <span className="text-xs truncate" title={opt}>
+                      {opt || labelFor('(فارغ)', '(empty)', '(vide)')}
+                    </span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
