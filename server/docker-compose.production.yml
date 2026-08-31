@@ -6,6 +6,8 @@ services:
     environment:
       DOMAIN: ${DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
+      # Optional second public hostname (ISP-block mirror) — see Caddyfile header.
+      MIRROR_DOMAIN: ${MIRROR_DOMAIN}
     ports:
       - "80:80"
       - "443:443"
