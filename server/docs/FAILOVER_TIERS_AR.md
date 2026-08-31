@@ -46,6 +46,11 @@ MIBOX (احتياطي 2 — الأولوية 20)
 | NEO → NEO 4K | 16,661 | 10 | مفعّلة |
 | NEO → MIBOX | 881 | 20 | مفعّلة |
 
+- **MIBOX مصدر failover نقي بدون كتالوج** (جولة 12): حُذف كتالوجه من قاعدة
+  البيانات (نسخة احتياطية في `/var/backups/dzhoot/mibox-catalog-channels-only/`)
+  لأن مصدر `Active+verified` يعرض قنواته تلقائيًا في كتالوج الزبائن → كان يسبب
+  مكررات قريبة (أسماء مختلفة لنفس القناة). النمط الصحيح للمصدر الاحتياطي =
+  لا كتالوج (مثل NEO 4K).
 - تغطية MIBOX جزئية (مطابقة بالاسم بين البانلين؛ كتالوج المطابقة محدود بـ
   20,000 صف). إعادة المطابقة: `POST /api/v1/admin/xtream-sources/<backupId>/failover-maps/auto-match`.
 - الفحص الدوري: `POST /api/v1/admin/xtream-sources/watchdog/run`، أو تلقائيًا
