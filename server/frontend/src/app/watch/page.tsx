@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Tv, Search, Loader2, KeyRound, LogOut } from 'lucide-react';
+import { Tv, Search, Loader2, KeyRound, LogOut, Star } from 'lucide-react';
 import api from '@/lib/api';
 import StreamPlayer from '@/components/stream-player';
 
@@ -25,6 +25,8 @@ export default function WatchPage() {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<WatchChannel | null>(null);
   const [playingName, setPlayingName] = useState('');
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   useEffect(() => {
     const stored = window.localStorage.getItem('watch_tv_code');
@@ -33,8 +35,28 @@ export default function WatchPage() {
       setCodeInput(stored);
       loadChannels(stored);
     }
+    try {
+      const favs = JSON.parse(window.localStorage.getItem('watch_favorites') || '[]');
+      if (Array.isArray(favs)) setFavorites(favs.filter((f) => typeof f === 'string'));
+    } catch {
+      /* ignore corrupted favorites */
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function toggleFavorite(channelId: string) {
+    setFavorites((prev) => {
+      const next = prev.includes(channelId)
+        ? prev.filter((id) => id !== channelId)
+        : [...prev, channelId];
+      try {
+        window.localStorage.setItem('watch_favorites', JSON.stringify(next));
+      } catch {
+        /* storage full/blocked — keep in-memory only */
+      }
+      return next;
+    });
+  }
 
   async function loadChannels(c?: string) {
     const finalCode = (c ?? codeInput).trim().toUpperCase();
@@ -87,8 +109,12 @@ export default function WatchPage() {
       if (!map.has(g)) map.set(g, []);
       map.get(g)!.push(c);
     }
-    return Array.from(map.entries());
-  }, [channels, search]);
+    const favList = list.filter((c) => favorites.includes(c.channelId));
+    const result: [string, WatchChannel[]][] = [];
+    if (favList.length > 0) result.push(['⭐ مفضلتي', favList]);
+    if (!favoritesOnly) result.push(...Array.from(map.entries()));
+    return result;
+  }, [channels, search, favorites, favoritesOnly]);
 
   function logout() {
     window.localStorage.removeItem('watch_tv_code');
@@ -168,14 +194,31 @@ export default function WatchPage() {
             <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">{error}</p>
           )}
 
-          <div className="relative mb-6">
-            <Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث عن قناة... (16,000+ قناة)"
-              className="w-full rounded-xl border border-border bg-card py-3 pl-4 pr-11 text-foreground outline-none focus:border-primary"
-            />
+          <div className="mb-6 flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="ابحث عن قناة... (16,000+ قناة)"
+                className="w-full rounded-xl border border-border bg-card py-3 pl-4 pr-11 text-foreground outline-none focus:border-primary"
+              />
+            </div>
+            {favorites.length > 0 && (
+              <button
+                onClick={() => setFavoritesOnly((v) => !v)}
+                className={`flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-3 text-sm font-semibold transition ${
+                  favoritesOnly
+                    ? 'border-amber-400/60 bg-amber-400/10 text-amber-500'
+                    : 'border-border bg-card text-muted-foreground hover:text-foreground'
+                }`}
+                title="عرض القنوات المفضلة فقط"
+              >
+                <Star className={`h-4 w-4 ${favoritesOnly ? 'fill-amber-400' : ''}`} aria-hidden="true" />
+                <span className="hidden sm:inline">المفضلة</span>
+                <span className="rounded-full bg-muted px-1.5 text-xs">{favorites.length}</span>
+              </button>
+            )}
           </div>
 
           {loading ? (
@@ -193,24 +236,43 @@ export default function WatchPage() {
                   </summary>
                   <div className="grid grid-cols-2 gap-2 border-t border-border p-3 sm:grid-cols-3 lg:grid-cols-5">
                     {list.map((c) => (
-                      <button
-                        key={c.channelId}
-                        onClick={() => {
-                          setSelected(c);
-                          setPlayingName(c.channelName);
-                        }}
-                        className="flex flex-col items-center gap-2 rounded-lg p-2 text-center transition hover:bg-primary/10"
-                      >
-                        <span className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-muted">
-                          {c.tvgLogo || c.channelImg ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={c.tvgLogo || c.channelImg || ''} alt="" className="h-full w-full object-cover" loading="lazy" />
-                          ) : (
-                            <Tv className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
-                          )}
-                        </span>
-                        <span className="line-clamp-2 text-xs font-medium leading-tight">{c.channelName}</span>
-                      </button>
+                      <div key={c.channelId} className="relative">
+                        <button
+                          onClick={() => {
+                            setSelected(c);
+                            setPlayingName(c.channelName);
+                          }}
+                          className="flex w-full flex-col items-center gap-2 rounded-lg p-2 text-center transition hover:bg-primary/10"
+                        >
+                          <span className="grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-muted">
+                            {c.tvgLogo || c.channelImg ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={c.tvgLogo || c.channelImg || ''} alt="" className="h-full w-full object-cover" loading="lazy" />
+                            ) : (
+                              <Tv className="h-6 w-6 text-muted-foreground" aria-hidden="true" />
+                            )}
+                          </span>
+                          <span className="line-clamp-2 text-xs font-medium leading-tight">{c.channelName}</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleFavorite(c.channelId);
+                          }}
+                          aria-label={favorites.includes(c.channelId) ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة'}
+                          title={favorites.includes(c.channelId) ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة'}
+                          className={`absolute left-1 top-1 grid h-7 w-7 place-items-center rounded-full transition ${
+                            favorites.includes(c.channelId)
+                              ? 'text-amber-400 hover:text-amber-300'
+                              : 'text-muted-foreground/30 hover:bg-background/80 hover:text-amber-400'
+                          }`}
+                        >
+                          <Star
+                            className={`h-4 w-4 ${favorites.includes(c.channelId) ? 'fill-amber-400' : ''}`}
+                            aria-hidden="true"
+                          />
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </details>
