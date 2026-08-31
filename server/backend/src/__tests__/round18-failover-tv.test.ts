@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import Channel from '../models/Channel';
 import XtreamSource from '../models/XtreamSource';
 import ChannelFailoverMap from '../models/ChannelFailoverMap';
+import Movie from '../models/Movie';
 import { verifyPlaybackToken } from '../services/playback-token';
 import User from '../models/User';
 import { proxyLogoUrl } from '../utils/logo-proxy';
@@ -56,8 +57,10 @@ function buildApp() {
 }
 
 function tokenFromUrl(url: string): string {
-  const match = String(url).match(/\/playback\/([^/]+)\.m3u8$/);
-  return match ? match[1] : '';
+  let u = String(url);
+  if (u.endsWith('.m3u8')) u = u.slice(0, -'.m3u8'.length);
+  const m = u.match(/\/playback\/([^/]+)$/);
+  return m ? m[1] : '';
 }
 
 describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
@@ -68,6 +71,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     await Channel.deleteMany({});
     await XtreamSource.deleteMany({});
     await ChannelFailoverMap.deleteMany({});
+    await Movie.deleteMany({});
     await User.deleteMany({});
     process.env.ALLOW_DIRECT_PLAYBACK = 'true';
     process.env.PLAYBACK_TOKEN_SECRET = 'round18-test-secret-for-playback-tokens';
@@ -287,5 +291,42 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     // Catch-up is never mirrored (timeshift is primary-panel specific).
     expect([200, 400, 404]).toContain(res.status);
     expect(getFailoverTarget).not.toHaveBeenCalled();
+  });
+
+  it('VOD movie token stream is rewritten to the mirror domain when the primary is down', async () => {
+    const src = await XtreamSource.create({
+      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'degraded', directPlayback: true,
+      mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
+    });
+    const movie = await Movie.create({
+      title: 'فيلم تجريبي', sourceId: src._id, externalId: 'E2E-1',
+      streamUrl: 'https://cf.business-cloud-neo.ru/movie/u/p/123.mp4', isActive: true,
+    });
+    (isSourceDown as jest.Mock).mockResolvedValue(true);
+
+    const res = await request(buildApp()).post('/api/v1/tv/playback-token').send({ movieId: String(movie._id) });
+    expect(res.status).toBe(200);
+    const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
+    expect(payload?.streamUrl).toBe('http://tv.business-cloud-neo.com/movie/u/p/123.mp4');
+    expect(payload?.streamUrl).not.toContain('cf.business-cloud-neo.ru');
+  });
+
+  it('VOD movie token keeps the primary URL when the source is healthy', async () => {
+    const src = await XtreamSource.create({
+      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true,
+      mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
+    });
+    const movie = await Movie.create({
+      title: 'فيلم تجريبي', sourceId: src._id, externalId: 'E2E-2',
+      streamUrl: 'https://cf.business-cloud-neo.ru/movie/u/p/456.mp4', isActive: true,
+    });
+    (isSourceDown as jest.Mock).mockResolvedValue(false);
+
+    const res = await request(buildApp()).post('/api/v1/tv/playback-token').send({ movieId: String(movie._id) });
+    expect(res.status).toBe(200);
+    const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
+    expect(payload?.streamUrl).toBe('https://cf.business-cloud-neo.ru/movie/u/p/456.mp4');
   });
 });
