@@ -12,6 +12,10 @@ jest.mock('axios', () => ({
     if (String(url).includes('.m3u8')) {
       return Promise.resolve({ status: 200, data: '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4,\nseg.ts\n' });
     }
+    if (String(url).includes('.ts')) {
+      // A TS transport stream — unbounded body, mirror the real axios stream shape.
+      return Promise.resolve({ status: 200, data: { destroy: jest.fn() } });
+    }
     if (String(url).includes('get_live_categories')) {
       return Promise.resolve({
         data: [
@@ -225,6 +229,45 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     const res = await runSourceWatchdog();
     // prev is verified → no hysteresis on the down direction... but probe found a live sample → verified.
     expect(res.states[0].health).toBe('verified');
+  });
+
+  it('watchdog keeps a TS-format direct-playback source verified via its .ts streams', async () => {
+    // Business Cloud NEO case: the panel serves TS transport streams and its
+    // API is not customer-relevant for direct playback. A healthy .ts response
+    // (HTTP 200) must keep the source verified — the old HLS-only probe read a
+    // 512 KB cap on the unbounded TS stream and wrongly marked it degraded.
+    (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('API unreachable'));
+    const tsSource = await XtreamSource.create({
+      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true, playbackFormat: 'ts',
+    });
+    await Channel.create({
+      channelId: 'CH-TS1', channelName: 'NEO 1', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/262849.ts', isActive: true,
+      metadata: { source: 'xtream', xtreamSourceId: String(tsSource._id) },
+    });
+
+    const res = await runSourceWatchdog();
+    expect(res.states[0].health).toBe('verified');
+    const fresh = await XtreamSource.findById(tsSource._id).lean().exec();
+    expect(fresh!.verificationStatus).toBe('verified');
+    expect(fresh!.lastError).toBeFalsy();
+  });
+
+  it('watchdog marks a TS-format direct-playback source degraded when its .ts stream is dead', async () => {
+    (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('API unreachable'));
+    const { get: axiosGet } = require('axios');
+    (axiosGet as jest.Mock).mockRejectedValueOnce(new Error('HTTP 403'));
+    const tsSource = await XtreamSource.create({
+      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true, playbackFormat: 'ts',
+    });
+    await Channel.create({
+      channelId: 'CH-TS2', channelName: 'NEO 2', channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/262850.ts', isActive: true,
+      metadata: { source: 'xtream', xtreamSourceId: String(tsSource._id) },
+    });
+
+    const res = await runSourceWatchdog();
+    expect(res.states[0].health).toBe('degraded');
   });
 
   it('channelCanonicalKey maps the messy Maghreb naming to shared keys', () => {
