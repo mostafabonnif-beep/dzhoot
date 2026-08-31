@@ -1,0 +1,8 @@
+{
+  "name": "DZ HOOF",
+  "description": "Smart IPTV player and channel management platform with live TV streaming, EPG, VOD, and pairing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
