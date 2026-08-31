@@ -1,6 +1,7 @@
 # MIRROR_DOMAIN (optional, env): a second public hostname served by the same
-# stack (ISP-block resilience). Empty by default — the leading-space convention
-# keeps the header valid either way: "{$DOMAIN} " vs "{$DOMAIN} <mirror>".
+# stack (ISP-block resilience). Empty by default — the header stays "{$DOMAIN}".
+# When set, use a LEADING COMMA (docker compose trims whitespace in env values):
+#   MIRROR_DOMAIN=, mirror.example.com   ->  "{$DOMAIN}, mirror.example.com".
 {$DOMAIN}{$MIRROR_DOMAIN} {
     encode gzip zstd
     tls {$ACME_EMAIL}
