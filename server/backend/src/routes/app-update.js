@@ -37,6 +37,35 @@ function versionNameToCode(version) {
   return major * 10000 + minor * 100 + patch;
 }
 
+function getCanonicalDownloadUrl(req) {
+  const configuredBaseUrl = String(process.env.PUBLIC_BASE_URL || '').trim().replace(/\/+$/, '');
+  if (/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/i.test(configuredBaseUrl)) {
+    return `${configuredBaseUrl}/api/v1/app/download`;
+  }
+  const host = String(req.get('host') || '').trim();
+  if (!host || /[\r\n]/.test(host)) return '/api/v1/app/download';
+  return `${req.protocol === 'https' ? 'https' : 'http'}://${host}/api/v1/app/download`;
+}
+
+function isStaleLocalDownloadUrl(req, value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const parsed = new URL(value);
+    const requestHost = String(req.get('host') || '').trim().toLowerCase();
+    const configuredBaseUrl = String(process.env.PUBLIC_BASE_URL || '').trim();
+    const configuredHost = configuredBaseUrl ? new URL(configuredBaseUrl).host.toLowerCase() : requestHost;
+    return parsed.protocol === 'https:' &&
+      parsed.host.toLowerCase() === configuredHost &&
+      parsed.pathname.startsWith('/downloads/');
+  } catch {
+    return false;
+  }
+}
+
+function publicDownloadUrl(req, value) {
+  return isStaleLocalDownloadUrl(req, value) ? getCanonicalDownloadUrl(req) : value;
+}
+
 async function fetchLatestRelease() {
   const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
@@ -93,12 +122,12 @@ router.get('/version', async (req, res) => {
           versionCode: dbLatest.versionCode,
           releaseNotes: dbLatest.releaseNotes || '',
           apkFileSize: dbLatest.apkFileSize,
-          downloadUrl: dbLatest.downloadUrl,
+          downloadUrl: publicDownloadUrl(req, dbLatest.downloadUrl),
         },
         currentVersion: currentVersionCode,
         isMandatory: dbLatest.isMandatory || currentVersionCode < dbLatest.minCompatibleVersion,
         releaseNotes: dbLatest.releaseNotes || '',
-        downloadUrl: dbLatest.downloadUrl,
+        downloadUrl: publicDownloadUrl(req, dbLatest.downloadUrl),
         minCompatibleVersion: dbLatest.minCompatibleVersion || 1,
         source: 'db',
       });
@@ -160,7 +189,7 @@ router.get('/latest', async (req, res) => {
           releaseNotes: dbLatest.releaseNotes || '',
           apkFileName: dbLatest.apkFileName,
           apkFileSize: dbLatest.apkFileSize,
-          downloadUrl: dbLatest.downloadUrl,
+          downloadUrl: publicDownloadUrl(req, dbLatest.downloadUrl),
           isMandatory: dbLatest.isMandatory || false,
           releasedAt: dbLatest.releasedAt,
         },
@@ -374,4 +403,11 @@ router.post('/crash-report', crashReportLimiter, async (req, res) => {
 });
 
 module.exports = router;
-module.exports._private = { normalizeVersion, compareVersions, versionNameToCode };
+module.exports._private = {
+  normalizeVersion,
+  compareVersions,
+  versionNameToCode,
+  getCanonicalDownloadUrl,
+  isStaleLocalDownloadUrl,
+  publicDownloadUrl,
+};
