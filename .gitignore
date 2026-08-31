@@ -82,3 +82,9 @@ __pycache__/
 >>>>>>> 2103af9 (chore: ignore local analysis helper scripts)
 /scripts/dzhoot-backup-channels.sh
 /scripts/dzhoot-cleanup.js
+/scripts/dzhoot-finalcheck.js
+/scripts/dzhoot-precount.js
+/scripts/dzhoot-sources.js
+/scripts/dzhoot-orphans.js
+/scripts/dzhoot-mibox-sample.js
+/scripts/dzhoot-coverage.js
