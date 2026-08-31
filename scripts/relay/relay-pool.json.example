@@ -1,0 +1,24 @@
+{
+  "listen_host": "127.0.0.1",
+  "listen_port": 9000,
+  "status_host": "127.0.0.1",
+  "status_port": 9080,
+  "upstream_check_host": "104.18.22.66",
+  "upstream_check_port": 443,
+  "upstream_check_targets": [
+    ["104.18.22.66", 443],
+    ["117.55.202.166", 80]
+  ],
+  "check_interval": 15,
+  "check_timeout": 8,
+  "fail_threshold": 2,
+  "recover_threshold": 2,
+  "status_file": "/var/lib/dzhoof-relay/status.json",
+  "redis_key": "dzhoof:relay:pool",
+  "redis_cli": ["docker", "exec", "dzhoof-redis", "redis-cli"],
+  "nodes": [
+    { "name": "oran",    "port": 9101, "priority": 1 },
+    { "name": "algiers", "port": 9102, "priority": 2 },
+    { "name": "jijel",   "port": 9103, "priority": 3 }
+  ]
+}
