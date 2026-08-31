@@ -20,6 +20,11 @@ export interface PlaybackTokenPayload {
   /** When true, the playback endpoint responds with a 302 redirect to the raw
    *  upstream URL instead of proxying the bytes (operator opt-in per source). */
   direct?: boolean;
+  /** Catalog channel _id — lets the proxy resolve a mid-stream failover
+   *  target (getFailoverTarget) if the upstream connection dies mid-playback. */
+  channelId?: string;
+  /** The channel's primary Xtream source id (excluded when picking a backup). */
+  primarySourceId?: string;
   issuedAt: number;
   expiresAt: number;
   nonce: string;
@@ -137,6 +142,10 @@ export function issuePlaybackToken(input: {
     altUrlHash?: string;
     hls?: boolean;
   };
+  /** Catalog channel _id — enables mid-stream proxy failover for v1 tokens. */
+  channelId?: string;
+  /** The channel's primary Xtream source id (excluded when picking a backup). */
+  primarySourceId?: string;
   direct?: boolean;
   ttlMs?: number;
   sessionId?: string;
@@ -175,6 +184,8 @@ export function issuePlaybackToken(input: {
       streamUrl: validateStreamUrl(input.streamUrl),
       upstreamHeaders: sanitizeUpstreamHeaders(input.upstreamHeaders),
       direct: input.direct === true || undefined,
+      channelId: input.channelId ? String(input.channelId).slice(0, 200) : undefined,
+      primarySourceId: input.primarySourceId ? String(input.primarySourceId).slice(0, 200) : undefined,
       issuedAt: now,
       expiresAt: now + ttlMs,
       nonce: crypto.randomBytes(16).toString('hex'),

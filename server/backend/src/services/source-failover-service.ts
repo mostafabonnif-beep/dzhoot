@@ -32,7 +32,9 @@ interface HealthCacheEntry {
   checkedAt: number;
 }
 
-const HEALTH_CACHE_TTL_MS = 60 * 1000;
+// 20s: failover decisions (token issue + mid-stream reconnect) must reflect a
+// source outage almost immediately; probes re-verify on their own cadence.
+const HEALTH_CACHE_TTL_MS = 20 * 1000;
 
 const healthCache = new Map<string, HealthCacheEntry>();
 const lastAlertedHealth = new Map<string, SourceHealth>();

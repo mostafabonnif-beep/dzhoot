@@ -738,6 +738,13 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
       sessionId: rootSessionId,
+      // Mid-stream proxy failover: the token carries the catalog channel ref
+      // so the proxy can resolve a backup target if the upstream dies mid-play.
+      channelId: String(channel._id),
+      primarySourceId:
+        channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId
+          ? String(channel.metadata.xtreamSourceId)
+          : undefined,
       upstreamHeaders: {
         userAgent: slot === 0 ? channel.activeUserAgent : selectedAlternate?.userAgent,
         referrer: slot === 0 ? channel.activeReferrer : selectedAlternate?.referrer,
@@ -965,6 +972,13 @@ router.get('/playback/:token', async (req, res) => {
       rootToken: token,
     };
 
+    // Mid-stream failover context: when the proxied upstream connection dies,
+    // the proxy re-resolves a backup target (NEO 4K / MIBOX) and keeps the
+    // client session alive instead of dropping the stream.
+    const failoverCtx = payload.channelId
+      ? { channelId: payload.channelId, primarySourceId: payload.primarySourceId }
+      : undefined;
+
     if (payload.direct === true) {
       // Direct mode is deliberately gated by deployment configuration. The
       // authorization token remains opaque in the initial API response, but
@@ -972,7 +986,7 @@ router.get('/playback/:token', async (req, res) => {
       // client. Operators should enable this only when their provider contract
       // permits direct client playback and source-URL exposure is acceptable.
       if (process.env.ALLOW_DIRECT_PLAYBACK !== 'true') {
-        return proxyUpstreamStream(req, res, payload.streamUrl, proxyContext, undefined, payload.upstreamHeaders);
+        return proxyUpstreamStream(req, res, payload.streamUrl, proxyContext, undefined, payload.upstreamHeaders, failoverCtx);
       }
 
       const parsed = new URL(target.streamUrl);
@@ -989,7 +1003,7 @@ router.get('/playback/:token', async (req, res) => {
       return res.redirect(302, target.streamUrl);
     }
 
-    return proxyUpstreamStream(req, res, target.streamUrl, proxyContext, undefined, target.upstreamHeaders);
+    return proxyUpstreamStream(req, res, target.streamUrl, proxyContext, undefined, target.upstreamHeaders, failoverCtx);
   } catch (error) {
     console.error('Tokenized TV proxy error:', error);
     if (!res.headersSent) res.status(502).send('Bad Gateway');
