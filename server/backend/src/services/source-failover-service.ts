@@ -305,13 +305,13 @@ async function probeSource(source: any): Promise<{ health: SourceHealth; error: 
 
     // Any live sample ⇒ the source serves customers.
     for (const probeUrl of probeUrls) {
-      const manifestOk = await probeManifest(probeUrl);
-      if (manifestOk.ok) {
+      const playbackOk = await probePlaybackUrl(probeUrl);
+      if (playbackOk.ok) {
         return { health: 'verified', error: null, latencyMs: Date.now() - started };
       }
-      if (manifestOk.error) {
+      if (playbackOk.error) {
         // keep the last error for diagnostics
-        error = manifestOk.error;
+        error = playbackOk.error;
       }
     }
     return {
@@ -325,31 +325,53 @@ async function probeSource(source: any): Promise<{ health: SourceHealth; error: 
 }
 
 /**
- * Lightweight liveness probe for a direct stream: follow redirects, expect an
- * HLS manifest (HTTP 200-399 + #EXTM3U marker). Deliberately NOT the deep
- * probeStream segment check — some panels (ottstreambox) return manifests with
- * RELATIVE segment paths after a 302 to a signed CDN host, so resolving the
- * first segment against the ORIGINAL URL always fails even though playback
- * works fine for customers.
+ * Lightweight liveness probe for a direct playback URL.
+ *
+ * HLS manifests (the ottstreambox case): follow redirects, expect an HLS
+ * manifest (HTTP 200-399 + #EXTM3U / #EXT-X- marker). Deliberately NOT the
+ * deep probeStream segment check — some panels return manifests with RELATIVE
+ * segment paths after a 302 to a signed CDN host, so resolving the first
+ * segment against the ORIGINAL URL always fails even though playback works
+ * fine for customers.
+ *
+ * TS transport streams (the Business Cloud NEO case): a .ts live URL never
+ * ends — an HTTP 200-399 response IS the liveness signal. Probe it like
+ * stream-prober does for non-HLS (stream response, tiny 1 KB cap, destroy
+ * immediately) instead of the 512 KB HLS-manifest read, which always fails
+ * with "maxContentLength size of 524288 exceeded" on a healthy TS stream and
+ * wrongly marks the source degraded every watchdog cycle.
  */
-async function probeManifest(url: string): Promise<{ ok: boolean; error: string | null }> {
+async function probePlaybackUrl(url: string): Promise<{ ok: boolean; error: string | null }> {
+  const isTs = /\.ts(?:\?|#|$)/i.test(url) || /[?&]output=ts(?:&|$)/i.test(url);
   try {
     const res = await axios.get(url, {
       timeout: 6000,
       maxRedirects: 5,
       validateStatus: (s) => s >= 200 && s < 500,
-      maxContentLength: 512 * 1024,
-      responseType: 'text',
+      maxContentLength: isTs ? 1024 : 512 * 1024,
+      responseType: isTs ? 'stream' : 'text',
       headers: { 'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18', Accept: '*/*' },
     });
     const httpOk = res.status >= 200 && res.status < 400;
-    if (!httpOk) return { ok: false, error: `HTTP ${res.status}` };
+    if (!httpOk) {
+      if (isTs && res.data && typeof res.data.destroy === 'function') res.data.destroy();
+      return { ok: false, error: `HTTP ${res.status}` };
+    }
+    if (isTs) {
+      // A TS transport stream is unbounded — a healthy HTTP response is enough.
+      if (res.data && typeof res.data.destroy === 'function') res.data.destroy();
+      return { ok: true, error: null };
+    }
     const body = String(res.data || '');
     if (!body.includes('#EXTM3U') && !body.includes('#EXT-X-')) {
       return { ok: false, error: 'Invalid HLS manifest' };
     }
     return { ok: true, error: null };
   } catch (err: any) {
+    if (isTs && String(err?.message || '').includes('maxContentLength')) {
+      // Cap hit while the stream is flowing = the source is alive.
+      return { ok: true, error: null };
+    }
     return { ok: false, error: err?.response?.status ? `HTTP ${err.response.status}` : String(err?.message || 'Manifest probe failed') };
   }
 }
