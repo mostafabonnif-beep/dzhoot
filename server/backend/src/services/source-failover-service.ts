@@ -235,25 +235,37 @@ export async function getFailoverTarget(
   mapFilter.$or = orClauses;
   if (primarySourceId) mapFilter.backupSourceId = { $ne: primarySourceId };
 
-  const map = await ChannelFailoverMap.findOne(mapFilter).sort({ updatedAt: -1 }).lean().exec();
-  if (!map) return null;
+  // Multi-tier cascade: a channel can map to several backup sources, each with
+  // a priority (lower = tried first, e.g. NEO 4K=10 then MIBOX=20). Iterate in
+  // priority order and return the first backup that is eligible AND healthy —
+  // if the top tier is down we fall through to the next instead of giving up.
+  const maps = await ChannelFailoverMap.aggregate([
+    { $match: mapFilter },
+    // Old maps may lack the field; treat them as the default tier (100).
+    { $addFields: { _priority: { $ifNull: ['$priority', 100] } } },
+    { $sort: { _priority: 1, updatedAt: -1 } },
+  ]).exec();
+  if (!maps || maps.length === 0) return null;
 
-  // Backup sources are added with status Inactive + directPlayback true (so the
-  // setup never disturbs live streams) — eligible via the same rule as above.
-  const source = await XtreamSource.findOne({
-    _id: map.backupSourceId,
-    $or: [{ status: 'Active' }, { directPlayback: true }],
-  }).lean().exec();
-  if (!source) return null;
+  for (const map of maps) {
+    // Backup sources are added with status Inactive + directPlayback true (so the
+    // setup never disturbs live streams) — eligible via the same rule as above.
+    const source = await XtreamSource.findOne({
+      _id: map.backupSourceId,
+      $or: [{ status: 'Active' }, { directPlayback: true }],
+    }).lean().exec();
+    if (!source) continue;
 
-  // Never fail over to a backup that is itself down.
-  const health = await getSourceHealth(String(source._id));
-  if (health !== 'verified') return null;
+    // Never fail over to a backup that is itself down — try the next tier.
+    const health = await getSourceHealth(String(source._id));
+    if (health !== 'verified') continue;
 
-  return {
-    streamUrl: buildFailoverStreamUrl(getSourceCreds(source), map.backupStreamId),
-    source,
-  };
+    return {
+      streamUrl: buildFailoverStreamUrl(getSourceCreds(source), map.backupStreamId),
+      source,
+    };
+  }
+  return null;
 }
 
 /**
