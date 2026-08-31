@@ -38,6 +38,11 @@ services:
       # to the viewer; the VPS only issues auth tokens. Keep video off the VPS
       # when scaling to many concurrent viewers.
       ALLOW_DIRECT_PLAYBACK: ${ALLOW_DIRECT_PLAYBACK:-false}
+      # HLS remux for web playback (opt-in): ffmpeg remuxes the upstream TS to
+      # live HLS (fMP4, copy) served over HTTPS same-origin, so hls.js can play
+      # providers whose media CDN is http:// only (browser mixed-content).
+      ALLOW_HLS_REMUX: ${ALLOW_HLS_REMUX:-false}
+      MAX_HLS_REMUX: ${MAX_HLS_REMUX:-6}
       PORT: 3000
       APP_VERSION: ${APP_VERSION:-1.0.1}
       RELEASE_COMMIT: ${RELEASE_COMMIT:-unknown}

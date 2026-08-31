@@ -14,6 +14,9 @@ const { epgService } = require('../services/epg-service');
 const { audit } = require('../services/audit-log');
 const { issuePlaybackToken, verifyPlaybackToken, altStreamHash } = require('../services/playback-token');
 const { proxyUpstreamStream, resolveSegmentUrlBySequence } = require('../services/upstream-proxy');
+const fs = require('fs');
+const path = require('path');
+const hlsRemux = require('../services/hls-remux-service');
 const {
   isCatchupSupported,
   buildCatchupUrlForChannel,
@@ -764,10 +767,24 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     // same session so clients can fall back to server-relayed playback when
     // the direct provider URL fails from their network (ISP blocks, geo, etc).
     // Both tokens share rootSessionId — one concurrent-stream slot, not two.
+    //
+    // HLS-remux (web) is gated by ALLOW_HLS_REMUX: browsers cannot play the
+    // raw provider TS (mixed content on http:// CDNs + no native TS support),
+    // so the server remuxes it to live HLS (ffmpeg, copy) served over HTTPS
+    // same-origin. The same relay token is reused — still one concurrent slot.
     let proxyPlaybackUrl;
-    if (xtreamDirectPlayback && process.env.ALLOW_DIRECT_PLAYBACK === 'true') {
+    let hlsUrl;
+    const directEnabled =
+      xtreamDirectPlayback && process.env.ALLOW_DIRECT_PLAYBACK === 'true';
+    const hlsRemuxEnabled = process.env.ALLOW_HLS_REMUX === 'true';
+    if (directEnabled || hlsRemuxEnabled) {
       const proxyToken = issuePlaybackToken({ ...tokenOpts, direct: false });
-      proxyPlaybackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${proxyToken.token}.m3u8`;
+      if (directEnabled) {
+        proxyPlaybackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${proxyToken.token}.m3u8`;
+      }
+      if (hlsRemuxEnabled) {
+        hlsUrl = `${getPublicBaseUrl(req)}/api/v1/tv/hls/${proxyToken.token}/index.m3u8`;
+      }
     }
 
     // Enforce the per-user concurrent stream limit (oldest session is evicted
@@ -815,6 +832,9 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         // Present only when direct playback is enabled for the source: the
         // client may retry through the server relay if the direct URL fails.
         ...(proxyPlaybackUrl ? { proxyPlaybackUrl } : {}),
+        // Web player primary source: server-side HLS remux (hls.js) when the
+        // deployment has HLS remux enabled.
+        ...(hlsUrl ? { hlsUrl } : {}),
       },
     });
   } catch (error) {
@@ -1524,6 +1544,102 @@ router.get('/pairing/status/:pin', async (req, res) => {
       success: false,
       error: 'Failed to check pairing status',
     });
+  }
+});
+
+// ── Server-side HLS remux (web playback) ────────────────────────────────────
+// The token is the relay token minted by /playback-token (shares the same
+// stream session slot). First request lazily starts an ffmpeg remux (upstream
+// TS → live HLS fMP4); the playlist + segments are served over HTTPS
+// same-origin so hls.js can play sources whose media CDN is http:// only.
+// GET /tv/hls/:token/:file
+const hlsAuthCache = new Map(); // token -> { at } — positive auth cached 30s
+router.get('/hls/:token/:file', async (req, res) => {
+  try {
+    const token = String(req.params.token || '');
+    const file = String(req.params.file || '');
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(file)) {
+      return res.status(400).send('Bad request');
+    }
+
+    const payload = verifyPlaybackToken(token);
+    if (!payload) return res.status(401).send('Playback token expired or invalid');
+
+    // Authorize once and cache positively for 30s — segment fetches arrive
+    // every ~2s and must not hit Mongo/Redis per segment.
+    const cachedAuth = hlsAuthCache.get(token);
+    if (!cachedAuth || Date.now() - cachedAuth.at > 30_000) {
+      const user = await User.findOne({
+        _id: payload.userId,
+        channelListCode: payload.channelListCode,
+        isActive: true,
+      }).select('_id channelListCode role');
+      if (!user) return res.status(401).send('Playback authorization revoked');
+      if (!(await ensurePlaybackSubscription(user, res))) return;
+      if (!(await isStreamSessionActive(String(user._id), payload.sessionId || token))) {
+        const ttlMs = payload.expiresAt ? payload.expiresAt - Date.now() : 30 * 60 * 1000;
+        const session = await registerStreamSession({
+          userId: String(user._id),
+          sessionId: payload.sessionId || token,
+          ttlSec: Math.max(60, Math.round(ttlMs / 1000)),
+        });
+        if (!session.allowed) {
+          return res.status(429).send('Playback session could not be registered');
+        }
+      }
+      hlsAuthCache.set(token, { at: Date.now() });
+      if (hlsAuthCache.size > 2000) hlsAuthCache.clear();
+    }
+
+    let hlsSession = hlsRemux.getHlsSession(token);
+    if (!hlsSession) {
+      const target = await resolvePlaybackTarget(payload);
+      if (!target) return res.status(404).send('Stream not found');
+      const started = hlsRemux.startHlsSession(token, {
+        streamUrl: target.streamUrl,
+        upstreamHeaders: target.upstreamHeaders,
+      });
+      if (!started.ok) {
+        if (started.busy) return res.status(503).send('Live stream is busy — retry shortly');
+        return res.status(502).send('Failed to start stream');
+      }
+      hlsSession = hlsRemux.getHlsSession(token);
+    }
+    hlsRemux.touchHlsSession(token);
+
+    // The first playlist request races the ffmpeg startup (spawn → connect →
+    // mux → first playlist, ~4-6s). Wait for it so hls.js's initial manifest
+    // fetch succeeds instead of 404ing and falling back unnecessarily.
+    if (hlsSession && file === 'index.m3u8') {
+      const playlistPath = path.join(hlsSession.dir, file);
+      const deadline = Date.now() + 12_000;
+      while (!fs.existsSync(playlistPath) && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 400));
+        hlsSession = hlsRemux.getHlsSession(token) || hlsSession;
+      }
+    }
+
+    if (!hlsSession || !fs.existsSync(path.join(hlsSession.dir, file))) {
+      return res.status(404).send('Not found');
+    }
+    const ext = path.extname(file).toLowerCase();
+    const contentType =
+      ext === '.m3u8'
+        ? 'application/vnd.apple.mpegurl'
+        : ext === '.mp4' || ext === '.m4s'
+          ? 'video/mp4'
+          : 'application/octet-stream';
+    res.set({
+      'Content-Type': contentType,
+      'Cache-Control':
+        ext === '.m3u8' ? 'no-store, no-cache, must-revalidate' : 'public, max-age=120',
+      'Access-Control-Allow-Origin': '*',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    fs.createReadStream(path.join(hlsSession.dir, file)).pipe(res);
+  } catch (error) {
+    console.error('HLS remux route error:', error);
+    if (!res.headersSent) res.status(500).send('Internal error');
   }
 });
 

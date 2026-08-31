@@ -29,32 +29,72 @@ interface StreamPlayerProps {
   mode?: 'proxy' | 'direct-fallback';
 }
 
+/** Normalize an absolute API URL to the current page origin (same server,
+ *  same Caddy) so the browser never needs cross-origin CORS/CORP/CSP
+ *  exceptions — the token paths are host-agnostic. */
+function toSameOrigin(url: string): string {
+  try {
+    const parsed = new URL(url, window.location.origin);
+    if (parsed.origin !== window.location.origin) {
+      return new URL(
+        parsed.pathname + parsed.search + parsed.hash,
+        window.location.origin,
+      ).toString();
+    }
+  } catch {
+    /* leave as-is */
+  }
+  return url;
+}
+
+interface TokenResult {
+  url?: string;
+  mimeType?: string;
+  hlsUrl?: string;
+  proxyUrl?: string;
+  error?: string;
+}
+
 /** Issue a server playback token for a catalog channel slot. */
-async function fetchTokenizedUrl(
-  channelId: string,
-  slot: number,
-): Promise<{ url?: string; error?: string }> {
+async function fetchTokenizedUrl(channelId: string, slot: number): Promise<TokenResult> {
   try {
     const res = await api.post('/tv/playback-token', { channelId, slot });
     const d = res.data;
-    if (d?.success && d.data?.playbackUrl) return { url: d.data.playbackUrl };
+    if (d?.success && d.data?.playbackUrl) {
+      return {
+        url: toSameOrigin(d.data.playbackUrl),
+        mimeType: d.data?.mimeType || '',
+        hlsUrl: d.data?.hlsUrl ? toSameOrigin(d.data.hlsUrl) : undefined,
+        proxyUrl: d.data?.proxyPlaybackUrl ? toSameOrigin(d.data.proxyPlaybackUrl) : undefined,
+      };
+    }
     return { error: d?.error || 'Failed to issue playback token' };
   } catch (e: any) {
     return { error: e?.response?.data?.error || e?.message || 'Playback token request failed' };
   }
 }
 
+interface SourceCandidate {
+  url: string;
+  /** 'hls' → hls.js engine; 'ts' → mpegts.js engine (raw MPEG-TS relay). */
+  kind: 'hls' | 'ts';
+  /** Whether the bytes flow through our server (relay/remux) vs the browser
+   *  fetching an external provider URL directly. */
+  serverAssisted: boolean;
+}
+
 export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: StreamPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<{ destroy: () => void } | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState('Loading...');
+  const [status, setStatus] = useState('جارٍ تحميل البث...');
   const [playerError, setPlayerError] = useState('');
-  const [activeSource, setActiveSource] = useState<'direct' | 'proxy'>('direct');
+  const [isLive, setIsLive] = useState(false);
   const [mini, setMini] = useState(false);
   const wasActiveRef = useRef(false); // tracks if player was already open (for swap vs fresh open)
   const playReportedRef = useRef<{ channelId: string; at: number } | null>(null);
-  const currentSourceRef = useRef<'direct' | 'proxy'>('proxy');
+  const currentSrcRef = useRef<string>('');
+  const stallTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Drag position for mini player
   const [position, setPosition] = useState({ right: 16, bottom: 16 });
@@ -97,12 +137,16 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
     let alternateIndex = 0;
     const sessionId = typeof window !== 'undefined' ? useAuthStore.getState().sessionId : null;
     let destroyed = false;
-    let activeHls: { destroy: () => void } | null = null;
-    let currentSource: 'direct' | 'proxy' = 'proxy';
-    currentSourceRef.current = currentSource;
+    let activeHls: { destroy: () => void; startLoad?: () => void } | null = null;
+    // Raw MPEG-TS player (mpegts.js) — same lifecycle as the HLS player.
+    let activeMpegts: { destroy: () => void; unload?: () => void } | null = null;
     // Native-HLS (Safari) listeners — hoisted so cleanup can remove them.
     let nativeLoadedMeta: (() => void) | null = null;
     let nativeError: (() => void) | null = null;
+    // Stall watchdog state
+    let lastProgressAt = Date.now();
+    let lastCurrentTime = -1;
+    let stallRecoveries = 0;
 
     const safeDestroyHls = (instance: { destroy: () => void } | null) => {
       if (!instance) return;
@@ -115,9 +159,20 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       if (activeHls === instance) activeHls = null;
     };
 
-    setStatus('Loading...');
+    const safeDestroyMpegts = (instance: { destroy: () => void } | null) => {
+      if (!instance) return;
+      try {
+        instance.destroy();
+      } catch {
+        /* already destroyed */
+      }
+      if (activeMpegts === instance) activeMpegts = null;
+    };
+
+    setStatus('جارٍ تحميل البث...');
     setPlayerError('');
-    setActiveSource(currentSource);
+    setIsLive(false);
+    currentSrcRef.current = '';
 
     // If player was already active (swapping streams), keep mini mode & position.
     // Only reset to full modal on fresh open.
@@ -127,7 +182,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
     }
     wasActiveRef.current = true;
 
-    // ── Video (HLS) mode ──
+    // ── Video (HLS / MPEG-TS) mode ──
     const video = videoRef.current;
     if (!video) return;
 
@@ -137,121 +192,260 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
         const Hls = HlsModule.default;
         if (destroyed) return;
 
-        // Candidate source resolution:
+        // Candidate source resolution (web):
         //  - Catalog channels (channelId present) play through the server
-        //    playback-token pipeline (slots 0..3). The proxy rewrites segment
-        //    URLs to same-origin HTTPS paths, so upstream http:// CDN segments
-        //    are never fetched directly by the browser (mixed content) and
-        //    datacenter-IP-blocked upstreams (HTTP 456) work via the server.
-        //  - 'direct-fallback' mode additionally tries the raw URL last.
+        //    playback-token pipeline. Preferred order per token slot:
+        //      1. hlsUrl   — server-side HLS remux (hls.js): the provider's
+        //                    http:// TS cannot be played by browsers directly
+        //                    (mixed content + no TS support), so ffmpeg
+        //                    remuxes it to live HLS over HTTPS same-origin.
+        //      2. relay    — raw server relay (proxyUrl in direct mode, or the
+        //                    plain playbackUrl when direct is off): TS via
+        //                    mpegts.js, HLS via hls.js.
+        //    The direct provider URL is deliberately NOT used by the web player
+        //    (its media CDN is http:// → blocked as mixed content).
         //  - Non-catalog channels (no channelId) fall back to raw direct URLs.
         let tokenSlot = 0;
         const maxTokenSlot = Math.min(3, Math.max(alternateUrls.length, 0));
         let directTried = false;
 
-        async function nextSource(): Promise<string | null> {
+        async function nextSource(): Promise<SourceCandidate | null> {
           if (destroyed) return null;
           if (ch.channelId && tokenSlot <= maxTokenSlot) {
             const slot = tokenSlot++;
             const r = await fetchTokenizedUrl(ch.channelId, slot);
-            if (r.url) return r.url;
-            // Token failed for this slot (e.g. no more viable alternates) —
-            // keep advancing instead of failing hard.
-            setStatus('Trying alternate stream...');
+            if (!r.url && !r.hlsUrl) {
+              // Token failed for this slot (e.g. expired/limit) — advance.
+              setStatus('تجربة مصدر بديل...');
+              return nextSource();
+            }
+            const candidates: SourceCandidate[] = [];
+            if (r.hlsUrl) candidates.push({ url: r.hlsUrl, kind: 'hls', serverAssisted: true });
+            // Relay: in direct mode the plain playbackUrl is the direct 302
+            // (skip — mixed content on web); otherwise it IS the relay.
+            const relayUrl = r.proxyUrl || (r.hlsUrl ? undefined : r.url);
+            if (relayUrl) {
+              candidates.push({
+                url: relayUrl,
+                kind: r.mimeType === 'application/x-mpegurl' ? 'hls' : 'ts',
+                serverAssisted: true,
+              });
+            }
+            // De-duplicate (hlsUrl and relay can share the same token path).
+            const seen = new Set<string>();
+            for (const c of candidates) {
+              if (!seen.has(c.url)) {
+                seen.add(c.url);
+                return c;
+              }
+            }
+            setStatus('تجربة مصدر بديل...');
             return nextSource();
           }
           if (mode === 'direct-fallback' && !directTried) {
             directTried = true;
-            return url;
+            return { url, kind: 'hls', serverAssisted: false };
           }
           if (!ch.channelId && alternateIndex < alternateUrls.length) {
-            return alternateUrls[alternateIndex++];
+            const alt = alternateUrls[alternateIndex++];
+            return {
+              url: alt,
+              kind: alt.includes('.m3u8') ? 'hls' : 'ts',
+              serverAssisted: false,
+            };
           }
           return null;
         }
 
-        if (Hls.isSupported()) {
-          const tryHlsSource = (src: string, isProxy: boolean) => {
+        /** Advance to the next candidate after a fatal engine error. */
+        function advanceFrom(currentSrc: string) {
+          if (destroyed) return;
+          setStatus('تبديل المصدر...');
+          void nextSource().then((info) => {
             if (destroyed) return;
-            safeDestroyHls(activeHls);
-            currentSource = isProxy ? 'proxy' : 'direct';
-            currentSourceRef.current = currentSource;
-            setActiveSource(currentSource);
-            if (isProxy && mode === 'direct-fallback') setStatus('Trying server stream...');
-            setPlayerError('');
-
-            const hls = new Hls({
-              enableWorker: true,
-              lowLatencyMode: true,
-              backBufferLength: 90,
-              maxBufferLength: 30,
-              maxMaxBufferLength: 60,
-              manifestLoadingTimeOut: 10000,
-              manifestLoadingMaxRetry: 2,
-              levelLoadingTimeOut: 10000,
-              levelLoadingMaxRetry: 2,
-              fragLoadingTimeOut: 20000,
-              fragLoadingMaxRetry: 2,
-              xhrSetup: (xhr: XMLHttpRequest, xhrUrl: string) => {
-                if (xhrUrl.includes('/api/v1/tv/') && sessionId) {
-                  xhr.setRequestHeader('X-Session-Id', sessionId);
-                }
-              },
-            });
-            activeHls = hls;
-            hlsRef.current = hls;
-            hls.loadSource(src);
-            hls.attachMedia(video!);
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-              if (!destroyed) {
-                setStatus('Playing');
-                video!.play().catch(() => {});
-              }
-            });
-            hls.on(
-              Hls.Events.ERROR,
-              (_: string, data: { fatal: boolean; type: string; details: string }) => {
-                if (destroyed) return;
-                if (data.fatal) {
-                  if (data.type === 'mediaError') {
-                    setStatus('Media error — recovering...');
-                    hls.recoverMediaError();
-                  } else if (data.type === 'networkError') {
-                    setStatus('Network error — retrying...');
-                    hls.startLoad();
-                  } else {
-                    // Fatal manifest/level/other error — advance to the next source.
-                    const currentSrc = src;
-                    safeDestroyHls(hls);
-                    void nextSource().then((next) => {
-                      if (destroyed) return;
-                      if (next && next !== currentSrc) {
-                        setStatus('Switching stream source...');
-                        tryHlsSource(next, next.includes('/api/v1/tv/'));
-                      } else {
-                        setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
-                      }
-                    });
-                  }
-                }
-              },
-            );
-          };
-
-          void nextSource().then((src) => {
-            if (destroyed) return;
-            if (src) {
-              tryHlsSource(src, src.includes('/api/v1/tv/'));
+            if (info && info.url !== currentSrc) {
+              playSource(info);
             } else {
               setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
             }
           });
+        }
+
+        function tryHlsSource(candidate: SourceCandidate) {
+          if (destroyed) return;
+          safeDestroyHls(activeHls);
+          safeDestroyMpegts(activeMpegts);
+          currentSrcRef.current = candidate.url;
+          if (candidate.serverAssisted && mode === 'direct-fallback') setStatus('تجربة خادم البث...');
+          setPlayerError('');
+          setIsLive(false);
+
+          let networkRetries = 0;
+          const hls = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true,
+            backBufferLength: 30,
+            maxBufferLength: 20,
+            maxMaxBufferLength: 30,
+            liveSyncDurationCount: 3,
+            liveMaxLatencyDurationCount: 6,
+            liveDurationInfinity: true,
+            manifestLoadingTimeOut: 10000,
+            manifestLoadingMaxRetry: 4,
+            manifestLoadingRetryDelay: 500,
+            levelLoadingTimeOut: 10000,
+            levelLoadingMaxRetry: 4,
+            levelLoadingRetryDelay: 500,
+            fragLoadingTimeOut: 20000,
+            fragLoadingMaxRetry: 6,
+            fragLoadingRetryDelay: 500,
+            xhrSetup: (xhr: XMLHttpRequest, xhrUrl: string) => {
+              if (xhrUrl.includes('/api/v1/tv/') && sessionId) {
+                xhr.setRequestHeader('X-Session-Id', sessionId);
+              }
+            },
+          });
+          activeHls = hls;
+          hlsRef.current = hls;
+          hls.loadSource(candidate.url);
+          hls.attachMedia(video!);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (!destroyed) {
+              setIsLive(true);
+              setStatus('بث مباشر');
+              video!.play().catch(() => {});
+            }
+          });
+          hls.on(
+            Hls.Events.ERROR,
+            (_: string, data: { fatal: boolean; type: string; details: string }) => {
+              if (destroyed) return;
+              if (data.fatal) {
+                if (data.type === 'mediaError') {
+                  setStatus('خطأ في الوسائط — استعادة...');
+                  hls.recoverMediaError();
+                } else if (data.type === 'networkError') {
+                  networkRetries += 1;
+                  if (networkRetries <= 3) {
+                    const delayMs = 500 * networkRetries;
+                    setStatus(`انقطاع الشبكة — إعادة المحاولة (${networkRetries}/3)...`);
+                    setTimeout(() => {
+                      if (destroyed) return;
+                      hls.startLoad();
+                    }, delayMs);
+                  } else {
+                    safeDestroyHls(hls);
+                    advanceFrom(candidate.url);
+                  }
+                } else {
+                  // Fatal manifest/level/other error — advance to the next source.
+                  safeDestroyHls(hls);
+                  advanceFrom(candidate.url);
+                }
+              }
+            },
+          );
+        }
+
+        async function tryMpegtsSource(candidate: SourceCandidate) {
+          if (destroyed) return;
+          safeDestroyHls(activeHls);
+          safeDestroyMpegts(activeMpegts);
+          currentSrcRef.current = candidate.url;
+          if (candidate.serverAssisted && mode === 'direct-fallback') setStatus('تجربة خادم البث...');
+          setPlayerError('');
+          setIsLive(false);
+
+          let Mpegts: any;
+          try {
+            const mod = await import('mpegts.js');
+            Mpegts = mod.default || mod;
+          } catch {
+            if (!destroyed) advanceFrom(candidate.url);
+            return;
+          }
+          if (destroyed) return;
+          if (!Mpegts || !Mpegts.isSupported || !Mpegts.isSupported()) {
+            // Engine unavailable on this browser — advance to the next source.
+            if (!destroyed) advanceFrom(candidate.url);
+            return;
+          }
+
+          const player = Mpegts.createPlayer(
+            { type: 'mpegts', isLive: true, url: candidate.url },
+            {
+              // Worker disabled: the page CSP (connect-src/script-src) has no
+              // blob: allowance, so a blob Worker would be blocked.
+              enableWorker: false,
+              // Low-latency live tuning — avoids the "stall then jump" that a
+              // growing stash buffer causes on raw TS passthrough.
+              enableStashBuffer: false,
+              liveBufferLatencyChasing: true,
+              liveBufferLatencyMaxLatency: 3,
+              liveBufferLatencyMinRemain: 0.5,
+              liveBufferLatencyMaxDrift: 3,
+              lazyLoad: false,
+              deferLoadAfterSourceOpen: true,
+            },
+          );
+          activeMpegts = player;
+          player.attachMediaElement(video!);
+          player.on(Mpegts.Events.ERROR, () => {
+            if (destroyed) return;
+            safeDestroyMpegts(player);
+            advanceFrom(candidate.url);
+          });
+          player.on(Mpegts.Events.RECOVERED_EARLY_EOF, () => {
+            /* ignore — live TS */
+          });
+          player.on(Mpegts.Events.MEDIA_INFO, () => {
+            if (!destroyed) {
+              setIsLive(true);
+              setStatus('بث مباشر');
+              video!.play().catch(() => {});
+            }
+          });
+          player.load();
+        }
+
+        /** Dispatch a candidate source to the right engine. */
+        function playSource(info: SourceCandidate | null) {
+          if (destroyed) return;
+          if (!info) {
+            setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
+            return;
+          }
+          if (info.kind === 'hls') {
+            tryHlsSource(info);
+          } else {
+            void tryMpegtsSource(info);
+          }
+        }
+
+        if (Hls.isSupported()) {
+          void nextSource().then((info) => playSource(info));
         } else if (video!.canPlayType('application/vnd.apple.mpegurl')) {
           // Native HLS (Safari): resolve candidates sequentially via <video>.
           let nativeFallback = false;
+          const nativePlay = (info: SourceCandidate | null) => {
+            if (destroyed) return;
+            if (!info) {
+              setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
+              return;
+            }
+            if (info.kind === 'hls') {
+              setStatus('تبديل المصدر...');
+              video!.src = info.url;
+              video!.load();
+            } else {
+              // Raw TS on Safari — use mpegts.js (MSE) instead of native.
+              void tryMpegtsSource(info);
+            }
+          };
           nativeLoadedMeta = () => {
             if (!destroyed) {
-              setStatus('Playing');
+              setIsLive(true);
+              setStatus('بث مباشر');
               video!.play().catch(() => {});
             }
           };
@@ -259,39 +453,69 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             if (destroyed) return;
             if (!nativeFallback) {
               nativeFallback = true;
-              void nextSource().then((next) => {
-                if (destroyed) return;
-                if (next) {
-                  setStatus('Switching stream source...');
-                  video!.src = next;
-                  video!.load();
-                } else {
-                  setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
-                }
-              });
+              void nextSource().then((info) => nativePlay(info));
             } else {
               setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
             }
           };
-          void nextSource().then((src) => {
-            if (destroyed) return;
-            if (src) {
-              video!.src = src;
-            } else {
-              setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
-            }
-          });
+          void nextSource().then((info) => nativePlay(info));
           video!.addEventListener('loadedmetadata', nativeLoadedMeta);
           video!.addEventListener('error', nativeError);
         } else {
-          setPlayerError('HLS not supported in this browser.');
+          setPlayerError('المتصفح لا يدعم هذا النوع من البث');
         }
+
+        // ── Stall watchdog ─────────────────────────────────────────────────
+        // If the video is neither paused nor ended but currentTime stops
+        // advancing for 10s, nudge the current engine; if it stalls repeatedly,
+        // advance to the next source (alternate slot / relay / error).
+        const stallTimer = setInterval(() => {
+          if (destroyed || video!.paused || video!.ended) return;
+          if (video!.readyState < 2) return; // still loading — not a stall
+          const now = Date.now();
+          if (video!.currentTime === lastCurrentTime && now - lastProgressAt > 10_000) {
+            stallRecoveries += 1;
+            lastProgressAt = now;
+            if (stallRecoveries >= 3) {
+              // Repeated stalls — give up on this source.
+              stallRecoveries = 0;
+              const src = currentSrcRef.current;
+              if (src) {
+                safeDestroyHls(activeHls);
+                safeDestroyMpegts(activeMpegts);
+                advanceFrom(src);
+              }
+              return;
+            }
+            // Soft recovery: nudge the current engine.
+            setStatus('البث متوقف — إعادة الاسترداد...');
+            try {
+              activeHls?.startLoad?.();
+              if (activeMpegts) {
+                // mpegts.js has no startLoad — recreate it on the same URL.
+                const src = currentSrcRef.current;
+                safeDestroyMpegts(activeMpegts);
+                if (src) void tryMpegtsSource({ url: src, kind: 'ts', serverAssisted: true });
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+        }, 2000);
+        stallTimerRef.current = stallTimer;
       } catch {
-        setPlayerError('Failed to load player');
+        setPlayerError('تعذر تحميل المشغل');
       }
     }
 
+    const onTimeUpdate = () => {
+      lastProgressAt = Date.now();
+      lastCurrentTime = video!.currentTime;
+    };
+    video!.addEventListener('timeupdate', onTimeUpdate);
+
     initPlayer();
+
     const PLAY_REPORT_DEDUP_MS = 30_000;
     const reportPlay = () => {
       const channelId = channel.id || channel.channelId;
@@ -308,7 +532,7 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
       api
         .post(
           `/channels/${channelId}/report-play`,
-          { deviceId, proxyPlay: currentSourceRef.current === 'proxy' },
+          { deviceId, proxyPlay: true },
           {
             headers: { 'X-Skip-Auth-Redirect': '1' },
             timeout: 10_000,
@@ -324,12 +548,13 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
     };
     const onPlaying = () => {
       if (destroyed) return;
-      setStatus('Playing');
+      setIsLive(true);
+      setStatus('بث مباشر');
       reportPlay();
     };
-    const onPause = () => !destroyed && setStatus('Paused');
-    const onWaiting = () => !destroyed && setStatus('Buffering...');
-    const onVidError = () => !destroyed && setPlayerError('Playback error');
+    const onPause = () => !destroyed && setStatus('متوقف مؤقتاً');
+    const onWaiting = () => !destroyed && setStatus('جارٍ التخزين المؤقت...');
+    const onVidError = () => !destroyed && setPlayerError('خطأ في التشغيل');
     video.addEventListener('playing', onPlaying);
     video.addEventListener('pause', onPause);
     video.addEventListener('waiting', onWaiting);
@@ -337,8 +562,21 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
 
     return () => {
       destroyed = true;
+      if (stallTimerRef.current) {
+        clearInterval(stallTimerRef.current);
+        stallTimerRef.current = null;
+      }
       safeDestroyHls(activeHls);
+      if (activeMpegts) {
+        try {
+          activeMpegts.destroy();
+        } catch {
+          /* already destroyed */
+        }
+        activeMpegts = null;
+      }
       hlsRef.current = null;
+      video.removeEventListener('timeupdate', onTimeUpdate);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('pause', onPause);
       video.removeEventListener('waiting', onWaiting);
@@ -396,11 +634,9 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
 
   const statusColor = playerError
     ? 'text-signal-red'
-    : status === 'Playing'
+    : status === 'بث مباشر'
       ? 'text-signal-green'
       : 'text-muted-foreground';
-
-  const sourceBadge = activeSource === 'proxy' ? 'proxy' : 'direct';
 
   /*
    * Single return — the video/audio element is always at the same position
@@ -465,6 +701,15 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
               {channel.name}
             </h2>
             <div className={`flex items-center shrink-0 ${mini ? 'gap-1' : 'gap-2'}`}>
+              {isLive && !mini && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-600/10 border border-red-600/30 text-red-600 text-[10px] font-bold uppercase tracking-[0.15em]">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-red-600" />
+                  </span>
+                  LIVE
+                </span>
+              )}
               <button
                 onClick={() => setMini(!mini)}
                 className={
@@ -516,17 +761,18 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             <div
               className={`flex items-center gap-2 truncate ${mini ? 'max-w-[55%]' : 'max-w-[60%]'}`}
             >
-              {!mini && (
-                <span
-                  className={`truncate ${mini ? 'text-xs' : 'text-xs'} text-muted-foreground`}
-                  title={channel.url}
-                >
-                  {channel.url}
+              {!mini && isLive && (
+                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.15em] text-red-600 shrink-0">
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-600" />
+                  مباشر
                 </span>
               )}
               {!mini && (
-                <span className="text-xs uppercase tracking-wider px-1.5 py-0.5 border border-border text-muted-foreground shrink-0">
-                  {sourceBadge}
+                <span
+                  className={`truncate text-xs text-muted-foreground`}
+                  title={channel.url}
+                >
+                  {channel.name}
                 </span>
               )}
             </div>

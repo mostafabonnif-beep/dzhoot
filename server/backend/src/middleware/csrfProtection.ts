@@ -6,10 +6,10 @@ import { Request, Response, NextFunction } from 'express';
  * On state-changing methods (POST, PUT, PATCH, DELETE), validates that the
  * request's Origin (or Referer fallback) matches the server's allowed origins.
  *
- * Requests that carry custom auth headers (x-session-id, Authorization: Bearer)
- * are inherently CSRF-safe because browsers never attach custom headers to
- * cross-origin form submissions or navigations — they require XHR/fetch which
- * is already gated by CORS preflight.
+ * Requests that carry custom auth headers (x-session-id, Authorization: Bearer,
+ * x-tv-code) are inherently CSRF-safe because browsers never attach custom
+ * headers to cross-origin form submissions or navigations — they require
+ * XHR/fetch which is already gated by CORS preflight.
  *
  * Requests with no Origin AND no Referer (server-to-server, CLI, TV apps)
  * are also allowed through since they aren't browser-initiated.
@@ -60,6 +60,15 @@ function extractOrigin(headerValue: string): string | null {
   }
 }
 
+/** Lower-cased hostname part of an Origin/Referer value, or null. */
+function originHostname(headerValue: string): string | null {
+  try {
+    return new URL(headerValue).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
   // Safe methods don't need CSRF protection
   if (SAFE_METHODS.has(req.method)) {
@@ -68,7 +77,12 @@ const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
 
   // Requests with custom auth headers are CSRF-safe by definition:
   // browsers cannot send custom headers via form submissions or navigations.
-  if (req.headers['x-session-id'] || req.headers['authorization']) {
+  // x-tv-code is the TV/watch-page credential (same guarantee as the others).
+  if (
+    req.headers['x-session-id'] ||
+    req.headers['authorization'] ||
+    req.headers['x-tv-code']
+  ) {
     return next();
   }
 
@@ -100,6 +114,19 @@ const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
       success: false,
       error: 'CSRF validation failed: unable to determine request origin',
     });
+  }
+
+  // Same-origin relaxation: the platform is served on several hostnames
+  // (main domain, mirror domain, raw-IP aliases like *.sslip.io) that all
+  // terminate TLS at the same edge. A request whose Origin hostname matches
+  // the Host header is same-origin and therefore CSRF-safe by definition,
+  // no matter which alias the operator added to ALLOWED_ORIGINS.
+  const hostHeader = req.headers['host'] as string | undefined;
+  if (hostHeader) {
+    const hostHostname = hostHeader.split(':')[0].trim().toLowerCase();
+    if (hostHostname && originHostname(requestOrigin) === hostHostname) {
+      return next();
+    }
   }
 
   if (!allowedOrigins.has(requestOrigin)) {
