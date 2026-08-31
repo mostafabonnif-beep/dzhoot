@@ -10,6 +10,30 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (source resilience — mirror domains)
+
+- `XtreamSource.mirrorServerUrls` (validated http(s) array; admin API create/patch + exposed
+  in `publicShape`). Alternate panel domains for the **same account**.
+- **Automatic API/mirror fallback**: `apiGet` (player_api / sync / verification / series)
+  tries the primary `serverUrl` first, then each mirror — a dead primary domain no longer
+  blocks catalog sync or source verification.
+- **Automatic playback mirror fallback** (live): when the watchdog reports the primary domain
+  down and no provider-level backup map exists, the playback token rewrites the stream URL to
+  the mirror domain (slot 0 only; **catch-up is never mirrored**) and flags `source: "mirror"`
+  in the token response. v2 channel-reference tokens apply the same rewrite at resolve time.
+- **Automatic playback mirror fallback (VOD)**: movie tokens (`movie.sourceId`) and series
+  episode tokens (parent series `sourceId`) rewrite to the mirror domain under the same
+  condition. No-op when the source is healthy, has no mirror, or the URL is not under the
+  primary base.
+
+### Fixed (watchdog health)
+
+- Watchdog direct-playback probe no longer treats **TS transport streams** as HLS manifests:
+  `.ts` URLs are light-probed (stream response, 1 KB cap, destroy immediately; HTTP 200-399 =
+  alive) instead of failing with `maxContentLength size of 524288 exceeded` every cycle, which
+  wrongly persisted `verificationStatus=degraded` on healthy TS-format sources (e.g. Business
+  Cloud NEO) and blocked scheduled catalog sync.
+
 ### Fixed (catalog access)
 
 - `GET /api/v1/channels` and `/channels/grouped` (the TV app channel list) now apply the
