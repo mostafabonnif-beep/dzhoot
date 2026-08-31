@@ -1,0 +1,22 @@
+#!/bin/bash
+# Manage iptables REDIRECT rules for upstream destinations routed through the
+# home relay pool (127.0.0.1:9000 -> redsocks 12345).
+# Destinations: "<ip>:<port>" pairs. NEO (Cloudflare) :443 + ottstreambox :80.
+UPSTREAM_RULES="104.18.22.66:443 104.18.23.66:443 117.55.202.166:80"
+if ss -tln | grep -q ":9000 "; then
+  iptables -t nat -C OUTPUT -m owner --uid-owner relay -j RETURN 2>/dev/null || iptables -t nat -I OUTPUT 1 -m owner --uid-owner relay -j RETURN
+  for rule in $UPSTREAM_RULES; do
+    ip="${rule%%:*}"; port="${rule##*:}"
+    iptables -t nat -C OUTPUT -p tcp -d "$ip" --dport "$port" -j REDIRECT --to-ports 12345 2>/dev/null || iptables -t nat -A OUTPUT -p tcp -d "$ip" --dport "$port" -j REDIRECT --to-ports 12345
+    iptables -t nat -C PREROUTING -p tcp -d "$ip" --dport "$port" -j REDIRECT --to-ports 12345 2>/dev/null || iptables -t nat -A PREROUTING -p tcp -d "$ip" --dport "$port" -j REDIRECT --to-ports 12345
+  done
+  echo "RELAY ACTIVE"
+else
+  iptables -t nat -D OUTPUT -m owner --uid-owner relay -j RETURN 2>/dev/null
+  for rule in $UPSTREAM_RULES; do
+    ip="${rule%%:*}"; port="${rule##*:}"
+    iptables -t nat -D OUTPUT -p tcp -d "$ip" --dport "$port" -j REDIRECT --to-ports 12345 2>/dev/null
+    iptables -t nat -D PREROUTING -p tcp -d "$ip" --dport "$port" -j REDIRECT --to-ports 12345 2>/dev/null
+  done
+  echo "RELAY OFF"
+fi
