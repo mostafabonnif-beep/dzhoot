@@ -62,6 +62,8 @@ function publicShape(src) {
     catalogOnlyImportedAt: src.catalogOnlyImportedAt || null,
     customerVisible: src.customerVisible === true,
     directPlayback: src.directPlayback === true,
+    mergeCatalog: src.mergeCatalog === true,
+    failoverPriority: Number(src.failoverPriority) || 20,
     lastError: src.lastError,
     lastDiagnosticsAt: src.lastDiagnosticsAt,
     verifiedAt: src.verifiedAt,
@@ -355,7 +357,7 @@ router.patch('/:id', async (req, res) => {
     const source = await XtreamSource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    const { name, status, serverUrl, mirrorServerUrls, username, password, customerVisible, directPlayback } = req.body || {};
+    const { name, status, serverUrl, mirrorServerUrls, username, password, customerVisible, directPlayback, mergeCatalog, failoverPriority } = req.body || {};
     if (name !== undefined) source.name = String(name).trim();
     if (serverUrl !== undefined) {
       if (!serverUrl) return res.status(400).json({ success: false, error: 'serverUrl cannot be empty' });
@@ -399,6 +401,23 @@ router.patch('/:id', async (req, res) => {
         resourceId: String(id),
         changes: { after: { directPlayback: source.directPlayback } },
       });
+    }
+    if (mergeCatalog !== undefined) {
+      source.mergeCatalog = mergeCatalog === true;
+      audit({
+        ...reqCtx(req),
+        action: 'XTREAM_SOURCE_MERGE_CATALOG',
+        resource: 'XtreamSource',
+        resourceId: String(id),
+        changes: { after: { mergeCatalog: source.mergeCatalog } },
+      });
+    }
+    if (failoverPriority !== undefined) {
+      const p = Number(failoverPriority);
+      if (!Number.isFinite(p) || p < 1) {
+        return res.status(400).json({ success: false, error: 'failoverPriority must be a positive number' });
+      }
+      source.failoverPriority = p;
     }
     const credentialsChanged = username !== undefined || password !== undefined;
     if (credentialsChanged) {

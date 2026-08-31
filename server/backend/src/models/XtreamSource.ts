@@ -14,6 +14,13 @@ export interface IXtreamSourceDocument extends Document {
   catalogOnlyImportedAt?: Date | null;
   customerVisible?: boolean;
   directPlayback?: boolean;
+  /** Merge-on-sync: when true, syncing this source maps its streams onto
+   *  EXISTING catalog channels (by canonical name) as failover backups and
+   *  does NOT create duplicate channel docs — the customer list stays put.
+   *  Genuinely new channels are still added. */
+  mergeCatalog?: boolean;
+  /** Failover tier for channels auto-mapped from a mergeCatalog source. */
+  failoverPriority?: number;
   lastError?: string | null;
   lastDiagnosticsAt?: Date | null;
   verifiedAt?: Date | null;
@@ -50,6 +57,8 @@ const xtreamSourceSchema = new Schema<IXtreamSourceDocument>(
     catalogOnlyImportedAt: { type: Date, default: null },
     customerVisible: { type: Boolean, default: false },
     directPlayback: { type: Boolean, default: false },
+    mergeCatalog: { type: Boolean, default: false },
+    failoverPriority: { type: Number, default: 20, min: 1 },
     lastError: { type: String, default: null },
     lastDiagnosticsAt: { type: Date, default: null },
     verifiedAt: { type: Date, default: null },

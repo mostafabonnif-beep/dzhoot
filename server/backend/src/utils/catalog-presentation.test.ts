@@ -178,3 +178,49 @@ describe('duplicate-channel dedup (CATALOG_DEDUP)', () => {
     expect(hidden).toEqual(['x3']);
   });
 });
+
+describe('catalog ordering (CATALOG_COUNTRY_PRIORITY / CATALOG_CATEGORY_PRIORITY)', () => {
+  const originalCountry = process.env.CATALOG_COUNTRY_PRIORITY;
+  const originalCategory = process.env.CATALOG_CATEGORY_PRIORITY;
+
+  afterEach(() => {
+    if (originalCountry === undefined) delete process.env.CATALOG_COUNTRY_PRIORITY;
+    else process.env.CATALOG_COUNTRY_PRIORITY = originalCountry;
+    if (originalCategory === undefined) delete process.env.CATALOG_CATEGORY_PRIORITY;
+    else process.env.CATALOG_CATEGORY_PRIORITY = originalCategory;
+  });
+
+  it('puts Algeria before the Arab world before France when priority is configured', () => {
+    process.env.CATALOG_COUNTRY_PRIORITY = 'DZ,AR,FR';
+    const dz = { channelId: '1', channelName: 'A1', channelGroup: 'DZ| SPORT' };
+    const ar = { channelId: '2', channelName: 'B2', channelGroup: 'AR| GENERAL' };
+    const fr = { channelId: '3', channelName: 'C3', channelGroup: 'FR| GENERAL' };
+    const sorted = sortClientCatalogChannels([fr, ar, dz]);
+    expect(sorted.map((c: any) => c.channelId)).toEqual(['1', '2', '3']);
+  });
+
+  it('detects regions from supplier labels like "~ ALGERIE ~" and "ALG:"', () => {
+    process.env.CATALOG_COUNTRY_PRIORITY = 'DZ,AR,FR';
+    const { presentationForChannel: pfc } = require('./catalog-presentation');
+    expect(pfc({ channelGroup: '~ ALGERIE ~', channelName: 'ENTV 1' }).countryCode).toBe('DZ');
+    expect(pfc({ channelGroup: 'ALG: News', channelName: 'X' }).countryCode).toBe('DZ');
+    expect(pfc({ channelGroup: 'ARABIC CHANNEL', channelName: 'Y' }).countryCode).toBe('AR');
+  });
+
+  it('keeps the supplier order when no priority is configured', () => {
+    const a = { channelId: '1', channelName: 'Zeta', channelGroup: 'G1' };
+    const b = { channelId: '2', channelName: 'Alpha', channelGroup: 'G1' };
+    // with priority unset the comparator falls back to group then order then name
+    const sorted = sortClientCatalogChannels([a, b]);
+    expect(sorted.map((c: any) => c.channelId)).toEqual(['2', '1']);
+  });
+
+  it('orders categories by priority within the same region', () => {
+    process.env.CATALOG_COUNTRY_PRIORITY = 'DZ';
+    process.env.CATALOG_CATEGORY_PRIORITY = 'رياضة,أخبار';
+    const news = { channelId: '1', channelName: 'A', channelGroup: 'DZ| NEWS', tvgName: 'News 24' };
+    const sport = { channelId: '2', channelName: 'B', channelGroup: 'DZ| SPORT', tvgName: 'Arena' };
+    const sorted = sortClientCatalogChannels([news, sport]);
+    expect(sorted.map((c: any) => c.channelId)).toEqual(['2', '1']);
+  });
+});
