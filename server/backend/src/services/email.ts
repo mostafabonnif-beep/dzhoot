@@ -82,7 +82,16 @@ async function getSmtpConfig(): Promise<SmtpConfig> {
 // Template loading & caching
 // ---------------------------------------------------------------------------
 
-const TEMPLATE_DIR = path.resolve(__dirname, '../templates/email');
+// Templates are copied to dist/templates by `npm run build` locally, but the
+// production Dockerfile builds with plain `tsc` and copies backend/src as
+// runtime files — so dist/templates never exists in the image and EVERY
+// system email silently failed (ENOENT). Resolve to src/templates as a
+// fallback so email works regardless of how the image was built.
+const DIST_TEMPLATE_DIR = path.resolve(__dirname, '../templates/email');
+const SRC_TEMPLATE_DIR = path.resolve(__dirname, '../../src/templates/email');
+const TEMPLATE_DIR = fs.existsSync(path.join(DIST_TEMPLATE_DIR, 'base.html'))
+  ? DIST_TEMPLATE_DIR
+  : SRC_TEMPLATE_DIR;
 const templateCache = new Map<string, HandlebarsTemplateDelegate>();
 
 let baseHtml: string | null = null;
