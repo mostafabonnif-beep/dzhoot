@@ -20,6 +20,9 @@
         reverse_proxy api:3000
     }
 
+    @legacyApkDownload path_regexp legacyApkDownload ^/downloads/[^/]+\.apk$
+    redir @legacyApkDownload /api/v1/app/download 302
+
     handle_path /downloads/* {
         root * /downloads
         file_server
