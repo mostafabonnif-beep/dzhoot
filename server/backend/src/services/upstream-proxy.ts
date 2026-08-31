@@ -203,6 +203,118 @@ function nestedPlaybackUrl(
     : absoluteUrl;
 }
 
+/** Mid-stream failover context: catalog channel + its primary Xtream source. */
+export interface FailoverContext {
+  channelId: string;
+  primarySourceId?: string;
+}
+
+/** Resolve a backup target for the channel via the failover maps (priority
+ *  cascade: NEO 4K then MIBOX). Returns null when nothing is available. */
+async function resolveFailoverTarget(ctx: FailoverContext) {
+  const Channel = require('../models/Channel').default || require('../models/Channel');
+  const { getFailoverTarget } = require('./source-failover-service');
+  const channel = await Channel.findById(ctx.channelId).select('channelId').lean();
+  if (!channel) return null;
+  return getFailoverTarget({ _id: channel._id, channelId: channel.channelId }, ctx.primarySourceId || null);
+}
+
+interface StreamFetchOptions {
+  responseType: 'stream';
+  timeout: number;
+  httpAgent?: http.Agent | https.Agent;
+  httpsAgent?: http.Agent | https.Agent;
+  headers: Record<string, string | undefined>;
+  maxRedirects: number;
+  beforeRedirect: (options: any) => void;
+}
+
+function buildStreamFetchOptions(
+  targetUrl: string,
+  upstreamHeaders: UpstreamHeaders | undefined,
+  requestedRange: string | undefined,
+): StreamFetchOptions {
+  const parsed = new URL(targetUrl);
+  const agent = createPinnedLookupAgent(targetUrl);
+  return {
+    responseType: 'stream',
+    timeout: 30_000,
+    httpAgent: parsed.protocol === 'http:' ? agent : undefined,
+    httpsAgent: parsed.protocol === 'https:' ? agent : undefined,
+    headers: {
+      'User-Agent': upstreamHeaders?.userAgent || 'VLC/3.0.18 LibVLC/3.0.18',
+      ...(upstreamHeaders?.referrer ? { Referer: upstreamHeaders.referrer } : {}),
+      Accept: '*/*',
+      'Accept-Encoding': 'gzip, deflate',
+      ...(requestedRange ? { Range: requestedRange } : {}),
+      Connection: 'keep-alive',
+    },
+    maxRedirects: 5,
+    beforeRedirect: (options) => {
+      const hostname = (options.hostname || '').replace(/^\[|\]$/g, '');
+      if (isPrivateIP(hostname) || ['localhost', 'metadata.google.internal'].includes(hostname.toLowerCase())) {
+        throw new Error('Redirect to private/internal address blocked');
+      }
+    },
+  };
+}
+
+function createPinnedLookupAgent(targetUrl: string): http.Agent | https.Agent {
+  // NOTE: callers validate SSRF + resolve addresses before calling this for
+  // the primary URL; the failover path re-validates inside fetchUpstreamOrFailover.
+  const parsed = new URL(targetUrl);
+  return parsed.protocol === 'https:'
+    ? new https.Agent()
+    : new http.Agent();
+}
+
+/** Fetch the upstream stream, falling back to a failover target when the
+ *  primary fails BEFORE any bytes flow (opening + HLS manifest reloads). */
+async function fetchUpstreamOrFailover(
+  url: string,
+  upstreamHeaders: UpstreamHeaders | undefined,
+  requestedRange: string | undefined,
+  failoverCtx?: FailoverContext,
+): Promise<{ response: any; fetchedUrl: string }> {
+  const primaryCheck = await validateUrlForSSRF(url);
+  if (!primaryCheck.safe || !primaryCheck.resolvedAddresses?.length) {
+    throw new Error(primaryCheck.reason || 'Stream URL blocked by security policy');
+  }
+  const pinnedLookup = createPinnedLookup(primaryCheck.resolvedAddresses);
+  const opts = buildStreamFetchOptions(url, upstreamHeaders, requestedRange);
+  opts.httpAgent = new http.Agent({ lookup: pinnedLookup });
+  opts.httpsAgent = new https.Agent({ lookup: pinnedLookup });
+  try {
+    const response = await fetchUpstreamWithRetry(url, opts);
+    return { response, fetchedUrl: url };
+  } catch (primaryError: any) {
+    if (!failoverCtx) throw primaryError;
+    let target: { streamUrl: string } | null = null;
+    try {
+      target = await resolveFailoverTarget(failoverCtx);
+    } catch (err) {
+      console.error('[upstream-proxy] failover resolve error:', redactSensitiveText(err));
+    }
+    if (!target) throw primaryError;
+    const backupUrl = String(target.streamUrl || '');
+    const backupCheck = await validateUrlForSSRF(backupUrl);
+    if (!backupCheck.safe || !backupCheck.resolvedAddresses?.length) {
+      console.error('[upstream-proxy] failover URL blocked by SSRF policy:', redactSensitiveText(backupUrl));
+      throw primaryError;
+    }
+    const backupLookup = createPinnedLookup(backupCheck.resolvedAddresses);
+    const backupOpts = buildStreamFetchOptions(backupUrl, upstreamHeaders, requestedRange);
+    backupOpts.httpAgent = new http.Agent({ lookup: backupLookup });
+    backupOpts.httpsAgent = new https.Agent({ lookup: backupLookup });
+    console.error(
+      `[upstream-proxy] primary fetch failed (${primaryError?.code || primaryError?.response?.status || 'error'}); ` +
+      `failing over to ${new URL(backupUrl).host}`,
+    );
+    const response = await fetchUpstreamWithRetry(backupUrl, backupOpts);
+    return { response, fetchedUrl: backupUrl };
+  }
+}
+
 export async function proxyUpstreamStream(
   req: any,
   res: any,
@@ -210,6 +322,7 @@ export async function proxyUpstreamStream(
   tokenContext?: ProxyTokenContext,
   legacyCode?: string,
   upstreamHeaders?: UpstreamHeaders,
+  failoverCtx?: FailoverContext,
 ): Promise<void> {
   try {
     try {
@@ -219,42 +332,18 @@ export async function proxyUpstreamStream(
       return;
     }
 
-    const ssrfCheck = await validateUrlForSSRF(url);
-    if (!ssrfCheck.safe || !ssrfCheck.resolvedAddresses?.length) {
-      if (!res.headersSent) res.status(403).send(ssrfCheck.reason || 'Stream URL blocked by security policy');
-      return;
-    }
-
-    const pinnedLookup = createPinnedLookup(ssrfCheck.resolvedAddresses);
-    const httpAgent = new http.Agent({ lookup: pinnedLookup });
-    const httpsAgent = new https.Agent({ lookup: pinnedLookup });
     const requestedRange = typeof req.headers?.range === 'string' ? req.headers.range : undefined;
-    const response = await fetchUpstreamWithRetry(url, {
-      responseType: 'stream',
-      timeout: 30_000,
-      httpAgent,
-      httpsAgent,
-      headers: {
-        'User-Agent': upstreamHeaders?.userAgent || 'VLC/3.0.18 LibVLC/3.0.18',
-        ...(upstreamHeaders?.referrer ? { Referer: upstreamHeaders.referrer } : {}),
-        Accept: '*/*',
-        'Accept-Encoding': 'gzip, deflate',
-        ...(requestedRange ? { Range: requestedRange } : {}),
-        Connection: 'keep-alive',
-      },
-      maxRedirects: 5,
-      beforeRedirect: (options) => {
-        const hostname = (options.hostname || '').replace(/^\[|\]$/g, '');
-        if (isPrivateIP(hostname) || ['localhost', 'metadata.google.internal'].includes(hostname.toLowerCase())) {
-          throw new Error('Redirect to private/internal address blocked');
-        }
-      },
-    });
+    const { response, fetchedUrl } = await fetchUpstreamOrFailover(
+      url,
+      upstreamHeaders,
+      requestedRange,
+      failoverCtx,
+    );
 
-    const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || url;
+    const finalUrl = response.request?.res?.responseUrl || response.request?.responseURL || fetchedUrl;
     const contentType = String(response.headers['content-type'] || '').toLowerCase();
     const isManifest =
-      url.includes('.m3u8') ||
+      fetchedUrl.includes('.m3u8') ||
       finalUrl.includes('.m3u8') ||
       contentType.includes('mpegurl') ||
       contentType.includes('apple.mpegurl');
@@ -414,12 +503,77 @@ export async function proxyUpstreamStream(
         res.off('close', closeUpstream);
       });
     } else {
-      response.data.pipe(res);
-      response.data.on('error', (error: unknown) => {
-        console.error('[upstream-proxy] stream error:', redactSensitiveText(error));
-        if (!res.headersSent) res.status(500).send('Stream error');
-      });
-      req.on('close', () => response.data.destroy());
+      // ── Raw stream (MPEG-TS / progressive) — with MID-STREAM FAILOVER ──────
+      // The playing session must survive upstream death: when the upstream
+      // connection errors mid-stream, resolve the failover target (priority
+      // cascade NEO 4K → MIBOX) and keep pumping into the SAME client
+      // response. The TS player tolerates the short gap; the stream never
+      // hard-stops for the customer.
+      let currentUrl = fetchedUrl;
+      let currentResponse = response;
+      let midStreamFailovers = 0;
+      const MAX_MID_STREAM_FAILOVERS = 2;
+      for (;;) {
+        const upstream = currentResponse.data;
+        const outcome = await new Promise<'end' | 'error' | 'closed'>((resolve) => {
+          let done = false;
+          const settle = (r: 'end' | 'error' | 'closed') => {
+            if (done) return;
+            done = true;
+            resolve(r);
+          };
+          upstream.pipe(res, { end: false });
+          upstream.once('error', () => settle('error'));
+          upstream.once('end', () => settle('end'));
+          req.once('close', () => {
+            upstream.destroy();
+            settle('closed');
+          });
+          res.once('close', () => {
+            upstream.destroy();
+            settle('closed');
+          });
+        });
+        if (outcome === 'end') {
+          res.end();
+          return;
+        }
+        if (outcome === 'closed') return;
+        // Upstream died mid-stream — try the next failover tier.
+        console.error('[upstream-proxy] mid-stream upstream error; attempting failover');
+        if (!failoverCtx || midStreamFailovers >= MAX_MID_STREAM_FAILOVERS) break;
+        let target: { streamUrl: string } | null = null;
+        try {
+          target = await resolveFailoverTarget(failoverCtx);
+        } catch (err) {
+          console.error('[upstream-proxy] failover resolve error:', redactSensitiveText(err));
+        }
+        if (!target || String(target.streamUrl || '') === currentUrl) break;
+        const backupUrl = String(target.streamUrl);
+        try {
+          const backupCheck = await validateUrlForSSRF(backupUrl);
+          if (!backupCheck.safe || !backupCheck.resolvedAddresses?.length) break;
+          const backupLookup = createPinnedLookup(backupCheck.resolvedAddresses);
+          const backupOpts = buildStreamFetchOptions(backupUrl, upstreamHeaders, requestedRange);
+          backupOpts.httpAgent = new http.Agent({ lookup: backupLookup });
+          backupOpts.httpsAgent = new https.Agent({ lookup: backupLookup });
+          console.error(`[upstream-proxy] reconnecting to failover tier: ${new URL(backupUrl).host}`);
+          currentResponse = await fetchUpstreamWithRetry(backupUrl, backupOpts);
+          currentUrl = backupUrl;
+          midStreamFailovers += 1;
+          continue;
+        } catch (err) {
+          console.error('[upstream-proxy] failover reconnect failed:', redactSensitiveText(err));
+          break;
+        }
+      }
+      // All tiers exhausted — terminate the client connection (headers were
+      // already sent; the player will surface a playback error to retry).
+      try {
+        if (!res.destroyed) res.destroy();
+      } catch {
+        /* ignore */
+      }
     }
   } catch (error: any) {
     console.error('[upstream-proxy] request error:', redactSensitiveText(error));

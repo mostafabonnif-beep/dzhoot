@@ -158,6 +158,20 @@ describe('v2 channel-reference playback tokens', () => {
     expect(verifyPlaybackToken(token)).toBeNull();
   });
 
+  it('carries the catalog channel ref for mid-stream proxy failover (v1)', () => {
+    const { token } = issuePlaybackToken({
+      userId: 'user-123',
+      channelListCode: 'ABC123',
+      streamUrl: 'https://provider.example/live/user/secret/42.ts',
+      channelId: 'ch-abc123',
+      primarySourceId: 'src-neo',
+    });
+    const payload = verifyPlaybackToken(token) as any;
+    expect(payload.v).toBe(1);
+    expect(payload.channelId).toBe('ch-abc123');
+    expect(payload.primarySourceId).toBe('src-neo');
+  });
+
   it('still verifies legacy v1 tokens after the v2 change', () => {
     const { token } = issuePlaybackToken({
       userId: 'user-123',
