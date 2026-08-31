@@ -206,6 +206,29 @@ async function resolvePlaybackTarget(payload) {
   return value;
 }
 
+/**
+ * Same-panel mirror fallback for VOD streams (movies / series episodes).
+ * Rewrites the stream URL to the source's mirror domain when the primary
+ * domain is down AND the URL is under the primary base. No-op otherwise.
+ */
+async function applyVodMirrorFallback(streamUrl, sourceId) {
+  if (!streamUrl || !sourceId) return streamUrl;
+  try {
+    const source = await XtreamSource.findById(sourceId)
+      .select('serverUrl mirrorServerUrls')
+      .lean();
+    if (!source || !Array.isArray(source.mirrorServerUrls) || !source.mirrorServerUrls.length) return streamUrl;
+    const primaryBase = String(source.serverUrl || '').replace(/\/+$/, '');
+    const mirrorBase = String(source.mirrorServerUrls[0]).replace(/\/+$/, '');
+    if (!primaryBase || !mirrorBase || !streamUrl.startsWith(primaryBase)) return streamUrl;
+    if (!(await isSourceDown(String(source._id)))) return streamUrl;
+    return rewriteStreamUrlBase(streamUrl, mirrorBase) || streamUrl;
+  } catch {
+    // Never break playback because of a mirror lookup — return the original.
+    return streamUrl;
+  }
+}
+
 async function ensurePlaybackSubscription(user, res) {
   const access = await checkPlaybackSubscription(String(user?._id || user?.id || ''), user?.role);
   if (access.allowed) return true;
@@ -549,6 +572,21 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       }
       if (!vodDoc.streamUrl) {
         return res.status(404).json({ success: false, error: 'Content has no playable stream' });
+      }
+
+      // Same-panel MIRROR fallback for VOD: movies carry sourceId directly,
+      // episodes resolve it through their parent series. When the primary
+      // panel domain is down, the same movie/episode stream URL is rewritten
+      // to the mirror domain (same account, same stream id).
+      let vodSourceId = null;
+      if (vodKind === 'movie') {
+        vodSourceId = vodDoc.sourceId || null;
+      } else if (vodDoc.seriesId) {
+        const parentSeries = await Series.findById(vodDoc.seriesId).select('sourceId').lean();
+        vodSourceId = parentSeries?.sourceId || null;
+      }
+      if (vodSourceId) {
+        vodDoc.streamUrl = await applyVodMirrorFallback(vodDoc.streamUrl, vodSourceId);
       }
 
       const rootSessionId = crypto.randomBytes(16).toString('hex');
