@@ -2,6 +2,7 @@ import {
   clearAlertCooldowns,
   sendOperationalAlert,
 } from './alert-notifier';
+import User from '../models/User';
 
 describe('operational alert notifier', () => {
   const originalWebhook = process.env.ALERT_WEBHOOK_URL;
@@ -23,6 +24,28 @@ describe('operational alert notifier', () => {
       severity: 'warning',
       message: 'No webhook configured',
     })).resolves.toBe(false);
+  });
+
+  it('emails an active admin when no webhook is configured', async () => {
+    delete process.env.ALERT_WEBHOOK_URL;
+    await User.create({
+      username: 'admin-test', email: 'admin@dzhoof.local', password: 'password123',
+      role: 'Admin', isActive: true, channelListCode: 'ALERTTEST',
+    });
+    const emailMock = jest.fn().mockResolvedValue({ ok: true });
+    jest.doMock('./email', () => ({ sendEmail: emailMock }));
+
+    await expect(sendOperationalAlert({
+      event: 'xtream-source-down',
+      severity: 'critical',
+      message: 'مصدر Business Cloud NEO متوقف',
+    })).resolves.toBe(true);
+
+    expect(emailMock).toHaveBeenCalledWith(expect.objectContaining({
+      to: 'admin@dzhoof.local',
+      template: 'source-alert',
+    }));
+    jest.unmock('./email');
   });
 
   it('redacts sensitive values and suppresses duplicate alerts during cooldown', async () => {
