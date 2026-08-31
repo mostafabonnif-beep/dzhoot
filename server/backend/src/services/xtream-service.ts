@@ -49,6 +49,39 @@ export interface XtreamCredentials {
   serverUrl: string;
   username: string;
   password: string;
+  /** Alternate panel domains for the same account — tried after serverUrl. */
+  mirrorServerUrls?: string[];
+}
+
+/** [primary, ...mirrors] — normalized (no trailing slash), de-duplicated. */
+export function endpointCandidates(creds: XtreamCredentials): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of [creds.serverUrl, ...(creds.mirrorServerUrls || [])]) {
+    const base = String(raw || '').trim().replace(/\/+$/, '');
+    if (!base || seen.has(base)) continue;
+    seen.add(base);
+    out.push(base);
+  }
+  return out;
+}
+
+/**
+ * Rewrite the origin (scheme+host+port) of a stream URL to another panel
+ * domain, keeping the path and query intact. Used for mirror fallback: the
+ * same panel account serves the same stream id on both domains.
+ */
+export function rewriteStreamUrlBase(streamUrl: string, newBase: string): string | null {
+  try {
+    const u = new URL(streamUrl);
+    const b = new URL(newBase.replace(/\/+$/, ''));
+    u.protocol = b.protocol;
+    u.host = b.host;
+    u.port = b.port;
+    return u.toString();
+  } catch {
+    return null;
+  }
 }
 
 export function buildXtreamApiUrl(
@@ -64,9 +97,19 @@ export function buildXtreamApiUrl(
 }
 
 async function apiGet(creds: XtreamCredentials, action?: string, extra: Record<string, string | number> = {}) {
-  const url = buildXtreamApiUrl(creds, action, extra);
-  const res = await safeAxiosGet(url);
-  return res.data;
+  // Mirror fallback: try the primary panel domain first, then each mirror.
+  // A dead primary must not break sync/verification when a mirror is up.
+  const endpoints = endpointCandidates(creds);
+  let lastError: unknown = null;
+  for (const base of endpoints) {
+    try {
+      const res = await safeAxiosGet(buildXtreamApiUrl({ ...creds, serverUrl: base }, action, extra));
+      return res.data;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError ?? new Error('apiGet: no reachable endpoint');
 }
 
 /** Verify credentials: player_api.php without action returns user_info/server_info. */
@@ -196,6 +239,7 @@ export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
 
   const diagnostics = await diagnoseXtreamSource({
     serverUrl: source.serverUrl,
+    mirrorServerUrls: source.mirrorServerUrls || [],
     username: decryptSecret(source.usernameEncrypted),
     password: decryptSecret(source.passwordEncrypted),
   }, sampleLimit);
@@ -489,6 +533,7 @@ async function seriesSourceAndCreds(series: any): Promise<XtreamCredentials> {
   if (!source) throw new Error('Xtream source unavailable for this series');
   return {
     serverUrl: source.serverUrl,
+    mirrorServerUrls: source.mirrorServerUrls || [],
     username: decryptSecret(source.usernameEncrypted),
     password: decryptSecret(source.passwordEncrypted),
   };
@@ -541,6 +586,7 @@ export async function previewXtreamSource(sourceId: string, createdBy?: string |
 
   const creds: XtreamCredentials = {
     serverUrl: source.serverUrl,
+    mirrorServerUrls: source.mirrorServerUrls || [],
     username: decryptSecret(source.usernameEncrypted),
     password: decryptSecret(source.passwordEncrypted),
   };
@@ -587,6 +633,7 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
 
   const creds: XtreamCredentials = {
     serverUrl: source.serverUrl,
+    mirrorServerUrls: source.mirrorServerUrls || [],
     username: decryptSecret(source.usernameEncrypted),
     password: decryptSecret(source.passwordEncrypted),
   };
@@ -711,6 +758,8 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
 
 module.exports = {
   buildXtreamApiUrl,
+  endpointCandidates,
+  rewriteStreamUrlBase,
   testXtreamConnection,
   diagnoseXtreamSource,
   verifyXtreamSource,
