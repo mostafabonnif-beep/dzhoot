@@ -1,0 +1,6 @@
+[Unit]
+Description=Manage Upstream relay redirect rules
+After=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/dzhoot/upstream-relay-manage.sh
