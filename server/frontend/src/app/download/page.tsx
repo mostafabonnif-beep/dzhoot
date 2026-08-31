@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 
+const DOWNLOAD_URL = 'https://iptv.ld-11.net/api/v1/app/download';
+
 interface LatestVersion {
   versionName: string;
   versionCode: number;
@@ -112,7 +114,7 @@ export default function DownloadPage() {
   useEffect(() => {
     if (!version?.downloadUrl) return;
     let cancelled = false;
-    QRCode.toDataURL(`${window.location.origin}/download`, {
+    QRCode.toDataURL(DOWNLOAD_URL, {
       width: 220,
       margin: 2,
       errorCorrectionLevel: 'M',
@@ -206,7 +208,7 @@ export default function DownloadPage() {
                 ) : null}
 
                 <a
-                  href="/download"
+                  href={DOWNLOAD_URL}
                   className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-6 py-4 text-base font-bold text-primary-foreground transition hover:opacity-90"
                 >
                   <Download className="h-5 w-5" aria-hidden="true" />
