@@ -57,3 +57,5 @@ coverage/
 /scripts/dzhoot-fix.js
 /scripts/dzhoot-verify.js
 /scripts/dzhoot-failover-data.js
+/scripts/dzhoot-activate.js
+/scripts/dzhoot-drill-alldown.js
