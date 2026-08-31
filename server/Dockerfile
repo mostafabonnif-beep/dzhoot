@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 
 ARG APP_VERSION=1.0.1
 
@@ -24,7 +24,7 @@ RUN npx tsc --project packages/shared/tsconfig.json && \
     npx tsc --project backend/tsconfig.json
 
 # --- Production stage ---
-FROM node:20-alpine
+FROM node:26-alpine
 
 ARG APP_VERSION=1.0.1
 ARG RELEASE_COMMIT=unknown
