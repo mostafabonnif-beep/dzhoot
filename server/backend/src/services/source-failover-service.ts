@@ -376,9 +376,10 @@ async function probePlaybackUrl(url: string): Promise<{ ok: boolean; error: stri
   }
 }
 
-function getSourceCreds(source: any): { serverUrl: string; username: string; password: string } {
+function getSourceCreds(source: any): { serverUrl: string; username: string; password: string; mirrorServerUrls?: string[] } {
   return {
     serverUrl: source.serverUrl,
+    mirrorServerUrls: source.mirrorServerUrls || [],
     username: decryptSecret(source.usernameEncrypted),
     password: decryptSecret(source.passwordEncrypted),
   };

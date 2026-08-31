@@ -3,6 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IXtreamSourceDocument extends Document {
   name: string;
   serverUrl: string;
+  mirrorServerUrls?: string[];
   usernameEncrypted: string;
   passwordEncrypted: string;
   status: 'Active' | 'Inactive';
@@ -30,6 +31,10 @@ const xtreamSourceSchema = new Schema<IXtreamSourceDocument>(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
     serverUrl: { type: String, required: true, trim: true, maxlength: 500 },
+    // Alternate panel domains for the SAME account (mirror). Used as automatic
+    // fallback when the primary serverUrl is unreachable — API/sync first, then
+    // playback URLs. Never a different provider (that is what failover maps are for).
+    mirrorServerUrls: { type: [String], default: [] },
     usernameEncrypted: { type: String, required: true },
     passwordEncrypted: { type: String, required: true },
     status: { type: String, enum: ['Active', 'Inactive'], default: 'Inactive', index: true },

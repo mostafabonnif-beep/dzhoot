@@ -227,4 +227,65 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
     expect(payload?.streamUrl).toContain('upstream.test');
   });
+
+  it('primary down + mirror configured → token stream rewritten to the mirror domain (source: mirror)', async () => {
+    const primary = await XtreamSource.create({
+      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'degraded', directPlayback: true,
+      mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
+    });
+    await Channel.create({
+      channelId: 'CH-MIRROR', channelName: 'قناة حية',
+      channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/262849.m3u8',
+      isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(primary._id) },
+    });
+    (isSourceDown as jest.Mock).mockResolvedValue(true);
+    (getFailoverTarget as jest.Mock).mockResolvedValue(null);
+
+    const res = await request(buildApp()).post('/api/v1/tv/playback-token').send({ channelId: 'CH-MIRROR', slot: 0 });
+    expect(res.status).toBe(200);
+    expect(res.body.data.source).toBe('mirror');
+    expect(res.body.data.mirrorBase).toBe('http://tv.business-cloud-neo.com');
+    const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
+    expect(payload?.streamUrl).toBe('http://tv.business-cloud-neo.com/live/u/p/262849.m3u8');
+    expect(payload?.streamUrl).not.toContain('cf.business-cloud-neo.ru');
+  });
+
+  it('primary down + mirror but healthy → no rewrite (primary stays)', async () => {
+    const primary = await XtreamSource.create({
+      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true,
+      mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
+    });
+    await Channel.create({
+      channelId: 'CH-MIRROR-OK', channelName: 'قناة حية',
+      channelUrl: 'https://cf.business-cloud-neo.ru/live/u/p/262849.m3u8',
+      isActive: true, metadata: { source: 'xtream', xtreamSourceId: String(primary._id) },
+    });
+    (isSourceDown as jest.Mock).mockResolvedValue(false);
+
+    const res = await request(buildApp()).post('/api/v1/tv/playback-token').send({ channelId: 'CH-MIRROR-OK', slot: 0 });
+    expect(res.status).toBe(200);
+    expect(res.body.data.source).toBeUndefined();
+    const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
+    expect(payload?.streamUrl).toContain('cf.business-cloud-neo.ru');
+  });
+
+  it('mirror never applies to catch-up even when the primary is down', async () => {
+    const primary = await XtreamSource.create({
+      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'blocked', directPlayback: true,
+      mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
+    });
+    await seedChannel(primary);
+    (isSourceDown as jest.Mock).mockResolvedValue(true);
+    (getFailoverTarget as jest.Mock).mockResolvedValue(null);
+
+    const res = await request(buildApp())
+      .post('/api/v1/tv/playback-token')
+      .send({ channelId: 'CH-LIVE', slot: 0, catchupStartMs: Date.now(), catchupDurationMin: 30 });
+    // Catch-up is never mirrored (timeshift is primary-panel specific).
+    expect([200, 400, 404]).toContain(res.status);
+    expect(getFailoverTarget).not.toHaveBeenCalled();
+  });
 });

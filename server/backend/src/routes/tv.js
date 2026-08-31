@@ -33,6 +33,7 @@ const {
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
 const { isSourceDown, getFailoverTarget } = require('../services/source-failover-service');
+const { rewriteStreamUrlBase } = require('../services/xtream-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
 
 // GET /logo?url=… — relay channel logos through OUR server so customers and
@@ -185,6 +186,21 @@ async function resolvePlaybackTarget(payload) {
   }
 
   const value = { streamUrl, upstreamHeaders };
+  // Same-panel mirror fallback for v2 channel-reference tokens: resolve the
+  // source once and rewrite the primary domain to the mirror when it is down.
+  if (channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId) {
+    const src = await XtreamSource.findById(channel.metadata.xtreamSourceId)
+      .select('serverUrl mirrorServerUrls')
+      .lean();
+    if (src && Array.isArray(src.mirrorServerUrls) && src.mirrorServerUrls.length) {
+      const primaryBase = String(src.serverUrl || '').replace(/\/+$/, '');
+      const mirrorBase = String(src.mirrorServerUrls[0]).replace(/\/+$/, '');
+      if (mirrorBase && primaryBase && streamUrl.startsWith(primaryBase) && (await isSourceDown(String(src._id)))) {
+        const rewritten = rewriteStreamUrlBase(streamUrl, mirrorBase);
+        if (rewritten) streamUrl = rewritten;
+      }
+    }
+  }
   if (resolvedTargetCache.size > 4000) resolvedTargetCache.clear();
   resolvedTargetCache.set(payload.nonce, { at: Date.now(), value });
   return value;
@@ -578,6 +594,10 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
 
     let xtreamDirectPlayback = false;
     let failoverTarget = null;
+    // Same-panel mirror domain to fall back to when the PRIMARY domain is down
+    // (set inside the xtream block below, applied to slot 0 afterwards).
+    let mirrorTargetBase = null;
+    let mirrorPrimaryBase = null;
     if (channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId) {
       const source = await XtreamSource.findById(channel.metadata.xtreamSourceId).lean();
       const sourceEligible = !!source && (
@@ -589,8 +609,14 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       const sourceDown = source ? await isSourceDown(String(source._id)) : false;
       if (source && sourceDown && catchupStartMs === 0) {
         failoverTarget = await getFailoverTarget(channel, source._id);
+        // No provider-level backup map? The same panel may still be reachable
+        // via a configured MIRROR domain — remember it so slot 0 is rewritten.
+        if (!failoverTarget && Array.isArray(source.mirrorServerUrls) && source.mirrorServerUrls.length) {
+          mirrorTargetBase = String(source.mirrorServerUrls[0]).replace(/\/+$/, '');
+          mirrorPrimaryBase = String(source.serverUrl || '').replace(/\/+$/, '');
+        }
       }
-      if (!sourceEligible && !failoverTarget) {
+      if (!sourceEligible && !failoverTarget && !mirrorTargetBase) {
         return res.status(404).json({ success: false, error: 'Channel source is not verified', code: 'SOURCE_NOT_VERIFIED' });
       }
       xtreamDirectPlayback = failoverTarget
@@ -659,6 +685,11 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     // picked stays as-is).
     if (failoverTarget && slot === 0) {
       streamUrl = failoverTarget.streamUrl;
+    } else if (mirrorTargetBase && slot === 0 && streamUrl.startsWith(mirrorPrimaryBase)) {
+      // No provider-level backup: rewrite the SAME stream to the mirror panel
+      // domain (same account, same stream id) — automatic, zero app change.
+      const rewritten = rewriteStreamUrlBase(streamUrl, mirrorTargetBase);
+      if (rewritten) streamUrl = rewritten;
     }
     if (!streamUrl) return res.status(404).json({ success: false, error: 'Stream slot not found' });
 
@@ -734,6 +765,8 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         // Tells the operator (and future clients) whether this token was
         // served from the backup source because the primary was down.
         ...(failoverTarget ? { source: 'backup', failoverSourceId: String(failoverTarget.source._id) } : {}),
+        // Or from a same-panel mirror domain (primary domain unreachable).
+        ...(mirrorTargetBase && !failoverTarget ? { source: 'mirror', mirrorBase: mirrorTargetBase } : {}),
         // Present only when direct playback is enabled for the source: the
         // client may retry through the server relay if the direct URL fails.
         ...(proxyPlaybackUrl ? { proxyPlaybackUrl } : {}),
