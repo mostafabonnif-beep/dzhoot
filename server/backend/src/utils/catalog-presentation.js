@@ -9,6 +9,76 @@ const UPSTREAM_NAME_MARKER = /(?:^|[\s|_./-])neo(?:[\s|_./-]|$)/iu;
 const DEFAULT_COUNTRY = 'دولي';
 const DEFAULT_CATEGORY = 'عام';
 
+// Group/name keywords → region code. Lets region detection work with supplier
+// labels like "~ ALGERIE ~", "Dz| …", "ALG: …", "ARABIC CHANNEL" instead of
+// requiring a bare ISO code prefix.
+const REGION_KEYWORDS = [
+  [/\b(algerie|alg[eé]rie|algeria|dz\b|alg:)/iu, 'DZ'],
+  [/\b(arab(ic)?|العربي|العربية)\b/iu, 'AR'],
+  [/\b(maghreb|maghrib|المغرب العربي)\b/iu, 'AR'],
+  [/\b(morocco|maroc|marocain|المغرب)\b/iu, 'MA'],
+  [/\b(tunisia|tunisie|تونس)\b/iu, 'TN'],
+  [/\b(libya|libye|ليبيا)\b/iu, 'LY'],
+  [/\b(egypt|egypte|مصر)\b/iu, 'EG'],
+  [/\b(saudi|السعودية)\b/iu, 'SA'],
+  [/\b(france|french|فرنسا)\b/iu, 'FR'],
+  [/\b(united kingdom|uk\b|britain|british|إنجلترا|بريطانيا)\b/iu, 'UK'],
+  [/\b(united states|usa\b|us\b|america|american|أمريكا|الولايات المتحدة)\b/iu, 'US'],
+  [/\b(canada|canad|كندا)\b/iu, 'CA'],
+  [/\b(turkey|turkish|تركيا)\b/iu, 'TR'],
+  [/\b(germany|german|deutsch|ألمانيا)\b/iu, 'DE'],
+  [/\b(spain|spanish|espa[nñ]a|إسبانيا)\b/iu, 'ES'],
+  [/\b(italy|italian|italia|إيطاليا)\b/iu, 'IT'],
+  [/\b(portugal|portugu[eê]s|البرتغال)\b/iu, 'PT'],
+  [/\b(brazil|brasil|brazilian|البرازيل)\b/iu, 'BR'],
+  [/\b(mexico|mexican|m[eé]xico|المكسيك)\b/iu, 'MX'],
+  [/\b(india|indian|الهند)\b/iu, 'IN'],
+  [/\b(pakistan|باكستان)\b/iu, 'PK'],
+  [/\b(iran|persian|إيران)\b/iu, 'IR'],
+  [/\b(iraq|العراق)\b/iu, 'IQ'],
+  [/\b(uae|emirates|الإمارات)\b/iu, 'AE'],
+  [/\b(qatar|قطر)\b/iu, 'QA'],
+  [/\b(russia|russian|russia\b|روسيا)\b/iu, 'RU'],
+  [/\b(greece|greek|اليونان)\b/iu, 'GR'],
+  [/\b(poland|polish|polska|بولندا)\b/iu, 'PL'],
+  [/\b(romania|romanian|رومانيا)\b/iu, 'RO'],
+  [/\b(bulgaria|bulgarian|بلغاريا)\b/iu, 'BG'],
+  [/\b(hungary|hungarian|المجر)\b/iu, 'HU'],
+  [/\b(serbia|serbian|صربيا)\b/iu, 'RS'],
+  [/\b(croatia|croatian|كرواتيا)\b/iu, 'HR'],
+  [/\b(sweden|swedish|السويد)\b/iu, 'SE'],
+  [/\b(norway|norwegian|النرويج)\b/iu, 'NO'],
+  [/\b(denmark|danish|الدنمارك)\b/iu, 'DK'],
+  [/\b(finland|finnish|فنلندا)\b/iu, 'FI'],
+  [/\b(netherlands|dutch|هولندا)\b/iu, 'NL'],
+  [/\b(belgium|belgian|بلجيكا)\b/iu, 'BE'],
+  [/\b(switzerland|suisse|سويسرا)\b/iu, 'CH'],
+  [/\b(austria|austrian|النمسا)\b/iu, 'AT'],
+  [/\b(czech|التشيك)\b/iu, 'CZ'],
+  [/\b(africa|african|أفريقيا|إفريقيا)\b/iu, 'AFR'],
+  [/\b(asia|asian|آسيا)\b/iu, 'ASIA'],
+  [/\b(europe|european|أوروبا)\b/iu, 'EU'],
+  [/\b(latam|latin|أمريكا اللاتينية)\b/iu, 'LATAM'],
+];
+
+// Operator-configurable ordering. When set (comma-separated region codes or
+// category labels), the customer list is organized by that priority FIRST —
+// e.g. DZ,AR,MA,TN,LY,EG,FR puts Algeria before the Arab world before France
+// before everything else. Unset = keep the supplier's own order (default).
+// Read per call (no module cache): env is cheap, and it keeps tests/ops simple.
+function countryPriority() {
+  return String(process.env.CATALOG_COUNTRY_PRIORITY || '')
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean);
+}
+function categoryPriority() {
+  return String(process.env.CATALOG_CATEGORY_PRIORITY || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 const REGION_LABELS = {
   AR: 'العالم العربي',
   DZ: 'الجزائر',
@@ -283,14 +353,23 @@ async function publicCatalogDedupQuery() {
   }
 }
 
-function regionFromGroup(group) {
+function regionFromGroup(group, name = '') {
   const raw = asText(group);
+  const haystack = `${raw} ${asText(name)}`;
+  // 1) Bare ISO prefix (e.g. "DZ| …", "FR| …").
   const [prefix] = raw.split('|', 1);
   const code = asText(prefix).toUpperCase();
-  return {
-    code: REGION_LABELS[code] ? code : null,
-    label: REGION_LABELS[code] || DEFAULT_COUNTRY,
-  };
+  if (REGION_LABELS[code]) {
+    return { code, label: REGION_LABELS[code] };
+  }
+  // 2) Keyword scan of the group/name text (supplier labels like
+  //    "~ ALGERIE ~", "ALG: …", "ARABIC CHANNEL").
+  for (const [re, keywordCode] of REGION_KEYWORDS) {
+    if (re.test(haystack)) {
+      return { code: keywordCode, label: REGION_LABELS[keywordCode] };
+    }
+  }
+  return { code: null, label: DEFAULT_COUNTRY };
 }
 
 function categoryFromChannel(channel) {
@@ -374,9 +453,35 @@ function presentChannelForClient(channel) {
 }
 
 function compareClientCatalogChannels(left, right) {
+  // Operator-configured region/category priority (CATALOG_COUNTRY_PRIORITY /
+  // CATALOG_CATEGORY_PRIORITY): when set, organize by that order FIRST — e.g.
+  // Algeria → Arab world → France → rest — then fall back to the supplier's
+  // curated group/order/name. Unset = pure supplier order (default behavior).
+  const lCountry = presentationForChannel(left).countryCode;
+  const rCountry = presentationForChannel(right).countryCode;
+  const countryOrder = countryPriority();
+  if (countryOrder.length > 0) {
+    const li = countryOrder.indexOf(lCountry);
+    const ri = countryOrder.indexOf(rCountry);
+    if (li !== ri) {
+      // Unknown/other regions go after all prioritized ones (keep stable).
+      const lRank = li === -1 ? countryOrder.length : li;
+      const rRank = ri === -1 ? countryOrder.length : ri;
+      if (lRank !== rRank) return lRank - rRank;
+    }
+  }
+  const lCategory = presentationForChannel(left).category;
+  const rCategory = presentationForChannel(right).category;
+  const catOrder = categoryPriority();
+  if (catOrder.length > 0 && lCategory !== rCategory) {
+    const li = catOrder.indexOf(lCategory);
+    const ri = catOrder.indexOf(rCategory);
+    const lRank = li === -1 ? catOrder.length : li;
+    const rRank = ri === -1 ? catOrder.length : ri;
+    if (lRank !== rRank) return lRank - rRank;
+  }
   // Restore the supplier's intended ordering (group, then per-group order,
-  // then name) instead of re-sorting by the neutral presentation labels —
-  // the operator's curated channel structure must stay visible to viewers.
+  // then name) — the operator's curated channel structure must stay visible.
   const groupCmp = asText(left?.channelGroup).localeCompare(asText(right?.channelGroup), 'ar');
   if (groupCmp !== 0) return groupCmp;
   const leftOrder = Number(left?.order) || 0;

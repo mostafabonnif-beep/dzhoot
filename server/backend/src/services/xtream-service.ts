@@ -15,6 +15,79 @@ import { reconcileChannelIdentities } from './channel-identity-service';
 import { createSyncPreview, markSnapshotApplied } from './sync-snapshot-service';
 import { probeStream, type ProbeResult } from './stream-prober';
 import { channelCache } from './cache';
+import ChannelFailoverMap from '../models/ChannelFailoverMap';
+import {
+  channelCanonicalKey,
+  cleanChannelName,
+  channelVariantRank,
+} from './source-failover-service';
+// isForeignCatalogChannel is exported at runtime (module.exports) but not as a
+// TS export — pull it via require alongside the typed imports above.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { isForeignCatalogChannel } = require('./source-failover-service');
+
+/**
+ * Merge-on-sync: index existing catalog channels (from OTHER sources) by
+ * canonical key and cleaned name so a mergeCatalog source can attach itself
+ * as a failover backup instead of duplicating the channel in the list.
+ */
+interface CatalogMatchIndex {
+  byCanonical: Map<string, any[]>;
+  byCleanName: Map<string, any[]>;
+}
+function buildCatalogMatchIndex(catalogChannels: any[]): CatalogMatchIndex {
+  const byCanonical = new Map<string, any[]>();
+  const byCleanName = new Map<string, any[]>();
+  const push = (map: Map<string, any[]>, key: string, channel: any) => {
+    const list = map.get(key);
+    if (list) list.push(channel);
+    else map.set(key, [channel]);
+  };
+  for (const channel of catalogChannels) {
+    const name = String(channel?.channelName || '');
+    if (!name || isForeignCatalogChannel(name)) continue;
+    const ck = channelCanonicalKey(name);
+    if (ck) push(byCanonical, ck, channel);
+    const cn = cleanChannelName(name).toLowerCase();
+    if (cn) push(byCleanName, cn, channel);
+  }
+  return { byCanonical, byCleanName };
+}
+function matchCatalogChannel(item: any, index: CatalogMatchIndex): any | null {
+  const name = String(item?.name || '').trim();
+  if (!name) return null;
+  const ck = channelCanonicalKey(name);
+  let candidates = ck ? index.byCanonical.get(ck) : undefined;
+  if (!candidates || candidates.length === 0) {
+    candidates = index.byCleanName.get(cleanChannelName(name).toLowerCase());
+  }
+  if (!candidates || candidates.length === 0) return null;
+  // Prefer the base variant over +6H / LQ / RAW / SD clones.
+  return [...candidates].sort(
+    (a, b) => channelVariantRank(a.channelName || '') - channelVariantRank(b.channelName || ''),
+  )[0];
+}
+async function upsertMergeFailoverMap(
+  existingChannel: any,
+  sourceId: mongoose.Types.ObjectId,
+  item: any,
+  priority: number,
+): Promise<void> {
+  await ChannelFailoverMap.findOneAndUpdate(
+    { channelRef: String(existingChannel.channelId), backupSourceId: sourceId },
+    {
+      $set: {
+        channelId: existingChannel._id,
+        backupChannelName: String(item?.name || '').trim(),
+        backupStreamId: String(item?.stream_id ?? '').trim(),
+        matchedBy: 'name',
+        enabled: true,
+        priority: Number(priority) || 20,
+      },
+    },
+    { upsert: true, new: true },
+  ).exec();
+}
 
 const API_TIMEOUT_MS = 30000;
 
@@ -672,8 +745,36 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
 
     // Live channels
     const liveIds = new Set<string>();
+    // Merge-on-sync: when the operator flagged this source as mergeCatalog,
+    // its streams attach to EXISTING catalog channels as failover backups
+    // (canonical-name match) instead of creating duplicate channel docs — the
+    // customer list stays exactly where it is; only genuinely new channels
+    // are inserted. This is how adding a new source must NOT reshuffle the app.
+    const mergeIndex = source.mergeCatalog === true
+      ? buildCatalogMatchIndex(
+          await Channel.find({
+            ownerId: null,
+            isActive: { $ne: false },
+            'metadata.source': 'xtream',
+            'metadata.xtreamSourceId': { $ne: String(id) },
+          })
+            .select('_id channelId channelName')
+            .lean()
+            .exec(),
+        )
+      : null;
+    const mergePriority = Number(source.failoverPriority) || 20;
     for (const item of Array.isArray(liveStreams) ? liveStreams : []) {
       const group = liveCatMap.get(String(item.category_id)) || 'Uncategorized';
+      if (mergeIndex) {
+        const existing = matchCatalogChannel(item, mergeIndex);
+        if (existing) {
+          await upsertMergeFailoverMap(existing, id, item, mergePriority);
+          liveIds.add(`xt:${String(id)}:${item.stream_id}`);
+          channels += 1;
+          continue;
+        }
+      }
       await upsertChannel(id, item, group, creds, source.playbackFormat || 'm3u8');
       liveIds.add(`xt:${String(id)}:${item.stream_id}`);
       channels += 1;
@@ -769,4 +870,6 @@ module.exports = {
   ensureSeasonEpisodes,
   encryptSecret,
   decryptSecret,
+  buildCatalogMatchIndex,
+  matchCatalogChannel,
 };
