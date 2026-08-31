@@ -150,6 +150,45 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     expect(await getFailoverTarget(channel, primary._id)).toBeNull();
   });
 
+  it('getFailoverTarget cascades: top tier down falls through to the next healthy tier', async () => {
+    const primary = await XtreamSource.create({ name: 'Upstream', serverUrl: 'http://upstream', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
+    const tier1 = await XtreamSource.create({ name: 'Tier1', serverUrl: 'http://t1', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'degraded', directPlayback: true });
+    const tier2 = await XtreamSource.create({ name: 'Tier2', serverUrl: 'http://t2', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified', directPlayback: true });
+    const channel = await Channel.create({ channelId: 'CH-C1', channelName: 'Z', channelUrl: 'http://upstream/z', isActive: true });
+    await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-C1', backupSourceId: tier1._id, backupChannelName: 'Z', backupStreamId: '111', priority: 10 });
+    await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-C1', backupSourceId: tier2._id, backupChannelName: 'Z', backupStreamId: '222', priority: 20 });
+
+    const target = await getFailoverTarget(channel, primary._id);
+    expect(target).not.toBeNull();
+    expect(String(target!.source._id)).toBe(String(tier2._id));
+    expect(target!.streamUrl).toContain('/222.m3u8');
+  });
+
+  it('getFailoverTarget prefers the lowest-priority healthy tier', async () => {
+    const primary = await XtreamSource.create({ name: 'Upstream', serverUrl: 'http://upstream', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
+    const tier1 = await XtreamSource.create({ name: 'Tier1', serverUrl: 'http://t1', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified', directPlayback: true });
+    const tier2 = await XtreamSource.create({ name: 'Tier2', serverUrl: 'http://t2', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified', directPlayback: true });
+    const channel = await Channel.create({ channelId: 'CH-C2', channelName: 'Z', channelUrl: 'http://upstream/z', isActive: true });
+    await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-C2', backupSourceId: tier1._id, backupChannelName: 'Z', backupStreamId: '111', priority: 10 });
+    await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-C2', backupSourceId: tier2._id, backupChannelName: 'Z', backupStreamId: '222', priority: 20 });
+
+    const target = await getFailoverTarget(channel, primary._id);
+    expect(target).not.toBeNull();
+    expect(String(target!.source._id)).toBe(String(tier1._id));
+    expect(target!.streamUrl).toContain('/111.m3u8');
+  });
+
+  it('getFailoverTarget falls through ALL tiers and returns null when every backup is down', async () => {
+    const primary = await XtreamSource.create({ name: 'Upstream', serverUrl: 'http://upstream', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
+    const tier1 = await XtreamSource.create({ name: 'Tier1', serverUrl: 'http://t1', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'degraded', directPlayback: true });
+    const tier2 = await XtreamSource.create({ name: 'Tier2', serverUrl: 'http://t2', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'blocked', directPlayback: true });
+    const channel = await Channel.create({ channelId: 'CH-C3', channelName: 'Z', channelUrl: 'http://upstream/z', isActive: true });
+    await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-C3', backupSourceId: tier1._id, backupChannelName: 'Z', backupStreamId: '111', priority: 10 });
+    await ChannelFailoverMap.create({ channelId: channel._id, channelRef: 'CH-C3', backupSourceId: tier2._id, backupChannelName: 'Z', backupStreamId: '222', priority: 20 });
+
+    expect(await getFailoverTarget(channel, primary._id)).toBeNull();
+  });
+
   it('watchdog marks a source blocked when the API probe fails', async () => {
     (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('ECONNREFUSED'));
     const src = await XtreamSource.create({ name: 'Upstream', serverUrl: 'http://upstream', usernameEncrypted: 'x', passwordEncrypted: 'y', status: 'Active', verificationStatus: 'verified' });
