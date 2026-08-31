@@ -28,11 +28,31 @@ function parseId(id) {
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
 }
 
+/** Validate and normalize mirrorServerUrls → array of clean http(s) URLs, or null if invalid. */
+function normalizeMirrorUrls(value) {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) return null;
+  const out = [];
+  for (const raw of value) {
+    if (typeof raw !== 'string' || !raw.trim()) return null;
+    let url;
+    try {
+      url = new URL(raw.trim());
+    } catch {
+      return null;
+    }
+    if (!/^https?:$/.test(url.protocol)) return null;
+    out.push(url.toString().replace(/\/+$/, ''));
+  }
+  return out;
+}
+
 function publicShape(src) {
   return {
     _id: src._id,
     name: src.name,
     serverUrl: src.serverUrl,
+    mirrorServerUrls: src.mirrorServerUrls || [],
     hasCredentials: !!(src.usernameEncrypted && src.passwordEncrypted),
     status: src.status,
     verificationStatus: src.verificationStatus || 'pending',
@@ -64,7 +84,7 @@ router.get('/', async (req, res) => {
 // POST / — create a source (credentials are encrypted at rest)
 router.post('/', async (req, res) => {
   try {
-    const { name, serverUrl, username, password } = req.body || {};
+    const { name, serverUrl, mirrorServerUrls, username, password } = req.body || {};
     if (!name || !serverUrl || !username || !password) {
       return res.status(400).json({ success: false, error: 'name, serverUrl, username and password are required' });
     }
@@ -77,12 +97,17 @@ router.post('/', async (req, res) => {
     if (!/^https?:$/.test(url.protocol)) {
       return res.status(400).json({ success: false, error: 'serverUrl must use http or https' });
     }
+    const mirrors = normalizeMirrorUrls(mirrorServerUrls);
+    if (mirrors === null) {
+      return res.status(400).json({ success: false, error: 'mirrorServerUrls must be an array of valid http(s) URLs' });
+    }
 
     const source = await XtreamSource.create({
       name: String(name).trim(),
       // Keep the full normalized URL — some panels are served under a subpath
       // (http://host:8080/iptv/) and url.origin would silently break player_api.
       serverUrl: url.toString().replace(/\/+$/, ''),
+      mirrorServerUrls: mirrors,
       usernameEncrypted: encryptSecret(String(username)),
       passwordEncrypted: encryptSecret(String(password)),
       status: 'Inactive',
@@ -330,7 +355,7 @@ router.patch('/:id', async (req, res) => {
     const source = await XtreamSource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    const { name, status, serverUrl, username, password, customerVisible, directPlayback } = req.body || {};
+    const { name, status, serverUrl, mirrorServerUrls, username, password, customerVisible, directPlayback } = req.body || {};
     if (name !== undefined) source.name = String(name).trim();
     if (serverUrl !== undefined) {
       if (!serverUrl) return res.status(400).json({ success: false, error: 'serverUrl cannot be empty' });
@@ -346,6 +371,13 @@ router.patch('/:id', async (req, res) => {
       // Keep the full normalized URL — panels served under a subpath (e.g.
       // http://host:8080/iptv/) would break if we stored only url.origin.
       source.serverUrl = url.toString().replace(/\/+$/, '');
+    }
+    if (mirrorServerUrls !== undefined) {
+      const mirrors = normalizeMirrorUrls(mirrorServerUrls);
+      if (mirrors === null) {
+        return res.status(400).json({ success: false, error: 'mirrorServerUrls must be an array of valid http(s) URLs' });
+      }
+      source.mirrorServerUrls = mirrors;
     }
     if (customerVisible !== undefined) {
       source.customerVisible = customerVisible === true;
