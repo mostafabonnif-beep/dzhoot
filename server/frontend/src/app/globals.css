@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ── Light Mode — Sand + DzGreen500 (الهوية الجزائرية) ──────────── */
+    /* Sand-50      #F6F9F7 */ --background: 140 20% 97%;
+    /* Sand-200     #E2EAE4 */ --card: 135 16% 90%;
+    /* Sand-200     #E2EAE4 */ --popover: 135 16% 90%;
+    /* text-primary #14201A */ --foreground: 150 23% 10%;
+    /* text-primary #14201A */ --card-foreground: 150 23% 10%;
+    /* text-primary #14201A */ --popover-foreground: 150 23% 10%;
+    /* DzGreen-500  #059669 */ --primary: 161 94% 30%;
+    /* Sand-50      #F6F9F7 */ --primary-foreground: 140 20% 97%;
+    /* Sand-100     #ECF2EE */ --secondary: 140 19% 94%;
+    /* text-primary #14201A */ --secondary-foreground: 150 23% 10%;
+    /* Sand-100     #ECF2EE */ --muted: 140 19% 94%;
+    /* text-secondary #3E5A4C*/ --muted-foreground: 150 27% 30%;
+    /* DzGreen-100  #A7F3D0 */ --accent: 152 76% 80%;
+    /* DzGreen-700  #065F46 */ --accent-foreground: 163 88% 20%;
+    /* Error light   #C02020 */ --destructive: 0 71% 44%;
+    /* Sand-50      #F6F9F7 */ --destructive-foreground: 140 20% 97%;
+    /* Sand-300     #D4DED7 */ --border: 138 13% 85%;
+    /* Sand-200     #E2EAE4 */ --input: 135 16% 90%;
+    /* DzGreen-500  #059669 */ --ring: 161 94% 30%;
+    /* DzGold-400   #E8C468 */ --gold: 43 74% 66%;
+                                --radius: 10px;
+    /* Signal — light mode */
+    /* #1A8A40 */ --signal-green: 142 67% 32%;
+    /* #C02020 */ --signal-red: 0 71% 44%;
+    /* #1A60D0 */ --signal-blue: 217 78% 45%;
+    /* #D07808 */ --signal-amber: 35 90% 42%;
+    /* Sidebar */
+    /* Sand-100     #ECF2EE */ --sidebar-background: 140 19% 94%;
+    /* text-primary #14201A */ --sidebar-foreground: 150 23% 10%;
+    /* DzGreen-500  #059669 */ --sidebar-primary: 161 94% 30%;
+    /* Sand-50      #F6F9F7 */ --sidebar-primary-foreground: 140 20% 97%;
+    /* Sand-200     #E2EAE4 */ --sidebar-accent: 135 16% 90%;
+    /* text-primary #14201A */ --sidebar-accent-foreground: 150 23% 10%;
+    /* Sand-300     #D4DED7 */ --sidebar-border: 138 13% 85%;
+    /* DzGreen-500  #059669 */ --sidebar-ring: 161 94% 30%;
+    /* Charts — light mode */
+    --chart-1: 38 75% 38%;
+    --chart-2: 142 60% 34%;
+    --chart-3: 220 60% 50%;
+    --chart-4: 280 50% 50%;
+    --chart-5: 0 55% 48%;
+    --chart-6: 180 50% 40%;
+    --chart-7: 60 55% 42%;
+    --chart-8: 330 50% 45%;
+    --chart-9: 200 60% 45%;
+    --chart-10: 100 45% 40%;
+  }
+
+  .dark {
+    /* ── Dark Mode — Atlas + DzGreen300 (الهوية الجزائرية) ──────────── */
+    /* Atlas-950  #070D0A */ --background: 150 30% 4%;
+    /* Atlas-800  #111D17 */ --card: 150 26% 9%;
+    /* Atlas-800  #111D17 */ --popover: 150 26% 9%;
+    /* text-primary #F2EDE3*/ --foreground: 38 29% 92%;
+    /* text-primary #F2EDE3*/ --card-foreground: 38 29% 92%;
+    /* text-primary #F2EDE3*/ --popover-foreground: 38 29% 92%;
+    /* DzGreen-300 #34D399 */ --primary: 158 65% 52%;
+    /* Atlas-950  #070D0A */ --primary-foreground: 150 30% 4%;
+    /* Atlas-700  #16241D */ --secondary: 150 27% 11%;
+    /* text-secondary #A5B8AE */ --secondary-foreground: 148 12% 68%;
+    /* Atlas-700  #16241D */ --muted: 150 27% 11%;
+    /* text-secondary #A5B8AE */ --muted-foreground: 148 12% 68%;
+    /* DzGreen-300 #34D399 */ --accent: 158 65% 52%;
+    /* Atlas-950  #070D0A */ --accent-foreground: 150 30% 4%;
+    /* Error dark  #E83838 */ --destructive: 0 78% 56%;
+    /* Sand-50     #F6F9F7 */ --destructive-foreground: 140 20% 97%;
+    /* Atlas-600  #1D2E25 */ --border: 148 23% 15%;
+    /* Atlas-700  #16241D */ --input: 150 27% 11%;
+    /* DzGreen-300 #34D399 */ --ring: 158 65% 52%;
+    /* DzGold-300  #F0D68A */ --gold: 45 77% 74%;
+    /* Signal — dark mode */
+    /* #28B560 */ --signal-green: 142 62% 43%;
+    /* #E83838 */ --signal-red: 0 78% 56%;
+    /* #3D88F5 */ --signal-blue: 217 89% 60%;
+    /* #F5A624 */ --signal-amber: 38 91% 55%;
+    /* Sidebar */
+    /* Atlas-900  #0C1512 */ --sidebar-background: 160 32% 6%;
+    /* text-primary #F2EDE3*/ --sidebar-foreground: 38 29% 92%;
+    /* DzGreen-300 #34D399 */ --sidebar-primary: 158 65% 52%;
+    /* Atlas-950  #070D0A */ --sidebar-primary-foreground: 150 30% 4%;
+    /* Atlas-700  #16241D */ --sidebar-accent: 150 27% 11%;
+    /* text-primary #F2EDE3*/ --sidebar-accent-foreground: 38 29% 92%;
+    /* Atlas-600  #1D2E25 */ --sidebar-border: 148 23% 15%;
+    /* DzGreen-300 #34D399 */ --sidebar-ring: 158 65% 52%;
+    /* Charts — dark mode (brighter for contrast) */
+    --chart-1: 43 85% 62%;
+    --chart-2: 142 65% 55%;
+    --chart-3: 220 70% 62%;
+    --chart-4: 280 60% 65%;
+    --chart-5: 0 70% 62%;
+    --chart-6: 180 55% 52%;
+    --chart-7: 60 60% 55%;
+    --chart-8: 330 60% 60%;
+    --chart-9: 200 65% 58%;
+    --chart-10: 100 55% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    /* NOTE: do NOT lock body scroll here — the dashboard shell (app-shell.tsx)
+       manages its own overflow. Customer-facing pages (landing, buy, download,
+       watch, pair) rely on native page scrolling. */
+    @apply h-full;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+    font-family: var(--font-arabic), var(--font-body), Arial, sans-serif;
+  }
+  html[dir='rtl'] {
+    text-align: right;
+  }
+  /* Only right-align form fields in RTL; LTR locales keep native left alignment. */
+  html[dir='rtl'] input,
+  html[dir='rtl'] textarea,
+  html[dir='rtl'] select {
+    text-align: right;
+  }
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .brand-gradient {
+    background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.82) 52%, hsl(var(--gold)) 100%);
+  }
+
+  .brand-glow {
+    box-shadow: 0 24px 70px hsl(var(--primary) / 0.18), inset 0 1px 0 hsl(var(--foreground) / 0.08);
+  }
+
+  .brand-surface {
+    background: linear-gradient(145deg, hsl(var(--card) / 0.92), hsl(var(--card) / 0.62));
+    box-shadow: 0 18px 45px hsl(var(--foreground) / 0.06), inset 0 1px 0 hsl(var(--foreground) / 0.05);
+    backdrop-filter: blur(18px);
+  }
+
+  .dashboard-shell {
+    background-image: radial-gradient(circle at 15% 0%, hsl(var(--primary) / 0.08), transparent 28rem), radial-gradient(circle at 90% 100%, hsl(var(--signal-blue) / 0.05), transparent 24rem);
+  }
+
+  .interactive-lift {
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+  }
+
+  .interactive-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 16px 32px hsl(var(--foreground) / 0.08);
+  }
+
+  .grid-bg {
+    background-image:
+      linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+}
+
+
+/* Professional polish utilities */
+.pro-card {
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--card) / 0.82);
+  box-shadow: 0 10px 30px hsl(var(--foreground) / 0.05);
+  backdrop-filter: blur(12px);
+}
+.pro-card-hover {
+  border-radius: 1rem;
+  border: 1px solid hsl(var(--border) / 0.8);
+  background: hsl(var(--card) / 0.82);
+  box-shadow: 0 10px 30px hsl(var(--foreground) / 0.05);
+  backdrop-filter: blur(12px);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+.pro-card-hover:hover {
+  border-color: hsl(var(--primary) / 0.35);
+  box-shadow: 0 14px 40px hsl(var(--foreground) / 0.07);
+  transform: translateY(-1px);
+}
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border: 1px solid hsl(var(--border));
+  padding: 0.15rem 0.65rem;
+  font-size: 11px;
+  font-weight: 600;
+}
+.status-chip-live {
+  border-color: hsl(142 67% 32% / 0.3);
+  background: hsl(142 67% 32% / 0.1);
+  color: hsl(142 67% 32%);
+}
+.dark .status-chip-live { color: hsl(142 70% 55%); }
+.status-chip-warn {
+  border-color: hsl(35 90% 42% / 0.3);
+  background: hsl(35 90% 42% / 0.1);
+  color: hsl(35 90% 35%);
+}
+.status-chip-down {
+  border-color: hsl(var(--destructive) / 0.3);
+  background: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
+}
+.login-shell {
+  background-image:
+    radial-gradient(circle at 10% 10%, hsl(var(--primary) / 0.09), transparent 28rem),
+    radial-gradient(circle at 90% 90%, hsl(var(--signal-blue) / 0.06), transparent 24rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

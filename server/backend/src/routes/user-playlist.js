@@ -1,0 +1,438 @@
+const express = require('express');
+const router = express.Router();
+const mongoose = require('mongoose');
+const User = require('../models/User');
+const Channel = require('../models/Channel');
+const { requireAuth } = require('./auth');
+const { audit } = require('../services/audit-log');
+const { issuePlaybackToken, altStreamHash } = require('../services/playback-token');
+const { getPublicBaseUrl } = require('../utils/public-url');
+const {
+  hasRestrictedPresentationMarker,
+  presentChannelForClient,
+  publicCatalogPresentationQuery,
+  sortClientCatalogChannels,
+} = require('../utils/catalog-presentation');
+function tokenizeUserChannel(channel, user, baseUrl) {
+  const source = channel.toObject ? channel.toObject() : channel;
+  const safe = { ...source, channelUrl: '' };
+  if (!user.channelListCode) return presentChannelForClient(safe);
+  if (source.channelUrl) {
+    const channelId = String(source.channelId || '').trim();
+    const { token } = issuePlaybackToken(
+      channelId
+        ? {
+            userId: String(user._id),
+            channelListCode: user.channelListCode,
+            channelRef: { channelId, hls: true },
+          }
+        : {
+            userId: String(user._id),
+            channelListCode: user.channelListCode,
+            streamUrl: source.channelUrl,
+          },
+    );
+    safe.channelUrl = `${baseUrl}/api/v1/tv/playback/${token}.m3u8`;
+  }
+  safe.alternateStreams = (source.alternateStreams || [])
+    .filter((alternate) => alternate.liveness?.status !== 'dead' && alternate.flaggedBad?.isFlagged !== true)
+    .slice(0, 10)
+    .map((alternate) => {
+      if (!alternate.streamUrl) return { ...alternate, streamUrl: '' };
+      const channelId = String(source.channelId || '').trim();
+      const { token } = issuePlaybackToken(
+        channelId
+          ? {
+              userId: String(user._id),
+              channelListCode: user.channelListCode,
+              channelRef: {
+                channelId,
+                altUrlHash: altStreamHash(alternate.streamUrl),
+                hls: true,
+              },
+            }
+          : {
+              userId: String(user._id),
+              channelListCode: user.channelListCode,
+              streamUrl: alternate.streamUrl,
+            },
+      );
+      return { ...alternate, streamUrl: `${baseUrl}/api/v1/tv/playback/${token}.m3u8` };
+    });
+  return presentChannelForClient(safe);
+}
+
+const {
+  resolveChannelGroups,
+  clubByChannelId,
+  capChannelAdditions,
+  withChannelCapFilter,
+  extractExtinfTitle,
+} = require('../services/import-helpers');
+
+// Get current user's channels
+router.get('/me/channels', requireAuth, async (req, res) => {
+  try {
+    console.log('🔵 GET /me/channels called for user:', req.user.id);
+    const user = await User.findById(req.user.id).populate(
+      'channels',
+      'channelName channelGroup channelUrl tvgLogo channelImg metadata metrics flaggedBad alternateStreams',
+    );
+    if (!user) {
+      console.error('❌ User not found:', req.user.id);
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    console.log(
+      `✅ User: ${user.username}, Role: ${user.role}, Channels: ${user.channels?.length || 0}`,
+    );
+    console.log(
+      '📋 Channel IDs in user.channels:',
+      user.channels?.map((ch) => ch._id || ch).slice(0, 3),
+    );
+    const baseUrl = getPublicBaseUrl(req);
+    const channels = sortClientCatalogChannels(
+      (user.channels || []).filter((channel) => !hasRestrictedPresentationMarker(channel)),
+    ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    res.json({ success: true, channels });
+  } catch (error) {
+    console.error('❌ Get my channels error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get channels' });
+  }
+});
+
+// Set current user's channels (replace)
+router.put('/me/channels', requireAuth, async (req, res) => {
+  try {
+    const { channelIds } = req.body;
+    if (!Array.isArray(channelIds))
+      return res.status(400).json({ success: false, error: 'channelIds must be an array' });
+
+    // Validate all IDs are valid ObjectIds
+    const invalidIds = channelIds.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({ success: false, error: 'Invalid channel ID format' });
+    }
+
+    // Validate channel IDs — only catalog channels or the user's own private imports,
+    // so a user can't add another user's private channel to their selection.
+    const channels = await Channel.find({
+      $and: [
+        { _id: { $in: channelIds } },
+        { $or: [{ ownerId: null }, { ownerId: req.user.id }] },
+        publicCatalogPresentationQuery(),
+      ],
+    });
+    if (channels.length !== channelIds.length) {
+      return res.status(400).json({ success: false, error: 'Some channel IDs are invalid' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    user.channels = channelIds.map((id) => new mongoose.Types.ObjectId(id));
+    await user.save();
+    audit({
+      userId: req.user.id,
+      action: 'set_channels',
+      resource: 'user_playlist',
+      resourceId: String(req.user.id),
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({ success: true, message: 'Channels updated', count: user.channels.length });
+  } catch (error) {
+    console.error('Set my channels error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update channels' });
+  }
+});
+
+// Add channels to current user
+router.post('/me/channels/add', requireAuth, async (req, res) => {
+  try {
+    const { channelIds } = req.body;
+    if (!Array.isArray(channelIds))
+      return res.status(400).json({ success: false, error: 'channelIds must be an array' });
+
+    const invalidIds = channelIds.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({ success: false, error: 'Invalid channel ID format' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const existingIds = new Set(user.channels.map((id) => id.toString()));
+    const validChannels = await Channel.find({
+      $and: [
+        { _id: { $in: channelIds } },
+        { $or: [{ ownerId: null }, { ownerId: req.user.id }] },
+        publicCatalogPresentationQuery(),
+      ],
+    }).select('_id');
+    const validIds = validChannels.map((c) => c._id.toString());
+
+    const wanted = validIds.filter((id) => !existingIds.has(id));
+    const { allowed: toAdd, rejected } = capChannelAdditions(user.channels.length, wanted);
+    let finalCount = user.channels.length;
+    let addedCount = 0;
+    if (toAdd.length > 0) {
+      // Atomic $addToSet with the cap in the filter — a snapshot-then-save would let
+      // concurrent additions overshoot USER_CHANNELS_MAX.
+      const updated = await User.findOneAndUpdate(
+        withChannelCapFilter(user._id, toAdd.length),
+        { $addToSet: { channels: { $each: toAdd.map((id) => new mongoose.Types.ObjectId(id)) } } },
+        { new: true },
+      );
+      if (updated) {
+        finalCount = updated.channels.length;
+        addedCount = toAdd.length;
+      } else {
+        console.warn(`[user-playlist] channel list limit hit concurrently for ${req.user.id}`);
+      }
+    }
+    if (rejected > 0) {
+      console.warn(
+        `[user-playlist] channel list limit reached for ${req.user.id}: ${rejected} skipped`,
+      );
+    }
+    audit({
+      userId: req.user.id,
+      action: 'add_channels',
+      resource: 'user_playlist',
+      resourceId: `${addedCount} channels`,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      message: `Added ${addedCount} channels`,
+      count: finalCount,
+      addedCount,
+    });
+  } catch (error) {
+    console.error('Add my channels error:', error);
+    res.status(500).json({ success: false, error: 'Failed to add channels' });
+  }
+});
+
+// Remove channels from current user
+router.post('/me/channels/remove', requireAuth, async (req, res) => {
+  try {
+    const { channelIds } = req.body;
+    if (!Array.isArray(channelIds))
+      return res.status(400).json({ success: false, error: 'channelIds must be an array' });
+
+    const invalidIds = channelIds.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+    if (invalidIds.length > 0) {
+      return res.status(400).json({ success: false, error: 'Invalid channel ID format' });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const before = user.channels.length;
+    const removeSet = new Set(channelIds.map((id) => id.toString()));
+    user.channels = user.channels.filter((id) => !removeSet.has(id.toString()));
+    await user.save();
+    const removed = before - user.channels.length;
+    audit({
+      userId: req.user.id,
+      action: 'remove_channels',
+      resource: 'user_playlist',
+      resourceId: `${removed} channels`,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      message: `Removed ${removed} channels`,
+      count: user.channels.length,
+      removedCount: removed,
+    });
+  } catch (error) {
+    console.error('Remove my channels error:', error);
+    res.status(500).json({ success: false, error: 'Failed to remove channels' });
+  }
+});
+
+// Get current user's channels with viable fallback streams (for Android app)
+router.get('/me/channels-with-fallbacks', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).populate(
+      'channels',
+      'channelName channelGroup channelUrl tvgLogo channelImg metadata flaggedBad alternateStreams',
+    );
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const baseUrl = getPublicBaseUrl(req);
+    const channels = sortClientCatalogChannels(
+      (user.channels || []).filter((channel) => !hasRestrictedPresentationMarker(channel)),
+    ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    res.json({ success: true, channels });
+  } catch (error) {
+    console.error('Get channels with fallbacks error:', error);
+    res.status(500).json({ success: false, error: 'Failed to get channels' });
+  }
+});
+
+// Get current user's channel list as M3U
+router.get('/me/playlist.m3u', requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).send('#EXTM3U\n#ERROR:User not found');
+
+    const baseUrl = getPublicBaseUrl(req);
+    const m3u = await user.generateUserPlaylist(baseUrl);
+    res.setHeader('Content-Type', 'audio/x-mpegurl');
+    const safeUsername = user.username.replace(/[^a-zA-Z0-9_-]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeUsername}-channels.m3u"`);
+    return res.send(m3u);
+  } catch (error) {
+    console.error('Generate user channels M3U error:', error);
+    return res.status(500).send('#EXTM3U\n#ERROR:Internal server error');
+  }
+});
+
+// Import M3U to user's playlist
+router.post('/me/import-m3u', requireAuth, async (req, res) => {
+  try {
+    const { m3uContent } = req.body;
+
+    if (!m3uContent) {
+      return res.status(400).json({
+        success: false,
+        error: 'M3U content is required',
+      });
+    }
+
+    // Parse M3U content (same logic as admin import)
+    const lines = m3uContent.split('\n');
+    const parsedChannels = [];
+    let currentChannel = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      if (line.startsWith('#EXTINF:')) {
+        const tvgIdMatch = line.match(/tvg-id="([^"]*)"/);
+        const tvgNameMatch = line.match(/tvg-name="([^"]*)"/);
+        const tvgLogoMatch = line.match(/tvg-logo="([^"]*)"/);
+        const groupTitleMatch = line.match(/group-title="([^"]*)"/);
+        // Title = text after the attribute list, NOT after the first comma — attribute
+        // values (logo URLs, user-agents) legally contain commas.
+        const channelName = extractExtinfTitle(line);
+
+        currentChannel = {
+          channelId: tvgIdMatch ? tvgIdMatch[1] : `channel_${Date.now()}_${i}`,
+          tvgName: tvgNameMatch ? tvgNameMatch[1] : '',
+          channelImg: tvgLogoMatch ? tvgLogoMatch[1] : '',
+          tvgLogo: tvgLogoMatch ? tvgLogoMatch[1] : '',
+          channelGroup: groupTitleMatch ? groupTitleMatch[1] : 'Uncategorized',
+          channelName: channelName || 'Unknown',
+          order: parsedChannels.length,
+        };
+      } else if (line && !line.startsWith('#') && currentChannel) {
+        currentChannel.channelUrl = line;
+        parsedChannels.push(currentChannel);
+        currentChannel = null;
+      }
+    }
+
+    if (parsedChannels.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid channels found in M3U content',
+      });
+    }
+
+    // Club same-tvg-id entries into alternateStreams and categorize from the iptv-org cache
+    // so an imported list isn't dumped into 'Uncategorized'.
+    const importChannels = clubByChannelId(parsedChannels);
+    await resolveChannelGroups(importChannels);
+
+    // Dedup only against THIS user's own (private) channels — never the shared catalog
+    // or other users' imports.
+    const urls = importChannels.map((ch) => ch.channelUrl);
+    const existingChannels = await Channel.find({
+      channelUrl: { $in: urls },
+      ownerId: req.user.id,
+    }).select('_id channelUrl');
+    const existingUrlMap = new Map(existingChannels.map((ch) => [ch.channelUrl, ch._id]));
+
+    // Create the rest as private channels owned by this user.
+    const toCreate = importChannels
+      .filter((ch) => !existingUrlMap.has(ch.channelUrl))
+      .map((ch) => ({ ...ch, ownerId: req.user.id }));
+    let createdChannels = [];
+    if (toCreate.length > 0) {
+      // ordered:false keeps going past any per-owner (ownerId, channelId) duplicate;
+      // on a BulkWriteError we still keep the successfully inserted docs.
+      createdChannels = await Channel.insertMany(toCreate, { ordered: false }).catch((err) => {
+        if (err.insertedDocs) return err.insertedDocs;
+        throw err;
+      });
+    }
+
+    // Collect all channel IDs
+    const allChannelIds = [
+      ...existingChannels.map((ch) => ch._id),
+      ...createdChannels.map((ch) => ch._id),
+    ];
+
+    // Add to user's playlist (skip already-added)
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+
+    const userChannelIds = new Set(user.channels.map((id) => id.toString()));
+    const wanted = allChannelIds.filter((id) => !userChannelIds.has(id.toString()));
+    const { allowed: toAdd, rejected } = capChannelAdditions(user.channels.length, wanted);
+    let finalCount = user.channels.length;
+    let addedCount = 0;
+    if (toAdd.length > 0) {
+      // Atomic $addToSet with the cap in the filter — a snapshot-then-save would let
+      // concurrent imports overshoot USER_CHANNELS_MAX.
+      const updated = await User.findOneAndUpdate(
+        withChannelCapFilter(user._id, toAdd.length),
+        { $addToSet: { channels: { $each: toAdd.map((id) => new mongoose.Types.ObjectId(id)) } } },
+        { new: true },
+      );
+      if (updated) {
+        finalCount = updated.channels.length;
+        addedCount = toAdd.length;
+      } else {
+        console.warn(`[user-playlist] channel list limit hit concurrently for ${req.user.id}`);
+      }
+    }
+    if (rejected > 0) {
+      console.warn(
+        `[user-playlist] channel list limit reached for ${req.user.id}: ${rejected} skipped`,
+      );
+    }
+
+    audit({
+      userId: req.user.id,
+      action: 'import_m3u',
+      resource: 'user_playlist',
+      resourceId: `${addedCount} channels`,
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
+
+    res.json({
+      success: true,
+      message: `Added ${addedCount} channels to your list`,
+      added: addedCount,
+      count: finalCount,
+    });
+  } catch (error) {
+    console.error('User import M3U error:', error);
+    res.status(500).json({ success: false, error: 'Failed to import M3U' });
+  }
+});
+
+module.exports = router;

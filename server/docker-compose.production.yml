@@ -1,0 +1,321 @@
+services:
+  caddy:
+    image: caddy:2.8.4-alpine
+    container_name: dzhoof-caddy
+    restart: unless-stopped
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+      # Optional second public hostname (ISP-block mirror) — see Caddyfile header.
+      MIRROR_DOMAIN: ${MIRROR_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./downloads:/downloads:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - dzhoof-network
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  api:
+    image: ${DOCKER_IMAGE}
+    container_name: dzhoof-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      # Direct playback (opt-in): with ALLOW_DIRECT_PLAYBACK=true and a source
+      # flagged directPlayback, video bytes go straight from the provider CDN
+      # to the viewer; the VPS only issues auth tokens. Keep video off the VPS
+      # when scaling to many concurrent viewers.
+      ALLOW_DIRECT_PLAYBACK: ${ALLOW_DIRECT_PLAYBACK:-false}
+      PORT: 3000
+      APP_VERSION: ${APP_VERSION:-1.0.1}
+      RELEASE_COMMIT: ${RELEASE_COMMIT:-unknown}
+      RELEASE_BUILT_AT: ${RELEASE_BUILT_AT:-unknown}
+      # Audit-remediation-v1: manual EPG triggers execute in the API container,
+      # so it needs the same memory hardening as the scheduler service.
+      NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first --expose-gc
+      EPG_FETCH_CONCURRENCY: ${EPG_FETCH_CONCURRENCY:-1}
+      EPG_SOURCE_TIMEOUT_MS: ${EPG_SOURCE_TIMEOUT_MS:-120000}
+      EPG_MAX_DECOMPRESSED_MB: ${EPG_MAX_DECOMPRESSED_MB:-100}
+      EPG_MAX_PROGRAMS_PER_SOURCE: ${EPG_MAX_PROGRAMS_PER_SOURCE:-50000}
+      EPG_HEAP_GUARD_MB: ${EPG_HEAP_GUARD_MB:-768}
+      EPG_COUNTRY_FILTER: ${EPG_COUNTRY_FILTER:-}
+      # Curated hide list (comma-separated regex patterns on channelGroup).
+      # Default hides radio streams (filler); set CATALOG_HIDE_GROUPS=none to disable.
+      CATALOG_HIDE_GROUPS: ${CATALOG_HIDE_GROUPS:-RADIO}
+      EPG_EXTRA_SOURCES: ${EPG_EXTRA_SOURCES:-}
+      MONGODB_URI: mongodb://mongodb:27017/dzhoof-iptv
+      # container_name, not the service name: the api/frontend also sit on the shared
+      # gkz-network where another stack's redis carries the alias "redis" (and requires
+      # auth) — the bare name resolves there and fails with NOAUTH.
+      REDIS_URL: redis://dzhoof-redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      XTREAM_SECRET_KEY: ${XTREAM_SECRET_KEY}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      GH_OAUTH_CLIENT_ID: ${GH_OAUTH_CLIENT_ID}
+      GH_OAUTH_CLIENT_SECRET: ${GH_OAUTH_CLIENT_SECRET}
+      GH_OAUTH_REDIRECT_URI: ${GH_OAUTH_REDIRECT_URI}
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL}
+      SUPER_ADMIN_CHANNEL_LIST_CODE: ${SUPER_ADMIN_CHANNEL_LIST_CODE}
+      GH_APP_OWNER: ${GH_APP_OWNER}
+      GH_APP_REPO: ${GH_APP_REPO}
+      GH_APP_APK_PATTERN: ${GH_APP_APK_PATTERN}
+      GH_APP_TOKEN: ${GH_APP_TOKEN}
+      MAIL_PROVIDER: brevo
+      BREVO_HOST: ${BREVO_HOST}
+      BREVO_PORT: ${BREVO_PORT}
+      BREVO_USER: ${BREVO_USER}
+      BREVO_PASSWORD: ${BREVO_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      APP_URL: ${APP_URL}
+      # Behind Cloudflare: derive the real client IP from CF-Connecting-IP for rate limiting
+      TRUST_CF_CONNECTING_IP: ${TRUST_CF_CONNECTING_IP}
+      # Public "Browse Demo Channels" code (dedicated demo user, not the super-admin)
+      DEMO_CHANNEL_LIST_CODE: ${DEMO_CHANNEL_LIST_CODE}
+      GOOGLE_RECAPTCHA_SITE_KEY: ${GOOGLE_RECAPTCHA_SITE_KEY}
+      GOOGLE_RECAPTCHA_SECRET_KEY: ${GOOGLE_RECAPTCHA_SECRET_KEY}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID}
+      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL}
+      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY}
+      BACKEND_SENTRY_DSN: ${BACKEND_SENTRY_DSN}
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL}
+      # Internal Prometheus scrape token. Leave blank until the optional monitoring profile is enabled.
+      METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      DISABLE_SCHEDULER: 'true'
+      SUBSCRIPTION_REQUIRED: ${SUBSCRIPTION_REQUIRED}
+      # Live-stream recording (ffmpeg inside the API container)
+      RECORDINGS_DIR: /app/recordings
+      RECORDING_MAX_SECONDS: ${RECORDING_MAX_SECONDS:-43200}
+      RECORDING_RETENTION_DAYS: ${RECORDING_RETENTION_DAYS:-30}
+      RECORDING_MAX_CONCURRENT: ${RECORDING_MAX_CONCURRENT:-2}
+    volumes:
+      - recordings_data:/app/recordings
+    networks:
+      - dzhoof-network
+      - gkz-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2048m
+        reservations:
+          memory: 256m
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  frontend:
+    image: ${DOCKER_FRONTEND_IMAGE}
+    container_name: dzhoof-frontend
+    restart: unless-stopped
+    environment:
+      GA_MEASUREMENT_ID: ${GA_MEASUREMENT_ID}
+      FRONTEND_SENTRY_DSN: ${FRONTEND_SENTRY_DSN}
+    networks:
+      - dzhoof-network
+      - gkz-network
+    depends_on:
+      - api
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  mongodb:
+    image: mongo:7.0.19
+    container_name: dzhoof-mongodb
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2048m
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - dzhoof-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  redis:
+    image: redis:7-alpine
+    container_name: dzhoof-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - dzhoof-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  scheduler:
+    image: ${DOCKER_IMAGE}
+    container_name: dzhoof-scheduler
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://mongodb:27017/dzhoof-iptv
+      # container_name, not the service name: the api/frontend also sit on the shared
+      # gkz-network where another stack's redis carries the alias "redis" (and requires
+      # auth) — the bare name resolves there and fails with NOAUTH.
+      REDIS_URL: redis://dzhoof-redis:6379
+      LIVENESS_CHECK_INTERVAL_MS: ${LIVENESS_CHECK_INTERVAL_MS}
+      EPG_REFRESH_INTERVAL_MS: ${EPG_REFRESH_INTERVAL_MS}
+      CACHE_REFRESH_INTERVAL_MS: ${CACHE_REFRESH_INTERVAL_MS}
+      # Audit-remediation-v1: bounded EPG fetching — sequential by default so peak
+      # memory stays proportional to a single guide; per-source timeout; heap guard.
+      NODE_OPTIONS: --max-old-space-size=1024 --dns-result-order=ipv4first --expose-gc
+      EPG_FETCH_CONCURRENCY: ${EPG_FETCH_CONCURRENCY:-1}
+      EPG_SOURCE_TIMEOUT_MS: ${EPG_SOURCE_TIMEOUT_MS:-120000}
+      EPG_MAX_DECOMPRESSED_MB: ${EPG_MAX_DECOMPRESSED_MB:-100}
+      EPG_MAX_PROGRAMS_PER_SOURCE: ${EPG_MAX_PROGRAMS_PER_SOURCE:-50000}
+      EPG_HEAP_GUARD_MB: ${EPG_HEAP_GUARD_MB:-768}
+      EPG_COUNTRY_FILTER: ${EPG_COUNTRY_FILTER:-}
+      # Curated hide list (comma-separated regex patterns on channelGroup).
+      # Default hides radio streams (filler); set CATALOG_HIDE_GROUPS=none to disable.
+      CATALOG_HIDE_GROUPS: ${CATALOG_HIDE_GROUPS:-RADIO}
+      EPG_EXTRA_SOURCES: ${EPG_EXTRA_SOURCES:-}
+      # Scheduler-driven M3U/Xtream syncs decrypt stored URLs/credentials, and the
+      # Xtream import signs playback URLs — without these secrets every scheduled
+      # m3u-sync/xtream-sync failed with "XTREAM_SECRET_KEY or JWT_ACCESS_SECRET
+      # must be configured in production". Mirror the API's secret set.
+      XTREAM_SECRET_KEY: ${XTREAM_SECRET_KEY}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY}
+      # Alerting / notification tasks (webhook + email) and FCM push
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL}
+      MAIL_PROVIDER: brevo
+      BREVO_HOST: ${BREVO_HOST}
+      BREVO_PORT: ${BREVO_PORT}
+      BREVO_USER: ${BREVO_USER}
+      BREVO_PASSWORD: ${BREVO_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      APP_URL: ${APP_URL}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID}
+      FCM_CLIENT_EMAIL: ${FCM_CLIENT_EMAIL}
+      FCM_PRIVATE_KEY: ${FCM_PRIVATE_KEY}
+      BACKEND_SENTRY_DSN: ${BACKEND_SENTRY_DSN}
+    command:
+      [
+        'sh',
+        '-c',
+        'echo "Waiting 5m for API to settle..." && sleep 300 && npx tsx backend/src/scheduler-entrypoint.ts',
+      ]
+    # The backend image's HEALTHCHECK probes the HTTP port, but the scheduler runs no
+    # HTTP server — it would show unhealthy forever. Disable the inherited check.
+    healthcheck:
+      disable: true
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2048m
+    networks:
+      - dzhoof-network
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  prometheus:
+    image: prom/prometheus:v3.14.0
+    container_name: dzhoof-prometheus
+    restart: unless-stopped
+    profiles: ['monitoring']
+    ports:
+      - '127.0.0.1:9090:9090'
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/runtime:/etc/prometheus/secrets:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      - api
+    networks:
+      - dzhoof-network
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+networks:
+  dzhoof-network:
+    driver: bridge
+  gkz-network:
+    external: true
+    name: dzhoof-shared-network
+
+volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+  recordings_data:
+    driver: local
+  prometheus_data:
+    driver: local

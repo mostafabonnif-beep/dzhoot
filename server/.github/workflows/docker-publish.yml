@@ -1,0 +1,322 @@
+name: Build, Publish & Deploy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy to production after build'
+        required: true
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/firevisioniptvserver
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      packages: write
+
+    outputs:
+      version: ${{ steps.vars.outputs.version }}
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+      is_tag: ${{ steps.vars.outputs.is_tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: vars
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            # Tag push: v1.2.3 → 1.2.3
+            VERSION="${GITHUB_REF_NAME#v}"
+            IS_TAG=true
+          else
+            # Manual dispatch on branch: use branch-sha (e.g. main-a1b2c3d)
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            SAFE_BRANCH=$(echo "$GITHUB_REF_NAME" | sed 's/[^a-zA-Z0-9._-]/-/g')
+            VERSION="${SAFE_BRANCH}-${SHORT_SHA}"
+            IS_TAG=false
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "is_tag=$IS_TAG" >> $GITHUB_OUTPUT
+          echo "image_tag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION (is_tag: $IS_TAG)"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          build-args: |
+            APP_VERSION=${{ steps.vars.outputs.version }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.frontend
+          push: true
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          build-args: |
+            GA_MEASUREMENT_ID=${{ vars.GA_MEASUREMENT_ID }}
+            FRONTEND_SENTRY_DSN=${{ secrets.FRONTEND_SENTRY_DSN }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ steps.vars.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:latest
+
+      - name: Create GitHub Release
+        if: steps.vars.outputs.is_tag == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            ## Docker Image
+
+            ```
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.version }}
+            ```
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: needs.build-and-push.outputs.is_tag == 'true' || inputs.deploy == 'true'
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare production docker-compose
+        env:
+          DOCKER_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.version }}
+          DOCKER_FRONTEND_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend:${{ needs.build-and-push.outputs.version }}
+          APP_VERSION: ${{ needs.build-and-push.outputs.version }}
+          # Auth
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+          # OAuth
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REDIRECT_URI: ${{ vars.GOOGLE_REDIRECT_URI }}
+          GH_OAUTH_CLIENT_ID: ${{ vars.GH_OAUTH_CLIENT_ID }}
+          GH_OAUTH_CLIENT_SECRET: ${{ secrets.GH_OAUTH_CLIENT_SECRET }}
+          GH_OAUTH_REDIRECT_URI: ${{ vars.GH_OAUTH_REDIRECT_URI }}
+          # Super Admin
+          SUPER_ADMIN_USERNAME: ${{ vars.SUPER_ADMIN_USERNAME }}
+          SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
+          SUPER_ADMIN_EMAIL: ${{ vars.SUPER_ADMIN_EMAIL }}
+          SUPER_ADMIN_CHANNEL_LIST_CODE: ${{ vars.SUPER_ADMIN_CHANNEL_LIST_CODE }}
+          # App Updates
+          GH_APP_OWNER: ${{ vars.GH_APP_OWNER }}
+          GH_APP_REPO: ${{ vars.GH_APP_REPO }}
+          GH_APP_APK_PATTERN: ${{ vars.GH_APP_APK_PATTERN }}
+          GH_APP_TOKEN: ${{ secrets.GH_APP_TOKEN }}
+          # Email
+          BREVO_HOST: ${{ vars.BREVO_HOST }}
+          BREVO_PORT: ${{ vars.BREVO_PORT }}
+          BREVO_USER: ${{ vars.BREVO_USER }}
+          BREVO_PASSWORD: ${{ secrets.BREVO_PASSWORD }}
+          MAIL_FROM: ${{ vars.MAIL_FROM }}
+          APP_URL: ${{ vars.APP_URL }}
+          TRUST_CF_CONNECTING_IP: ${{ vars.TRUST_CF_CONNECTING_IP }}
+          DEMO_CHANNEL_LIST_CODE: ${{ vars.DEMO_CHANNEL_LIST_CODE }}
+          # reCAPTCHA
+          GOOGLE_RECAPTCHA_SITE_KEY: ${{ vars.GOOGLE_RECAPTCHA_SITE_KEY }}
+          GOOGLE_RECAPTCHA_SECRET_KEY: ${{ secrets.GOOGLE_RECAPTCHA_SECRET_KEY }}
+          # Scheduler
+          LIVENESS_CHECK_INTERVAL_MS: ${{ vars.LIVENESS_CHECK_INTERVAL_MS }}
+          EPG_REFRESH_INTERVAL_MS: ${{ vars.EPG_REFRESH_INTERVAL_MS }}
+          CACHE_REFRESH_INTERVAL_MS: ${{ vars.CACHE_REFRESH_INTERVAL_MS }}
+          # Observability
+          BACKEND_SENTRY_DSN: ${{ secrets.BACKEND_SENTRY_DSN }}
+          FRONTEND_SENTRY_DSN: ${{ secrets.FRONTEND_SENTRY_DSN }}
+          GA_MEASUREMENT_ID: ${{ vars.GA_MEASUREMENT_ID }}
+        run: |
+          # Substitute env vars into the production compose file
+          envsubst < docker-compose.production.yml > docker-compose.deploy.yml
+
+      - name: Resolve Portainer stack
+        id: stack
+        run: |
+          STACKS=$(curl -s \
+            "${{ vars.PORTAINER_URL }}/api/stacks" \
+            -H "X-API-Key: ${{ secrets.PORTAINER_API_TOKEN }}")
+
+          STACK_ID=$(echo "$STACKS" | jq -r '.[] | select(.Name | ascii_downcase == "firevisiontv_prod") | .Id')
+          ENDPOINT_ID=$(echo "$STACKS" | jq -r '.[] | select(.Name | ascii_downcase == "firevisiontv_prod") | .EndpointId')
+
+          if [ -z "$STACK_ID" ] || [ "$STACK_ID" = "null" ]; then
+            echo "Stack 'FireVisionTV_Prod' not found — will create it"
+            echo "stack_exists=false" >> $GITHUB_OUTPUT
+
+            # Get the first available endpoint for stack creation
+            ENDPOINT_ID=$(curl -s \
+              "${{ vars.PORTAINER_URL }}/api/endpoints" \
+              -H "X-API-Key: ${{ secrets.PORTAINER_API_TOKEN }}" \
+              | jq -r '.[0].Id')
+
+            if [ -z "$ENDPOINT_ID" ] || [ "$ENDPOINT_ID" = "null" ]; then
+              echo "No endpoints found in Portainer"
+              exit 1
+            fi
+
+            echo "endpoint_id=$ENDPOINT_ID" >> $GITHUB_OUTPUT
+            echo "Using endpoint ID: $ENDPOINT_ID"
+          else
+            echo "stack_exists=true" >> $GITHUB_OUTPUT
+            echo "stack_id=$STACK_ID" >> $GITHUB_OUTPUT
+            echo "endpoint_id=$ENDPOINT_ID" >> $GITHUB_OUTPUT
+            echo "Found stack ID: $STACK_ID (endpoint: $ENDPOINT_ID)"
+          fi
+
+      - name: Ensure external network exists
+        run: |
+          ENDPOINT_ID=${{ steps.stack.outputs.endpoint_id }}
+          NETWORK_NAME="base_network_cadnative"
+
+          # Check if network exists
+          NETWORKS=$(curl -s \
+            "${{ vars.PORTAINER_URL }}/api/endpoints/$ENDPOINT_ID/docker/networks" \
+            -H "X-API-Key: ${{ secrets.PORTAINER_API_TOKEN }}")
+
+          EXISTS=$(echo "$NETWORKS" | jq -r --arg name "$NETWORK_NAME" '.[] | select(.Name == $name) | .Name')
+
+          if [ -z "$EXISTS" ]; then
+            echo "Creating external network '$NETWORK_NAME'..."
+            curl -sf -X POST \
+              "${{ vars.PORTAINER_URL }}/api/endpoints/$ENDPOINT_ID/docker/networks/create" \
+              -H "X-API-Key: ${{ secrets.PORTAINER_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "{\"Name\": \"$NETWORK_NAME\", \"Driver\": \"bridge\", \"CheckDuplicate\": true}"
+            echo "Network created."
+          else
+            echo "Network '$NETWORK_NAME' already exists."
+          fi
+
+      - name: Deploy to Portainer
+        id: deploy
+        run: |
+          ENDPOINT_ID=${{ steps.stack.outputs.endpoint_id }}
+          STACK_FILE="$(cat docker-compose.deploy.yml)"
+
+          if [ "${{ steps.stack.outputs.stack_exists }}" = "true" ]; then
+            echo "Updating existing stack..."
+            PAYLOAD=$(jq -n \
+              --arg stackFile "$STACK_FILE" \
+              --argjson endpointId "$ENDPOINT_ID" \
+              '{
+                stackFileContent: $stackFile,
+                env: [],
+                prune: false,
+                pullImage: true
+              }')
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X PUT \
+              "${{ vars.PORTAINER_URL }}/api/stacks/${{ steps.stack.outputs.stack_id }}?endpointId=$ENDPOINT_ID" \
+              -H "X-API-Key: ${{ secrets.PORTAINER_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
+          else
+            echo "Creating new stack..."
+            PAYLOAD=$(jq -n \
+              --arg name "FireVisionTV_Prod" \
+              --arg stackFile "$STACK_FILE" \
+              '{
+                name: $name,
+                stackFileContent: $stackFile
+              }')
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+              "${{ vars.PORTAINER_URL }}/api/stacks/create/standalone/string?endpointId=$ENDPOINT_ID" \
+              -H "X-API-Key: ${{ secrets.PORTAINER_API_TOKEN }}" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD")
+          fi
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "HTTP Status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            echo "Stack deployed successfully"
+            echo "deployment_status=success" >> $GITHUB_OUTPUT
+          else
+            echo "Stack deploy failed: $RESPONSE_BODY"
+            echo "deployment_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
+      - name: Wait for containers
+        run: sleep 30
+
+      - name: Health check
+        id: health_check
+        run: |
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+          HEALTH_URL="https://tv.cadnative.com/health"
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            echo "Health check attempt $((RETRY_COUNT + 1))/$MAX_RETRIES"
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" "$HEALTH_URL" 2>/dev/null || echo -e "\n000")
+            HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+            RESPONSE_BODY=$(echo "$RESPONSE" | sed '$d')
+
+            if [ "$HTTP_CODE" -eq 200 ]; then
+              echo "Health check passed"
+              echo "$RESPONSE_BODY" | jq . 2>/dev/null || echo "$RESPONSE_BODY"
+              echo "health_status=healthy" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            [ $RETRY_COUNT -lt $MAX_RETRIES ] && sleep 10
+          done
+
+          echo "Health check failed after $MAX_RETRIES attempts"
+          echo "health_status=unhealthy" >> $GITHUB_OUTPUT
+          exit 1
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ needs.build-and-push.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: \`${{ needs.build-and-push.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy**: ${{ steps.deploy.outputs.deployment_status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Health**: ${{ steps.health_check.outputs.health_status }}" >> $GITHUB_STEP_SUMMARY

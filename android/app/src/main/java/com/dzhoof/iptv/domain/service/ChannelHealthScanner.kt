@@ -1,0 +1,428 @@
+package com.dzhoof.iptv.domain.service
+
+import android.content.Context
+import android.util.Log
+import com.dzhoof.iptv.data.source.local.dao.ChannelDao
+import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
+import com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity
+import com.dzhoof.iptv.data.source.remote.playlist.StreamUrlTemplate
+import com.dzhoof.iptv.di.IoDispatcher
+import com.dzhoof.iptv.domain.model.ChannelHealthStatus
+import com.dzhoof.iptv.domain.repository.HealthSyncEntry
+import com.dzhoof.iptv.domain.repository.StreamMetricsRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.io.Closeable
+import java.util.concurrent.TimeUnit
+import javax.inject.Inject
+import javax.inject.Singleton
+
+data class ScanProgress(
+    val scanned: Int = 0,
+    val total: Int = 0,
+    val isScanning: Boolean = false
+)
+
+@Singleton
+class ChannelHealthScanner @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val channelHealthDao: ChannelHealthDao,
+    private val channelDao: ChannelDao,
+    private val thumbnailExtractor: ChannelThumbnailExtractor,
+    private val streamMetricsRepository: StreamMetricsRepository,
+    @IoDispatcher private val dispatcher: CoroutineDispatcher
+) {
+    companion object {
+        private const val TAG = "HealthScanner"
+        private const val BATCH_SIZE = 4
+        private const val CONNECT_TIMEOUT_SECONDS = 20L
+        private const val READ_TIMEOUT_SECONDS = 20L
+        private const val STARTUP_DELAY_MS = 60L * 1000L             // 1 minute
+        private const val THUMBNAIL_DELAY_MS = 5L * 60L * 1000L  // 5 minutes
+        private const val COOLDOWN_MS = 30L * 60L * 1000L         // 30 minutes
+    }
+
+    private val scanClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
+
+    private val _scanProgress = MutableStateFlow(ScanProgress())
+    val scanProgress: StateFlow<ScanProgress> = _scanProgress.asStateFlow()
+
+    private var scanJob: Job? = null
+    private val scanMutex = Mutex()
+    private val supervisorJob = SupervisorJob()
+    private val scope = CoroutineScope(supervisorJob + dispatcher)
+
+    /**
+     * Loop: health scan → 5 min → thumbnail extraction (ONLINE only) → 30 min → repeat
+     */
+    fun startAutoScan() {
+        scope.launch {
+            scanMutex.withLock {
+                if (scanJob?.isActive == true) return@launch
+                scanJob = scope.launch scanLoop@{
+            Log.d(TAG, "Auto scan started, waiting ${STARTUP_DELAY_MS / 1000}s before first scan")
+            delay(STARTUP_DELAY_MS)
+            while (isActive) {
+                // Phase 1: Health scan
+                runFullScan()
+
+                // Phase 2: 5 min cooldown before thumbnail extraction
+                Log.d(TAG, "Health scan done, waiting 5min before thumbnail extraction")
+                delay(THUMBNAIL_DELAY_MS)
+
+                // Phase 3: Extract thumbnails for ONLINE channels
+                if (isActive) {
+                    val count = thumbnailExtractor.extractThumbnails()
+                    Log.d(TAG, "Extracted $count thumbnails, cooldown ${COOLDOWN_MS / 60000}min")
+                }
+
+                // Phase 4: Main cooldown before next health scan cycle
+                delay(COOLDOWN_MS)
+            }
+                }
+            }
+        }
+    }
+
+    fun triggerManualScan() {
+        scope.launch {
+            scanMutex.withLock {
+                scanJob?.cancel()
+                scanJob = scope.launch {
+            Log.d(TAG, "Manual scan triggered — incremental rescan")
+            runFullScan()
+
+            // Resume auto cycle
+            while (isActive) {
+                Log.d(TAG, "Waiting 5min for thumbnail extraction")
+                delay(THUMBNAIL_DELAY_MS)
+
+                if (isActive) {
+                    thumbnailExtractor.extractThumbnails()
+                }
+
+                Log.d(TAG, "Cooldown ${COOLDOWN_MS / 60000}min before next health scan")
+                delay(COOLDOWN_MS)
+
+                runFullScan()
+            }
+                }
+            }
+        }
+    }
+
+    fun stopScan() {
+        scope.launch {
+            scanMutex.withLock {
+                scanJob?.cancel()
+                scanJob = null
+                _scanProgress.value = _scanProgress.value.copy(isScanning = false)
+                Log.d(TAG, "Scan stopped")
+            }
+        }
+    }
+
+    fun destroy() {
+        scanJob?.cancel()
+        scanJob = null
+        supervisorJob.cancel()
+        // OkHttp socket cleanup involves network I/O — run off main thread
+        Thread {
+            try {
+                scanClient.dispatcher.executorService.shutdown()
+                scanClient.connectionPool.evictAll()
+            } catch (e: Exception) {
+                Log.w(TAG, "Error during scanner cleanup", e)
+            }
+        }.start()
+        Log.d(TAG, "Scanner destroyed")
+    }
+
+    private suspend fun runFullScan() {
+        // Don't cleanup orphaned entries before scan — old statuses stay visible
+        // until replaced by new results. Cleanup happens after scan completes.
+        val allChannelIds = channelHealthDao.getAllChannelIdsByPriority()
+        val total = allChannelIds.size
+        if (total == 0) return
+
+        _scanProgress.value = ScanProgress(scanned = 0, total = total, isScanning = true)
+        Log.d(TAG, "Starting scan of $total channels in batches of $BATCH_SIZE")
+
+        var scannedCount = 0
+        val batches = allChannelIds.chunked(BATCH_SIZE)
+        val allResults = mutableListOf<ChannelHealthEntity>()
+
+        for (batch in batches) {
+            if (scanJob?.isActive != true) break
+
+            // Get stream URLs for this batch — filters out channels deleted by concurrent sync
+            val channelUrls = withContext(dispatcher) {
+                batch.mapNotNull { id ->
+                    val entity = channelDao.getChannelByIdSync(id)
+                    entity?.let { id to StreamUrlTemplate.resolve(context, it.streamUrl) }
+                }
+            }
+            if (channelUrls.isEmpty()) {
+                scannedCount += batch.size
+                continue
+            }
+            val validIds = channelUrls.map { it.first }.toSet()
+
+            // Mark batch as CHECKING (preserves existing thumbnailPath)
+            for ((id, _) in channelUrls) {
+                channelHealthDao.upsertPreservingThumbnail(
+                    channelId = id,
+                    status = ChannelHealthStatus.CHECKING.name,
+                    lastCheckedAt = System.currentTimeMillis(),
+                    responseTimeMs = null,
+                    errorMessage = null
+                )
+            }
+
+            // Check streams concurrently within the batch
+            val healthResults = coroutineScope {
+                channelUrls.map { (id, url) ->
+                    async { checkStream(id, url) }
+                }.awaitAll()
+            }
+
+            // Save results — re-verify channel exists to avoid FK crash on concurrent delete
+            for (result in healthResults) {
+                if (channelDao.getChannelByIdSync(result.channelId) != null) {
+                    channelHealthDao.upsertPreservingThumbnail(
+                        channelId = result.channelId,
+                        status = result.status,
+                        lastCheckedAt = result.lastCheckedAt,
+                        responseTimeMs = result.responseTimeMs,
+                        errorMessage = result.errorMessage
+                    )
+                }
+            }
+
+            allResults.addAll(healthResults)
+            scannedCount += batch.size
+            _scanProgress.value = ScanProgress(
+                scanned = scannedCount.coerceAtMost(total),
+                total = total,
+                isScanning = true
+            )
+        }
+
+        _scanProgress.value = _scanProgress.value.copy(isScanning = false)
+        Log.d(TAG, "Scan complete: $scannedCount/$total channels checked")
+
+        // Cleanup orphaned health entries only after all new results are written
+        channelHealthDao.cleanupOrphaned()
+        // Remove disk thumbnail files that no longer have a DB row
+        thumbnailExtractor.cleanupOrphanedFiles()
+
+        // Bulk sync health results to server
+        if (allResults.isNotEmpty()) {
+            try {
+                val syncEntries = allResults
+                    .filter { it.status != ChannelHealthStatus.CHECKING.name }
+                    .map { result ->
+                        val status = when (result.status) {
+                            ChannelHealthStatus.ONLINE.name -> "alive"
+                            ChannelHealthStatus.OFFLINE.name -> "dead"
+                            ChannelHealthStatus.UNRESPONSIVE.name -> "unresponsive"
+                            else -> "unknown"
+                        }
+                        HealthSyncEntry(
+                            channelId = result.channelId,
+                            status = status,
+                            responseTimeMs = result.responseTimeMs,
+                            timestamp = result.lastCheckedAt
+                        )
+                    }
+                streamMetricsRepository.syncHealthResults(syncEntries)
+                Log.d(TAG, "Synced ${syncEntries.size} health results to server")
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to sync health results to server: ${e.message}")
+            }
+        }
+    }
+
+    private suspend fun checkStream(channelId: String, streamUrl: String): ChannelHealthEntity {
+        if (streamUrl.isBlank()) {
+            // Paired-server mode: /channels intentionally strips channelUrl (upstream
+            // URLs stay server-side) and playback goes through short-lived playback
+            // tokens. A blank local streamUrl is NOT evidence the channel is down —
+            // mark it UNKNOWN so the UI never shows a false "offline" / "source
+            // provider problem" from this scanner.
+            return ChannelHealthEntity(
+                channelId = channelId,
+                status = ChannelHealthStatus.UNKNOWN.name,
+                lastCheckedAt = System.currentTimeMillis(),
+                errorMessage = null,
+            )
+        }
+        // Paired-server mode: the catalog sends tokenized proxy URLs
+        // (…/api/v1/tv/playback/<token>.m3u8). Those tokens expire quickly and
+        // the upstream is only reachable through the server, so probing them
+        // from the device would 401 and falsely mark every channel OFFLINE
+        // ("all channels down" + "source provider problem" everywhere). The
+        // server owns real health (watchdog + playback reports) — treat
+        // tokenized URLs as UNKNOWN, never OFFLINE.
+        if (streamUrl.contains("/api/v1/tv/playback/", ignoreCase = true)) {
+            return ChannelHealthEntity(
+                channelId = channelId,
+                status = ChannelHealthStatus.UNKNOWN.name,
+                lastCheckedAt = System.currentTimeMillis(),
+                responseTimeMs = null,
+                errorMessage = null,
+            )
+        }
+        if (!streamUrl.startsWith("http", ignoreCase = true)) {
+            return ChannelHealthEntity(
+                channelId = channelId,
+                status = ChannelHealthStatus.OFFLINE.name,
+                lastCheckedAt = System.currentTimeMillis(),
+                errorMessage = "Invalid URL"
+            )
+        }
+
+        // Android network security policy blocks cleartext HTTP — skip immediately
+        if (streamUrl.startsWith("http://", ignoreCase = true)) {
+            return ChannelHealthEntity(
+                channelId = channelId,
+                status = ChannelHealthStatus.OFFLINE.name,
+                lastCheckedAt = System.currentTimeMillis(),
+                errorMessage = "لا يُسمح باتصالات HTTP غير المشفرة"
+            )
+        }
+
+        return withContext(dispatcher) {
+            val startTime = System.currentTimeMillis()
+            try {
+                val isHls = streamUrl.contains(".m3u8", ignoreCase = true)
+
+                if (isHls) {
+                    checkHlsStream(channelId, streamUrl, startTime)
+                } else {
+                    checkGenericStream(channelId, streamUrl, startTime)
+                }
+            } catch (e: Exception) {
+                ChannelHealthEntity(
+                    channelId = channelId,
+                    status = ChannelHealthStatus.OFFLINE.name,
+                    lastCheckedAt = System.currentTimeMillis(),
+                    responseTimeMs = System.currentTimeMillis() - startTime,
+                    errorMessage = e.message?.take(200)
+                )
+            }
+        }
+    }
+
+    private fun checkHlsStream(
+        channelId: String,
+        streamUrl: String,
+        startTime: Long
+    ): ChannelHealthEntity {
+        val request = Request.Builder().url(streamUrl).get().build()
+        val response = scanClient.newCall(request).execute()
+        val responseTime = System.currentTimeMillis() - startTime
+
+        return response.use { resp ->
+            if (!resp.isSuccessful) {
+                return@use ChannelHealthEntity(
+                    channelId = channelId,
+                    status = ChannelHealthStatus.OFFLINE.name,
+                    lastCheckedAt = System.currentTimeMillis(),
+                    responseTimeMs = responseTime,
+                    errorMessage = "HTTP ${resp.code}"
+                )
+            }
+
+            // Read first 4KB to validate HLS manifest
+            val peek = resp.body?.let { body ->
+                body.source().use { source ->
+                    val buffer = okio.Buffer()
+                    source.read(buffer, 4096)
+                    buffer.readUtf8()
+                }
+            } ?: ""
+
+            val isValid = peek.contains("#EXTM3U") ||
+                    peek.contains("#EXT-X-STREAM-INF") ||
+                    peek.contains("#EXTINF")
+
+            ChannelHealthEntity(
+                channelId = channelId,
+                status = if (isValid) ChannelHealthStatus.ONLINE.name else ChannelHealthStatus.OFFLINE.name,
+                lastCheckedAt = System.currentTimeMillis(),
+                responseTimeMs = responseTime,
+                errorMessage = if (!isValid) "Invalid HLS manifest" else null
+            )
+        }
+    }
+
+    private fun checkGenericStream(
+        channelId: String,
+        streamUrl: String,
+        startTime: Long
+    ): ChannelHealthEntity {
+        // Try HEAD first, fall back to GET with range
+        val headRequest = Request.Builder().url(streamUrl).head().build()
+        return try {
+            val response = scanClient.newCall(headRequest).execute()
+            val responseTime = System.currentTimeMillis() - startTime
+
+            response.use { resp ->
+                ChannelHealthEntity(
+                    channelId = channelId,
+                    status = if (resp.isSuccessful) ChannelHealthStatus.ONLINE.name
+                    else ChannelHealthStatus.OFFLINE.name,
+                    lastCheckedAt = System.currentTimeMillis(),
+                    responseTimeMs = responseTime,
+                    errorMessage = if (!resp.isSuccessful) "HTTP ${resp.code}" else null
+                )
+            }
+        } catch (e: Exception) {
+            // HEAD not supported, try GET with range header
+            val getRequest = Request.Builder()
+                .url(streamUrl)
+                .header("Range", "bytes=0-1023")
+                .get()
+                .build()
+
+            val response = scanClient.newCall(getRequest).execute()
+            val responseTime = System.currentTimeMillis() - startTime
+
+            response.use { resp ->
+                ChannelHealthEntity(
+                    channelId = channelId,
+                    status = if (resp.isSuccessful || resp.code == 206) ChannelHealthStatus.ONLINE.name
+                    else ChannelHealthStatus.OFFLINE.name,
+                    lastCheckedAt = System.currentTimeMillis(),
+                    responseTimeMs = responseTime,
+                    errorMessage = if (!resp.isSuccessful && resp.code != 206) "HTTP ${resp.code}" else null
+                )
+            }
+        }
+    }
+}
