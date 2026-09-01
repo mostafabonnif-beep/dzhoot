@@ -52,6 +52,11 @@ interface TokenResult {
   mimeType?: string;
   hlsUrl?: string;
   proxyUrl?: string;
+  /** Direct provider URL (HTTPS only) — the browser plays it straight from
+   *  the provider CDN; residential viewer IPs are allowed by the provider. */
+  directUrl?: string;
+  /** `.m3u8` twin of the direct URL for hls.js (when the source is Xtream). */
+  directHlsUrl?: string;
   error?: string;
 }
 
@@ -66,6 +71,9 @@ async function fetchTokenizedUrl(channelId: string, slot: number): Promise<Token
         mimeType: d.data?.mimeType || '',
         hlsUrl: d.data?.hlsUrl ? toSameOrigin(d.data.hlsUrl) : undefined,
         proxyUrl: d.data?.proxyPlaybackUrl ? toSameOrigin(d.data.proxyPlaybackUrl) : undefined,
+        // External provider URLs stay absolute — never rewrite to same-origin.
+        directUrl: d.data?.directUrl || undefined,
+        directHlsUrl: d.data?.directHlsUrl || undefined,
       };
     }
     return { error: d?.error || 'Failed to issue playback token' };
@@ -195,16 +203,17 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
         // Candidate source resolution (web):
         //  - Catalog channels (channelId present) play through the server
         //    playback-token pipeline. Preferred order per token slot:
-        //      1. hlsUrl   — server-side HLS remux (hls.js): the provider's
-        //                    http:// TS cannot be played by browsers directly
-        //                    (mixed content + no TS support), so ffmpeg
-        //                    remuxes it to live HLS over HTTPS same-origin.
-        //      2. relay    — raw server relay (proxyUrl in direct mode, or the
-        //                    plain playbackUrl when direct is off): TS via
-        //                    mpegts.js, HLS via hls.js.
-        //    The direct provider URL is deliberately NOT used by the web player
-        //    (its media CDN is http:// → blocked as mixed content).
-        //  - Non-catalog channels (no channelId) fall back to raw direct URLs.
+        //      1. directHlsUrl — provider HTTPS .m3u8 (hls.js): the browser
+        //                        plays straight from the provider CDN. Works
+        //                        for residential viewers even when the
+        //                        provider blocks the VPS datacenter IP.
+        //      2. directUrl    — provider HTTPS raw TS (mpegts.js), same idea.
+        //      3. hlsUrl       — server-side HLS remux (hls.js): fallback when
+        //                        the viewer's IP is not allowed by the provider
+        //                        or the direct CDN is unreachable.
+        //      4. relay        — raw server relay (proxyUrl in direct mode, or
+        //                        the plain playbackUrl when direct is off): TS
+        //                        via mpegts.js, HLS via hls.js.
         let tokenSlot = 0;
         const maxTokenSlot = Math.min(3, Math.max(alternateUrls.length, 0));
         let directTried = false;
@@ -214,12 +223,18 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
           if (ch.channelId && tokenSlot <= maxTokenSlot) {
             const slot = tokenSlot++;
             const r = await fetchTokenizedUrl(ch.channelId, slot);
-            if (!r.url && !r.hlsUrl) {
+            if (!r.url && !r.hlsUrl && !r.directUrl && !r.directHlsUrl) {
               // Token failed for this slot (e.g. expired/limit) — advance.
               setStatus('تجربة مصدر بديل...');
               return nextSource();
             }
             const candidates: SourceCandidate[] = [];
+            if (r.directHlsUrl) {
+              candidates.push({ url: r.directHlsUrl, kind: 'hls', serverAssisted: false });
+            }
+            if (r.directUrl) {
+              candidates.push({ url: r.directUrl, kind: 'ts', serverAssisted: false });
+            }
             if (r.hlsUrl) candidates.push({ url: r.hlsUrl, kind: 'hls', serverAssisted: true });
             // Relay: in direct mode the plain playbackUrl is the direct 302
             // (skip — mixed content on web); otherwise it IS the relay.
