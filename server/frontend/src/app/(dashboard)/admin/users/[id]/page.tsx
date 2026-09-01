@@ -111,7 +111,7 @@ export default function UserDetailPage() {
   const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
   const [toggleConfirmActive, setToggleConfirmActive] = useState(false);
   const [toggleBusy, setToggleBusy] = useState(false);
-  const copyTimeoutRef = useRef<NodeJS.Timeout>();
+  const copyTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   useEffect(() => {
     return () => clearTimeout(copyTimeoutRef.current);

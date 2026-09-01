@@ -76,7 +76,7 @@ export default function SettingsPage() {
   const [alertTesting, setAlertTesting] = useState(false);
   const [emailTesting, setEmailTesting] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
-  const copyTimeoutRef = useRef<NodeJS.Timeout>();
+  const copyTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
   useEffect(() => {
     return () => clearTimeout(copyTimeoutRef.current);
