@@ -39,6 +39,13 @@ const { isSourceDown, getFailoverTarget } = require('../services/source-failover
 const { rewriteStreamUrlBase } = require('../services/xtream-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
 
+// Curated groups exposed to demo users — mirrors channels.js so the demo
+// browsing endpoint and the playback-token endpoint agree on the same subset.
+const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA الجزائر')
+  .split(',')
+  .map((g) => g.trim())
+  .filter(Boolean);
+
 // GET /logo?url=… — relay channel logos through OUR server so customers and
 // resellers never see the upstream providers' image hosts. SSRF-guarded and
 // cached (the catalog shares logo URLs across channels, so the cache hits a lot).
@@ -534,8 +541,12 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     }
 
     const user = req.user;
+    // Demo is a curated LIVE-only preview (mirrors streams.js). Demo users have
+    // no subscription and no assigned channels, so they need explicit carve-outs
+    // in the subscription gate and the channel-access check below.
+    const isDemo = user?.demo === true;
     const { isSubscriptionRequired, getActiveSubscription } = require('../services/subscription-service');
-    if (await isSubscriptionRequired() && user.role !== 'Admin' && !(await getActiveSubscription(user.id))) {
+    if (!isDemo && await isSubscriptionRequired() && user.role !== 'Admin' && !(await getActiveSubscription(user.id))) {
       return res.status(403).json({
         success: false,
         error: 'Your subscription has expired. Activate a new code to continue watching.',
@@ -545,6 +556,11 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
 
     // ── VOD (movie or series episode) — same encrypted-token + proxy pipeline ──
     if (hasVodRef) {
+      // Demo is a curated LIVE-only preview. Movies/episodes are paid content —
+      // never authorize them for the public demo code (same policy as streams.js).
+      if (isDemo) {
+        return res.status(404).json({ success: false, error: 'Content not found', code: 'CONTENT_NOT_FOUND' });
+      }
       let vodDoc = null;
       let vodKind = 'movie';
       if (movieId) {
@@ -625,11 +641,17 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       });
     }
 
-    let channel = await Channel.findOne({ channelId: channelRef, isActive: { $ne: false } }).lean();
+    // Demo access is a curated subset of the catalog — restrict the lookup to
+    // the same groups the browsing endpoint exposes (channels.js DEMO_CHANNEL_GROUPS).
+    const channelQuery = { channelId: channelRef, isActive: { $ne: false } };
+    if (isDemo) channelQuery.channelGroup = { $in: DEMO_CHANNEL_GROUPS };
+    let channel = await Channel.findOne(channelQuery).lean();
     // Clients historically send the Mongo _id (e.g. older app builds) — resolve
     // it defensively so a stale client can't brick playback with a 404.
     if (!channel && isValidObjectId(channelRef)) {
-      channel = await Channel.findOne({ _id: channelRef, isActive: { $ne: false } }).lean();
+      const demoIdQuery = { _id: channelRef, isActive: { $ne: false } };
+      if (isDemo) demoIdQuery.channelGroup = { $in: DEMO_CHANNEL_GROUPS };
+      channel = await Channel.findOne(demoIdQuery).lean();
     }
     if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
 
@@ -643,6 +665,11 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       const source = await XtreamSource.findById(channel.metadata.xtreamSourceId).lean();
       const sourceEligible = !!source && (
         (source.status === 'Active' && source.verificationStatus === 'verified') ||
+        // Customer-visible sources are listed in the public catalog
+        // (channels.js verifiedXtreamChannelQuery uses the same OR set), so
+        // their channels must be playable — otherwise the catalog shows
+        // channels that always fail with SOURCE_NOT_VERIFIED.
+        source.customerVisible === true ||
         source.directPlayback === true
       );
       // Watchdog says the primary is down → look for a verified backup mapping
@@ -665,7 +692,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         : (source && source.directPlayback === true);
     }
 
-    const isCatalogUser = user.role === 'Admin' || user.allCatalog === true;
+    const isCatalogUser = user.role === 'Admin' || user.allCatalog === true || isDemo;
     const assigned = (user.channels || []).some((id) => String(id) === String(channel._id));
     if (!isCatalogUser && !assigned) {
       return res.status(404).json({ success: false, error: 'Channel not found' });

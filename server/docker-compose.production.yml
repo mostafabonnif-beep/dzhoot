@@ -98,6 +98,8 @@ services:
       TRUST_CF_CONNECTING_IP: ${TRUST_CF_CONNECTING_IP}
       # Public "Browse Demo Channels" code (dedicated demo user, not the super-admin)
       DEMO_CHANNEL_LIST_CODE: ${DEMO_CHANNEL_LIST_CODE}
+      # Demo TV auth code — read by requireTvOrSessionAuth for demo playback/browsing
+      DEMO_TV_CODE: ${DEMO_TV_CODE:-}
       GOOGLE_RECAPTCHA_SITE_KEY: ${GOOGLE_RECAPTCHA_SITE_KEY}
       GOOGLE_RECAPTCHA_SECRET_KEY: ${GOOGLE_RECAPTCHA_SECRET_KEY}
       FCM_PROJECT_ID: ${FCM_PROJECT_ID}

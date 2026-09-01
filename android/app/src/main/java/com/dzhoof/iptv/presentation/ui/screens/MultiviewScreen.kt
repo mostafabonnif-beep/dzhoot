@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +52,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.source.remote.playlist.StreamUrlTemplate
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.presentation.ui.components.SelectableRow
@@ -58,6 +60,7 @@ import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
 import com.dzhoof.iptv.presentation.ui.screens.player.VideoPlayer
 import com.dzhoof.iptv.presentation.ui.theme.Amber
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
+import kotlinx.coroutines.launch
 import com.dzhoof.iptv.presentation.ui.theme.ShapeLarge
 import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 import com.dzhoof.iptv.presentation.viewmodel.MultiviewViewModel
@@ -262,15 +265,33 @@ private fun MultiviewPane(
     // One player per pane, keyed by channel — swapping the channel recreates just
     // this pane's player; the old one is released on dispose.
     val player = remember(channel.id) { viewModel.createPlayer() }
+    val paneScope = rememberCoroutineScope()
     DisposableEffect(channel.id) {
-        channel.streamUrl?.let { url ->
-            player.setMediaItem(
-                MediaItem.Builder().setUri(StreamUrlTemplate.resolve(context, url)).build()
-            )
-            player.prepare()
-            player.playWhenReady = true
+        val job = paneScope.launch {
+            // Paired mode: the server strips raw upstream URLs from channel
+            // lists, so panes request a short-lived playback token (same
+            // contract as the main player) and fall back to the direct URL
+            // when tokenization is unavailable.
+            val serverUrl = AppPreferences.getServerUrl(context).trimEnd('/')
+            val tvCode = AppPreferences.getTvCode(context)
+            val url = if (serverUrl.isNotBlank() && tvCode.isNotEmpty()) {
+                viewModel.resolvePlaybackUrl(channel.id)
+                    ?: channel.streamUrl?.let { StreamUrlTemplate.resolve(context, it) }
+            } else {
+                channel.streamUrl?.let { StreamUrlTemplate.resolve(context, it) }
+            }
+            if (url != null) {
+                player.setMediaItem(
+                    MediaItem.Builder().setUri(url).build()
+                )
+                player.prepare()
+                player.playWhenReady = true
+            }
         }
-        onDispose { player.release() }
+        onDispose {
+            job.cancel()
+            player.release()
+        }
     }
     LaunchedEffect(isFocused) { player.volume = if (isFocused) 1f else 0f }
 

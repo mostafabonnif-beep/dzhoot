@@ -25,7 +25,6 @@ import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
 import com.dzhoof.iptv.presentation.viewmodel.PlayerViewModel
-import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
 private fun mediaItem(url: String, mimeType: String?): MediaItem {
@@ -79,9 +78,15 @@ internal suspend fun prepareChannelStream(
             exoPlayer.setMediaSource(buildHlsMediaSource(catchupTarget.url))
         } else {
             val slotTargets = coroutineScope {
-                (0..3).map { slot ->
-                    async { resolvePlaybackUrl(channel.id, slot, 0L, 0) }
-                }.mapNotNull { it.await() }
+                // Probe slots sequentially instead of firing 4 concurrent token
+                // requests per channel load: every successful slot registers a
+                // long-lived server-side stream session, and concurrent fan-out
+                // while zapping can hit the per-user concurrent-stream limit
+                // (429) or spike the API rate limiter. 404s on empty slots are
+                // expected and ignored (see requestPlaybackUrl).
+                (0..3).mapNotNull { slot ->
+                    resolvePlaybackUrl(channel.id, slot, 0L, 0)
+                }
             }
             val primaryTarget = slotTargets.firstOrNull() ?: return false
             val slots = slotTargets.mapIndexed { index, playbackTarget ->
