@@ -43,6 +43,9 @@ services:
       # providers whose media CDN is http:// only (browser mixed-content).
       ALLOW_HLS_REMUX: ${ALLOW_HLS_REMUX:-false}
       MAX_HLS_REMUX: ${MAX_HLS_REMUX:-6}
+      # Optional egress proxy for upstream fetches (some providers WAF-block
+      # datacenter IPs on stream endpoints with HTTP 456/458).
+      UPSTREAM_HTTP_PROXY: ${UPSTREAM_HTTP_PROXY:-}
       PORT: 3000
       APP_VERSION: ${APP_VERSION:-1.0.1}
       RELEASE_COMMIT: ${RELEASE_COMMIT:-unknown}
