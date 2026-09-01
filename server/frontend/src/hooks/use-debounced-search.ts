@@ -10,8 +10,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 export function useDebouncedSearch(initialValue = '', delay = 300) {
   const [search, setSearch] = useState(initialValue);
   const [debouncedSearch, setDebouncedSearch] = useState(initialValue);
-  const timeoutRef = useRef<NodeJS.Timeout>();
-  const abortControllerRef = useRef<AbortController>();
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const abortControllerRef = useRef<AbortController | undefined>(undefined);
 
   const handleSearchChange = useCallback(
     (value: string) => {
