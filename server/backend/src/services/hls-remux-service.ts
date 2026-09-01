@@ -105,6 +105,14 @@ export function startHlsSession(
     '-hide_banner',
     '-loglevel', 'error',
   ];
+  // Optional egress proxy: IPTV providers commonly WAF-block datacenter IPs on
+  // stream endpoints (HTTP 456/458). Pointing UPSTREAM_HTTP_PROXY at a
+  // residential/ISP proxy lets the remux fetch the upstream from an allowed IP.
+  const upstreamProxy = String(process.env.UPSTREAM_HTTP_PROXY || '').trim();
+  if (upstreamProxy) {
+    args.push('-http_proxy', upstreamProxy);
+    args.push('-https_proxy', upstreamProxy);
+  }
   if (opts.upstreamHeaders?.userAgent) {
     args.push('-user_agent', opts.upstreamHeaders.userAgent);
   }

@@ -266,7 +266,9 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
             if (info && info.url !== currentSrc) {
               playSource(info);
             } else {
-              setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
+              setPlayerError(
+                'تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة أو يحجبها مزود الخدمة عن خوادم التشغيل. جرّب قناة أخرى، وإن استمرت المشكلة تواصل مع الدعم.',
+              );
             }
           });
         }
@@ -412,7 +414,9 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
         function playSource(info: SourceCandidate | null) {
           if (destroyed) return;
           if (!info) {
-            setPlayerError('تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة');
+            setPlayerError(
+              'تعذر تحميل البث — قد تتوقف مصادر البث لهذه القناة أو يحجبها مزود الخدمة عن خوادم التشغيل. جرّب قناة أخرى، وإن استمرت المشكلة تواصل مع الدعم.',
+            );
             return;
           }
           if (info.kind === 'hls') {
