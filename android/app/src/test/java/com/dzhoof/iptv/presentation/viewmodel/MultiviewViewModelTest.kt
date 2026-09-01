@@ -9,7 +9,7 @@ import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
 import com.dzhoof.iptv.presentation.ui.player.PlayerFactory
-import io.mockk.any
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -93,7 +93,7 @@ class MultiviewViewModelTest {
                 data = PlaybackTokenData(playbackUrl = "https://example.test/token/stream.m3u8"),
             ),
         )
-        every { apiService.issuePlaybackToken(any()) } returns response
+        coEvery { apiService.issuePlaybackToken(any()) } returns response
 
         val viewModel = MultiviewViewModel(getChannelsUseCase, playerFactory, apiService)
 
@@ -106,7 +106,7 @@ class MultiviewViewModelTest {
     @Test
     fun `resolvePlaybackUrl returns null when the server denies playback`() = runTest {
         every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(emptyList()))
-        every { apiService.issuePlaybackToken(any()) } returns Response.error(404, okhttp3.ResponseBody.create(null, "{}"))
+        coEvery { apiService.issuePlaybackToken(any()) } returns Response.error(404, okhttp3.ResponseBody.create(null, "{}"))
 
         val viewModel = MultiviewViewModel(getChannelsUseCase, playerFactory, apiService)
 
