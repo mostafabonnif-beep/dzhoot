@@ -13,10 +13,32 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import com.dzhoof.iptv.data.AppPreferences
+import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.data.source.remote.playlist.StreamUrlTemplate
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONObject
+import javax.inject.Inject
 
+/**
+ * Fire TV / Android TV input service.
+ *
+ * The server strips raw upstream URLs from TV channel lists, so in paired mode
+ * (server URL + TV code configured) every tune must request a short-lived
+ * server playback token — the same contract the in-app player uses. Direct
+ * `channelUrl` playback remains the fallback for local/unpaired setups.
+ */
+@AndroidEntryPoint
 class DzhoofTvInputService : TvInputService() {
+
+    @Inject
+    lateinit var apiService: DzhoofApiService
 
     override fun onCreateSession(inputId: String): Session {
         return DzhoofSession(this)
@@ -30,6 +52,7 @@ class DzhoofTvInputService : TvInputService() {
         private var player: ExoPlayer? = null
         private var currentSurface: Surface? = null
         private var currentVolume: Float = 1.0f
+        private val tuneScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
         override fun onSetSurface(surface: Surface?): Boolean {
             currentSurface = surface
@@ -46,9 +69,9 @@ class DzhoofTvInputService : TvInputService() {
             Log.d(TAG, "onTune: $channelUri")
             notifyVideoUnavailable(TvInputManager.VIDEO_UNAVAILABLE_REASON_TUNING)
 
-            val streamUrl = getStreamUrlFromChannel(channelUri)
-            if (streamUrl == null) {
-                Log.e(TAG, "No stream URL found for channel: $channelUri")
+            val channelMeta = getChannelMeta(channelUri)
+            if (channelMeta == null) {
+                Log.e(TAG, "No channel metadata found for: $channelUri")
                 player?.release()
                 player = null
                 notifyVideoUnavailable(TvInputManager.VIDEO_UNAVAILABLE_REASON_UNKNOWN)
@@ -82,12 +105,45 @@ class DzhoofTvInputService : TvInputService() {
                         notifyVideoUnavailable(TvInputManager.VIDEO_UNAVAILABLE_REASON_UNKNOWN)
                     }
                 })
-
-                setMediaItem(MediaItem.fromUri(streamUrl))
-                prepare()
             }
 
             player = exoPlayer
+
+            val serverUrl = AppPreferences.getServerUrl(ctx).trimEnd('/')
+            val tvCode = AppPreferences.getTvCode(ctx)
+            val paired = serverUrl.isNotBlank() && tvCode.isNotEmpty() && channelMeta.channelId.isNotEmpty()
+            if (paired) {
+                // Paired mode: request a short-lived server playback token. The
+                // direct upstream URL is intentionally absent for TV clients.
+                tuneScope.launch {
+                    try {
+                        val response = apiService.issuePlaybackToken(
+                            PlaybackTokenRequest(channelId = channelMeta.channelId),
+                        )
+                        val body = response.body()
+                        val playbackUrl = body?.data?.playbackUrl
+                        if (response.isSuccessful && body?.success == true && !playbackUrl.isNullOrBlank()) {
+                            exoPlayer.setMediaItem(MediaItem.fromUri(playbackUrl))
+                            exoPlayer.prepare()
+                        } else {
+                            Log.e(TAG, "Playback token request failed: HTTP ${response.code()} ${body?.error}")
+                            notifyVideoUnavailable(TvInputManager.VIDEO_UNAVAILABLE_REASON_UNKNOWN)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Playback token request error", e)
+                        notifyVideoUnavailable(TvInputManager.VIDEO_UNAVAILABLE_REASON_UNKNOWN)
+                    }
+                }
+            } else {
+                val streamUrl = channelMeta.channelUrl
+                if (streamUrl == null) {
+                    Log.e(TAG, "No stream URL for unpaired channel: $channelUri")
+                    notifyVideoUnavailable(TvInputManager.VIDEO_UNAVAILABLE_REASON_UNKNOWN)
+                } else {
+                    exoPlayer.setMediaItem(MediaItem.fromUri(StreamUrlTemplate.resolve(ctx, streamUrl)))
+                    exoPlayer.prepare()
+                }
+            }
             return true
         }
 
@@ -95,12 +151,13 @@ class DzhoofTvInputService : TvInputService() {
 
         override fun onRelease() {
             Log.d(TAG, "Session released")
+            tuneScope.cancel()
             player?.release()
             player = null
             currentSurface = null
         }
 
-        private fun getStreamUrlFromChannel(channelUri: Uri): String? {
+        private fun getChannelMeta(channelUri: Uri): ChannelMeta? {
             val projection = arrayOf(TvContract.Channels.COLUMN_INTERNAL_PROVIDER_DATA)
 
             return try {
@@ -108,8 +165,11 @@ class DzhoofTvInputService : TvInputService() {
                     if (cursor.moveToFirst()) {
                         val internalData = cursor.getString(0)
                         val json = JSONObject(internalData ?: "{}")
-                        json.optString("channelUrl").takeIf { it.isNotEmpty() }
-                            ?.let { StreamUrlTemplate.resolve(ctx, it) }
+                        ChannelMeta(
+                            channelId = json.optString("channelId"),
+                            channelUrl = json.optString("channelUrl").takeIf { it.isNotEmpty() }
+                                ?.let { StreamUrlTemplate.resolve(ctx, it) },
+                        )
                     } else null
                 }
             } catch (e: Exception) {
@@ -118,6 +178,11 @@ class DzhoofTvInputService : TvInputService() {
             }
         }
     }
+
+    private data class ChannelMeta(
+        val channelId: String,
+        val channelUrl: String?,
+    )
 
     companion object {
         private const val TAG = "DzhoofTvInput"
