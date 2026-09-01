@@ -12,6 +12,8 @@ WORK_ROOT="${WORK_ROOT:-/var/backups/dzhoot/offsite-staging}"
 COMPOSE_DIR="${COMPOSE_DIR:-/opt/dzhoot/server}"
 MONGO_CONTAINER="${MONGO_CONTAINER:-dzhoof-mongodb}"
 DATABASE_NAME="${DATABASE_NAME:-dzhoof-iptv}"
+# Root-only production env file that holds MONGODB_URI for authenticated dumps.
+MONGO_PROD_ENV="${MONGO_PROD_ENV:-/etc/dzhoot/.env.production}"
 MODE="${1:---backup}"
 
 say() { printf '[offsite-backup] %s\n' "$*"; }
@@ -78,7 +80,15 @@ trap cleanup EXIT
 install -d -m 700 "$STAGING/recovery"
 
 say 'Creating a MongoDB recovery archive.'
-docker exec "$MONGO_CONTAINER" mongodump --db "$DATABASE_NAME" --gzip --archive=/tmp/dzhoof-offsite-backup.archive.gz
+# MongoDB requires auth since the Aug 2026 hardening. Credentials are read from
+# the root-only production env file (never embedded in this script); the dump
+# runs INSIDE the mongo container, so the URI host is rewritten to loopback.
+if [ -z "${MONGO_DUMP_URI:-}" ] && [ -n "${MONGO_PROD_ENV:-}" ] && [ -f "$MONGO_PROD_ENV" ]; then
+  MONGO_DUMP_URI="$(grep -E '^MONGODB_URI=' "$MONGO_PROD_ENV" | head -1 | cut -d= -f2- | tr -d "\"'" 2>/dev/null || true)"
+fi
+: "${MONGO_DUMP_URI:?MONGODB_URI is missing — set MONGO_DUMP_URI or MONGODB_URI in $MONGO_PROD_ENV}"
+MONGO_DUMP_URI="$(printf '%s' "$MONGO_DUMP_URI" | sed -E 's#^(mongodb(\+srv)?://[^@]*@)[^/]+#\1127.0.0.1#')"
+docker exec "$MONGO_CONTAINER" mongodump --uri "$MONGO_DUMP_URI" --gzip --archive=/tmp/dzhoof-offsite-backup.archive.gz
 docker cp "$MONGO_CONTAINER":/tmp/dzhoof-offsite-backup.archive.gz "$STAGING/recovery/mongodb.archive.gz"
 docker exec "$MONGO_CONTAINER" rm -f /tmp/dzhoof-offsite-backup.archive.gz
 

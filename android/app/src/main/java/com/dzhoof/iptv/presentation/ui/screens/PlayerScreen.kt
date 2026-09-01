@@ -173,8 +173,17 @@ fun PlayerScreen(
         if (!parentalLocked) viewModel.loadChannel(channelId)
     }
 
-    // Set up media item when channel loads
-    LaunchedEffect(uiState.channel) {
+    // Set up media item when channel loads. Keyed on the stream identity (id +
+    // URLs + catch-up window) rather than the whole channel object: UI-only
+    // updates such as toggling a favorite build a new ChannelUiModel copy and
+    // used to restart playback (re-prepare + fresh token requests mid-watch).
+    LaunchedEffect(
+        uiState.channel?.id,
+        uiState.channel?.streamUrl,
+        uiState.channel?.alternateStreamUrls,
+        catchupStartMs,
+        catchupDurationMin,
+    ) {
         uiState.channel?.let { channel ->
             val prepared = prepareChannelStream(
                 context = context,
