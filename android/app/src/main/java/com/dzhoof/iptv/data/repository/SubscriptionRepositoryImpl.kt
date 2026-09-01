@@ -61,6 +61,23 @@ class SubscriptionRepositoryImpl @Inject constructor(
         return IOException(if (code != null) "$code: $message" else message)
     }
 
+    /**
+     * Maps transport/parse failures to a stable, user-facing Arabic message
+     * instead of leaking raw Gson/OkHttp text (e.g. "Use JsonReader...").
+     * HTTP error-body IOExceptions (localized by backendError) pass through.
+     */
+    private fun networkError(e: Exception): IOException = when (e) {
+        is java.net.SocketTimeoutException ->
+            IOException("تعذر الاتصال بالخادم — انتهت المهلة. تحقق من اتصالك وحاول مجددًا.")
+        is java.net.UnknownHostException ->
+            IOException("تعذر الوصول إلى الخادم. تحقق من اتصالك بالإنترنت.")
+        is com.google.gson.JsonSyntaxException ->
+            IOException("استجابة غير متوقعة من الخادم. حاول مجددًا لاحقًا.")
+        is IOException -> e
+        else ->
+            IOException("تعذر الاتصال بالخادم. حاول مجددًا.")
+    }
+
     private suspend fun getPushToken(): String? {
         if (!BuildConfig.FIREBASE_ENABLED) return null
         val preferences = appContext.getSharedPreferences(
@@ -112,7 +129,7 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     Result.error(backendError(response.errorBody()?.string(), "Activation failed (HTTP ${response.code()})"))
                 }
             } catch (e: Exception) {
-                Result.error(e)
+                Result.error(networkError(e))
             }
         }
 
@@ -144,7 +161,7 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     Result.error(backendError(response.errorBody()?.string(), "فشل تفعيل كود العميل (HTTP ${response.code()})"))
                 }
             } catch (e: Exception) {
-                Result.error(e)
+                Result.error(networkError(e))
             }
         }
 
