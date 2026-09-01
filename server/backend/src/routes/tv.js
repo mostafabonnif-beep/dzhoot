@@ -724,6 +724,11 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     // Primary source is down and a verified backup mapping exists: serve the
     // backup stream (primary slot only — an explicit alternate slot the user
     // picked stays as-is).
+    // NOTE: keep the PRE-rewrite URL aside — the mirror rewrite only reflects
+    // reachability FROM THE SERVER (the primary may be blocked for the VPS
+    // datacenter IP but perfectly fine for residential viewers). The browser
+    // direct-playback URL must use the original (usually https) provider URL.
+    const preMirrorStreamUrl = streamUrl;
     if (failoverTarget && slot === 0) {
       streamUrl = failoverTarget.streamUrl;
     } else if (mirrorTargetBase && slot === 0 && streamUrl.startsWith(mirrorPrimaryBase)) {
@@ -789,10 +794,21 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     // http:// mirror URLs, tunnel-down periods).
     let directUrl;
     let directHlsUrl;
-    if (directEnabled && /^https:/i.test(streamUrl)) {
-      directUrl = streamUrl;
-      if (/\.ts(\?|$)/i.test(streamUrl) && channel.metadata?.source === 'xtream') {
-        directHlsUrl = streamUrl.replace(/\.ts(\?|$)/i, '.m3u8$1');
+    // The direct browser URL must be the ORIGINAL provider URL (pre-mirror
+    // rewrite): the mirror is http:// and only reflects server-side
+    // reachability. Residential browsers reach the https primary fine.
+    const directCandidateUrl =
+      failoverTarget && /^https:/i.test(failoverTarget.streamUrl)
+        ? failoverTarget.streamUrl
+        : /^https:/i.test(preMirrorStreamUrl)
+          ? preMirrorStreamUrl
+          : /^https:/i.test(streamUrl)
+            ? streamUrl
+            : null;
+    if (directEnabled && directCandidateUrl) {
+      directUrl = directCandidateUrl;
+      if (/\.ts(\?|$)/i.test(directCandidateUrl) && channel.metadata?.source === 'xtream') {
+        directHlsUrl = directCandidateUrl.replace(/\.ts(\?|$)/i, '.m3u8$1');
       }
     }
     if (directEnabled || hlsRemuxEnabled) {
