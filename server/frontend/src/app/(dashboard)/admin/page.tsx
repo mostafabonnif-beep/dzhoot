@@ -120,7 +120,10 @@ function formatDate(timestamp: string, locale: string) {
 
 export default function AdminDashboard() {
   const { locale } = useLocale();
-  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
+  const L = useCallback(
+    (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en),
+    [locale],
+  );
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [config, setConfig] = useState<ConfigDefaults | null>(null);
   const [streamHealth, setStreamHealth] = useState<StreamHealthData | null>(null);
@@ -199,7 +202,7 @@ export default function AdminDashboard() {
         : '',
     );
     setLastUpdated(new Date());
-  }, [locale]);
+  }, [L]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -213,7 +216,7 @@ export default function AdminDashboard() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [loadDashboard]);
+  }, [loadDashboard, L]);
 
   function refreshDashboard() {
     setRefreshing(true);
