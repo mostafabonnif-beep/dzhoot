@@ -777,6 +777,24 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     const directEnabled =
       xtreamDirectPlayback && process.env.ALLOW_DIRECT_PLAYBACK === 'true';
     const hlsRemuxEnabled = process.env.ALLOW_HLS_REMUX === 'true';
+
+    // Direct BROWSER playback (web player): when the provider stream URL is
+    // HTTPS (no browser mixed-content) and direct playback is enabled for the
+    // source, hand the viewer's browser the provider URL directly. Residential
+    // viewers fetch from the provider's own CDN (their IP is allowed) — no
+    // server relay needed, so streams keep working even when the provider
+    // blocks the VPS datacenter IP (HTTP 456). `.ts` → mpegts.js in the
+    // player, plus an `.m3u8` twin for hls.js when the source is Xtream.
+    // Server-side remux/relay remain as fallbacks (datacenter clients,
+    // http:// mirror URLs, tunnel-down periods).
+    let directUrl;
+    let directHlsUrl;
+    if (directEnabled && /^https:/i.test(streamUrl)) {
+      directUrl = streamUrl;
+      if (/\.ts(\?|$)/i.test(streamUrl) && channel.metadata?.source === 'xtream') {
+        directHlsUrl = streamUrl.replace(/\.ts(\?|$)/i, '.m3u8$1');
+      }
+    }
     if (directEnabled || hlsRemuxEnabled) {
       const proxyToken = issuePlaybackToken({ ...tokenOpts, direct: false });
       if (directEnabled) {
@@ -832,6 +850,11 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         // Present only when direct playback is enabled for the source: the
         // client may retry through the server relay if the direct URL fails.
         ...(proxyPlaybackUrl ? { proxyPlaybackUrl } : {}),
+        // Web player: direct provider URLs (HTTPS only — no mixed content).
+        // Residential viewers play straight from the provider CDN; the server
+        // paths below remain as automatic fallbacks.
+        ...(directUrl ? { directUrl } : {}),
+        ...(directHlsUrl ? { directHlsUrl } : {}),
         // Web player primary source: server-side HLS remux (hls.js) when the
         // deployment has HLS remux enabled.
         ...(hlsUrl ? { hlsUrl } : {}),
