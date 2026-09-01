@@ -81,6 +81,63 @@ describe('catalog presentation', () => {
   });
 });
 
+describe('operator ordering (panel override)', () => {
+  const {
+    sortClientCatalogChannels,
+    setCatalogOrderingOverride,
+    clearCatalogOrderingCache,
+  } = require('./catalog-presentation');
+  const originalCountry = process.env.CATALOG_COUNTRY_PRIORITY;
+  const originalCategory = process.env.CATALOG_CATEGORY_PRIORITY;
+
+  afterEach(() => {
+    clearCatalogOrderingCache();
+    if (originalCountry === undefined) delete process.env.CATALOG_COUNTRY_PRIORITY;
+    else process.env.CATALOG_COUNTRY_PRIORITY = originalCountry;
+    if (originalCategory === undefined) delete process.env.CATALOG_CATEGORY_PRIORITY;
+    else process.env.CATALOG_CATEGORY_PRIORITY = originalCategory;
+  });
+
+  const channels = [
+    { channelId: '1', channelName: 'Canal Algerie', channelGroup: 'FR| CHAINE', order: 1 },
+    { channelId: '2', channelName: 'ENTV 1', channelGroup: 'DZ| NATIONAL', order: 1 },
+    { channelId: '3', channelName: 'MBC 1', channelGroup: 'AR| GENERAL', order: 1 },
+    { channelId: '4', channelName: 'TF1', channelGroup: 'FR| CHAINE', order: 2 },
+  ];
+
+  it('env fallback: DZ first, then AR, then the rest', () => {
+    process.env.CATALOG_COUNTRY_PRIORITY = 'DZ,AR';
+    clearCatalogOrderingCache();
+    const sorted = sortClientCatalogChannels(channels);
+    expect(sorted.map((c: { channelId: string }) => c.channelId)).toEqual(['2', '3', '1', '4']);
+  });
+
+  it('panel override beats the env and applies immediately', () => {
+    process.env.CATALOG_COUNTRY_PRIORITY = 'AR';
+    setCatalogOrderingOverride(['FR'], []);
+    const sorted = sortClientCatalogChannels(channels);
+    // FR first (panel), then AR, then DZ.
+    expect(sorted.map((c: { channelId: string }) => c.channelId)).toEqual(['1', '4', '3', '2']);
+  });
+
+  it('panel category priority orders categories within the same country band', () => {
+    setCatalogOrderingOverride(['FR'], ['رياضة', 'عام']);
+    const sports = { channelId: '9', channelName: 'beIN SPORTS', channelGroup: 'FR| SPORT', order: 5 };
+    const general = { channelId: '8', channelName: 'TF1', channelGroup: 'FR| GENERAL', order: 1 };
+    const sorted = sortClientCatalogChannels([general, sports]);
+    expect(sorted.map((c: { channelId: string }) => c.channelId)).toEqual(['9', '8']);
+  });
+
+  it('clearing the override returns to the supplier order', () => {
+    setCatalogOrderingOverride(['DZ'], []);
+    setCatalogOrderingOverride(null, null);
+    const sorted = sortClientCatalogChannels(channels);
+    // Pure supplier order: group asc (AR| GENERAL, DZ| NATIONAL, FR| CHAINE),
+    // then per-group order.
+    expect(sorted.map((c: { channelId: string }) => c.channelId)).toEqual(['3', '2', '1', '4']);
+  });
+});
+
 describe('display-name cleaning', () => {
   it('strips unicode small-caps and decorative symbols from groups/names', () => {
     expect(cleanDisplayText('AR| ARABIC SPORTS ⚽ رياضة ᴴᴰ/ᴿᴬᵂ')).toBe('AR| ARABIC SPORTS رياضة');

@@ -25,6 +25,21 @@ export interface IXtreamSourceDocument extends Document {
   lastDiagnosticsAt?: Date | null;
   verifiedAt?: Date | null;
   lastDiagnostics?: Record<string, unknown> | null;
+  /** Result of the last mergeCatalog sync vs the customer-facing list:
+   *  fingerprint before/after + matched/added counts. Proof that adding a
+   *  source never reshuffles the customer list (listUnchanged). */
+  stabilityReport?: {
+    at: Date;
+    beforeCount: number;
+    afterCount: number;
+    added: number;
+    matched: number;
+    listUnchanged: boolean;
+    fingerprintBefore: string;
+    fingerprintAfter: string;
+  } | null;
+  /** Rolling history of stability reports (most recent first, capped at 10). */
+  stabilityHistory?: Array<Record<string, unknown>> | null;
   stats: {
     channels: number;
     movies: number;
@@ -63,6 +78,8 @@ const xtreamSourceSchema = new Schema<IXtreamSourceDocument>(
     lastDiagnosticsAt: { type: Date, default: null },
     verifiedAt: { type: Date, default: null },
     lastDiagnostics: { type: Schema.Types.Mixed, default: null },
+    stabilityReport: { type: Schema.Types.Mixed, default: null },
+    stabilityHistory: { type: [Schema.Types.Mixed], default: [] },
     stats: {
       channels: { type: Number, default: 0 },
       movies: { type: Number, default: 0 },

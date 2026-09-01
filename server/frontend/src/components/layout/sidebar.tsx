@@ -28,6 +28,7 @@ import {
   Store,
   ExternalLink,
   MessageSquare,
+  ListOrdered,
   type LucideIcon,
 } from 'lucide-react';
 import { useUIStore } from '@/store/ui-store';
@@ -62,6 +63,7 @@ const adminLinks: NavigationLink[] = [
   { href: '/admin/import', labelKey: 'nav.import', icon: Globe },
   { href: '/admin/m3u-sources', labelKey: 'nav.m3uSources', icon: Link2 },
   { href: '/admin/xtream-sources', labelKey: 'nav.xtreamSources', icon: Server },
+  { href: '/admin/catalog-ordering', labelKey: 'nav.catalogOrdering', icon: ListOrdered },
   { href: '/admin/sources', labelKey: 'nav.sources', icon: MonitorPlay },
   { href: '/admin/epg', labelKey: 'nav.epg', icon: Calendar },
   { href: '/admin/versions', labelKey: 'nav.versions', icon: Package },

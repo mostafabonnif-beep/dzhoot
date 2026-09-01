@@ -482,6 +482,7 @@ app.use('/api/v1/activation', require('./routes/activation'));
 app.use('/api/v1/me', require('./routes/me'));
 // Xtream Codes sources + VOD catalog
 app.use('/api/v1/admin/xtream-sources', require('./routes/admin-xtream-sources'));
+app.use('/api/v1/admin/catalog-ordering', require('./routes/admin-catalog-ordering'));
 app.use('/api/v1/admin/m3u-sources', require('./routes/admin-m3u-sources'));
 app.use('/api/v1/catalog', require('./routes/catalog'));
 // Stream authorization + dynamic home + notifications + runtime settings
@@ -716,6 +717,10 @@ function startServer() {
       epgService.initializeOnStartup().catch((err) => {
         console.error('EPG service initialization failed:', err.message);
       });
+
+      // Load the operator's channel-ordering preferences (panel overrides env)
+      const { startCatalogOrderingAutoRefresh } = require('./utils/catalog-presentation');
+      startCatalogOrderingAutoRefresh();
 
       // Initialize scheduler service (liveness checks, EPG refresh, cache refresh)
       // Only start interval timers if the external scheduler container is not running

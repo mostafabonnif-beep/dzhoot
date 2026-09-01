@@ -55,10 +55,63 @@ async function getAlertEmail(): Promise<string> {
   return '';
 }
 
+/** Telegram bot token: AppSetting `alert_telegram_bot_token` → env fallback. */
+async function getTelegramBotToken(): Promise<string> {
+  try {
+    const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
+    const doc = await AppSetting.findOne({ key: 'alert_telegram_bot_token' }).lean().exec();
+    const fromDb = doc ? String(doc.value || '').trim() : '';
+    if (fromDb) return fromDb;
+  } catch {
+    // fall through
+  }
+  return String(process.env.ALERT_TELEGRAM_BOT_TOKEN || '').trim();
+}
+
+/** Telegram chat id: AppSetting `alert_telegram_chat_id` → env fallback. */
+async function getTelegramChatId(): Promise<string> {
+  try {
+    const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
+    const doc = await AppSetting.findOne({ key: 'alert_telegram_chat_id' }).lean().exec();
+    const fromDb = doc ? String(doc.value || '').trim() : '';
+    if (fromDb) return fromDb;
+  } catch {
+    // fall through
+  }
+  return String(process.env.ALERT_TELEGRAM_CHAT_ID || '').trim();
+}
+
+const TELEGRAM_MSG_LIMIT = 4000;
+function escapeTelegramHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function formatTelegramText(payload: AlertPayload, now: Date): string {
+  const severityIcon = payload.severity === 'critical' ? '🚨' : '⚠️';
+  const severityLabel = payload.severity === 'critical' ? 'حرج' : 'تحذير';
+  const lines = [
+    `${severityIcon} <b>DZ HOOF — ${severityLabel}</b>`,
+    '',
+    `<b>الحدث:</b> ${escapeTelegramHtml(payload.event)}`,
+    `<b>الرسالة:</b> ${escapeTelegramHtml(payload.message)}`,
+    `<b>الوقت:</b> ${now.toISOString()}`,
+  ];
+  if (payload.details && Object.keys(payload.details).length > 0) {
+    const detailText = Object.entries(payload.details)
+      .map(([key, value]) => `${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+      .join('\n')
+      .slice(0, 800);
+    lines.push('', `<b>التفاصيل:</b>\n${escapeTelegramHtml(detailText)}`);
+  }
+  return lines.join('\n').slice(0, TELEGRAM_MSG_LIMIT);
+}
+
 export async function sendOperationalAlert(payload: AlertPayload): Promise<boolean> {
   let webhookUrl = await getWebhookUrl();
   const alertEmail = await getAlertEmail();
-  if (!webhookUrl && !alertEmail) return false;
+  const telegramToken = await getTelegramBotToken();
+  const telegramChatId = await getTelegramChatId();
+  if (!webhookUrl && !alertEmail && !(telegramToken && telegramChatId)) return false;
 
   const key = `${payload.event}:${payload.severity}`;
   const now = Date.now();
@@ -132,6 +185,35 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
       else console.error(`[alert] email delivery failed: ${redactSensitiveText(res.error || '')}`);
     } catch (error: any) {
       console.error(`[alert] email channel error: ${redactSensitiveText(error?.message || error)}`);
+    }
+  }
+
+  // Channel 3: Telegram (bot token + chat id from the admin panel). HTML
+  // formatting, right-to-left friendly, truncated to Telegram's limit.
+  if (telegramToken && telegramChatId && !delivered) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: telegramChatId,
+          text: formatTelegramText(payload, new Date(now)),
+          parse_mode: 'HTML',
+          disable_web_page_preview: true,
+        }),
+        signal: controller.signal,
+      });
+      if (response.ok) delivered = true;
+      else {
+        const body = await response.text().catch(() => '');
+        console.error(`[alert] telegram returned HTTP ${response.status}: ${redactSensitiveText(body.slice(0, 200))}`);
+      }
+    } catch (error: any) {
+      console.error(`[alert] telegram channel error: ${redactSensitiveText(error?.message || error)}`);
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

@@ -68,6 +68,9 @@ export default function SettingsPage() {
   const [pwLoading, setPwLoading] = useState(false);
   const [brevoConfigured, setBrevoConfigured] = useState(false);
   const [alertWebhook, setAlertWebhook] = useState('');
+  const [tgToken, setTgToken] = useState('');
+  const [tgChatId, setTgChatId] = useState('');
+  const [tgConfigured, setTgConfigured] = useState(false);
   const [brevoUser, setBrevoUser] = useState('');
   const [brevoPass, setBrevoPass] = useState('');
   const [mailFrom, setMailFrom] = useState('');
@@ -94,6 +97,10 @@ export default function SettingsPage() {
         ]);
         const appSettings = appSettingsRes?.data?.data || {};
         if (appSettings.alert_webhook_url !== undefined) setAlertWebhook(String(appSettings.alert_webhook_url));
+        if (appSettings.alert_telegram_chat_id !== undefined) setTgChatId(String(appSettings.alert_telegram_chat_id));
+        // The API never returns the bot token — only whether it's set.
+        setTgConfigured(appSettings.alert_telegram_configured === true);
+        setTgToken('');
         if (appSettings.brevo_user !== undefined) setBrevoUser(String(appSettings.brevo_user));
         // The API never returns the SMTP password — only whether it's set.
         setBrevoConfigured(appSettings.brevo_configured === true);
@@ -877,6 +884,37 @@ export default function SettingsPage() {
                 onChange={(e) => setMailFrom(e.target.value)}
               />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Telegram — توكن البوت</label>
+              <input
+                dir="ltr"
+                type="password"
+                className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
+                placeholder={tgConfigured ? '•••••••• (اتركه فارغًا للإبقاء عليه)' : '123456:ABC-DEF…'}
+                value={tgToken}
+                onChange={(e) => setTgToken(e.target.value)}
+              />
+              {tgConfigured ? (
+                <p className="text-xs text-signal-green">✓ توكن البوت مضبوط — اترك الحقل فارغًا عند الحفظ للإبقاء عليه.</p>
+              ) : null}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Telegram — معرف المحادثة</label>
+              <input
+                dir="ltr"
+                className="flex h-10 w-full border border-border bg-background px-3 py-2 text-sm"
+                placeholder="123456789 أو @channelusername"
+                value={tgChatId}
+                onChange={(e) => setTgChatId(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {locale === 'ar'
+                  ? 'تصلك تنبيهات الانقطاع والفشل مباشرة على تيليجرام (بوت + محادثة).'
+                  : locale === 'fr'
+                    ? 'Les alertes d’interruption arrivent sur Telegram (bot + chat).'
+                    : 'Outage & failure alerts arrive on Telegram (bot + chat).'}
+              </p>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -887,13 +925,17 @@ export default function SettingsPage() {
                     alert_webhook_url: alertWebhook,
                     brevo_user: brevoUser,
                     mail_from: mailFrom,
+                    alert_telegram_chat_id: tgChatId,
                   };
                   if (brevoPass) payload.brevo_password = brevoPass;
+                  if (tgToken) payload.alert_telegram_bot_token = tgToken;
                   await api.put('/admin/app-settings', payload);
                   const newlySet = Boolean(brevoPass);
                   setBrevoPass('');
-                  // Configured stays true if it was already set and we kept it.
                   setBrevoConfigured((prev) => prev || newlySet);
+                  const tgNewlySet = Boolean(tgToken);
+                  setTgToken('');
+                  setTgConfigured((prev) => prev || tgNewlySet);
                   toast(locale === 'ar' ? 'تم حفظ إعدادات التنبيهات' : locale === 'fr' ? 'Alertes enregistrées' : 'Alert settings saved', 'success');
                 } catch {
                   toast(locale === 'ar' ? 'فشل حفظ الإعدادات' : 'Échec de l\'enregistrement', 'error');

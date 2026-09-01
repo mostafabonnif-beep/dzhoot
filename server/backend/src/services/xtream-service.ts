@@ -24,7 +24,55 @@ import {
 // isForeignCatalogChannel is exported at runtime (module.exports) but not as a
 // TS export — pull it via require alongside the typed imports above.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { isForeignCatalogChannel } = require('./source-failover-service');
+const { isForeignCatalogChannel, tokenize, nameMatchScore, fuzzyAccepted } = require('./source-failover-service');
+
+// ── Customer-list stability fingerprint ────────────────────────────────────
+// Merge-on-sync promises the operator that syncing a new source never
+// reshuffles the customer list: existing channels are only ever mapped to
+// failover backups, never edited. To PROVE it, we fingerprint the shared
+// catalog (the exact order customers see in M3U/TV: group asc, order asc,
+// channelId asc) before and after the sync and record both hashes.
+import { createHash } from 'crypto';
+
+export async function snapshotCatalogFingerprint(): Promise<{ count: number; fingerprint: string }> {
+  const docs = await Channel.find({
+    ownerId: null,
+    isActive: { $ne: false },
+  })
+    .select('channelGroup order channelId channelName')
+    .sort({ channelGroup: 1, order: 1, channelId: 1 })
+    .lean()
+    .exec();
+  const hash = createHash('sha256');
+  for (const d of docs) {
+    hash.update(`${String(d.channelGroup || '')}\u0001${Number(d.order) || 0}\u0001${String(d.channelId || '')}\u0001${String(d.channelName || '')}\u0001`);
+  }
+  return { count: docs.length, fingerprint: hash.digest('hex') };
+}
+
+async function recordStabilityReport(
+  source: any,
+  before: { count: number; fingerprint: string },
+  after: { count: number; fingerprint: string },
+  matched: number,
+): Promise<void> {
+  const report = {
+    at: new Date(),
+    beforeCount: before.count,
+    afterCount: after.count,
+    added: Math.max(0, after.count - before.count),
+    matched,
+    listUnchanged: before.fingerprint === after.fingerprint && before.count === after.count,
+    fingerprintBefore: before.fingerprint,
+    fingerprintAfter: after.fingerprint,
+  };
+  source.stabilityReport = report;
+  const history = Array.isArray(source.stabilityHistory) ? source.stabilityHistory : [];
+  history.unshift({ ...report });
+  source.stabilityHistory = history.slice(0, 10);
+  await source.save();
+  console.log(`[xtream] stability report for ${String(source.name)}: unchanged=${report.listUnchanged} added=${report.added} matched=${matched}`);
+}
 
 /**
  * Merge-on-sync: index existing catalog channels (from OTHER sources) by
@@ -34,10 +82,12 @@ const { isForeignCatalogChannel } = require('./source-failover-service');
 interface CatalogMatchIndex {
   byCanonical: Map<string, any[]>;
   byCleanName: Map<string, any[]>;
+  byToken: Map<string, Array<{ cleanedName: string; chans: any[] }>>;
 }
 function buildCatalogMatchIndex(catalogChannels: any[]): CatalogMatchIndex {
   const byCanonical = new Map<string, any[]>();
   const byCleanName = new Map<string, any[]>();
+  const byToken = new Map<string, Array<{ cleanedName: string; chans: any[] }>>();
   const push = (map: Map<string, any[]>, key: string, channel: any) => {
     const list = map.get(key);
     if (list) list.push(channel);
@@ -49,9 +99,16 @@ function buildCatalogMatchIndex(catalogChannels: any[]): CatalogMatchIndex {
     const ck = channelCanonicalKey(name);
     if (ck) push(byCanonical, ck, channel);
     const cn = cleanChannelName(name).toLowerCase();
-    if (cn) push(byCleanName, cn, channel);
+    if (cn) {
+      push(byCleanName, cn, channel);
+      // Token index for the fuzzy fallback (same scoring as autoMatch).
+      for (const token of tokenize(cn)) {
+        if (!byToken.has(token)) byToken.set(token, []);
+        byToken.get(token)!.push({ cleanedName: cn, chans: [channel] });
+      }
+    }
   }
-  return { byCanonical, byCleanName };
+  return { byCanonical, byCleanName, byToken };
 }
 function matchCatalogChannel(item: any, index: CatalogMatchIndex): any | null {
   const name = String(item?.name || '').trim();
@@ -60,6 +117,31 @@ function matchCatalogChannel(item: any, index: CatalogMatchIndex): any | null {
   let candidates = ck ? index.byCanonical.get(ck) : undefined;
   if (!candidates || candidates.length === 0) {
     candidates = index.byCleanName.get(cleanChannelName(name).toLowerCase());
+  }
+  // Fuzzy fallback: shared-token candidates scored with the same
+  // typo-tolerant matcher used by autoMatchFailoverMaps — catches
+  // 'ENTV' vs 'AR: ENTV 1 FULL HD' gaps that canonical keys miss.
+  if (!candidates || candidates.length === 0) {
+    const cleaned = cleanChannelName(name);
+    const tokens = tokenize(cleaned);
+    const candidateChans = new Map<string, any[]>();
+    for (const token of tokens) {
+      for (const cand of index.byToken.get(token) || []) {
+        if (!candidateChans.has(cand.cleanedName)) candidateChans.set(cand.cleanedName, cand.chans);
+      }
+    }
+    let best: any[] | undefined;
+    let bestScore = 0;
+    for (const [catalogName, chans] of candidateChans) {
+      const score = nameMatchScore(cleaned, catalogName);
+      if (score > bestScore) {
+        bestScore = score;
+        best = chans;
+      }
+    }
+    if (best && fuzzyAccepted(cleaned, best[0]?.channelName ? cleanChannelName(best[0].channelName) : '')) {
+      candidates = best;
+    }
   }
   if (!candidates || candidates.length === 0) return null;
   // Prefer the base variant over +6H / LQ / RAW / SD clones.
@@ -764,6 +846,11 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
         )
       : null;
     const mergePriority = Number(source.failoverPriority) || 20;
+    // Stability proof: fingerprint the customer-facing list BEFORE the sync.
+    // mergeCatalog syncs must never reshuffle it — new channels may be added,
+    // matched streams become failover backups, nothing is moved or edited.
+    const catalogBefore = source.mergeCatalog === true ? await snapshotCatalogFingerprint() : null;
+    let mergeMatched = 0;
     for (const item of Array.isArray(liveStreams) ? liveStreams : []) {
       const group = liveCatMap.get(String(item.category_id)) || 'Uncategorized';
       if (mergeIndex) {
@@ -772,6 +859,7 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
           await upsertMergeFailoverMap(existing, id, item, mergePriority);
           liveIds.add(`xt:${String(id)}:${item.stream_id}`);
           channels += 1;
+          mergeMatched += 1;
           continue;
         }
       }
@@ -842,13 +930,18 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
 
     const identity = await reconcileChannelIdentities();
     await markSnapshotApplied(livePreview.snapshotId);
+    // Stability proof (after): record the diff — customer list unchanged?
+    if (catalogBefore) {
+      const catalogAfter = await snapshotCatalogFingerprint();
+      await recordStabilityReport(source, catalogBefore, catalogAfter, mergeMatched);
+    }
     source.stats = { channels, movies, series: seriesCount };
     source.syncStatus = 'idle';
     source.lastSyncAt = new Date();
     if (catalogOnly) source.catalogOnlyImportedAt = new Date();
     await source.save();
 
-    return { ok: true, stats: source.stats, identity, catalogOnly };
+    return { ok: true, stats: source.stats, identity, catalogOnly, stabilityReport: source.stabilityReport ?? null };
   } catch (err: any) {
     source.syncStatus = 'error';
     source.lastError = redactSensitiveText(err);

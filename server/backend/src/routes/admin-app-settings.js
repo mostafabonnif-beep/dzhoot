@@ -17,6 +17,8 @@ const KNOWN_KEYS = new Set([
   'app',
   'code_expiry_days',
   'alert_webhook_url',
+  'alert_telegram_bot_token',
+  'alert_telegram_chat_id',
   'brevo_user',
   'brevo_password',
   'mail_from',
@@ -29,6 +31,8 @@ function sanitize(key, value) {
     return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : 30;
   }
   if (key === 'alert_webhook_url') return String(value || '').trim().slice(0, 500);
+  if (key === 'alert_telegram_bot_token') return String(value || '').trim().slice(0, 200);
+  if (key === 'alert_telegram_chat_id') return String(value || '').trim().slice(0, 100);
   if (key === 'brevo_user') return String(value || '').trim().slice(0, 200);
   if (key === 'brevo_password') return String(value || '').trim().slice(0, 300);
   if (key === 'mail_from') return String(value || '').trim().slice(0, 200);
@@ -45,9 +49,14 @@ router.get('/', async (req, res) => {
         out.brevo_configured = Boolean(String(s.value || '').trim());
         continue;
       }
+      if (s.key === 'alert_telegram_bot_token') {
+        out.alert_telegram_configured = Boolean(String(s.value || '').trim());
+        continue;
+      }
       out[s.key] = s.value;
     }
     if (out.brevo_configured === undefined) out.brevo_configured = false;
+    if (out.alert_telegram_configured === undefined) out.alert_telegram_configured = false;
     return res.json({ success: true, data: out });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
@@ -61,6 +70,10 @@ router.put('/', async (req, res) => {
     // Empty password means "keep the existing one" — never overwrite with ''.
     if (body.brevo_password === '' || body.brevo_password === undefined) {
       delete body.brevo_password;
+    }
+    // Same for the Telegram bot token (a secret too).
+    if (body.alert_telegram_bot_token === '' || body.alert_telegram_bot_token === undefined) {
+      delete body.alert_telegram_bot_token;
     }
     const keys = Object.keys(body).filter((k) => KNOWN_KEYS.has(k));
     if (keys.length === 0) {
@@ -82,6 +95,10 @@ router.put('/', async (req, res) => {
     if ('brevo_password' in saved) {
       saved.brevo_configured = Boolean(String(saved.brevo_password || '').trim());
       delete saved.brevo_password;
+    }
+    if ('alert_telegram_bot_token' in saved) {
+      saved.alert_telegram_configured = Boolean(String(saved.alert_telegram_bot_token || '').trim());
+      delete saved.alert_telegram_bot_token;
     }
 
     audit({ ...reqCtx(req), action: 'APP_SETTINGS_UPDATE', resource: 'AppSetting', changes: { after: saved } });
