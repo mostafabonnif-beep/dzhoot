@@ -242,7 +242,7 @@ dependencies {
     implementation("com.amazon.device:amazon-appstore-sdk:3.0.5")
 
     // QR Code generation
-    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.google.zxing:core:3.5.4")
 
     // Testing
     testImplementation(libs.junit)
