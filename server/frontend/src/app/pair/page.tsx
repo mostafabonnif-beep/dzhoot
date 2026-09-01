@@ -54,7 +54,7 @@ function PairContent() {
         setError(msg);
         setState('error');
       });
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!hydrated) return;
