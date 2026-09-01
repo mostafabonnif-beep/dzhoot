@@ -65,18 +65,130 @@ const REGION_KEYWORDS = [
 // category labels), the customer list is organized by that priority FIRST —
 // e.g. DZ,AR,MA,TN,LY,EG,FR puts Algeria before the Arab world before France
 // before everything else. Unset = keep the supplier's own order (default).
-// Read per call (no module cache): env is cheap, and it keeps tests/ops simple.
-function countryPriority() {
+//
+// Two sources of truth, in order:
+//   1. Admin panel (AppSetting keys `catalog_country_priority` /
+//      `catalog_category_priority`, arrays) — set from the "تنظيم القوائم"
+//      page, applied live after a short cache refresh.
+//   2. Env vars (CATALOG_COUNTRY_PRIORITY / CATALOG_CATEGORY_PRIORITY) —
+//      fallback when the panel setting is absent.
+// The cache is refreshed by refreshCatalogOrdering() (server boot, admin PUT,
+// and a 60s interval started by startCatalogOrderingAutoRefresh()).
+
+const ORDERING_REFRESH_MS = 60_000;
+const orderingState = {
+  country: null, // { value: string[], source: 'db' | 'env' } | null (not loaded yet)
+  category: null,
+  loadedAt: 0,
+};
+
+function envCountryPriority() {
   return String(process.env.CATALOG_COUNTRY_PRIORITY || '')
     .split(',')
     .map((s) => s.trim().toUpperCase())
     .filter(Boolean);
 }
-function categoryPriority() {
+function envCategoryPriority() {
   return String(process.env.CATALOG_CATEGORY_PRIORITY || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+function normalizePriorityList(value, upper) {
+  if (!Array.isArray(value)) return [];
+  const list = value
+    .map((v) => String(v ?? '').trim())
+    .filter(Boolean)
+    .map((v) => (upper ? v.toUpperCase() : v));
+  return [...new Set(list)];
+}
+
+async function readAppSettingValue(key) {
+  try {
+    const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
+    const doc = await AppSetting.findOne({ key }).lean().exec();
+    return doc ? doc.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Reload the ordering cache from AppSettings (env fallback). Async — safe to
+ *  call from server boot and after an admin update. */
+async function refreshCatalogOrdering() {
+  try {
+    const [countryDb, categoryDb] = await Promise.all([
+      readAppSettingValue('catalog_country_priority'),
+      readAppSettingValue('catalog_category_priority'),
+    ]);
+    orderingState.country = {
+      value: normalizePriorityList(countryDb, true),
+      source: Array.isArray(countryDb) && countryDb.length ? 'db' : 'env',
+    };
+    orderingState.category = {
+      value: normalizePriorityList(categoryDb, false),
+      source: Array.isArray(categoryDb) && categoryDb.length ? 'db' : 'env',
+    };
+    if (orderingState.country.source === 'env') orderingState.country.value = envCountryPriority();
+    if (orderingState.category.source === 'env') orderingState.category.value = envCategoryPriority();
+  } catch (error) {
+    console.error('[catalog] ordering refresh failed:', error?.message);
+    orderingState.country = { value: envCountryPriority(), source: 'env' };
+    orderingState.category = { value: envCategoryPriority(), source: 'env' };
+  }
+  orderingState.loadedAt = Date.now();
+}
+
+/** Sync test hook: force the cache (bypassing the DB). null value = env fallback. */
+function setCatalogOrderingOverride(country, category) {
+  orderingState.country = {
+    value: normalizePriorityList(country, true),
+    source: country === null || country === undefined ? 'env' : 'db',
+  };
+  orderingState.category = {
+    value: normalizePriorityList(category, false),
+    source: category === null || category === undefined ? 'env' : 'db',
+  };
+  if (orderingState.country.source === 'env') orderingState.country.value = envCountryPriority();
+  if (orderingState.category.source === 'env') orderingState.category.value = envCategoryPriority();
+  orderingState.loadedAt = Date.now();
+}
+
+function clearCatalogOrderingCache() {
+  orderingState.country = null;
+  orderingState.category = null;
+  orderingState.loadedAt = 0;
+}
+
+/** Admin-facing view of the CURRENT effective ordering (with its source). */
+async function getCatalogOrdering() {
+  if (!orderingState.country || Date.now() - orderingState.loadedAt > ORDERING_REFRESH_MS) {
+    await refreshCatalogOrdering();
+  }
+  return {
+    countryPriority: orderingState.country,
+    categoryPriority: orderingState.category,
+  };
+}
+
+function countryPriority() {
+  return orderingState.country ? orderingState.country.value : envCountryPriority();
+}
+function categoryPriority() {
+  return orderingState.category ? orderingState.category.value : envCategoryPriority();
+}
+
+let orderingRefreshTimer = null;
+/** Start the periodic cache refresh (idempotent). Call once from server boot. */
+function startCatalogOrderingAutoRefresh() {
+  if (orderingRefreshTimer) return orderingRefreshTimer;
+  void refreshCatalogOrdering();
+  orderingRefreshTimer = setInterval(() => {
+    void refreshCatalogOrdering();
+  }, ORDERING_REFRESH_MS);
+  if (orderingRefreshTimer.unref) orderingRefreshTimer.unref();
+  return orderingRefreshTimer;
 }
 
 const REGION_LABELS = {
@@ -139,6 +251,8 @@ const CATEGORY_RULES = [
   ['موسيقى', /(?:music|radio|mtv|hits|vevo)/iu],
   ['ديني', /(?:quran|islam|religion|church|holy|mosque)/iu],
 ];
+
+const CATEGORY_LABELS = CATEGORY_RULES.map(([label]) => label).concat([DEFAULT_CATEGORY]);
 
 function asText(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -512,4 +626,11 @@ module.exports = {
   sortClientCatalogChannels,
   cleanDisplayText,
   cleanVodTitle,
+  refreshCatalogOrdering,
+  setCatalogOrderingOverride,
+  clearCatalogOrderingCache,
+  getCatalogOrdering,
+  startCatalogOrderingAutoRefresh,
+  REGION_LABELS,
+  CATEGORY_LABELS,
 };

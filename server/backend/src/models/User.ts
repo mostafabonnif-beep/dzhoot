@@ -8,6 +8,7 @@ import { publicCatalogHideQuery, publicCatalogDedupQuery } from '../utils/catalo
 const {
   hasRestrictedPresentationMarker,
   publicCatalogPresentationQuery,
+  sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
 
 const userSchema = new Schema<IUserDocument>(
@@ -246,6 +247,10 @@ userSchema.methods.generateUserPlaylist = async function (
       $and: [{ _id: { $in: this.channels } }, xtreamVisibilityGuard, dedup],
     }).sort({ channelGroup: 1, order: 1 });
   }
+  // Apply the operator's ordering (region priority → category priority →
+  // supplier group/order/name) to the M3U too, so the TV app's list matches
+  // the JSON playlist: same organized order everywhere.
+  channels = sortClientCatalogChannels(channels);
 
   let m3uHeader = '#EXTM3U';
   if (baseUrl && this.channelListCode) {

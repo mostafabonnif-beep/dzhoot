@@ -68,6 +68,7 @@ function publicShape(src) {
     lastDiagnosticsAt: src.lastDiagnosticsAt,
     verifiedAt: src.verifiedAt,
     stats: src.stats,
+    stabilityReport: src.stabilityReport || null,
     createdAt: src.createdAt,
   };
 }
@@ -273,7 +274,12 @@ router.post('/:id/sync', async (req, res) => {
           action: 'XTREAM_SOURCE_SYNC',
           resource: 'XtreamSource',
           resourceId: String(id),
-          changes: { after: result.stats },
+          changes: {
+            after: {
+              stats: result.stats,
+              stabilityReport: result.stabilityReport || undefined,
+            },
+          },
         });
       })
       .catch((err) => {

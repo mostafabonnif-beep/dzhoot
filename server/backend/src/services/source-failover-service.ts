@@ -85,7 +85,7 @@ const JUNK_TOKENS = new Set([
   'tv', 'ch', 'channel', 'chaîne', 'canal', 'قناة', 'بث', 'تدفق',
 ]);
 
-function tokenize(cleaned: string): string[] {
+export function tokenize(cleaned: string): string[] {
   return cleaned.split(' ').filter((t) => t.length >= 3 && !JUNK_TOKENS.has(t));
 }
 
@@ -177,6 +177,7 @@ export function channelCanonicalKey(name: string): string | null {
   if (has(/algerie\s*6\b|tv\s*6\b/)) return 'algerie-6';
   if (has(/el\s*maarifa|maarifa|algerie\s*7\b/)) return 'el-maarifa';
   if (has(/edhakira|algerie\s*8\b/)) return 'edhakira';
+  if (has(/echourouk\s*news|echorouk\s*news/)) return 'echourouk-news';
   if (has(/ech.*rouk/)) return 'echourouk';
   if (has(/ennahar|ennahaar/)) return 'ennahar';
   if (has(/el\s*bilad|elbilad/)) return 'el-bilad';
@@ -187,7 +188,29 @@ export function channelCanonicalKey(name: string): string | null {
   if (has(/watania/)) return 'el-watania';
   if (has(/bahia/)) return 'el-bahia';
   if (has(/be\s*in\s*sports?|beinsports?/)) return 'beinsports';
+  if (has(/be\s*in\s*movies?/)) return 'bein-movies';
   if (has(/be\s*in\b/)) return 'bein';
+  // Big Arabic families (Egyptian, Gulf, pan-Arab) — the +6H / package tags
+  // ('SSC 1 FHD', 'mbc1 4K', 'OSN Movies HD') differ per supplier, so map the
+  // family, not the exact variant.
+  if (has(/mbc\s*[1-4]\b/)) {
+    const m = n.match(/mbc\s*([1-4])\b/);
+    return m ? `mbc-${m[1]}` : 'mbc';
+  }
+  if (has(/mbc\s*(action|drama|max|masr|masr\s*2|bollywood|iraq|africa|the\s*first)/)) return 'mbc-extra';
+  if (has(/ssc\s*[1-5]\b/)) return 'ssc-sports';
+  if (has(/rotana/)) return 'rotana';
+  if (has(/dubai\s*(one|tv|sports)?|dubai\b/)) return 'dubai';
+  if (has(/abu\s*dhabi|adtv/)) return 'abu-dhabi';
+  if (has(/al\s*jazeera|الجزيرة/)) return 'aljazeera';
+  if (has(/al\s*arabiya|العربية/)) return 'alarabiya';
+  if (has(/al\s*oula|saudi\s*(tv\s*)?1\b|السعودية\s*الأولى|sbc\b/)) return 'al-oula';
+  if (has(/al\s*iraqiya|العراقية/)) return 'al-iraqiya';
+  if (has(/al\s*sharqiya|الشرقية/)) return 'al-sharqiya';
+  if (has(/on\s*time\s*sports|ontv|on\s*tv\s*sport/)) return 'on-time-sports';
+  if (has(/(^|\s)dmc(\s|$)/)) return 'dmc';
+  if (has(/osn\s*(movies|series|sports|ya\s*hala)?/)) return 'osn';
+  if (has(/el\s*fadjr|elfadjr|elfajr/)) return 'el-fadjr';
   return null;
 }
 
@@ -555,7 +578,6 @@ export async function autoMatchFailoverMaps(
 
   const catalog = await Channel.find({ isActive: { $ne: false } })
     .select('channelId channelName channelGroup')
-    .limit(20000)
     .lean()
     .exec();
   // Index catalog channels by canonical key (curated dictionary) and by cleaned
@@ -662,6 +684,7 @@ module.exports = {
   channelCanonicalKey,
   channelVariantRank,
   nameMatchScore,
+  tokenize,
   fuzzyAccepted,
   isForeignCatalogChannel,
 };

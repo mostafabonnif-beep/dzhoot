@@ -324,6 +324,34 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     expect(channelCanonicalKey('Dz| El Bilad TV ✦')).toBe('el-bilad');
     expect(channelCanonicalKey('AR: El Bilad')).toBe('el-bilad');
     expect(channelCanonicalKey('BEIN SPORT AR')).toBe('beinsports');
+    expect(channelCanonicalKey('beIN MOVIES 1 HD')).toBe('bein-movies');
+    expect(channelCanonicalKey('AR: BEIN MOVIES')).toBe('bein-movies');
+    expect(channelCanonicalKey('MBC 1 FHD')).toBe('mbc-1');
+    expect(channelCanonicalKey('MBC 2 HD')).toBe('mbc-2');
+    expect(channelCanonicalKey('AR: MBC 3')).toBe('mbc-3');
+    expect(channelCanonicalKey('MBC 4 ✦')).toBe('mbc-4');
+    expect(channelCanonicalKey('MBC ACTION HD')).toBe('mbc-extra');
+    expect(channelCanonicalKey('MBC DRAMA 4K')).toBe('mbc-extra');
+    expect(channelCanonicalKey('MBC MASR')).toBe('mbc-extra');
+    expect(channelCanonicalKey('SSC 1 HD')).toBe('ssc-sports');
+    expect(channelCanonicalKey('SSC 5')).toBe('ssc-sports');
+    expect(channelCanonicalKey('Rotana Cinema HD')).toBe('rotana');
+    expect(channelCanonicalKey('Dubai One')).toBe('dubai');
+    expect(channelCanonicalKey('Abu Dhabi TV')).toBe('abu-dhabi');
+    expect(channelCanonicalKey('ADTV Sports 2')).toBe('abu-dhabi');
+    expect(channelCanonicalKey('Al Jazeera Arabic')).toBe('aljazeera');
+    expect(channelCanonicalKey('الجزيرة')).toBe('aljazeera');
+    expect(channelCanonicalKey('Al Arabiya')).toBe('alarabiya');
+    expect(channelCanonicalKey('العربية')).toBe('alarabiya');
+    expect(channelCanonicalKey('Al Oula Saudi')).toBe('al-oula');
+    expect(channelCanonicalKey('Al Iraqiya')).toBe('al-iraqiya');
+    expect(channelCanonicalKey('Al Sharqiya')).toBe('al-sharqiya');
+    expect(channelCanonicalKey('ON Time Sports 1')).toBe('on-time-sports');
+    expect(channelCanonicalKey('DMC Egypt')).toBe('dmc');
+    expect(channelCanonicalKey('OSN Movies HD')).toBe('osn');
+    expect(channelCanonicalKey('OSN Series')).toBe('osn');
+    expect(channelCanonicalKey('El Fadjr TV')).toBe('el-fadjr');
+    expect(channelCanonicalKey('Echourouk News')).toBe('echourouk-news');
   });
 
   it('nameMatchScore tolerates typos and ignores junk tokens', () => {

@@ -90,3 +90,5 @@ __pycache__/
 /scripts/dzhoot-coverage.js
 /scripts/dzhoot-fillmaps.js
 /scripts/dzhoot-live-token.js
+/scripts/dzhoof-diagnose.js
+/scripts/dzhoot-stabilize.js
