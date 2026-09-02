@@ -206,4 +206,15 @@ describe('Admin channels page', () => {
     expect(modal.textContent).toContain('وضع Catch-up: تايم شيفت');
     expect(modal.textContent).toContain('نافذة Catch-up: 3 يوم');
   });
+
+  it('filters the admin list by catchup readiness from the summary chips', async () => {
+    render(<ChannelsPageShell mode="admin" />);
+
+    await screen.findByText('rows:3');
+    fireEvent.click(screen.getByRole('button', { name: /جاهزة لـ Catch-up/i }));
+    expect(screen.getByText('rows:1')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /عرض كل القنوات/i }));
+    expect(screen.getByText('rows:3')).toBeInTheDocument();
+  });
 });
