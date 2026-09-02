@@ -186,7 +186,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   // Admin: row selection for bulk enable/disable/delete
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [bulkSelectionLoading, setBulkSelectionLoading] = useState(false);
-  const [adminFocusFilter, setAdminFocusFilter] = useState<'catchup' | 'epg' | 'flagged' | 'alternates' | null>(null);
+  const [adminFocusFilter, setAdminFocusFilter] = useState<'catchup' | 'epg' | 'timeshift_epg' | 'flagged' | 'alternates' | null>(null);
 
   // Clear row selection whenever the visible page changes (bulk actions apply
   // only to rows the admin can see, keeping destructive ops predictable).
@@ -552,6 +552,9 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     if (!isAdmin || !adminFocusFilter) return channels;
     if (adminFocusFilter === 'catchup') return channels.filter((c) => Boolean(c.catchup?.type));
     if (adminFocusFilter === 'epg') return channels.filter((c) => Boolean(c.epgId));
+    if (adminFocusFilter === 'timeshift_epg') {
+      return channels.filter((c) => Boolean(c.catchup?.type) && Boolean(c.epgId));
+    }
     if (adminFocusFilter === 'flagged') return channels.filter((c) => Boolean(c.flaggedBad?.isFlagged));
     if (adminFocusFilter === 'alternates') {
       return channels.filter(
@@ -579,6 +582,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   ).length;
   const catchupReadyCount = channels.filter((c) => Boolean(c.catchup?.type)).length;
   const epgLinkedCount = channels.filter((c) => Boolean(c.epgId)).length;
+  const timeshiftReadyWithEpgCount = channels.filter((c) => Boolean(c.catchup?.type) && Boolean(c.epgId)).length;
   const channelsReadinessLabel =
     deadCount > 0
       ? L('تحتاج معالجة تشغيلية', 'Assainissement opérationnel requis', 'Operational cleanup needed')
@@ -1161,6 +1165,15 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           `${detailChannel.catchup.days} day${detailChannel.catchup.days > 1 ? 's' : ''}`,
         )
       : undefined;
+  const detailReplayReadiness = detailChannel
+    ? detailChannel.catchup?.type && detailChannel.epgId
+      ? L('جاهزة للتايم شيفت من الدليل', 'Prête au timeshift depuis le guide', 'Ready for timeshift from guide')
+      : detailChannel.catchup?.type
+        ? L('تدعم Catch-up لكن تحتاج ربط EPG', 'Catch-up disponible mais liaison EPG requise', 'Catch-up available but needs EPG linkage')
+        : detailChannel.epgId
+          ? L('مرتبطة بـ EPG لكن بدون Catch-up', 'Liée à l’EPG mais sans catch-up', 'Linked to EPG but without catch-up')
+          : L('غير جاهزة للتايم شيفت بعد', 'Pas encore prête pour le timeshift', 'Not ready for timeshift yet')
+    : undefined;
 
   // Detail modal fields
   const detailFields: ChannelField[] = detailChannel
@@ -1174,6 +1187,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               { label: t('channels.quality'), value: detailChannel.metadata?.quality },
               { label: t('channels.network'), value: detailChannel.metadata?.network },
               { label: t('channels.website'), value: detailChannel.metadata?.website },
+              { label: L('جاهزية التايم شيفت', 'Préparation timeshift', 'Timeshift readiness'), value: detailReplayReadiness },
               { label: L('معرّف EPG', 'ID EPG', 'EPG ID'), value: detailChannel.epgId },
               { label: L('وضع Catch-up', 'Mode catch-up', 'Catch-up mode'), value: detailCatchupMode },
               { label: L('نافذة Catch-up', 'Fenêtre catch-up', 'Catch-up window'), value: detailCatchupWindow },
@@ -1182,6 +1196,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             ]
           : [
               { label: t('channels.group'), value: detailChannel.channelGroup },
+              { label: L('جاهزية التايم شيفت', 'Préparation timeshift', 'Timeshift readiness'), value: detailReplayReadiness },
               { label: L('معرّف EPG', 'ID EPG', 'EPG ID'), value: detailChannel.epgId },
               { label: L('وضع Catch-up', 'Mode catch-up', 'Catch-up mode'), value: detailCatchupMode },
               { label: L('نافذة Catch-up', 'Fenêtre catch-up', 'Catch-up window'), value: detailCatchupWindow },
@@ -1730,6 +1745,16 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
                 className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'catchup' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
               >
                 {L('جاهزة لـ Catch-up', 'Prêtes pour le catch-up', 'Catch-up ready')}: <strong className="ms-1">{catchupReadyCount}</strong>
+              </button>
+            )}
+            {isAdmin && timeshiftReadyWithEpgCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'timeshift_epg' ? null : 'timeshift_epg'))}
+                aria-pressed={adminFocusFilter === 'timeshift_epg'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'timeshift_epg' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
+                {L('جاهزة للتايم شيفت مع EPG', 'Timeshift + EPG prêts', 'Timeshift + EPG ready')}: <strong className="ms-1">{timeshiftReadyWithEpgCount}</strong>
               </button>
             )}
             {isAdmin && epgLinkedCount > 0 && (
