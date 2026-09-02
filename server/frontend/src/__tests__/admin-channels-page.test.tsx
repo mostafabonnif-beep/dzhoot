@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import ChannelsPageShell from '../components/channels-page-shell';
 import api from '@/lib/api';
 
@@ -93,7 +93,14 @@ jest.mock('@/components/ui/status-dot', () => ({
 
 jest.mock('@/components/ui/channel-data-table', () => ({
   __esModule: true,
-  default: ({ data }: any) => <div>rows:{data.length}</div>,
+  default: ({ data, onDetail }: any) => (
+    <div>
+      <div>rows:{data.length}</div>
+      {data[0] && (
+        <button onClick={() => onDetail?.(data[0])}>show-first-detail</button>
+      )}
+    </div>
+  ),
 }));
 
 jest.mock('@/components/ui/channel-logo', () => ({
@@ -103,7 +110,14 @@ jest.mock('@/components/ui/channel-logo', () => ({
 
 jest.mock('@/components/channel-detail-modal', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ open, fields }: any) =>
+    open ? (
+      <div data-testid="channel-detail-modal">
+        {fields.map((field: any) => (
+          <div key={field.label}>{`${field.label}: ${field.value}`}</div>
+        ))}
+      </div>
+    ) : null,
 }));
 
 const mockedGet = api.get as jest.Mock;
@@ -179,5 +193,17 @@ describe('Admin channels page', () => {
     await waitFor(() => {
       expect(mockedGet).toHaveBeenCalled();
     });
+  });
+
+  it('shows EPG and catchup details in the admin channel detail modal', async () => {
+    render(<ChannelsPageShell mode="admin" />);
+
+    await screen.findByText('rows:3');
+    fireEvent.click(screen.getByText('show-first-detail'));
+
+    const modal = await screen.findByTestId('channel-detail-modal');
+    expect(modal.textContent).toContain('معرّف EPG: beinsports1.ar');
+    expect(modal.textContent).toContain('وضع Catch-up: تايم شيفت');
+    expect(modal.textContent).toContain('نافذة Catch-up: 3 يوم');
   });
 });

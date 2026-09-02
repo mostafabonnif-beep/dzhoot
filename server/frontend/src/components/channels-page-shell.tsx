@@ -1132,6 +1132,21 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   // Add-from-system panel: exclude already-owned channels (search is server-side now)
   const myIds = new Set(channels.map((c) => c._id));
   const availableChannels = allChannels.filter((c) => !myIds.has(c._id));
+  const detailCatchupMode = detailChannel?.catchup?.type
+    ? detailChannel.catchup.type === 'timeshift'
+      ? L('تايم شيفت', 'Timeshift', 'Timeshift')
+      : detailChannel.catchup.type === 'append'
+        ? L('أرشيف ملحق', 'Archive append', 'Archive append')
+        : detailChannel.catchup.type
+    : undefined;
+  const detailCatchupWindow =
+    typeof detailChannel?.catchup?.days === 'number' && detailChannel.catchup.days > 0
+      ? L(
+          `${detailChannel.catchup.days} يوم`,
+          `${detailChannel.catchup.days} jour${detailChannel.catchup.days > 1 ? 's' : ''}`,
+          `${detailChannel.catchup.days} day${detailChannel.catchup.days > 1 ? 's' : ''}`,
+        )
+      : undefined;
 
   // Detail modal fields
   const detailFields: ChannelField[] = detailChannel
@@ -1145,10 +1160,18 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               { label: t('channels.quality'), value: detailChannel.metadata?.quality },
               { label: t('channels.network'), value: detailChannel.metadata?.network },
               { label: t('channels.website'), value: detailChannel.metadata?.website },
+              { label: L('معرّف EPG', 'ID EPG', 'EPG ID'), value: detailChannel.epgId },
+              { label: L('وضع Catch-up', 'Mode catch-up', 'Catch-up mode'), value: detailCatchupMode },
+              { label: L('نافذة Catch-up', 'Fenêtre catch-up', 'Catch-up window'), value: detailCatchupWindow },
               { label: t('channels.drmType'), value: detailChannel.channelDrmType },
               { label: t('channels.sortOrder'), value: detailChannel.order?.toString() },
             ]
-          : [{ label: t('channels.group'), value: detailChannel.channelGroup }]),
+          : [
+              { label: t('channels.group'), value: detailChannel.channelGroup },
+              { label: L('معرّف EPG', 'ID EPG', 'EPG ID'), value: detailChannel.epgId },
+              { label: L('وضع Catch-up', 'Mode catch-up', 'Catch-up mode'), value: detailCatchupMode },
+              { label: L('نافذة Catch-up', 'Fenêtre catch-up', 'Catch-up window'), value: detailCatchupWindow },
+            ]),
         {
           label: t('common.status'),
           value:
