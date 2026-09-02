@@ -54,6 +54,10 @@ interface Channel {
   order?: number;
   epgId?: string;
   isActive?: boolean;
+  catchup?: {
+    type?: string | null;
+    days?: number | null;
+  };
   metadata?: {
     isWorking?: boolean;
     lastTested?: string;
@@ -559,6 +563,8 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   const alternateReadyCount = channels.filter(
     (c) => (c.alternateStreams?.filter((alt) => !alt.flaggedBad?.isFlagged).length ?? 0) > 0,
   ).length;
+  const catchupReadyCount = channels.filter((c) => Boolean(c.catchup?.type)).length;
+  const epgLinkedCount = channels.filter((c) => Boolean(c.epgId)).length;
   const channelsReadinessLabel =
     deadCount > 0
       ? L('تحتاج معالجة تشغيلية', 'Assainissement opérationnel requis', 'Operational cleanup needed')
@@ -1677,8 +1683,18 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             </div>
           </div>
         </div>
-        {(flaggedPrimaryCount > 0 || selectedRows.size > 0) && (
+        {(flaggedPrimaryCount > 0 || selectedRows.size > 0 || (isAdmin && catchupReadyCount > 0) || (isAdmin && epgLinkedCount > 0)) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs opacity-90">
+            {isAdmin && catchupReadyCount > 0 && (
+              <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
+                {L('جاهزة لـ Catch-up', 'Prêtes pour le catch-up', 'Catch-up ready')}: <strong className="ms-1">{catchupReadyCount}</strong>
+              </span>
+            )}
+            {isAdmin && epgLinkedCount > 0 && (
+              <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
+                {L('مرتبطة بـ EPG', 'Liées à l’EPG', 'EPG linked')}: <strong className="ms-1">{epgLinkedCount}</strong>
+              </span>
+            )}
             {flaggedPrimaryCount > 0 && (
               <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
                 {L('قنوات مُعلّمة كمشكلة', 'Chaînes signalées', 'Flagged channels')}: <strong className="ms-1">{flaggedPrimaryCount}</strong>
