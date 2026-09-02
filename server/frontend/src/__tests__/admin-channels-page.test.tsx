@@ -202,6 +202,7 @@ describe('Admin channels page', () => {
     fireEvent.click(screen.getByText('show-first-detail'));
 
     const modal = await screen.findByTestId('channel-detail-modal');
+    expect(modal.textContent).toContain('جاهزية التايم شيفت: جاهزة للتايم شيفت من الدليل');
     expect(modal.textContent).toContain('معرّف EPG: beinsports1.ar');
     expect(modal.textContent).toContain('وضع Catch-up: تايم شيفت');
     expect(modal.textContent).toContain('نافذة Catch-up: 3 يوم');
@@ -216,5 +217,13 @@ describe('Admin channels page', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /عرض كل القنوات/i }));
     expect(screen.getByText('rows:3')).toBeInTheDocument();
+  });
+
+  it('filters the admin list by combined timeshift and EPG readiness', async () => {
+    render(<ChannelsPageShell mode="admin" />);
+
+    await screen.findByText('rows:3');
+    fireEvent.click(screen.getByRole('button', { name: /جاهزة للتايم شيفت مع EPG/i }));
+    expect(screen.getByText('rows:1')).toBeInTheDocument();
   });
 });
