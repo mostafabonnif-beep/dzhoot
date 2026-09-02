@@ -142,6 +142,7 @@ fun DzhoofNavGraph(
                 onPlayEpisode = { id, title ->
                     navController.navigate(Screen.VodPlayer.createRoute("EPISODE", id, title))
                 },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
             )
         }
 
@@ -158,6 +159,7 @@ fun DzhoofNavGraph(
                 onPlayEpisode = { id, title ->
                     navController.navigate(Screen.VodPlayer.createRoute("EPISODE", id, title))
                 },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
             )
         }
 
@@ -174,6 +176,7 @@ fun DzhoofNavGraph(
                 onPlayEpisode = { id, title ->
                     navController.navigate(Screen.VodPlayer.createRoute("EPISODE", id, title))
                 },
+                onOpenSettings = { navController.navigate(Screen.Settings.route) },
             )
         }
 
