@@ -163,18 +163,40 @@ describe('Round 19 — settings import never leaks the SMTP password', () => {
     await AppSetting.deleteMany({});
   });
 
-  it('POST /import stores but never echoes brevo_password', async () => {
+  it('POST /import stores but never echoes SMTP or Telegram secrets', async () => {
     const res = await request(settingsApp())
       .post('/admin/app-settings/import')
-      .send({ settings: { brevo_user: 'smtp@example.com', brevo_password: 'import-secret' } });
+      .send({ settings: {
+        brevo_user: 'smtp@example.com',
+        brevo_password: 'import-secret',
+        alert_telegram_bot_token: 'telegram-import-secret',
+      } });
     expect(res.status).toBe(200);
     expect(JSON.stringify(res.body)).not.toContain('import-secret');
+    expect(JSON.stringify(res.body)).not.toContain('telegram-import-secret');
     expect(res.body.data.brevo_configured).toBe(true);
+    expect(res.body.data.alert_telegram_configured).toBe(true);
     expect(res.body.data.brevo_user).toBe('smtp@example.com');
 
     const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
     const stored = await AppSetting.findOne({ key: 'brevo_password' }).lean();
+    const telegramStored = await AppSetting.findOne({ key: 'alert_telegram_bot_token' }).lean();
     expect(stored?.value).toBe('import-secret');
+    expect(telegramStored?.value).toBe('telegram-import-secret');
+  });
+
+  it('POST /import rejects invalid webhook and invalid emails', async () => {
+    const badWebhook = await request(settingsApp())
+      .post('/admin/app-settings/import')
+      .send({ settings: { alert_webhook_url: 'ftp://bad.example.com/hook' } });
+    expect(badWebhook.status).toBe(400);
+    expect(badWebhook.body.field).toBe('alert_webhook_url');
+
+    const badBrevoUser = await request(settingsApp())
+      .post('/admin/app-settings/import')
+      .send({ settings: { brevo_user: 'bad-email' } });
+    expect(badBrevoUser.status).toBe(400);
+    expect(badBrevoUser.body.field).toBe('brevo_user');
   });
 });
 

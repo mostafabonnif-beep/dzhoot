@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, Trash2, Pencil, Copy, Check } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -210,6 +210,16 @@ export default function PlansPage() {
     setTimeout(() => setCopiedId(null), 1500);
   }
 
+  const summary = useMemo(() => {
+    const activePlans = plans.filter((plan) => plan.status === 'Active').length;
+    const inactivePlans = plans.length - activePlans;
+    const totalCodes = plans.reduce((sum, plan) => sum + (plan.codeCount ?? 0), 0);
+    const usedCodes = plans.reduce((sum, plan) => sum + (plan.usedCodeCount ?? 0), 0);
+    const activeSubs = plans.reduce((sum, plan) => sum + (plan.activeSubs ?? 0), 0);
+
+    return { activePlans, inactivePlans, totalCodes, usedCodes, activeSubs };
+  }, [plans]);
+
   const columns: DataTableColumn<PlanData>[] = [
     {
       key: 'name',
@@ -356,6 +366,29 @@ export default function PlansPage() {
           {error}
         </div>
       )}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="text-xs text-muted-foreground">إجمالي الباقات</div>
+          <div className="mt-2 text-2xl font-semibold">{totalCount || plans.length}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="text-xs text-muted-foreground">الباقات النشطة</div>
+          <div className="mt-2 text-2xl font-semibold text-primary">{summary.activePlans}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="text-xs text-muted-foreground">الباقات غير النشطة</div>
+          <div className="mt-2 text-2xl font-semibold">{summary.inactivePlans}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="text-xs text-muted-foreground">الأكواد المستخدمة</div>
+          <div className="mt-2 text-2xl font-semibold">{summary.usedCodes}/{summary.totalCodes}</div>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="text-xs text-muted-foreground">الاشتراكات النشطة</div>
+          <div className="mt-2 text-2xl font-semibold">{summary.activeSubs}</div>
+        </div>
+      </div>
 
       <DataTable
         columns={columns}

@@ -1,6 +1,5 @@
 const express = require('express');
 const router = express.Router();
-const mongoose = require('mongoose');
 const AppSetting = require('../models/AppSetting');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx } = require('../services/audit-log');
@@ -24,13 +23,42 @@ const KNOWN_KEYS = new Set([
   'mail_from',
 ]);
 
+function normalizeHttpUrl(value) {
+  const raw = String(value || '').trim().slice(0, 500);
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+    return parsed.toString();
+  } catch {
+    return '';
+  }
+}
+
+function isValidEmail(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw);
+}
+
+function validateSettingValue(key, value) {
+  if (key === 'alert_webhook_url') {
+    const raw = String(value || '').trim();
+    if (raw && !normalizeHttpUrl(raw)) return 'Invalid webhook URL';
+  }
+  if (key === 'mail_from' || key === 'brevo_user') {
+    if (!isValidEmail(value)) return 'Invalid email address';
+  }
+  return null;
+}
+
 function sanitize(key, value) {
   if (key === 'subscription_required') return !!value;
   if (key === 'code_expiry_days') {
     const n = Number(value);
     return Number.isFinite(n) && n >= 1 && n <= 365 ? Math.floor(n) : 30;
   }
-  if (key === 'alert_webhook_url') return String(value || '').trim().slice(0, 500);
+  if (key === 'alert_webhook_url') return normalizeHttpUrl(value);
   if (key === 'alert_telegram_bot_token') return String(value || '').trim().slice(0, 200);
   if (key === 'alert_telegram_chat_id') return String(value || '').trim().slice(0, 100);
   if (key === 'brevo_user') return String(value || '').trim().slice(0, 200);
@@ -58,7 +86,7 @@ router.get('/', async (req, res) => {
     if (out.brevo_configured === undefined) out.brevo_configured = false;
     if (out.alert_telegram_configured === undefined) out.alert_telegram_configured = false;
     return res.json({ success: true, data: out });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
@@ -82,6 +110,10 @@ router.put('/', async (req, res) => {
 
     const saved = {};
     for (const key of keys) {
+      const validationError = validateSettingValue(key, body[key]);
+      if (validationError) {
+        return res.status(400).json({ success: false, error: validationError, field: key });
+      }
       const value = sanitize(key, body[key]);
       const doc = await AppSetting.findOneAndUpdate(
         { key },
@@ -123,10 +155,14 @@ router.get('/export', async (req, res) => {
     const out = {};
     for (const s of settings) {
       if (s.key.startsWith(EXCLUDED_PREFIX) || EXCLUDED_KEYS.has(s.key)) continue;
-      // The SMTP password never leaves the server — even in a settings backup
-      // the operator may share with someone or store off-box. Export a flag.
+      // Secrets never leave the server — even in a settings backup the
+      // operator may share with someone or store off-box. Export flags only.
       if (s.key === 'brevo_password') {
         out.brevo_configured = Boolean(String(s.value || '').trim());
+        continue;
+      }
+      if (s.key === 'alert_telegram_bot_token') {
+        out.alert_telegram_configured = Boolean(String(s.value || '').trim());
         continue;
       }
       out[s.key] = s.value;
@@ -160,6 +196,10 @@ router.post('/import', async (req, res) => {
 
     const saved = {};
     for (const key of keys) {
+      const validationError = validateSettingValue(key, payload[key]);
+      if (validationError) {
+        return res.status(400).json({ success: false, error: validationError, field: key });
+      }
       const value = sanitize(key, payload[key]);
       const doc = await AppSetting.findOneAndUpdate(
         { key },
@@ -169,10 +209,14 @@ router.post('/import', async (req, res) => {
       saved[key] = doc.value;
     }
 
-    // Never echo or audit-log the SMTP password (same masking as PUT /)
+    // Never echo or audit-log secrets (same masking as PUT /)
     if ('brevo_password' in saved) {
       saved.brevo_configured = Boolean(String(saved.brevo_password || '').trim());
       delete saved.brevo_password;
+    }
+    if ('alert_telegram_bot_token' in saved) {
+      saved.alert_telegram_configured = Boolean(String(saved.alert_telegram_bot_token || '').trim());
+      delete saved.alert_telegram_bot_token;
     }
 
     audit({ ...reqCtx(req), action: 'APP_SETTINGS_IMPORT', resource: 'AppSetting', changes: { after: saved } });

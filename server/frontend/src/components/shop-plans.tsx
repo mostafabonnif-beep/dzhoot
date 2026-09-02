@@ -22,29 +22,38 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
   const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
       const q = shopId ? `?shop=${encodeURIComponent(shopId)}` : '';
-      const r = await fetch(`/api/v1/shop/plans${q}`, { cache: 'no-store' });
+      const r = await fetch(`/api/v1/shop/plans${q}`, { cache: 'no-store', signal });
       const j = await r.json();
-      if (j.success) setData(j.data);
-      else setError(true);
+      if (signal?.aborted) return;
+      if (j.success) {
+        setData(j.data);
+        setError(false);
+      } else {
+        setError(true);
+      }
     } catch {
-      setError(true);
+      if (!signal?.aborted) setError(true);
     }
   }, [shopId]);
 
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load]);
 
   useEffect(() => {
-    fetch('/api/v1/payments/chargily/config', { cache: 'no-store' })
+    const controller = new AbortController();
+    fetch('/api/v1/payments/chargily/config', { cache: 'no-store', signal: controller.signal })
       .then((r) => r.json())
       .then((j) => {
-        if (j?.success && j.data?.enabled) setCardPayEnabled(true);
+        if (!controller.signal.aborted && j?.success && j.data?.enabled) setCardPayEnabled(true);
       })
       .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   const payByCard = useCallback(

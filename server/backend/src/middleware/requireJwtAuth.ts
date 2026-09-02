@@ -17,7 +17,14 @@ function requireJwtAuth(req: Request, res: Response, next: NextFunction) {
       return res.status(500).json({ success: false, error: 'Server configuration error' });
     }
     const payload = jwt.verify(token, ACCESS_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
-    req.jwt = payload as any;
+    req.jwt = {
+      sub: String(payload.sub || ''),
+      role: typeof payload.role === 'string' ? payload.role : '',
+      channelListCode: typeof payload.channelListCode === 'string' ? payload.channelListCode : undefined,
+      jti: typeof payload.jti === 'string' ? payload.jti : undefined,
+      iat: typeof payload.iat === 'number' ? payload.iat : undefined,
+      exp: typeof payload.exp === 'number' ? payload.exp : undefined,
+    };
     req.userId = payload.sub;
     next();
   } catch {

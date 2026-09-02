@@ -1,5 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
+import { HydratedDocument } from 'mongoose';
+import { IUserDocument, ISessionDocument } from '@dzhoof/shared';
 import Session from '../models/Session';
+
+type PopulatedSession = HydratedDocument<ISessionDocument> & {
+  userId: HydratedDocument<IUserDocument> | null;
+};
 
 /**
  * Middleware to check if user is authenticated
@@ -17,7 +23,7 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     // Find session in database
-    const session = await Session.findOne({ sessionId }).populate('userId');
+    const session = (await Session.findOne({ sessionId }).populate('userId')) as PopulatedSession | null;
 
     if (!session) {
       return res.status(401).json({
@@ -36,7 +42,7 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     // Check if user still exists and is active
-    if (!session.userId || !(session.userId as any).isActive) {
+    if (!session.userId || !session.userId.isActive) {
       await Session.deleteOne({ sessionId });
       return res.status(401).json({
         success: false,
@@ -46,10 +52,9 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
     }
 
     // Session binding: warn on IP/UA mismatch (log for now, strict mode can reject)
-    const sessionData = session as any;
-    if (sessionData.ipAddress && sessionData.ipAddress !== req.ip) {
+    if (session.ipAddress && session.ipAddress !== req.ip) {
       console.warn(
-        `Session IP mismatch: session=${sessionData.ipAddress} request=${req.ip} user=${sessionData.userId?.username || 'unknown'}`,
+        `Session IP mismatch: session=${session.ipAddress} request=${req.ip} user=${session.userId?.username || 'unknown'}`,
       );
     }
 
@@ -57,9 +62,9 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
     await session.updateActivity();
 
     // Attach user info to request
-    const user = session.userId as any;
+    const user = session.userId;
     req.user = {
-      id: user._id,
+      id: String(user._id),
       username: user.username,
       email: user.email,
       role: user.role,

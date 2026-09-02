@@ -176,7 +176,7 @@ describe('xtream-service', () => {
     const synced = await syncXtreamSource(String(source._id));
     expect(synced.ok).toBe(true);
     const channels = await Channel.find({ ownerId: null, 'metadata.xtreamSourceId': String(source._id) }).lean();
-    expect(channels.find((channel) => channel.channelName === 'ENTV')!.channelUrl).toBe(directUrl);
+    expect(channels.find((channel: any) => channel.channelName === 'ENTV')!.channelUrl).toBe(directUrl);
   });
 
   it('keeps a metadata-only source inactive and verifies it after live playback succeeds', async () => {
@@ -231,7 +231,7 @@ describe('xtream-service', () => {
     // Live channels
     const channels = await Channel.find({ ownerId: null, 'metadata.xtreamSourceId': String(source._id) }).lean();
     expect(channels).toHaveLength(2);
-    const entv = channels.find((c) => c.channelName === 'ENTV')!;
+    const entv = channels.find((c: any) => c.channelName === 'ENTV')!;
     expect(entv.channelUrl).toBe(`${SERVER}/live/${USER}/${PASS}/101.m3u8`);
     expect(entv.channelGroup).toBe('Algeria');
     expect(entv.tvgId).toBe('ENTV.epg');
