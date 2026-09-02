@@ -26,7 +26,7 @@ async function requireReseller(req: Request, res: Response, next: NextFunction) 
     if (!reseller || reseller.status !== 'Active') {
       return res.status(403).json({ success: false, error: 'Reseller account inactive or missing' });
     }
-    (req as any).reseller = reseller;
+    req.reseller = reseller;
     next();
   } catch {
     return res.status(401).json({ success: false, error: 'Invalid or expired token' });

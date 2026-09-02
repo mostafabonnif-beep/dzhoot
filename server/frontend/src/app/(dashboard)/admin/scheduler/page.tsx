@@ -149,7 +149,10 @@ export default function SchedulerPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { toast } = useToast();
   const { locale } = useLocale();
-  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
+  const L = useCallback(
+    (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en),
+    [locale],
+  );
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -159,7 +162,7 @@ export default function SchedulerPage() {
     } catch {
       setError(L('فشل تحميل بيانات المهام', 'Échec du chargement des tâches', 'Failed to load tasks'));
     }
-  }, []);
+  }, [L]);
 
   const fetchRuns = useCallback(async () => {
     try {
@@ -175,12 +178,12 @@ export default function SchedulerPage() {
     } catch {
       setError(L('فشل تحميل بيانات المهام', 'Échec du chargement des tâches', 'Failed to load tasks'));
     }
-  }, [runsPage, taskFilter]);
+  }, [L, runsPage, taskFilter]);
 
   // Initial load
   useEffect(() => {
     Promise.all([fetchTasks(), fetchRuns()]).finally(() => setLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchRuns, fetchTasks]);
 
   // Refetch runs when page/filter changes
   useEffect(() => {

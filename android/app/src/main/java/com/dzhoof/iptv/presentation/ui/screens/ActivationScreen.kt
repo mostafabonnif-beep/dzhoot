@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
@@ -30,6 +31,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.dzhoof.iptv.R
+import com.dzhoof.iptv.presentation.util.normalizeActivationCodeInput
 import com.dzhoof.iptv.presentation.viewmodel.SubscriptionViewModel
 import kotlinx.coroutines.delay
 
@@ -59,35 +62,31 @@ fun ActivationScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                text = "مرحبًا بك في DZ HOOF",
+                text = stringResource(R.string.activation_welcome),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
             )
-            Spacer(modifier = Modifier.width(1.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
-                text = "فعّل جهازك وابدأ مشاهدة القنوات",
+                text = stringResource(R.string.activation_subtitle),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = 8.dp),
             )
-            Spacer(modifier = Modifier.width(1.dp))
+            Spacer(modifier = Modifier.height(18.dp))
             Text(
-                text = "أدخل كود التفعيل الذي استلمته من البائع. لا تحتاج إلى إدخال رابط الخادم أو رمز PIN.",
+                text = stringResource(R.string.activation_instructions),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 18.dp),
+                modifier = Modifier.fillMaxWidth(),
             )
-            Spacer(modifier = Modifier.width(1.dp))
             OutlinedTextField(
                 value = code,
-                onValueChange = { code = it.uppercase() },
-                label = { Text("كود التفعيل") },
-                placeholder = { Text("DZHF-XXXX-XXXX-XXXX") },
+                onValueChange = { code = normalizeActivationCodeInput(it) },
+                label = { Text(stringResource(R.string.activation_code_label)) },
+                placeholder = { Text(stringResource(R.string.activation_code_placeholder)) },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.Characters,
@@ -98,7 +97,6 @@ fun ActivationScreen(
                     .padding(top = 22.dp)
                     .focusable(),
             )
-            Spacer(modifier = Modifier.width(1.dp))
             Button(
                 onClick = {
                     activationAttempted = true
@@ -113,7 +111,10 @@ fun ActivationScreen(
                 if (uiState.isRedeeming) {
                     CircularProgressIndicator(strokeWidth = 2.dp)
                 } else {
-                    Text("تفعيل الجهاز", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = stringResource(R.string.activation_submit),
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 }
             }
             // SubscriptionViewModel also refreshes saved sessions for the

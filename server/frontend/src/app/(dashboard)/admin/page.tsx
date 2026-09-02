@@ -120,7 +120,10 @@ function formatDate(timestamp: string, locale: string) {
 
 export default function AdminDashboard() {
   const { locale } = useLocale();
-  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
+  const L = useCallback(
+    (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en),
+    [locale],
+  );
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [config, setConfig] = useState<ConfigDefaults | null>(null);
   const [streamHealth, setStreamHealth] = useState<StreamHealthData | null>(null);
@@ -199,7 +202,7 @@ export default function AdminDashboard() {
         : '',
     );
     setLastUpdated(new Date());
-  }, [locale]);
+  }, [L]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -213,7 +216,7 @@ export default function AdminDashboard() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [loadDashboard]);
+  }, [L, loadDashboard]);
 
   function refreshDashboard() {
     setRefreshing(true);
@@ -348,6 +351,28 @@ export default function AdminDashboard() {
     });
   }
 
+  const epgInsight = epgCoverage
+    ? {
+        weakSources: [...epgCoverage.sources]
+          .sort((a, b) => a.coveragePercent - b.coveragePercent || b.unmatchedChannels.length - a.unmatchedChannels.length)
+          .slice(0, 3),
+        uncoveredRatio: epgCoverage.totalSystemChannels > 0
+          ? Math.round((epgCoverage.unmatchedChannelCount / epgCoverage.totalSystemChannels) * 100)
+          : 0,
+        statusTone: epgCoverage.overallCoveragePercent >= 90
+          ? 'text-signal-green'
+          : epgCoverage.overallCoveragePercent >= 70
+            ? 'text-amber-600 dark:text-amber-400'
+            : 'text-destructive',
+        lastRefreshLabel: channelOperations?.epg.lastRefreshedAt
+          ? `${formatDate(channelOperations.epg.lastRefreshedAt, locale)} ${formatTime(channelOperations.epg.lastRefreshedAt)}`
+          : L('لم يحدث بعد', 'Jamais', 'Never'),
+        sourceErrors: channelOperations?.epg.lastRefreshErrorCount ?? 0,
+        totalPrograms: channelOperations?.epg.totalPrograms ?? 0,
+        channelsWithEpg: channelOperations?.epg.channelsWithEpg ?? epgCoverage.matchedSystemChannels,
+      }
+    : null;
+
   return (
     <div className="dashboard-shell space-y-8 rounded-[2rem] p-1">
       {partialError && (
@@ -417,6 +442,73 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
+
+      {epgInsight && (
+        <section className="brand-surface overflow-hidden rounded-3xl border border-border/70">
+          <div className="flex flex-col gap-3 border-b border-border bg-muted/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold">{L('جاهزية دليل البرامج', 'Disponibilité du guide TV', 'EPG readiness')}</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {L('راقب نسبة التغطية، القنوات غير المطابقة، وأضعف المصادر قبل أن تتأثر تجربة المشاهدة.', 'Suivez la couverture, les chaînes non appariées et les sources faibles avant d’impacter l’expérience TV.', 'Track coverage, unmatched channels, and weak sources before the TV experience degrades.')}
+              </p>
+            </div>
+            <div className="flex gap-2 text-xs">
+              <Link href="/admin/epg" className="rounded-lg border border-border bg-card px-2.5 py-1.5 font-medium hover:bg-muted">{L('تفاصيل EPG', 'Détails EPG', 'EPG details')}</Link>
+              <Link href="/admin/channels" className="rounded-lg border border-border bg-card px-2.5 py-1.5 font-medium hover:bg-muted">{L('القنوات غير المطابقة', 'Chaînes non appariées', 'Unmatched channels')}</Link>
+            </div>
+          </div>
+          <div className="grid gap-px bg-border md:grid-cols-4">
+            {[
+              { label: L('نسبة التغطية', 'Couverture', 'Coverage'), value: `${epgCoverage.overallCoveragePercent}%`, sub: `${epgCoverage.matchedSystemChannels}/${epgCoverage.totalSystemChannels}`, tone: epgInsight.statusTone },
+              { label: L('القنوات غير المطابقة', 'Chaînes non appariées', 'Unmatched channels'), value: epgCoverage.unmatchedChannelCount, sub: `${epgInsight.uncoveredRatio}% ${L('من الكتالوج', 'du catalogue', 'of catalog')}`, tone: epgCoverage.unmatchedChannelCount === 0 ? 'text-signal-green' : 'text-amber-600 dark:text-amber-400' },
+              { label: L('آخر تحديث ناجح', 'Dernier rafraîchissement', 'Last refresh'), value: epgInsight.lastRefreshLabel, sub: `${epgInsight.totalPrograms} ${L('برنامج محفوظ', 'programmes stockés', 'programs stored')}`, tone: 'text-foreground' },
+              { label: L('أخطاء المصادر', 'Erreurs de source', 'Source errors'), value: epgInsight.sourceErrors, sub: `${epgInsight.channelsWithEpg} ${L('قناة لها دليل', 'chaînes avec guide', 'channels with guide')}`, tone: epgInsight.sourceErrors === 0 ? 'text-signal-green' : 'text-destructive' },
+            ].map((item, index) => (
+              <div key={item.label} className={`bg-card p-4 ${index > 0 ? 'border-l border-border' : ''}`}>
+                <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground">{item.label}</p>
+                <p className={`mt-1.5 text-2xl font-display font-bold tabular-nums ${item.tone}`}>{item.value}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{item.sub}</p>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-4 p-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="rounded-2xl border border-border/70 bg-card p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold">{L('أضعف مصادر EPG', 'Sources EPG les plus faibles', 'Weakest EPG sources')}</h3>
+                <span className="text-xs text-muted-foreground">{L('أولوية المراجعة التشغيلية', 'Priorité de revue opérationnelle', 'Operational review priority')}</span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {epgInsight.weakSources.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{L('لا توجد مصادر مكتشفة بعد.', 'Aucune source détectée pour le moment.', 'No sources discovered yet.')}</p>
+                ) : (
+                  epgInsight.weakSources.map((source) => (
+                    <div key={source.source} className="flex items-start justify-between gap-3 rounded-xl border border-border/70 px-3 py-3">
+                      <div>
+                        <p className="font-medium">{source.source}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {L(`${source.matchedChannelCount} من ${source.coveredChannelCount} قناة مطابقة`, `${source.matchedChannelCount} sur ${source.coveredChannelCount} chaînes appariées`, `${source.matchedChannelCount} of ${source.coveredChannelCount} channels matched`)}
+                        </p>
+                      </div>
+                      <div className="text-left">
+                        <p className={`text-sm font-semibold tabular-nums ${source.coveragePercent >= 90 ? 'text-signal-green' : source.coveragePercent >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-destructive'}`}>{source.coveragePercent}%</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{source.unmatchedChannels.length} {L('غير مطابقة', 'non appariées', 'unmatched')}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-border/70 bg-card p-4">
+              <h3 className="text-sm font-semibold">{L('خلاصة تشغيلية', 'Résumé opérationnel', 'Operational summary')}</h3>
+              <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
+                <li>• {epgCoverage.unmatchedChannelCount === 0 ? L('كل القنوات مطابقة حاليًا مع دليل البرامج.', 'Toutes les chaînes sont actuellement appariées au guide TV.', 'All channels are currently matched to the TV guide.') : L(`${epgCoverage.unmatchedChannelCount} قناة تحتاج مطابقة tvg-id أو مراجعة المصدر.`, `${epgCoverage.unmatchedChannelCount} chaînes nécessitent un tvg-id ou une revue de source.`, `${epgCoverage.unmatchedChannelCount} channels need tvg-id matching or source review.`)}</li>
+                <li>• {channelOperations?.epg.refreshInProgress ? L('تحديث EPG جارٍ الآن — راقب لوحة التفاصيل للتقدم.', 'Le rafraîchissement EPG est en cours — surveillez la page de détails.', 'An EPG refresh is running now — monitor the details page.') : L('لا يوجد تحديث EPG جارٍ الآن.', 'Aucun rafraîchissement EPG en cours.', 'No EPG refresh is currently running.')}</li>
+                <li>• {epgInsight.sourceErrors > 0 ? L(`آخر تحديث سجّل ${epgInsight.sourceErrors} مصدرًا فاشلًا ويحتاج متابعة.`, `Le dernier rafraîchissement a enregistré ${epgInsight.sourceErrors} source(s) en échec à examiner.`, `The last refresh recorded ${epgInsight.sourceErrors} failing source(s) that need review.`) : L('آخر تحديث مرّ دون أخطاء مصادر مسجلة.', 'Le dernier rafraîchissement s’est terminé sans erreur de source.', 'The last refresh completed without recorded source errors.')}</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      )}
 
       {business && (
         <section className="brand-surface overflow-hidden rounded-3xl border border-border/70">

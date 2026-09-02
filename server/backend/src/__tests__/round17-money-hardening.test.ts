@@ -247,16 +247,19 @@ describe('Round 17 — panel input validation & secret hygiene', () => {
     expect(res.status).toBe(400);
   });
 
-  it('settings export never includes the SMTP password', async () => {
+  it('settings export never includes SMTP or Telegram secrets', async () => {
     const AppSetting = require('../models/AppSetting').default || require('../models/AppSetting');
     await AppSetting.create({ key: 'brevo_user', value: 'smtp@example.com' });
     await AppSetting.create({ key: 'brevo_password', value: 'super-secret-pass' });
+    await AppSetting.create({ key: 'alert_telegram_bot_token', value: 'telegram-secret-token' });
 
     const res = await request(settingsApp()).get('/admin/app-settings/export');
     expect(res.status).toBe(200);
     const payload = JSON.parse(res.text);
     expect(payload.settings.brevo_password).toBeUndefined();
+    expect(payload.settings.alert_telegram_bot_token).toBeUndefined();
     expect(payload.settings.brevo_configured).toBe(true);
+    expect(payload.settings.alert_telegram_configured).toBe(true);
   });
 
   it('settings PUT response never echoes the SMTP password', async () => {
@@ -264,6 +267,31 @@ describe('Round 17 — panel input validation & secret hygiene', () => {
     expect(res.status).toBe(200);
     expect(JSON.stringify(res.body)).not.toContain('new-secret');
     expect(res.body.data.brevo_configured).toBe(true);
+  });
+
+  it('settings PUT never echoes Telegram secrets and validates webhook/email fields', async () => {
+    const ok = await request(settingsApp()).put('/admin/app-settings').send({
+      alert_telegram_bot_token: 'telegram-secret',
+      alert_webhook_url: 'https://hooks.example.com/notify',
+      mail_from: 'ops@example.com',
+      brevo_user: 'smtp@example.com',
+    });
+    expect(ok.status).toBe(200);
+    expect(JSON.stringify(ok.body)).not.toContain('telegram-secret');
+    expect(ok.body.data.alert_telegram_configured).toBe(true);
+    expect(ok.body.data.alert_webhook_url).toBe('https://hooks.example.com/notify');
+
+    const badWebhook = await request(settingsApp()).put('/admin/app-settings').send({
+      alert_webhook_url: 'javascript:alert(1)',
+    });
+    expect(badWebhook.status).toBe(400);
+    expect(badWebhook.body.field).toBe('alert_webhook_url');
+
+    const badEmail = await request(settingsApp()).put('/admin/app-settings').send({
+      mail_from: 'not-an-email',
+    });
+    expect(badEmail.status).toBe(400);
+    expect(badEmail.body.field).toBe('mail_from');
   });
 });
 
