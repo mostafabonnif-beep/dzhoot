@@ -443,7 +443,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {epgInsight && (
+      {epgInsight && epgCoverage && (
         <section className="brand-surface overflow-hidden rounded-3xl border border-border/70">
           <div className="flex flex-col gap-3 border-b border-border bg-muted/50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
