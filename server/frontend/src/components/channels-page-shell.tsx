@@ -545,6 +545,38 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
 
   const displayData = isAdmin ? channels : userPaginated;
   const displayTotalCount = isAdmin ? totalCount : filtered.length;
+  const workingCount =
+    isAdmin && healthStats
+      ? healthStats.working
+      : channels.filter((c) => c.metadata?.isWorking === true).length;
+  const deadCount =
+    isAdmin && healthStats
+      ? healthStats.notWorking
+      : channels.filter((c) => c.metadata?.isWorking === false).length;
+  const untestedCount =
+    isAdmin && healthStats ? healthStats.untested : Math.max(channels.length - workingCount - deadCount, 0);
+  const flaggedPrimaryCount = channels.filter((c) => c.flaggedBad?.isFlagged).length;
+  const alternateReadyCount = channels.filter(
+    (c) => (c.alternateStreams?.filter((alt) => !alt.flaggedBad?.isFlagged).length ?? 0) > 0,
+  ).length;
+  const channelsReadinessLabel =
+    deadCount > 0
+      ? L('تحتاج معالجة تشغيلية', 'Assainissement opérationnel requis', 'Operational cleanup needed')
+      : untestedCount > 0
+        ? L('جاهزة جزئيًا', 'Partiellement prête', 'Partially ready')
+        : L('جاهزة تشغيليًا', 'Operationally ready', 'Operationally ready');
+  const channelsReadinessTone =
+    deadCount > 0
+      ? 'border-destructive/30 bg-destructive/5 text-destructive'
+      : untestedCount > 0
+        ? 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300'
+        : 'border-signal-green/30 bg-signal-green/5 text-signal-green';
+  const channelsReadinessMessage =
+    deadCount > 0
+      ? L('هناك قنوات متعطلة تحتاج اختبارًا أو استبدالًا قبل الاعتماد على الكتالوج تجاريًا.', 'Certaines chaînes sont en panne et doivent être testées ou remplacées avant un usage commercial.', 'Some channels are broken and need testing or replacement before relying on the catalog commercially.')
+      : untestedCount > 0
+        ? L('الكتالوج جيد، لكن ما زالت هناك قنوات غير مختبرة تستحق فحصًا جماعيًا.', 'Le catalogue est bon, mais certaines chaînes non testées méritent une vérification groupée.', 'The catalog looks good, but some untested channels still need a bulk check.')
+        : L('الكتالوج الحالي نظيف نسبيًا ويمكن استخدامه كأساس للاستيراد والتوزيع.', 'Le catalogue actuel est propre et peut servir de base à l’import et à la distribution.', 'The current catalog is clean enough to support import and distribution.');
 
   // --- Admin actions ---
   async function handleAddChannel(e: React.FormEvent) {
@@ -1614,6 +1646,52 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           )}
         </div>
       </div>
+
+      <section className={`rounded-lg border px-4 py-3 ${channelsReadinessTone}`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.15em]">{L('ملخص تشغيلي للكتالوج', 'Résumé opérationnel du catalogue', 'Catalog operational summary')}</p>
+            <p className="mt-2 text-lg font-bold">{channelsReadinessLabel}</p>
+            <p className="mt-1 text-sm opacity-90">{channelsReadinessMessage}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+            <div>
+              <div className="text-xs opacity-70">{L('إجمالي القنوات', 'Total chaînes', 'Total channels')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{displayTotalCount}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-70">{L('سليمة', 'Saines', 'Working')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{workingCount}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-70">{L('متعطلة', 'En panne', 'Broken')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{deadCount}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-70">{L('غير مختبرة', 'Non testées', 'Untested')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{untestedCount}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-70">{L('بث بديل جاهز', 'Alternatives prêtes', 'Channels with alternates')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{alternateReadyCount}</div>
+            </div>
+          </div>
+        </div>
+        {(flaggedPrimaryCount > 0 || selectedRows.size > 0) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs opacity-90">
+            {flaggedPrimaryCount > 0 && (
+              <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
+                {L('قنوات مُعلّمة كمشكلة', 'Chaînes signalées', 'Flagged channels')}: <strong className="ms-1">{flaggedPrimaryCount}</strong>
+              </span>
+            )}
+            {isAdmin && selectedRows.size > 0 && (
+              <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
+                {L('محددة للعمل الجماعي', 'Sélectionnées pour action groupée', 'Selected for bulk action')}: <strong className="ms-1">{selectedRows.size}</strong>
+              </span>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Test results banner */}
       {testResults && (
