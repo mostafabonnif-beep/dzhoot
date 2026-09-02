@@ -186,12 +186,13 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   // Admin: row selection for bulk enable/disable/delete
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [bulkSelectionLoading, setBulkSelectionLoading] = useState(false);
+  const [adminFocusFilter, setAdminFocusFilter] = useState<'catchup' | 'epg' | 'flagged' | 'alternates' | null>(null);
 
   // Clear row selection whenever the visible page changes (bulk actions apply
   // only to rows the admin can see, keeping destructive ops predictable).
   useEffect(() => {
     setSelectedRows(new Set());
-  }, [page, debouncedSearch, isAdmin]);
+  }, [page, debouncedSearch, isAdmin, adminFocusFilter]);
 
   // Admin: M3U Import
   const [showImport, setShowImport] = useState(false);
@@ -547,8 +548,21 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
   }
 
-  const displayData = isAdmin ? channels : userPaginated;
-  const displayTotalCount = isAdmin ? totalCount : filtered.length;
+  const adminFocusedChannels = useMemo(() => {
+    if (!isAdmin || !adminFocusFilter) return channels;
+    if (adminFocusFilter === 'catchup') return channels.filter((c) => Boolean(c.catchup?.type));
+    if (adminFocusFilter === 'epg') return channels.filter((c) => Boolean(c.epgId));
+    if (adminFocusFilter === 'flagged') return channels.filter((c) => Boolean(c.flaggedBad?.isFlagged));
+    if (adminFocusFilter === 'alternates') {
+      return channels.filter(
+        (c) => (c.alternateStreams?.filter((alt) => !alt.flaggedBad?.isFlagged).length ?? 0) > 0,
+      );
+    }
+    return channels;
+  }, [adminFocusFilter, channels, isAdmin]);
+
+  const displayData = isAdmin ? adminFocusedChannels : userPaginated;
+  const displayTotalCount = isAdmin ? (adminFocusFilter ? adminFocusedChannels.length : totalCount) : filtered.length;
   const workingCount =
     isAdmin && healthStats
       ? healthStats.working
@@ -1706,27 +1720,62 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
             </div>
           </div>
         </div>
-        {(flaggedPrimaryCount > 0 || selectedRows.size > 0 || (isAdmin && catchupReadyCount > 0) || (isAdmin && epgLinkedCount > 0)) && (
+        {(flaggedPrimaryCount > 0 || selectedRows.size > 0 || (isAdmin && catchupReadyCount > 0) || (isAdmin && epgLinkedCount > 0) || alternateReadyCount > 0) && (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs opacity-90">
             {isAdmin && catchupReadyCount > 0 && (
-              <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'catchup' ? null : 'catchup'))}
+                aria-pressed={adminFocusFilter === 'catchup'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'catchup' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
                 {L('جاهزة لـ Catch-up', 'Prêtes pour le catch-up', 'Catch-up ready')}: <strong className="ms-1">{catchupReadyCount}</strong>
-              </span>
+              </button>
             )}
             {isAdmin && epgLinkedCount > 0 && (
-              <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'epg' ? null : 'epg'))}
+                aria-pressed={adminFocusFilter === 'epg'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'epg' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
                 {L('مرتبطة بـ EPG', 'Liées à l’EPG', 'EPG linked')}: <strong className="ms-1">{epgLinkedCount}</strong>
-              </span>
+              </button>
+            )}
+            {alternateReadyCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'alternates' ? null : 'alternates'))}
+                aria-pressed={adminFocusFilter === 'alternates'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'alternates' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
+                {L('بث بديل جاهز', 'Alternatives prêtes', 'Channels with alternates')}: <strong className="ms-1">{alternateReadyCount}</strong>
+              </button>
             )}
             {flaggedPrimaryCount > 0 && (
-              <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'flagged' ? null : 'flagged'))}
+                aria-pressed={adminFocusFilter === 'flagged'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'flagged' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
                 {L('قنوات مُعلّمة كمشكلة', 'Chaînes signalées', 'Flagged channels')}: <strong className="ms-1">{flaggedPrimaryCount}</strong>
-              </span>
+              </button>
             )}
             {isAdmin && selectedRows.size > 0 && (
               <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
                 {L('محددة للعمل الجماعي', 'Sélectionnées pour action groupée', 'Selected for bulk action')}: <strong className="ms-1">{selectedRows.size}</strong>
               </span>
+            )}
+            {isAdmin && adminFocusFilter && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter(null)}
+                className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2.5 py-1 text-muted-foreground hover:bg-background hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+                {L('عرض كل القنوات', 'Afficher toutes les chaînes', 'Show all channels')}
+              </button>
             )}
           </div>
         )}
