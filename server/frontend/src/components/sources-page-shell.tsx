@@ -192,6 +192,7 @@ function SourceContent({
   onStatsChange: (data: { stats: LivenessStats; inProgress: boolean } | null) => void;
 }) {
   const { toast } = useToast();
+  const { locale } = useLocale();
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [replaceExisting, setReplaceExisting] = useState(false);
@@ -210,6 +211,28 @@ function SourceContent({
   }, [channels]);
 
   const displayStats = isAdmin ? livenessStats : channelStats;
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
+  const readinessLabel = !displayStats
+    ? L('في انتظار بيانات المصدر', 'En attente des données', 'Waiting for source data')
+    : displayStats.dead > 0
+      ? L('يحتاج تنظيفًا قبل الاستيراد', 'Nettoyage requis avant import', 'Needs cleanup before import')
+      : displayStats.unknown > 0
+        ? L('جاهز جزئيًا ويحتاج تحققًا', 'Partiellement prêt, vérification requise', 'Partially ready, verification required')
+        : L('جاهز للاستيراد', 'Prêt pour l’import', 'Ready for import');
+  const readinessTone = !displayStats
+    ? 'border-border bg-muted/30 text-muted-foreground'
+    : displayStats.dead > 0
+      ? 'border-destructive/30 bg-destructive/5 text-destructive'
+      : displayStats.unknown > 0
+        ? 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300'
+        : 'border-signal-green/30 bg-signal-green/5 text-signal-green';
+  const readinessMessage = !displayStats
+    ? L('اختر منطقة لعرض الحالة التشغيلية قبل الاستيراد أو الفحص.', 'Choisissez une région pour voir l’état opérationnel avant l’import ou le test.', 'Pick a region to see the operational state before importing or testing.')
+    : displayStats.dead > 0
+      ? L('يوجد عدد من القنوات الميتة؛ افحصها أو استبعدها قبل الاستيراد الجماعي.', 'Certaines chaînes sont mortes ; testez-les ou excluez-les avant un import groupé.', 'Some channels are dead; test or exclude them before bulk import.')
+      : displayStats.unknown > 0
+        ? L('بعض القنوات لم تُختبر بعد؛ نفّذ فحص liveness لرفع الثقة قبل الاستيراد.', 'Certaines chaînes ne sont pas encore testées ; lancez un contrôle de disponibilité avant l’import.', 'Some channels are still untested; run a liveness check before importing.')
+        : L('القنوات المعروضة سليمة حاليًا ويمكن استيرادها بثقة أعلى.', 'Les chaînes affichées sont saines et peuvent être importées avec plus de confiance.', 'Displayed channels look healthy and can be imported with higher confidence.');
 
   useEffect(() => {
     if (displayStats) {
@@ -327,6 +350,35 @@ function SourceContent({
       onDetail={onDetail}
       showLiveness
       onTestChannel={handleTestChannel}
+      headerSlot={
+        <section className={`rounded-lg border px-4 py-3 ${readinessTone}`}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.15em]">{L('ملخص تشغيلي للمصدر', 'Résumé opérationnel de la source', 'Source operational summary')}</p>
+              <p className="mt-2 text-lg font-bold">{readinessLabel}</p>
+              <p className="mt-1 text-sm opacity-90">{readinessMessage}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+              <div>
+                <div className="text-xs opacity-70">{L('إجمالي القنوات', 'Total chaînes', 'Total channels')}</div>
+                <div className="mt-1 text-xl font-bold tabular-nums">{channels.length}</div>
+              </div>
+              <div>
+                <div className="text-xs opacity-70">{L('سليمة', 'Saines', 'Alive')}</div>
+                <div className="mt-1 text-xl font-bold tabular-nums">{displayStats?.alive ?? 0}</div>
+              </div>
+              <div>
+                <div className="text-xs opacity-70">{L('ميتة', 'Mortes', 'Dead')}</div>
+                <div className="mt-1 text-xl font-bold tabular-nums">{displayStats?.dead ?? 0}</div>
+              </div>
+              <div>
+                <div className="text-xs opacity-70">{L('محددة للاستيراد', 'Sélectionnées', 'Selected for import')}</div>
+                <div className="mt-1 text-xl font-bold tabular-nums">{selection.count}</div>
+              </div>
+            </div>
+          </div>
+        </section>
+      }
       toolbarActions={
         <>
           {isAdmin && (
