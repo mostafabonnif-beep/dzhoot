@@ -23,7 +23,7 @@ interface ChannelDao {
      * 
      * @return Flow emitting list of all active channels
      */
-    @Query("SELECT * FROM channels WHERE isActive = 1 ORDER BY name ASC")
+    @Query("SELECT * FROM channels WHERE isActive = 1 ORDER BY categoryId COLLATE NOCASE ASC, `order` ASC, name COLLATE NOCASE ASC, id ASC")
     fun getAllChannels(): Flow<List<ChannelEntity>>
     
     /**
@@ -41,7 +41,7 @@ interface ChannelDao {
      * @param categoryId The category identifier
      * @return Flow emitting list of channels in the category
      */
-    @Query("SELECT * FROM channels WHERE categoryId = :categoryId AND isActive = 1 ORDER BY name ASC")
+    @Query("SELECT * FROM channels WHERE categoryId = :categoryId AND isActive = 1 ORDER BY `order` ASC, name COLLATE NOCASE ASC, id ASC")
     fun getChannelsByCategory(categoryId: String): Flow<List<ChannelEntity>>
     
     /**
@@ -57,7 +57,7 @@ interface ChannelDao {
         WHERE (name LIKE '%' || :query || '%' 
            OR groupTitle LIKE '%' || :query || '%')
            AND isActive = 1
-        ORDER BY name ASC
+        ORDER BY categoryId COLLATE NOCASE ASC, `order` ASC, name COLLATE NOCASE ASC, id ASC
     """)
     fun searchChannels(query: String): Flow<List<ChannelEntity>>
     
@@ -102,7 +102,7 @@ interface ChannelDao {
     @Query("SELECT id FROM channels")
     suspend fun getAllChannelIds(): List<String>
 
-    @Query("SELECT * FROM channels WHERE isActive = 1 ORDER BY name ASC")
+    @Query("SELECT * FROM channels WHERE isActive = 1 ORDER BY categoryId COLLATE NOCASE ASC, `order` ASC, name COLLATE NOCASE ASC, id ASC")
     suspend fun getAllActiveChannels(): List<ChannelEntity>
 
     @Query("SELECT * FROM channels WHERE id = :channelId")
