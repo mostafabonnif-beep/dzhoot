@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, Pencil, Trash2, History, RotateCcw, HandCoins, MessageCircle, CheckCheck, AlertTriangle, QrCode } from 'lucide-react';
+import { Loader2, Plus, Pencil, Trash2, History, RotateCcw, HandCoins, MessageCircle, CheckCheck, AlertTriangle, QrCode, KeyRound, PlusCircle, Trash } from 'lucide-react';
 import ShopQrCard from '@/components/shop-qr-card';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -25,6 +25,19 @@ interface ResellerData {
   stats?: { total: number; activated: number; remaining: number };
   purchasedValue?: number;
   createdAt?: string;
+  branding?: {
+    displayName?: string;
+    logoUrl?: string;
+    primaryColor?: string;
+  };
+}
+
+interface ApiKeyMeta {
+  _id: string;
+  name: string;
+  prefix: string;
+  createdAt?: string;
+  lastUsedAt?: string | null;
 }
 
 type PermissionKey = 'generateCodes' | 'transfers' | 'renew' | 'changePackage' | 'suspend' | 'exportM3U' | 'viewHistory';
@@ -32,6 +45,9 @@ type PermissionKey = 'generateCodes' | 'transfers' | 'renew' | 'changePackage' |
 const PERMISSION_KEYS: PermissionKey[] = ['generateCodes', 'transfers', 'renew', 'changePackage', 'suspend', 'exportM3U', 'viewHistory'];
 
 interface ResellerForm {
+  brandingDisplayName: string;
+  brandingLogoUrl: string;
+  brandingPrimaryColor: string;
   name: string;
   city: string;
   phone: string;
@@ -65,6 +81,9 @@ const emptyForm: ResellerForm = {
     exportM3U: true,
     viewHistory: true,
   },
+  brandingDisplayName: '',
+  brandingLogoUrl: '',
+  brandingPrimaryColor: '',
 };
 
 interface CreditDebtItem {
@@ -166,6 +185,9 @@ export default function ResellersPage() {
         exportM3U: r.permissions?.exportM3U !== false,
         viewHistory: r.permissions?.viewHistory !== false,
       },
+      brandingDisplayName: r.branding?.displayName || '',
+      brandingLogoUrl: r.branding?.logoUrl || '',
+      brandingPrimaryColor: r.branding?.primaryColor || '',
     });
     setFormError('');
     setFormOpen(true);
@@ -191,6 +213,11 @@ export default function ResellersPage() {
         password: form.password || undefined,
         prefix: form.prefix.trim() ? form.prefix.trim().toUpperCase() : undefined,
         permissions: { ...form.permissions },
+        branding: {
+          displayName: form.brandingDisplayName.trim(),
+          logoUrl: form.brandingLogoUrl.trim(),
+          primaryColor: form.brandingPrimaryColor.trim(),
+        },
         creditPaid,
       };
       if (editingId) {
@@ -208,6 +235,66 @@ export default function ResellersPage() {
       setFormError(axiosErr.response?.data?.error || t('resellers.saveError'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Reseller API keys (مفاتيح API للموزع) — white-label integrations.
+  const [apiKeysTarget, setApiKeysTarget] = useState<ResellerData | null>(null);
+  const [apiKeys, setApiKeys] = useState<ApiKeyMeta[]>([]);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [newKeyName, setNewKeyName] = useState('');
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [createdKey, setCreatedKey] = useState('');
+  const [revealedKeyId, setRevealedKeyId] = useState<string | null>(null);
+
+  const fetchApiKeys = useCallback(async (reseller: ResellerData) => {
+    setApiKeysLoading(true);
+    try {
+      const res = await api.get(`/admin/resellers/${reseller._id}/api-keys`);
+      setApiKeys(res.data?.data || []);
+    } catch {
+      setApiKeys([]);
+    } finally {
+      setApiKeysLoading(false);
+    }
+  }, []);
+
+  function openApiKeys(r: ResellerData) {
+    setApiKeysTarget(r);
+    setApiKeys([]);
+    setNewKeyName('');
+    setCreatedKey('');
+    setRevealedKeyId(null);
+    fetchApiKeys(r);
+  }
+
+  async function handleCreateKey() {
+    if (!apiKeysTarget || creatingKey) return;
+    setCreatingKey(true);
+    try {
+      const res = await api.post(`/admin/resellers/${apiKeysTarget._id}/api-keys`, { name: newKeyName.trim() || undefined });
+      setCreatedKey(res.data?.data?.key || '');
+      setRevealedKeyId(res.data?.data?._id || null);
+      setNewKeyName('');
+      fetchApiKeys(apiKeysTarget);
+      toast(t('resellers.apiKeyCreated'), 'success');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast(axiosErr.response?.data?.error || t('resellers.saveError'), 'error');
+    } finally {
+      setCreatingKey(false);
+    }
+  }
+
+  async function handleRevokeKey(keyId: string) {
+    if (!apiKeysTarget) return;
+    try {
+      await api.delete(`/admin/resellers/${apiKeysTarget._id}/api-keys/${keyId}`);
+      fetchApiKeys(apiKeysTarget);
+      toast(t('resellers.apiKeyRevoked'), 'success');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { error?: string } } };
+      toast(axiosErr.response?.data?.error || t('resellers.saveError'), 'error');
     }
   }
 
@@ -541,6 +628,16 @@ export default function ResellersPage() {
           <button
             onClick={(e) => {
               e.stopPropagation();
+              openApiKeys(r);
+            }}
+            className="p-1.5 text-muted-foreground hover:text-primary"
+            title={t('resellers.apiKeys')}
+          >
+            <KeyRound className="h-4 w-4" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
               setDeleteTarget(r);
             }}
             className="p-1.5 text-muted-foreground hover:text-destructive"
@@ -826,6 +923,37 @@ export default function ResellersPage() {
               />
               <p className="text-[11px] text-muted-foreground">{t('resellers.prefixHint')}</p>
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              {t('resellers.branding')}
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <input
+                className={inputClass}
+                value={form.brandingDisplayName}
+                onChange={(e) => setForm({ ...form, brandingDisplayName: e.target.value })}
+                placeholder={t('resellers.brandingName')}
+                maxLength={60}
+              />
+              <input
+                className={inputClass}
+                value={form.brandingLogoUrl}
+                onChange={(e) => setForm({ ...form, brandingLogoUrl: e.target.value })}
+                placeholder="https://... logo.png"
+                dir="ltr"
+              />
+              <input
+                className={inputClass}
+                value={form.brandingPrimaryColor}
+                onChange={(e) => setForm({ ...form, brandingPrimaryColor: e.target.value })}
+                placeholder="#22c55e"
+                dir="ltr"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">{t('resellers.brandingHint')}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                 {t('resellers.password')}
@@ -1019,6 +1147,67 @@ export default function ResellersPage() {
         </div>
       </Modal>
 
+      {/* Reseller API keys modal */}
+      <Modal
+        open={!!apiKeysTarget}
+        onClose={() => setApiKeysTarget(null)}
+        title={`${t('resellers.apiKeys')} — ${apiKeysTarget?.name ?? ''}`}
+      >
+        <div className="p-5 space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              className={inputClass}
+              value={newKeyName}
+              onChange={(e) => setNewKeyName(e.target.value)}
+              placeholder={t('resellers.apiKeyNamePlaceholder')}
+              maxLength={60}
+            />
+            <button
+              onClick={handleCreateKey}
+              disabled={creatingKey}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              <Plus className={`h-4 w-4 ${creatingKey ? 'animate-spin' : ''}`} />
+              {t('resellers.apiKeyCreate')}
+            </button>
+          </div>
+          {createdKey && (
+            <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 space-y-1" dir="ltr">
+              <p className="text-xs font-medium text-amber-700 dark:text-amber-400">{t('resellers.apiKeyOnce')}</p>
+              <code className="block break-all text-xs font-mono">{createdKey}</code>
+            </div>
+          )}
+          {apiKeysLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : apiKeys.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t('resellers.apiKeysEmpty')}</p>
+          ) : (
+            <div className="space-y-2">
+              {apiKeys.map((k) => (
+                <div key={k._id} className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{k.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono" dir="ltr">
+                      {k.prefix}…
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleRevokeKey(k._id)}
+                    className="shrink-0 p-1.5 text-muted-foreground hover:text-destructive"
+                    title={t('resellers.apiKeyRevoke')}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground">{t('resellers.apiKeyHint')}</p>
+        </div>
+      </Modal>
+
       {/* Add reseller debt modal */}
       <Modal open={debtFormOpen} onClose={() => setDebtFormOpen(false)} title={t('resellers.addDebt')}>
         <form onSubmit={handleAddDebt} className="space-y-3 p-5">
@@ -1111,7 +1300,7 @@ export default function ResellersPage() {
       />
       {qrTarget && (
         <ShopQrCard
-          reseller={{ _id: qrTarget._id, name: qrTarget.name, phone: qrTarget.phone }}
+          reseller={{ _id: qrTarget._id, name: qrTarget.name, phone: qrTarget.phone, branding: qrTarget.branding }}
           open
           onClose={() => setQrTarget(null)}
         />

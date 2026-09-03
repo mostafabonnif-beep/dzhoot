@@ -16,12 +16,13 @@ import { hashActivationCode, normalizeActivationCode } from '../utils/code-gener
 /* ------------------------------------------------------------------ */
 
 const RESELLER_ID = new mongoose.Types.ObjectId();
-jest.mock('../middleware/requireReseller', () => ({
-  requireReseller: (req: any, _res: any, next: any) => {
+jest.mock('../middleware/requireReseller', () => {
+  const requireReseller = (req: any, _res: any, next: any) => {
     req.reseller = { _id: RESELLER_ID, name: 'محل الاختبار', status: 'Active' };
     next();
-  },
-}));
+  };
+  return { requireReseller, requireResellerOrApiKeyForReads: requireReseller };
+});
 
 jest.mock('../routes/auth', () => ({
   requireAuth: (req: any, _res: any, next: any) => {

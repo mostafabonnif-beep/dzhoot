@@ -8,12 +8,13 @@ import CreditTransaction from '../models/CreditTransaction';
 // The reseller router mounts requireReseller at the top — mock it with a
 // mutable current-reseller so each test controls who is logged in.
 let currentReseller: any = null;
-jest.mock('../middleware/requireReseller', () => ({
-  requireReseller: (req: any, _res: any, next: any) => {
+jest.mock('../middleware/requireReseller', () => {
+  const requireReseller = (req: any, _res: any, next: any) => {
     req.reseller = currentReseller;
     next();
-  },
-}));
+  };
+  return { requireReseller, requireResellerOrApiKeyForReads: requireReseller };
+});
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const resellerRouter = require('../routes/reseller');
