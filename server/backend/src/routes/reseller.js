@@ -39,7 +39,6 @@ const PERMISSION_DEFAULTS = {
   suspend: true,
   exportM3U: true,
   viewHistory: true,
-  subResellers: true,
 };
 
 function hasPerm(reseller, key) {
