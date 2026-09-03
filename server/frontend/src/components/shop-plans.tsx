@@ -20,6 +20,7 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
   const [data, setData] = useState<ShopData | null>(null);
   const [error, setError] = useState(false);
   const [cardPayEnabled, setCardPayEnabled] = useState(false);
+  const [cinetPayEnabled, setCinetPayEnabled] = useState(false);
   const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
@@ -48,10 +49,23 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/v1/payments/chargily/config', { cache: 'no-store', signal: controller.signal })
-      .then((r) => r.json())
-      .then((j) => {
-        if (!controller.signal.aborted && j?.success && j.data?.enabled) setCardPayEnabled(true);
+    // Either gateway enables the "pay online" CTA; the checkout call records
+    // which provider was used so the success page polls the right status API.
+    Promise.all([
+      fetch('/api/v1/payments/chargily/config', { cache: 'no-store', signal: controller.signal })
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch('/api/v1/payments/cinetpay/config', { cache: 'no-store', signal: controller.signal })
+        .then((r) => r.json())
+        .catch(() => null),
+    ])
+      .then(([chargily, cinetpay]) => {
+        if (controller.signal.aborted) return;
+        if (chargily?.success && chargily.data?.enabled) setCardPayEnabled(true);
+        if (cinetpay?.success && cinetpay.data?.enabled) {
+          setCardPayEnabled(true);
+          setCinetPayEnabled(true);
+        }
       })
       .catch(() => {});
     return () => controller.abort();
@@ -62,11 +76,14 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
       setPayError(null);
       setPayingPlanId(plan._id);
       try {
-        const r = await fetch('/api/v1/payments/chargily/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ planId: plan._id, shopId }),
-        });
+        const r = await fetch(
+          cinetPayEnabled ? '/api/v1/payments/cinetpay/checkout' : '/api/v1/payments/chargily/checkout',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planId: plan._id, shopId }),
+          },
+        );
         const j = await r.json();
         if (j.success && j.data?.checkoutUrl) {
           window.location.href = j.data.checkoutUrl;
