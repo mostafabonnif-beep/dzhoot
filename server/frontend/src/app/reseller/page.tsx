@@ -32,6 +32,7 @@ import Modal from '@/components/ui/modal';
 import { useLocale } from '@/components/locale-provider';
 import TransfersSection from '@/components/reseller/transfers-section';
 import TicketsSection from '@/components/reseller/tickets-section';
+import BrandingApiKeysSection from '@/components/reseller/branding-api-keys';
 import CodeToolsModal, { CodeToolsTarget } from '@/components/reseller/code-tools';
 
 interface CreditItem {
@@ -1013,6 +1014,8 @@ export default function ResellerDashboardPage() {
 
         {/* Support tickets (تذاكر الدعم) */}
         <TicketsSection />
+
+        <BrandingApiKeysSection />
 
         {/* Customer debts (ديون الزبائن) */}
         <section className="border border-border bg-card p-4">

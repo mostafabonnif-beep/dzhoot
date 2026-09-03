@@ -6,7 +6,12 @@ import { Printer } from 'lucide-react';
 import Modal from '@/components/ui/modal';
 
 interface ShopQrCardProps {
-  reseller: { _id: string; name: string; phone?: string };
+  reseller: {
+    _id: string;
+    name: string;
+    phone?: string;
+    branding?: { displayName?: string; logoUrl?: string; primaryColor?: string };
+  };
   open: boolean;
   onClose: () => void;
 }
@@ -17,6 +22,8 @@ interface ShopQrCardProps {
  * that shop. Print opens a clean A6 card in a print dialog.
  */
 export default function ShopQrCard({ reseller, open, onClose }: ShopQrCardProps) {
+  const displayName = reseller.branding?.displayName || reseller.name;
+  const accent = reseller.branding?.primaryColor || '#059669';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [origin, setOrigin] = useState('');
 
@@ -48,11 +55,11 @@ export default function ShopQrCard({ reseller, open, onClose }: ShopQrCardProps)
     document.body.appendChild(iframe);
     const doc = iframe.contentDocument!;
     doc.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
-      <title>بطاقة ${reseller.name}</title>
+      <title>بطاقة ${displayName}</title>
       <style>
         @page { size: 90mm 60mm; margin: 0; }
         body { margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-        .card { width: 82mm; height: 52mm; border: 1.5px solid #059669; border-radius: 4mm; padding: 3mm 4mm; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
+        .card { width: 82mm; height: 52mm; border: 1.5px solid ${accent}; border-radius: 4mm; padding: 3mm 4mm; display: flex; flex-direction: column; justify-content: space-between; box-sizing: border-box; }
         .head { display: flex; justify-content: space-between; align-items: center; }
         .brand { font-family: Arial, sans-serif; font-weight: 900; font-size: 15px; color: #059669; }
         .brand small { display: block; font-weight: 600; font-size: 9px; color: #5A5470; letter-spacing: 0.5px; }
@@ -67,7 +74,8 @@ export default function ShopQrCard({ reseller, open, onClose }: ShopQrCardProps)
       </style></head><body>
       <div class="card">
         <div class="head">
-          <div class="brand">DZ HOOF<small>التلفزيون الذكي بلا حدود</small></div>
+                    ${reseller.branding?.logoUrl ? `<img src='${reseller.branding.logoUrl}' alt='${displayName}' style='max-height:9mm;max-width:100%;object-fit:contain;margin-bottom:1mm;' />` : `<small style='font-weight:700;font-size:11px;'>${displayName}</small>`}
+          <div class="brand" style="color:${accent};">${displayName}</div>
           <div class="brand" style="text-align:left; color:#128C4A;">مسح واشترك</div>
         </div>
         <div class="mid">
