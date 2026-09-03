@@ -25,8 +25,9 @@ set -Eeuo pipefail
 
 ALLOW_RESTORE_DRILL="${ALLOW_RESTORE_DRILL:-false}"
 # Positional argument wins; fall back to the BACKUP_FILE env var so the
-# monthly cron (/etc/cron.d/dzhoof-restore-drill) works — it passes the
-# backup path as an env prefix, not a positional argument.
+# monthly cron (/etc/cron.d/dzhoof-restore-drill) invokes the Bash launcher
+# server/scripts/ops/run-restore-drill-cron.sh so cron never executes this
+# script directly through its default /bin/sh interpreter.
 BACKUP_FILE="${1:-${BACKUP_FILE:-}}"
 MONGO_CONTAINER="${MONGO_CONTAINER:-dzhoof-mongodb}"
 DRILL_DB="${DRILL_DB:-restore_drill}"
