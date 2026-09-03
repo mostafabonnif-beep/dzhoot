@@ -44,6 +44,8 @@ export interface IResellerPermissions {
   exportM3U: boolean;
   /** View code history (activation, devices, subscription window). */
   viewHistory: boolean;
+  /** Create and manage sub-resellers (موزعون فرعيون) under this account. */
+  subResellers: boolean;
 }
 
 export interface IResellerDocument extends Document {
@@ -57,6 +59,8 @@ export interface IResellerDocument extends Document {
   /** Code credit per plan (رصيد الأكواد): [{planId, quantity}] — reseller can
    *  self-generate codes while credit remains; decremented on each generation. */
   credit?: Array<{ planId: mongoose.Types.ObjectId; quantity: number }>;
+  /** Parent reseller (الموزع الأب) — set when a reseller creates a sub-reseller; null for top-level resellers. */
+  parentResellerId?: mongoose.Types.ObjectId;
   /** Portal login (بوابة الموزعين) — set by admin; inactive resellers cannot log in. */
   username?: string;
   /** Unique code prefix (3-6 chars) printed on this reseller's codes. */
@@ -131,6 +135,12 @@ const resellerSchema = new Schema<IResellerDocument>(
       sparse: true,
       index: true,
     },
+    parentResellerId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Reseller',
+      default: null,
+      index: true,
+    },
     /** Unique code prefix (3-6 chars) printed on this reseller's codes — e.g. "ALG1". */
     prefix: {
       type: String,
@@ -160,6 +170,7 @@ const resellerSchema = new Schema<IResellerDocument>(
         suspend: { type: Boolean, default: true },
         exportM3U: { type: Boolean, default: true },
         viewHistory: { type: Boolean, default: true },
+        subResellers: { type: Boolean, default: true },
       },
       _id: false,
       default: () => ({}),
