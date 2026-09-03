@@ -34,7 +34,7 @@ function SuccessContent() {
       return;
     }
     try {
-      const r = await fetch(`/api/v1/payments/chargily/status/${encodeURIComponent(token)}`, {
+      const r = await fetch(`/api/v1/payments/status/${encodeURIComponent(token)}`, {
         cache: 'no-store',
       });
       if (r.status === 404) {
