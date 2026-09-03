@@ -33,6 +33,7 @@ import { useLocale } from '@/components/locale-provider';
 import TransfersSection from '@/components/reseller/transfers-section';
 import TicketsSection from '@/components/reseller/tickets-section';
 import BrandingApiKeysSection from '@/components/reseller/branding-api-keys';
+import SubResellersSection from '@/components/reseller/sub-resellers-section';
 import CodeToolsModal, { CodeToolsTarget } from '@/components/reseller/code-tools';
 
 interface CreditItem {
@@ -116,6 +117,7 @@ export default function ResellerDashboardPage() {
       suspend: boolean;
       exportM3U: boolean;
       viewHistory: boolean;
+      subResellers?: boolean;
     };
     stats: { total: number; activated: number; activatedThisMonth: number; remaining: number };
     credit: CreditItem[];
@@ -1016,6 +1018,8 @@ export default function ResellerDashboardPage() {
         <TicketsSection />
 
         <BrandingApiKeysSection />
+
+        {me?.permissions?.subResellers !== false && <SubResellersSection />}
 
         {/* Customer debts (ديون الزبائن) */}
         <section className="border border-border bg-card p-4">
