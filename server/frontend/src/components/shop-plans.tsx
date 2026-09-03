@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { MessageCircle, Loader2, CreditCard } from 'lucide-react';
 
 type Plan = { _id: string; name: string; durationDays: number; price: number };
-type ShopData = { brand: string; whatsapp: string; shop: { name: string; phone: string } | null; plans: Plan[] };
+type ShopBranding = { displayName?: string; logoUrl?: string; primaryColor?: string };
+type ShopData = { brand: string; whatsapp: string; shop: { name: string; phone: string; branding?: ShopBranding } | null; plans: Plan[] };
 
 function durationLabel(days: number): string {
   if (days >= 360) return 'سنة كاملة';
@@ -97,7 +98,7 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
   }
 
   const phone = data.shop?.phone || data.whatsapp;
-  const shopLabel = data.shop ? data.shop.name : data.brand;
+  const shopLabel = data.shop ? data.shop.branding?.displayName || data.shop.name : data.brand;
   const waNumber = String(phone || '').replace(/[^\d]/g, '');
   const waLink = (plan: Plan) =>
     `https://wa.me/${waNumber}?text=${encodeURIComponent(
@@ -107,8 +108,23 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
   return (
     <div className="space-y-6">
       {data.shop && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-          🏪 أنت تطلب من محل <strong>{data.shop.name}</strong>
+        <div
+          className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm flex items-center gap-3"
+          style={data.shop.branding?.primaryColor ? { borderColor: `${data.shop.branding.primaryColor}55` } : undefined}
+        >
+          {data.shop.branding?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.shop.branding.logoUrl}
+              alt={data.shop.branding.displayName || data.shop.name}
+              className="h-9 w-9 rounded-lg object-contain bg-background"
+            />
+          ) : (
+            <span aria-hidden>🏪</span>
+          )}
+          <span>
+            أنت تطلب من محل <strong>{data.shop.branding?.displayName || data.shop.name}</strong>
+          </span>
         </div>
       )}
       {payError && (
