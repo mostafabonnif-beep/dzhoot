@@ -18,6 +18,7 @@ const Subscription = require('../models/Subscription');
 const { requireReseller, requireResellerOrApiKeyForReads } = require('../middleware/requireReseller');
 const { createResellerApiKey } = require('../models/ResellerApiKey');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const { audit, reqCtx } = require('../services/audit-log');
 const { getPublicBaseUrl } = require('../utils/public-url');
 
@@ -32,11 +33,13 @@ router.use(requireResellerOrApiKeyForReads);
 const PERMISSION_DEFAULTS = {
   generateCodes: true,
   transfers: true,
+  subResellers: true,
   renew: true,
   changePackage: true,
   suspend: true,
   exportM3U: true,
   viewHistory: true,
+  subResellers: true,
 };
 
 function hasPerm(reseller, key) {
@@ -189,6 +192,7 @@ router.get('/me', async (req, res) => {
         permissions: {
           generateCodes: hasPerm(r, 'generateCodes'),
           transfers: hasPerm(r, 'transfers'),
+          subResellers: hasPerm(r, 'subResellers'),
           renew: hasPerm(r, 'renew'),
           changePackage: hasPerm(r, 'changePackage'),
           suspend: hasPerm(r, 'suspend'),
@@ -1665,6 +1669,242 @@ router.delete('/api-keys/:id', async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error('[reseller] api-key revoke error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// ─── Sub-resellers (موزعون فرعيون) — a reseller manages subs under their own
+// account; subs are leaf nodes (depth 2 max) and get credit via transfers. ──
+
+// Assert this reseller may manage sub-resellers (permission + depth cap: a
+// sub-reseller cannot create sub-subs of their own).
+function requireSubResellerPerm(req, res) {
+  if (!hasPerm(req.reseller, 'subResellers')) {
+    deny(res, 'subResellers');
+    return false;
+  }
+  if (req.reseller.parentResellerId) {
+    res.status(403).json({
+      success: false,
+      error: 'Sub-resellers cannot create sub-resellers (two levels max)',
+      code: 'DEPTH_LIMIT',
+    });
+    return false;
+  }
+  return true;
+}
+
+// GET /sub-resellers — list this reseller's subs with credit + code stats.
+router.get('/sub-resellers', requireResellerOrApiKeyForReads, async (req, res) => {
+  try {
+    if (!hasPerm(req.reseller, 'subResellers')) return deny(res, 'subResellers');
+    const subs = await Reseller.find({ parentResellerId: req.reseller._id })
+      .select('username name status credit createdAt permissions parentResellerId')
+      .sort({ createdAt: -1 })
+      .lean();
+    const ids = subs.map((s) => s._id);
+    const codeStats = ids.length
+      ? await ActivationCode.aggregate([
+          { $match: { resellerId: { $in: ids } } },
+          { $group: { _id: '$resellerId', total: { $sum: 1 }, activated: { $sum: { $cond: [{ $eq: ['$status', 'ACTIVATED'] }, 1, 0] } } } },
+        ])
+      : [];
+    const statsBySub = new Map(codeStats.filter((s) => s._id).map((s) => [String(s._id), s]));
+    const data = subs.map((s) => {
+      const st = statsBySub.get(String(s._id)) || { total: 0, activated: 0 };
+      return {
+        _id: String(s._id),
+        username: s.username || '',
+        name: s.name,
+        status: s.status,
+        credit: s.credit || [],
+        parentResellerId: s.parentResellerId ? String(s.parentResellerId) : null,
+        createdAt: s.createdAt,
+        stats: { total: st.total, activated: st.activated, remaining: st.total - st.activated },
+      };
+    });
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error('[reseller] sub-resellers list error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /sub-resellers — create a sub-reseller under this account.
+// Credit (optional): planId + quantity allocated from the parent's own per-plan
+// credit — atomically deducted (never below zero) and credited to the sub,
+// with a GRANT ledger entry. Username/password are optional: when omitted the
+// API generates them and returns the password exactly once.
+router.post('/sub-resellers', async (req, res) => {
+  if (!requireSubResellerPerm(req, res)) return;
+  let creditDeducted = false;
+  let planObjId = null;
+  let qty = 0;
+  const rollback = () =>
+    planObjId
+      ? Reseller.updateOne({ _id: req.reseller._id, 'credit.planId': planObjId }, { $inc: { 'credit.$.quantity': qty } }).exec()
+      : Promise.resolve();
+  try {
+    const { planId: bodyPlanId, credit } = req.body || {};
+    const cleanName = String((req.body || {}).name || '').trim();
+    if (!cleanName || cleanName.length > 80) {
+      return res.status(400).json({ success: false, error: 'name is required (max 80 chars)' });
+    }
+
+    // Credit allocation (optional): planId + quantity must come together.
+    let planId = null;
+    if (bodyPlanId !== undefined || credit !== undefined) {
+      planId = typeof bodyPlanId === 'string' ? bodyPlanId : null;
+      qty = Number(credit);
+      if (!planId || !parseId(planId)) {
+        return res.status(400).json({ success: false, error: 'planId is required when allocating credit' });
+      }
+      if (!Number.isInteger(qty) || qty < 1 || qty > 100000) {
+        return res.status(400).json({ success: false, error: 'credit must be an integer between 1 and 100000' });
+      }
+      planObjId = new mongoose.Types.ObjectId(planId);
+    }
+
+    // Credentials: use provided ones or generate (password returned once).
+    let username = String((req.body || {}).username || '').trim().toLowerCase();
+    let password = String((req.body || {}).password || '');
+    if (username && !/^[a-z0-9_.-]{3,50}$/.test(username)) {
+      return res.status(400).json({ success: false, error: 'username must be 3-50 letters/numbers/._-' });
+    }
+    if (password && (password.length < 8 || password.length > 128)) {
+      return res.status(400).json({ success: false, error: 'password must be 8-128 characters' });
+    }
+    if (!username) username = `sub${crypto.randomBytes(4).toString('hex')}`;
+    if (!password) password = crypto.randomBytes(9).toString('base64url');
+
+    // CodeQL-safe uniqueness check: fetch usernames with a clean query, match
+    // in JS, then query with the DB-returned value (same pattern as transfers).
+    const usernames = await Reseller.distinct('username').exec();
+    if (usernames.includes(username)) {
+      return res.status(409).json({ success: false, error: 'Username already taken' });
+    }
+    const takenUsername = usernames[usernames.indexOf(username)];
+    if (takenUsername) {
+      const existing = await Reseller.findOne({ username: takenUsername }).select('_id').lean();
+      if (existing) {
+        return res.status(409).json({ success: false, error: 'Username already taken' });
+      }
+    }
+
+    // Atomic deduction from the parent — never below zero.
+    if (planObjId) {
+      const parentUpdated = await consumeCredit(String(req.reseller._id), planId, qty);
+      if (parentUpdated === null) {
+        return res.status(400).json({
+          success: false,
+          error: 'Insufficient credit for this plan',
+          code: 'INSUFFICIENT_CREDIT',
+        });
+      }
+      creditDeducted = true;
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    let doc;
+    try {
+      doc = await Reseller.create({
+        name: cleanName,
+        city: '',
+        status: 'Active',
+        username,
+        passwordHash,
+        parentResellerId: req.reseller._id,
+        credit: planObjId ? [{ planId: planObjId, quantity: qty }] : [],
+        prices: [],
+      });
+    } catch (err) {
+      await rollback();
+      throw err;
+    }
+
+    if (planObjId) {
+      try {
+        await recordCreditTx({
+          resellerId: doc._id,
+          planId: planObjId,
+          type: 'GRANT',
+          quantity: qty,
+          balanceAfter: qty,
+          performedBy: req.reseller._id,
+          performedByRole: 'reseller',
+          note: `تخصيص رصيد من المحل الأب ${req.reseller.name}`,
+          counterpartyId: String(req.reseller._id),
+        });
+      } catch (err) {
+        console.error('[reseller] sub-reseller grant ledger error:', err);
+      }
+    }
+
+    audit({
+      ...reqCtx(req),
+      action: 'RESELLER_SUB_CREATE',
+      resource: 'Reseller',
+      resourceId: String(doc._id),
+      changes: { after: { username, parentId: String(req.reseller._id), credit: planObjId ? qty : 0 } },
+    });
+    res.status(201).json({
+      success: true,
+      data: {
+        _id: String(doc._id),
+        username,
+        name: doc.name,
+        credit: planObjId ? qty : 0,
+        password, // shown ONCE — the parent hands it to the sub-reseller
+      },
+    });
+  } catch (err) {
+    if (creditDeducted) await rollback();
+    console.error('[reseller] sub-reseller create error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// PATCH /sub-resellers/:id — reset password or set status. Own subs only.
+router.patch('/sub-resellers/:id', async (req, res) => {
+  if (!requireSubResellerPerm(req, res)) return;
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
+    const sub = await Reseller.findOne({ _id: id, parentResellerId: req.reseller._id });
+    if (!sub) return res.status(404).json({ success: false, error: 'Sub-reseller not found' });
+    const { action, status, newPassword } = req.body || {};
+    if (action === 'reset-password') {
+      const cleanPassword = String(newPassword || '');
+      if (cleanPassword.length < 8 || cleanPassword.length > 128) {
+        return res.status(400).json({ success: false, error: 'password must be 8-128 characters' });
+      }
+      sub.passwordHash = await bcrypt.hash(cleanPassword, 12);
+      await audit({
+        ...reqCtx(req),
+        action: 'RESELLER_SUB_PASSWORD_RESET',
+        resource: 'Reseller',
+        resourceId: String(sub._id),
+      });
+    } else if (action === 'set-status') {
+      const cleanStatus = String(status || '');
+      if (!['Active', 'Inactive'].includes(cleanStatus)) {
+        return res.status(400).json({ success: false, error: 'status must be Active or Inactive' });
+      }
+      sub.status = cleanStatus;
+      await audit({
+        ...reqCtx(req),
+        action: 'RESELLER_SUB_STATUS',
+        resource: 'Reseller',
+        resourceId: String(sub._id),
+        changes: { after: { status: cleanStatus } },
+      });
+    } else {
+      return res.status(400).json({ success: false, error: 'Unknown action' });
+    }
+    await sub.save();
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[reseller] sub-reseller update error:', err);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });

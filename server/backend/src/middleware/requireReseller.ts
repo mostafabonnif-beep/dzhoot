@@ -54,6 +54,8 @@ const API_KEY_READ_ROUTES: RegExp[] = [
   /^\/batches\/[^/]+\/codes$/,
   /^\/tickets$/,
   /^\/debts$/,
+  /^\/whitelabel\/branding$/,
+  /^\/sub-resellers$/,
 ];
 
 async function authenticateApiKey(
