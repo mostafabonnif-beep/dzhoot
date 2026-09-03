@@ -214,7 +214,14 @@ export interface FailoverContext {
 async function resolveFailoverTarget(ctx: FailoverContext) {
   const Channel = require('../models/Channel').default || require('../models/Channel');
   const { getFailoverTarget } = require('./source-failover-service');
-  const channel = await Channel.findById(ctx.channelId).select('channelId').lean();
+  const channelId = String(ctx.channelId || '').trim();
+  if (!channelId) return null;
+  // ctx.channelId is the business channelId (e.g. 'xt:6a84...'), not a Mongo _id —
+  // findById would throw CastError and silently kill mid-stream failover.
+  const query = /^[0-9a-fA-F]{24}$/.test(channelId)
+    ? { $or: [{ channelId }, { _id: channelId }] }
+    : { channelId };
+  const channel = await Channel.findOne(query).select('channelId').lean();
   if (!channel) return null;
   return getFailoverTarget({ _id: channel._id, channelId: channel.channelId }, ctx.primarySourceId || null);
 }
