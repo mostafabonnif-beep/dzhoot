@@ -5,12 +5,13 @@ import Reseller from '../models/Reseller';
 import SupportTicket from '../models/SupportTicket';
 
 let currentReseller: any = null;
-jest.mock('../middleware/requireReseller', () => ({
-  requireReseller: (req: any, _res: any, next: any) => {
+jest.mock('../middleware/requireReseller', () => {
+  const requireReseller = (req: any, _res: any, next: any) => {
     req.reseller = currentReseller;
     next();
-  },
-}));
+  };
+  return { requireReseller, requireResellerOrApiKeyForReads: requireReseller };
+});
 
 const ADMIN_ID = new mongoose.Types.ObjectId();
 jest.mock('../routes/auth', () => ({

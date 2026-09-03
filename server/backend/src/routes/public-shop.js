@@ -40,10 +40,18 @@ router.get('/plans', async (req, res) => {
     const shopId = req.query.shop ? String(req.query.shop).trim() : '';
     if (shopId && mongoose.Types.ObjectId.isValid(shopId)) {
       const reseller = await Reseller.findOne({ _id: shopId, status: 'Active' })
-        .select('name phone')
+        .select('name phone branding')
         .lean();
       if (reseller) {
-        data.shop = { name: reseller.name, phone: reseller.phone || '' };
+        // White label: a reseller's branding (when set) overrides the generic
+        // shop brand on THEIR customer-facing pages.
+        const branding = reseller.branding || {};
+        data.shop = {
+          name: branding.displayName || reseller.name,
+          phone: reseller.phone || '',
+          logoUrl: branding.logoUrl || '',
+          primaryColor: branding.primaryColor || '',
+        };
       }
     }
 

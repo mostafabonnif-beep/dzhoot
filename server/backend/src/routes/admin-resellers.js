@@ -5,12 +5,15 @@ const Reseller = require('../models/Reseller');
 const ActivationCode = require('../models/ActivationCode');
 const CodeBatch = require('../models/CodeBatch');
 const Plan = require('../models/Plan');
+const { safeHttpsUrl } = require('../models/Reseller');
 
 const { audit, reqCtx } = require('../services/audit-log');
 const bcrypt = require('bcryptjs');
 const CreditTransaction = require('../models/CreditTransaction');
 const ResellerCreditDebt = require('../models/ResellerCreditDebt');
 const { recordCreditTx, returnUnusedCreditForReseller } = require('../services/subscription-service');
+const ResellerApiKey = require('../models/ResellerApiKey');
+const { createResellerApiKey } = require('../models/ResellerApiKey');
 
 // Permission flags that admins can toggle per reseller (مصفوفة الصلاحيات).
 const PERMISSION_KEYS = [
@@ -121,7 +124,7 @@ router.get('/', async (req, res) => {
 // POST / — create reseller
 router.post('/', async (req, res) => {
   try {
-    const { name, city, phone, notes, status, prices, username, password, credit, prefix, permissions } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password, credit, prefix, permissions, branding } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'name is required' });
     }
@@ -195,7 +198,7 @@ router.put('/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
-    const { name, city, phone, notes, status, prices, username, password, credit, prefix, permissions } = req.body || {};
+    const { name, city, phone, notes, status, prices, username, password, credit, prefix, permissions, branding } = req.body || {};
     const update = {};
     if (username !== undefined) {
       if (username && !/^[a-z0-9_.-]{3,50}$/i.test(String(username).trim())) {
@@ -239,6 +242,28 @@ router.put('/:id', async (req, res) => {
     if (credit !== undefined) update.credit = cleanCredit(credit);
     const cleanPerms = cleanPermissions(permissions);
     if (cleanPerms !== undefined) update.permissions = cleanPerms;
+    if (branding !== undefined) {
+      if (typeof branding !== 'object' || branding === null) {
+        return res.status(400).json({ success: false, error: 'branding must be an object' });
+      }
+      if (branding.displayName !== undefined) {
+        update['branding.displayName'] = String(branding.displayName).trim().slice(0, 60);
+      }
+      if (branding.logoUrl !== undefined) {
+        const v = safeHttpsUrl(branding.logoUrl);
+        if (v === null) {
+          return res.status(400).json({ success: false, error: 'logoUrl must be a direct https:// URL' });
+        }
+        update['branding.logoUrl'] = v;
+      }
+      if (branding.primaryColor !== undefined) {
+        const v = String(branding.primaryColor).trim();
+        if (v && !/^#[0-9a-fA-F]{6}$/.test(v)) {
+          return res.status(400).json({ success: false, error: 'primaryColor must be #rrggbb' });
+        }
+        update['branding.primaryColor'] = v;
+      }
+    }
     const prev = await Reseller.findById(id).select('credit').lean().exec();
     const doc = await Reseller.findByIdAndUpdate(id, { $set: update }, { new: true }).exec();
     if (!doc) return res.status(404).json({ success: false, error: 'Reseller not found' });
@@ -384,5 +409,68 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+
+// ─── API keys for big resellers (مفاتيح API) — admin-managed ───────────
+
+// GET /:id/api-keys — metadata only (the secret is shown exactly once).
+router.get('/:id/api-keys', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
+    const keys = await ResellerApiKey.find({ resellerId: id, active: true })
+      .select('name prefix createdAt lastUsedAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ success: true, data: keys });
+  } catch (err) {
+    console.error('[admin-resellers] api-keys list error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /:id/api-keys — create a key for this reseller; plaintext shown ONCE.
+router.post('/:id/api-keys', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
+    const reseller = await Reseller.findById(id).select('_id status').lean();
+    if (!reseller) return res.status(404).json({ success: false, error: 'Reseller not found' });
+    const name = String(req.body?.name || '').trim().slice(0, 60) || 'API key';
+    const count = await ResellerApiKey.countDocuments({ resellerId: id, active: true });
+    if (count >= 10) {
+      return res.status(400).json({ success: false, error: 'API key limit reached (10) — revoke unused keys first' });
+    }
+    const { plaintext, doc } = await createResellerApiKey(id, name);
+    audit({ ...reqCtx(req), action: 'RESELLER_API_KEY_CREATE', resource: 'Reseller', resourceId: id });
+    res.status(201).json({
+      success: true,
+      data: { _id: String(doc._id), name: doc.name, prefix: doc.prefix, createdAt: doc.createdAt, key: plaintext },
+    });
+  } catch (err) {
+    console.error('[admin-resellers] api-key create error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// DELETE /:id/api-keys/:keyId — revoke a key.
+router.delete('/:id/api-keys/:keyId', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    const keyId = parseId(req.params.keyId);
+    if (!id || !keyId) return res.status(400).json({ success: false, error: 'Invalid id' });
+    const doc = await ResellerApiKey.findOneAndUpdate(
+      { _id: keyId, resellerId: id, active: true },
+      { $set: { active: false } },
+      { new: true },
+    ).exec();
+    if (!doc) return res.status(404).json({ success: false, error: 'API key not found' });
+    audit({ ...reqCtx(req), action: 'RESELLER_API_KEY_REVOKE', resource: 'Reseller', resourceId: id });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[admin-resellers] api-key revoke error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
 
 module.exports = router;

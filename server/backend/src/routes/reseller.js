@@ -5,6 +5,8 @@ const CodeBatch = require('../models/CodeBatch');
 const Plan = require('../models/Plan');
 const ActivationCode = require('../models/ActivationCode');
 const Reseller = require('../models/Reseller');
+const ResellerApiKey = require('../models/ResellerApiKey');
+const { safeHttpsUrl } = require('../models/Reseller');
 const Device = require('../models/Device');
 const User = require('../models/User');
 const SupportTicket = require('../models/SupportTicket');
@@ -13,12 +15,16 @@ const { generateCodes, getCodeExpiryDays, recordCreditTx } = require('../service
 const CreditTransaction = require('../models/CreditTransaction');
 const ActivationRedemption = require('../models/ActivationRedemption');
 const Subscription = require('../models/Subscription');
-const { requireReseller } = require('../middleware/requireReseller');
+const { requireReseller, requireResellerOrApiKeyForReads } = require('../middleware/requireReseller');
+const { createResellerApiKey } = require('../models/ResellerApiKey');
+const crypto = require('crypto');
 const { audit, reqCtx } = require('../services/audit-log');
 const { getPublicBaseUrl } = require('../utils/public-url');
 
 // Reseller portal (بوابة الموزعين): /api/v1/reseller/*
-router.use(requireReseller);
+// Bearer JWT for everything; API keys (X-API-Key, وايت لابل للموزعين الكبار)
+// are accepted on safe read-only GET endpoints only — writes stay JWT-only.
+router.use(requireResellerOrApiKeyForReads);
 
 // ─── Permission matrix (مصفوفة صلاحيات الموزع) ─────────────────────────
 // Every flag defaults to ON so existing resellers keep full access. Admins
@@ -175,6 +181,11 @@ router.get('/me', async (req, res) => {
         name: r.name,
         city: r.city || '',
         prefix: r.prefix || 'DZHF',
+        branding: {
+          displayName: r.branding?.displayName || '',
+          logoUrl: r.branding?.logoUrl || '',
+          primaryColor: r.branding?.primaryColor || '',
+        },
         permissions: {
           generateCodes: hasPerm(r, 'generateCodes'),
           transfers: hasPerm(r, 'transfers'),
@@ -210,7 +221,6 @@ router.get('/me', async (req, res) => {
   }
 });
 
-// GET /ledger — this reseller's credit movement history (سجل حركات الرصيد)
 router.get('/ledger', async (req, res) => {
   try {
     const page = Math.max(parseInt(String(req.query.page || '1'), 10) || 1, 1);
@@ -1557,6 +1567,105 @@ router.delete('/debts/:id', async (req, res) => {
   } catch (err) {
     console.error('[reseller] delete debt error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// ─── White-label branding (وايت لابل) + API keys (مفاتيح API) ───────────
+
+// PUT /branding — the reseller styles what THEIR customers see (buy page,
+// QR cards). Accepts partial updates; empty strings clear a field.
+router.put('/branding', async (req, res) => {
+  try {
+    const { displayName, logoUrl, primaryColor } = req.body || {};
+    const update = {};
+    if (displayName !== undefined) {
+      const v = String(displayName).trim().slice(0, 60);
+      update['branding.displayName'] = v;
+    }
+    if (logoUrl !== undefined) {
+      const v = safeHttpsUrl(logoUrl);
+      if (v === null) {
+        return res.status(400).json({ success: false, error: 'logoUrl must be a direct https:// URL' });
+      }
+      update['branding.logoUrl'] = v;
+    }
+    if (primaryColor !== undefined) {
+      const v = String(primaryColor).trim();
+      if (v && !/^#[0-9a-fA-F]{6}$/.test(v)) {
+        return res.status(400).json({ success: false, error: 'primaryColor must be #rrggbb' });
+      }
+      update['branding.primaryColor'] = v;
+    }
+    const doc = await Reseller.findByIdAndUpdate(req.reseller._id, { $set: update }, { new: true })
+      .select('branding')
+      .exec();
+    audit({ ...reqCtx(req), action: 'RESELLER_BRANDING_UPDATE', resource: 'Reseller', resourceId: String(req.reseller._id) });
+    res.json({
+      success: true,
+      data: {
+        displayName: doc?.branding?.displayName || '',
+        logoUrl: doc?.branding?.logoUrl || '',
+        primaryColor: doc?.branding?.primaryColor || '',
+      },
+    });
+  } catch (err) {
+    console.error('[reseller] branding error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// GET /api-keys — metadata only (never the secret; it is shown exactly once).
+router.get('/api-keys', async (req, res) => {
+  try {
+    const keys = await ResellerApiKey.find({ resellerId: req.reseller._id, active: true })
+      .select('name prefix createdAt lastUsedAt')
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ success: true, data: keys });
+  } catch (err) {
+    console.error('[reseller] api-keys list error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// POST /api-keys — create a key; the plaintext is returned ONCE.
+router.post('/api-keys', async (req, res) => {
+  try {
+    const name = String(req.body?.name || '').trim().slice(0, 60) || 'API key';
+    const count = await ResellerApiKey.countDocuments({ resellerId: req.reseller._id, active: true });
+    if (count >= 10) {
+      return res.status(400).json({ success: false, error: 'API key limit reached (10) — revoke unused keys first' });
+    }
+    const { plaintext, doc } = await createResellerApiKey(String(req.reseller._id), name);
+    audit({ ...reqCtx(req), action: 'RESELLER_API_KEY_CREATE', resource: 'Reseller', resourceId: String(req.reseller._id) });
+    res.status(201).json({
+      success: true,
+      data: { _id: String(doc._id), name: doc.name, prefix: doc.prefix, createdAt: doc.createdAt, key: plaintext },
+    });
+  } catch (err) {
+    console.error('[reseller] api-key create error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+// DELETE /api-keys/:id — revoke (soft) one of this reseller's own keys.
+router.delete('/api-keys/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid id' });
+    }
+    const doc = await ResellerApiKey.findOneAndUpdate(
+      { _id: id, resellerId: req.reseller._id, active: true },
+      { $set: { active: false } },
+      { new: true },
+    ).exec();
+    if (!doc) return res.status(404).json({ success: false, error: 'API key not found' });
+    audit({ ...reqCtx(req), action: 'RESELLER_API_KEY_REVOKE', resource: 'Reseller', resourceId: String(req.reseller._id) });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[reseller] api-key revoke error:', err);
+    res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
 
