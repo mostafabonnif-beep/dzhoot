@@ -24,6 +24,7 @@ const {
 const { registerStreamSession, isStreamSessionActive } = require('../services/stream-session-service');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { epgCache } = require('../services/cache');
+const { buildNowNext } = require('../utils/epg-now-next');
 const { decryptSecret } = require('../utils/crypto');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
@@ -1352,6 +1353,42 @@ router.get('/epg/:code/json', async (req, res) => {
       success: false,
       error: 'Failed to fetch EPG data',
     });
+  }
+});
+
+// Get lightweight now/next guide for the user's channels (issue #173).
+// Cheaper than the full-guide endpoints: apps poll this for the home banner.
+router.get('/epg/:code/now-next', async (req, res) => {
+  try {
+    const user = await findUserByCode(req.params.code, res);
+    if (!user) return;
+
+    const cacheKey = `now-next:${user.channelListCode}`;
+    const cached = await epgCache.get(cacheKey);
+    if (cached) {
+      res.setHeader('Cache-Control', 'public, max-age=60');
+      return res.json(cached);
+    }
+
+    const { epgIds, channelInfoMap } = await loadEpgChannelIds(user);
+    const programs = await epgService.getEpgForChannels(epgIds, 3);
+    const nowDate = new Date();
+    const payload = buildNowNext(
+      [...channelInfoMap.values()].map((info) => ({
+        key: info.epgId,
+        name: info.name,
+        icon: info.icon,
+      })),
+      programs,
+      nowDate,
+    );
+    const body = { success: true, ...payload };
+    await epgCache.set(cacheKey, body, 60);
+    res.setHeader('Cache-Control', 'public, max-age=60');
+    return res.json(body);
+  } catch (error) {
+    console.error('Error fetching now/next EPG:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch now/next guide' });
   }
 });
 
