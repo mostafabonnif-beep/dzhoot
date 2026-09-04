@@ -357,24 +357,12 @@ private fun PosterCard(
     imageUrl: String?,
     onClick: () -> Unit,
 ) {
-    Card(
+    CatalogPosterCard(
+        title = title,
+        subtitle = subtitle,
+        imageUrl = imageUrl,
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        AsyncImage(
-            model = imageUrl,
-            contentDescription = title,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(210.dp)
-                .clip(MaterialTheme.shapes.medium),
-            contentScale = ContentScale.Crop,
-        )
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+    )
 }
 
 @Composable
