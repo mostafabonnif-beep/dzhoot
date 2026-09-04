@@ -19,6 +19,7 @@ export interface PlaybackAccessResult {
 export async function checkPlaybackSubscription(
   userId: string | undefined,
   role: string | undefined,
+  contentType?: 'Live' | 'VOD',
 ): Promise<PlaybackAccessResult> {
   const required = await isSubscriptionRequired();
   if (!required || role === 'Admin') {
@@ -29,7 +30,21 @@ export async function checkPlaybackSubscription(
   }
   const subscription = await getActiveSubscription(String(userId));
   const plan = subscription?.planId ? await Plan.findById(subscription.planId).lean().exec() : null;
-  return { allowed: Boolean(subscription && plan), required, subscription, plan };
+  const allowed = Boolean(subscription && plan) && planAllowsContentType(plan, contentType);
+  return { allowed, required, subscription, plan };
 }
 
-module.exports = { checkPlaybackSubscription };
+/**
+ * Work-plan part 5: a plan may be scoped to Live TV only, VOD only, or both.
+ * Plans with no contentTypes (legacy documents / backfill gap) keep granting
+ * everything, so the gate only restricts when the plan explicitly narrows.
+ */
+export function planAllowsContentType(plan: any | null | undefined, contentType?: 'Live' | 'VOD'): boolean {
+  if (!contentType) return true;
+  if (!plan) return false;
+  const types = Array.isArray(plan.contentTypes) ? plan.contentTypes.filter(Boolean) : [];
+  if (types.length === 0) return true;
+  return types.includes(contentType);
+}
+
+module.exports = { checkPlaybackSubscription, planAllowsContentType };
