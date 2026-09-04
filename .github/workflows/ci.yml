@@ -81,7 +81,19 @@ jobs:
       - run: npm run build:backend
       - name: Test operational readiness guard
         run: bash scripts/ops/test-operational-readiness.sh
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Audit production dependencies (tolerates npm registry outages)
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev --audit-level=high; then exit 0; fi
+            echo "audit attempt $attempt failed - retrying in 30s"
+            sleep 30
+          done
+          # Three retries exhausted. A registry outage (503/400) is not a finding:
+          # fail only if an actual vulnerability report rendered.
+          if npm audit --omit=dev --audit-level=high 2>&1 | grep -qiE 'severity|vulnerabilit'; then
+            exit 1
+          fi
+          echo "::warning::npm audit endpoint unavailable - skipping audit (registry outage)"
       - run: npm run test:backend
       - name: E2E smoke (subscription loop)
         run: npx tsx scripts/smoke-activation.ts
@@ -149,4 +161,16 @@ jobs:
       - run: npm run lint -w @dzhoof/frontend
       - run: npm run build -w @dzhoof/frontend
       - run: npm run test:frontend
-      - run: npm audit --omit=dev --audit-level=high
+      - name: Audit production dependencies (tolerates npm registry outages)
+        run: |
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev --audit-level=high; then exit 0; fi
+            echo "audit attempt $attempt failed - retrying in 30s"
+            sleep 30
+          done
+          # Three retries exhausted. A registry outage (503/400) is not a finding:
+          # fail only if an actual vulnerability report rendered.
+          if npm audit --omit=dev --audit-level=high 2>&1 | grep -qiE 'severity|vulnerabilit'; then
+            exit 1
+          fi
+          echo "::warning::npm audit endpoint unavailable - skipping audit (registry outage)"
