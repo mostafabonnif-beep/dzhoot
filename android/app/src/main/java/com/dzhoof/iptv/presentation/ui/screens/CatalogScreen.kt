@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -30,8 +31,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +49,7 @@ import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.Season
 import com.dzhoof.iptv.domain.model.Series
 import com.dzhoof.iptv.presentation.ui.components.AppTextField
+import com.dzhoof.iptv.presentation.ui.components.CatalogPosterCard
 import com.dzhoof.iptv.presentation.ui.components.EmptyState
 import com.dzhoof.iptv.presentation.ui.components.ErrorState
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
@@ -196,53 +200,37 @@ private fun CatalogContent(
     }
 
     if (state.tab == CatalogTab.MOVIES) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
-            contentPadding = PaddingValues(bottom = 28.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            items(state.movies.size, key = { i -> "$i:${state.movies[i].id}" }) { i ->
-                val movie = state.movies[i]
+        PosterGrid(
+            items = state.movies,
+            totalCount = state.totalCount,
+            isLoadingMore = state.isLoadingMore,
+            onLoadMore = onLoadMore,
+            keyOf = { it.id },
+            posterContent = { movie ->
                 PosterCard(
                     title = movie.title,
                     subtitle = movie.year?.toString() ?: movie.category,
                     imageUrl = movie.poster,
                     onClick = { onMovieClick(movie) },
                 )
-            }
-            if (state.movies.size < state.totalCount) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (state.isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
-                    }
-                }
-            }
-        }
+            },
+        )
     } else {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
-            contentPadding = PaddingValues(bottom = 28.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            items(state.series.size, key = { i -> "$i:${state.series[i].id}" }) { i ->
-                val series = state.series[i]
+        PosterGrid(
+            items = state.series,
+            totalCount = state.totalCount,
+            isLoadingMore = state.isLoadingMore,
+            onLoadMore = onLoadMore,
+            keyOf = { it.id },
+            posterContent = { series ->
                 PosterCard(
                     title = series.title,
-                    subtitle = series.category,
+                    subtitle = series.releaseDate?.take(4) ?: series.category,
                     imageUrl = series.poster,
                     onClick = { onSeriesClick(series) },
                 )
-            }
-            if (state.series.size < state.totalCount) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (state.isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
-                    }
-                }
-            }
-        }
+            },
+        )
     }
 }
 
@@ -350,6 +338,46 @@ private fun SeriesDetails(
     }
 }
 
+/**
+ * Shared poster grid for movies/series with TV-friendly infinite scroll.
+ */
+@Composable
+private fun <T> PosterGrid(
+    items: List<T>,
+    totalCount: Int,
+    isLoadingMore: Boolean,
+    onLoadMore: () -> Unit,
+    keyOf: (T) -> Any,
+    posterContent: @Composable (T) -> Unit,
+) {
+    val gridState = rememberLazyGridState()
+    val tailVisible by remember(items.size) {
+        derivedStateOf {
+            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            items.isNotEmpty() && last >= items.size - 1
+        }
+    }
+    LaunchedEffect(tailVisible, items.size, totalCount, isLoadingMore) {
+        if (tailVisible && items.size < totalCount && !isLoadingMore) onLoadMore()
+    }
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Adaptive(minSize = 150.dp),
+        contentPadding = PaddingValues(bottom = 28.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        items(items, key = keyOf) { item -> posterContent(item) }
+        if (items.size < totalCount) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun PosterCard(
     title: String,
@@ -357,24 +385,12 @@ private fun PosterCard(
     imageUrl: String?,
     onClick: () -> Unit,
 ) {
-    Card(
+    CatalogPosterCard(
+        title = title,
+        subtitle = subtitle,
+        imageUrl = imageUrl,
         onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-    ) {
-        AsyncImage(
-            model = imageUrl,
-            contentDescription = title,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(210.dp)
-                .clip(MaterialTheme.shapes.medium),
-            contentScale = ContentScale.Crop,
-        )
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
+    )
 }
 
 @Composable

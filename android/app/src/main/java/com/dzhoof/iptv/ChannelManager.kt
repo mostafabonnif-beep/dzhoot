@@ -60,13 +60,17 @@ class ChannelManager private constructor(
             }
         }
 
-        // Insert or update channels
+        // Insert or update channels. Stable human-friendly numbers come from the
+        // curated sync order (same order the in-app browse list uses), so the
+        // TV channel bar matches the app instead of showing raw channel ids.
+        val displayNumbers = appChannels.withIndex().associate { (index, ch) -> ch.id to index + 1 }
         for (channel in appChannels) {
             val existingId = existingTifChannels[channel.id]
+            val displayNumber = displayNumbers[channel.id] ?: 0
             if (existingId != null) {
-                updateChannel(existingId, channel)
+                updateChannel(existingId, channel, displayNumber)
             } else {
-                insertChannel(channel)
+                insertChannel(channel, displayNumber)
             }
         }
 
@@ -162,7 +166,7 @@ class ChannelManager private constructor(
         return existingChannels
     }
 
-    private fun insertChannel(channel: ChannelEntity): Uri? {
+    private fun insertChannel(channel: ChannelEntity, displayNumber: Int): Uri? {
         val resolver = context.contentResolver
 
         return try {
@@ -176,8 +180,13 @@ class ChannelManager private constructor(
                 put(TvContract.Channels.COLUMN_INPUT_ID, inputId)
                 put(TvContract.Channels.COLUMN_TYPE, TvContract.Channels.TYPE_OTHER)
                 put(TvContract.Channels.COLUMN_DISPLAY_NAME, truncateName(channel.name))
-                put(TvContract.Channels.COLUMN_DISPLAY_NUMBER, channel.id)
+                put(TvContract.Channels.COLUMN_DISPLAY_NUMBER, displayNumber)
                 put(TvContract.Channels.COLUMN_INTERNAL_PROVIDER_DATA, internalData.toString())
+                // Expose the channel to the system TV app: browsable makes it
+                // playable from the Live Channels grid, searchable lets it show
+                // up in the launcher/global TV search.
+                put(TvContractCompat.Channels.COLUMN_BROWSABLE, 1)
+                put(TvContractCompat.Channels.COLUMN_SEARCHABLE, 1)
                 channel.logoUrl?.takeIf { it.isNotEmpty() }?.let {
                     put(TvContractCompat.Channels.COLUMN_APP_LINK_ICON_URI, it)
                 }
@@ -192,7 +201,7 @@ class ChannelManager private constructor(
         }
     }
 
-    private fun updateChannel(tifChannelId: Long, channel: ChannelEntity) {
+    private fun updateChannel(tifChannelId: Long, channel: ChannelEntity, displayNumber: Int) {
         val resolver = context.contentResolver
 
         try {
@@ -206,6 +215,7 @@ class ChannelManager private constructor(
 
             val values = ContentValues().apply {
                 put(TvContract.Channels.COLUMN_DISPLAY_NAME, truncateName(channel.name))
+                put(TvContract.Channels.COLUMN_DISPLAY_NUMBER, displayNumber)
                 put(TvContract.Channels.COLUMN_INTERNAL_PROVIDER_DATA, internalData.toString())
                 channel.logoUrl?.takeIf { it.isNotEmpty() }?.let {
                     put(TvContractCompat.Channels.COLUMN_APP_LINK_ICON_URI, it)
