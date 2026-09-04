@@ -63,7 +63,8 @@ internal fun handlePlayerKeyEvent(
     viewModel: PlayerViewModel,
     state: PlayerOverlayState,
     onNavigateToSettings: (() -> Unit)?,
-    onNavigateToSearch: (() -> Unit)?
+    onNavigateToSearch: (() -> Unit)?,
+    onNavigateToGuide: (() -> Unit)? = null
 ): Boolean {
     val action = keyEvent.nativeKeyEvent.action
     val keyCode = keyEvent.nativeKeyEvent.keyCode
@@ -134,6 +135,12 @@ internal fun handlePlayerKeyEvent(
 
     if (keyCode == KeyEvent.KEYCODE_SEARCH && onNavigateToSearch != null) {
         onNavigateToSearch()
+        return true
+    }
+
+    // TV remote "Guide" button — jump straight to the EPG grid.
+    if (keyCode == KeyEvent.KEYCODE_GUIDE && onNavigateToGuide != null) {
+        onNavigateToGuide()
         return true
     }
 

@@ -47,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
@@ -388,6 +389,7 @@ private fun DzhoofAppShell(
 private val tvBottomNavItems = listOf(
     Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
     Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
+    Triple(Screen.Guide, Icons.Default.Tv, "دليل البرامج"),
     Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
     Triple(Screen.Catalog, Icons.Default.Movie, "فيديو"),
     Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),

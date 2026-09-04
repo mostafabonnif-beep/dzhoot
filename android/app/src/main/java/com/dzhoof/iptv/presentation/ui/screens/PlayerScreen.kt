@@ -335,7 +335,8 @@ fun PlayerScreen(
                     viewModel = viewModel,
                     state = overlayState,
                     onNavigateToSettings = onNavigateToSettings,
-                    onNavigateToSearch = onNavigateToSearch
+                    onNavigateToSearch = onNavigateToSearch,
+                    onNavigateToGuide = onNavigateToGuide
                 )
             }
     ) {
