@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
@@ -30,6 +31,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -196,53 +200,21 @@ private fun CatalogContent(
     }
 
     if (state.tab == CatalogTab.MOVIES) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
-            contentPadding = PaddingValues(bottom = 28.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            items(state.movies.size, key = { i -> "$i:${state.movies[i].id}" }) { i ->
-                val movie = state.movies[i]
-                PosterCard(
-                    title = movie.title,
-                    subtitle = movie.year?.toString() ?: movie.category,
-                    imageUrl = movie.poster,
-                    onClick = { onMovieClick(movie) },
-                )
-            }
-            if (state.movies.size < state.totalCount) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (state.isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
-                    }
-                }
-            }
-        }
+        PosterGrid(
+            items = state.movies,
+            totalCount = state.totalCount,
+            isLoadingMore = state.isLoadingMore,
+            onLoadMore = onLoadMore,
+            onPosterClick = { onMovieClick(it) },
+        )
     } else {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 150.dp),
-            contentPadding = PaddingValues(bottom = 28.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            items(state.series.size, key = { i -> "$i:${state.series[i].id}" }) { i ->
-                val series = state.series[i]
-                PosterCard(
-                    title = series.title,
-                    subtitle = series.category,
-                    imageUrl = series.poster,
-                    onClick = { onSeriesClick(series) },
-                )
-            }
-            if (state.series.size < state.totalCount) {
-                item(span = { GridItemSpan(maxLineSpan) }) {
-                    OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (state.isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
-                    }
-                }
-            }
-        }
+        PosterGrid(
+            items = state.series,
+            totalCount = state.totalCount,
+            isLoadingMore = state.isLoadingMore,
+            onLoadMore = onLoadMore,
+            onPosterClick = { onSeriesClick(it) },
+        )
     }
 }
 
@@ -345,6 +317,55 @@ private fun SeriesDetails(
             items(episodes.size, key = { i -> "$i:${episodes[i].id}" }) { i ->
                 val episode = episodes[i]
                 EpisodeRow(episode = episode, onClick = { onEpisodeClick(episode) })
+            }
+        }
+    }
+}
+
+/**
+ * Shared poster grid for movies/series with TV-friendly infinite scroll:
+ * load-more fires when the tail of the loaded list becomes visible, so
+ * D-pad users never hunt for a button. The button stays for pointer input.
+ */
+@Composable
+private fun <T> PosterGrid(
+    // Generic item — caller maps title/subtitle/poster/onClick below via itemContent.
+
+    items: List<T>,
+    totalCount: Int,
+    isLoadingMore: Boolean,
+    onLoadMore: () -> Unit,
+    onPosterClick: (T) -> Unit,
+) {
+    val gridState = rememberLazyGridState()
+    val tailVisible by remember(items.size) {
+        derivedStateOf {
+            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last >= items.size - 1
+        }
+    }
+    LazyVerticalGrid(
+        state = gridState,
+        columns = GridCells.Adaptive(minSize = 150.dp),
+        contentPadding = PaddingValues(bottom = 28.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        items(items.size, key = { i -> "$i:${items[i].id}" }) { i ->
+            val entry = items[i]
+            PosterCard(
+                title = entry.title,
+                subtitle = entry.year?.toString() ?: entry.category,
+                imageUrl = entry.poster,
+                onClick = { onPosterClick(entry) },
+            )
+        }
+        if (items.size < totalCount) {
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                LaunchedEffect(tailVisible) { if (tailVisible) onLoadMore() }
+                OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
+                }
             }
         }
     }
