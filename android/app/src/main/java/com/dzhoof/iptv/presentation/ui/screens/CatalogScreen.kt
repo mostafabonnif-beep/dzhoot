@@ -205,7 +205,15 @@ private fun CatalogContent(
             totalCount = state.totalCount,
             isLoadingMore = state.isLoadingMore,
             onLoadMore = onLoadMore,
-            onPosterClick = { onMovieClick(it) },
+            keyOf = { it.id },
+            posterContent = { movie ->
+                PosterCard(
+                    title = movie.title,
+                    subtitle = movie.year?.toString() ?: movie.category,
+                    imageUrl = movie.poster,
+                    onClick = { onMovieClick(movie) },
+                )
+            },
         )
     } else {
         PosterGrid(
@@ -213,7 +221,15 @@ private fun CatalogContent(
             totalCount = state.totalCount,
             isLoadingMore = state.isLoadingMore,
             onLoadMore = onLoadMore,
-            onPosterClick = { onSeriesClick(it) },
+            keyOf = { it.id },
+            posterContent = { series ->
+                PosterCard(
+                    title = series.title,
+                    subtitle = series.year?.toString() ?: series.category,
+                    imageUrl = series.poster,
+                    onClick = { onSeriesClick(series) },
+                )
+            },
         )
     }
 }
@@ -323,26 +339,26 @@ private fun SeriesDetails(
 }
 
 /**
- * Shared poster grid for movies/series with TV-friendly infinite scroll:
- * load-more fires when the tail of the loaded list becomes visible, so
- * D-pad users never hunt for a button. The button stays for pointer input.
+ * Shared poster grid for movies/series with TV-friendly infinite scroll.
  */
 @Composable
 private fun <T> PosterGrid(
-    // Generic item — caller maps title/subtitle/poster/onClick below via itemContent.
-
     items: List<T>,
     totalCount: Int,
     isLoadingMore: Boolean,
     onLoadMore: () -> Unit,
-    onPosterClick: (T) -> Unit,
+    keyOf: (T) -> Any,
+    posterContent: @Composable (T) -> Unit,
 ) {
     val gridState = rememberLazyGridState()
     val tailVisible by remember(items.size) {
         derivedStateOf {
-            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= items.size - 1
+            val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            items.isNotEmpty() && last >= items.size - 1
         }
+    }
+    LaunchedEffect(tailVisible, items.size, totalCount, isLoadingMore) {
+        if (tailVisible && items.size < totalCount && !isLoadingMore) onLoadMore()
     }
     LazyVerticalGrid(
         state = gridState,
@@ -351,18 +367,9 @@ private fun <T> PosterGrid(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        items(items.size, key = { i -> "$i:${items[i].id}" }) { i ->
-            val entry = items[i]
-            PosterCard(
-                title = entry.title,
-                subtitle = entry.year?.toString() ?: entry.category,
-                imageUrl = entry.poster,
-                onClick = { onPosterClick(entry) },
-            )
-        }
+        items(items, key = keyOf) { item -> posterContent(item) }
         if (items.size < totalCount) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                LaunchedEffect(tailVisible) { if (tailVisible) onLoadMore() }
                 OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {
                     Text(if (isLoadingMore) "جارٍ التحميل…" else "تحميل المزيد")
                 }
