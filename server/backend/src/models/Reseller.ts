@@ -1,6 +1,34 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+/**
+ * Validate and normalize a white-label branding logo URL: must be a direct
+ * https:// URL (no credentials, no query tricks) — it is rendered in
+ * customer-facing pages. Returns '' for empty input, null when invalid.
+ */
+export function safeHttpsUrl(raw: unknown): string | null {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  if (value.length > 500) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) return null;
+  return parsed.toString();
+}
+
+export interface IResellerBranding {
+  /** Shop display name shown to customers (defaults to the reseller name). */
+  displayName?: string;
+  /** https:// logo URL rendered on customer-facing pages. */
+  logoUrl?: string;
+  /** Brand accent color as #rrggbb (optional). */
+  primaryColor?: string;
+}
+
 export interface IResellerPermissions {
   /** Self-service code generation from plan credit. */
   generateCodes: boolean;
@@ -16,6 +44,8 @@ export interface IResellerPermissions {
   exportM3U: boolean;
   /** View code history (activation, devices, subscription window). */
   viewHistory: boolean;
+  /** Create and manage sub-resellers (موزعون فرعيون) under this account. */
+  subResellers: boolean;
 }
 
 export interface IResellerDocument extends Document {
@@ -29,6 +59,8 @@ export interface IResellerDocument extends Document {
   /** Code credit per plan (رصيد الأكواد): [{planId, quantity}] — reseller can
    *  self-generate codes while credit remains; decremented on each generation. */
   credit?: Array<{ planId: mongoose.Types.ObjectId; quantity: number }>;
+  /** Parent reseller (الموزع الأب) — set when a reseller creates a sub-reseller; null for top-level resellers. */
+  parentResellerId?: mongoose.Types.ObjectId;
   /** Portal login (بوابة الموزعين) — set by admin; inactive resellers cannot log in. */
   username?: string;
   /** Unique code prefix (3-6 chars) printed on this reseller's codes. */
@@ -36,6 +68,8 @@ export interface IResellerDocument extends Document {
   passwordHash?: string;
   /** Per-feature capability flags (مصفوفة الصلاحيات). Default: everything on. */
   permissions?: Partial<IResellerPermissions>;
+  /** White-label branding (الهوية الخاصة) shown to this reseller's customers. */
+  branding?: IResellerBranding;
   lastLoginAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -101,6 +135,12 @@ const resellerSchema = new Schema<IResellerDocument>(
       sparse: true,
       index: true,
     },
+    parentResellerId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Reseller',
+      default: null,
+      index: true,
+    },
     /** Unique code prefix (3-6 chars) printed on this reseller's codes — e.g. "ALG1". */
     prefix: {
       type: String,
@@ -130,6 +170,36 @@ const resellerSchema = new Schema<IResellerDocument>(
         suspend: { type: Boolean, default: true },
         exportM3U: { type: Boolean, default: true },
         viewHistory: { type: Boolean, default: true },
+        subResellers: { type: Boolean, default: true },
+      },
+      _id: false,
+      default: () => ({}),
+    },
+    // White-label branding (وايت لابل) — optional; falls back to the reseller
+    // name when unset. logoUrl must be https and is rendered client-side only.
+    branding: {
+      type: {
+        displayName: { type: String, trim: true, maxlength: 60, default: '' },
+        logoUrl: {
+          type: String,
+          trim: true,
+          maxlength: 500,
+          default: '',
+          validate: {
+            validator: (v: string) => !v || /^https:\/\/\S+$/.test(v),
+            message: 'logoUrl must be an https URL',
+          },
+        },
+        primaryColor: {
+          type: String,
+          trim: true,
+          maxlength: 9,
+          default: '',
+          validate: {
+            validator: (v: string) => !v || /^#[0-9a-fA-F]{3,8}$/.test(v),
+            message: 'primaryColor must be a hex color',
+          },
+        },
       },
       _id: false,
       default: () => ({}),
@@ -158,4 +228,5 @@ resellerSchema.methods.comparePassword = async function (candidate: string): Pro
 const Reseller = mongoose.model<IResellerDocument>('Reseller', resellerSchema);
 
 module.exports = Reseller;
+module.exports.safeHttpsUrl = safeHttpsUrl;
 export default Reseller;

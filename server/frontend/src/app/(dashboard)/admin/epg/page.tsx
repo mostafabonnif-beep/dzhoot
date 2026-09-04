@@ -129,6 +129,7 @@ export default function EpgPage() {
   const [unmatchedDebounced, setUnmatchedDebounced] = useState('');
   const [savingTvgId, setSavingTvgId] = useState<string | null>(null);
   const [tvgDrafts, setTvgDrafts] = useState<Record<string, string>>({});
+  const [onlyMissingTvgId, setOnlyMissingTvgId] = useState(false);
 
   const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
 
@@ -372,6 +373,46 @@ export default function EpgPage() {
     },
   ];
 
+  const unmatchedWithoutTvgId = unmatched.filter((item) => !item.tvgId?.trim()).length;
+  const unmatchedWithExistingTvgId = unmatched.length - unmatchedWithoutTvgId;
+  const prioritizedUnmatched = [...unmatched]
+    .filter((item) => (onlyMissingTvgId ? !item.tvgId?.trim() : true))
+    .sort((a, b) => {
+      const aMissing = a.tvgId?.trim() ? 1 : 0;
+      const bMissing = b.tvgId?.trim() ? 1 : 0;
+      if (aMissing !== bMissing) return aMissing - bMissing;
+      const groupCompare = (b.channelGroup ? 1 : 0) - (a.channelGroup ? 1 : 0);
+      if (groupCompare !== 0) return groupCompare;
+      return a.channelName.localeCompare(b.channelName, locale === 'ar' ? 'ar' : 'en');
+    });
+  const unmatchedGroups = Object.entries(
+    unmatched.reduce<Record<string, number>>((acc, item) => {
+      const key = item.channelGroup?.trim() || L('بدون تصنيف', 'Sans catégorie', 'Uncategorized');
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {}),
+  )
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], locale === 'ar' ? 'ar' : 'en'))
+    .slice(0, 4);
+  const readinessTone =
+    coveragePercent >= 90 && failingSources.length === 0
+      ? 'text-signal-green border-signal-green/30 bg-signal-green/5'
+      : coveragePercent >= 70 && failingSources.length <= 1
+        ? 'text-amber-700 border-amber-500/30 bg-amber-500/5 dark:text-amber-300'
+        : 'text-destructive border-destructive/30 bg-destructive/5';
+  const readinessLabel =
+    coveragePercent >= 90 && failingSources.length === 0
+      ? L('جاهز تشغيليًا', 'Opérationnel', 'Operationally ready')
+      : coveragePercent >= 70 && failingSources.length <= 1
+        ? L('يحتاج ضبطًا محدودًا', 'Ajustements requis', 'Needs targeted tuning')
+        : L('خطر تشغيلي مرتفع', 'Risque opérationnel élevé', 'High operational risk');
+  const readinessMessage =
+    coveragePercent >= 90 && failingSources.length === 0
+      ? L('التغطية مستقرة ومعظم القنوات مربوطة بشكل سليم.', 'La couverture est stable et la plupart des chaînes sont correctement liées.', 'Coverage is stable and most channels are matched correctly.')
+      : coveragePercent >= 70 && failingSources.length <= 1
+        ? L('ركّز على القنوات غير المغطاة وأضعف مصدر لتحسين الجاهزية.', 'Concentrez-vous sur les chaînes non couvertes et la source la plus faible pour améliorer la préparation.', 'Focus on unmatched channels and the weakest source to improve readiness.')
+        : L('الصفحة تحتاج تدخلًا سريعًا: أصلح المصادر المتعثرة وابدأ بالقنوات بلا tvg-id.', 'Une intervention rapide est nécessaire : corrigez les sources en échec et commencez par les chaînes sans tvg-id.', 'Immediate action is needed: fix failing sources and start with channels that lack a tvg-id.');
+
   return (
     <div className="space-y-8">
       {/* Surface failing sources so an operator sees partial-ingest problems
@@ -612,26 +653,93 @@ export default function EpgPage() {
         )}
       </div>
 
-      {/* Unmatched channels — manual tvg-id matching */}
-      <div className="border border-border ">
-        <div className="border-b border-border px-4 py-2.5 flex items-center justify-between gap-3">
-          <h2 className="text-xs font-bold uppercase tracking-[0.15em]">
-            {L('القنوات غير المغطاة', 'Chaînes sans couverture EPG', 'Unmatched channels')}
-            <span className="ms-2 font-normal text-muted-foreground">({unmatchedTotal})</span>
-          </h2>
-          <div className="relative w-full sm:w-72">
-            <input
-              type="text"
-              value={unmatchedSearch}
-              onChange={(e) => {
-                setUnmatchedSearch(e.target.value);
-                setUnmatchedPage(1);
-              }}
-              placeholder={L('ابحث باسم القناة أو معرّفها...', 'Rechercher une chaîne…', 'Search by name or id…')}
-              className="w-full h-9 ps-3 pe-3 border border-border bg-background text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary"
-            />
+      <section className={`border px-4 py-3 ${readinessTone}`} aria-label={L('ملخص جاهزية EPG', 'Résumé de préparation EPG', 'EPG readiness summary')}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em]">{L('ملخص تشغيلي', 'Résumé opérationnel', 'Operational summary')}</p>
+            <p className="mt-2 text-lg font-display font-bold">{readinessLabel}</p>
+            <p className="mt-1 text-sm opacity-90">{readinessMessage}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+            <div>
+              <p className="text-xs opacity-70">{L('التغطية', 'Couverture', 'Coverage')}</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums">{coveragePercent}%</p>
+            </div>
+            <div>
+              <p className="text-xs opacity-70">{L('بدون تغطية', 'Sans couverture', 'Unmatched')}</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums">{Math.max(stats?.totalSystemChannels ? stats.totalSystemChannels - stats.channelsWithEpg : unmatchedTotal, unmatchedTotal)}</p>
+            </div>
+            <div>
+              <p className="text-xs opacity-70">{L('مصادر متعثرة', 'Sources en échec', 'Failing sources')}</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums">{failingSources.length}</p>
+            </div>
+            <div>
+              <p className="text-xs opacity-70">{L('بدون tvg-id', 'Sans tvg-id', 'Without tvg-id')}</p>
+              <p className="mt-1 text-xl font-display font-bold tabular-nums">{unmatchedWithoutTvgId}</p>
+            </div>
           </div>
         </div>
+      </section>
+
+      {/* Unmatched channels — manual tvg-id matching */}
+      <div className="border border-border ">
+        <div className="border-b border-border px-4 py-2.5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-xs font-bold uppercase tracking-[0.15em]">
+              {L('القنوات غير المغطاة', 'Chaînes sans couverture EPG', 'Unmatched channels')}
+              <span className="ms-2 font-normal text-muted-foreground">({unmatchedTotal})</span>
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {L(
+                'ابدأ بالقنوات التي لا تحتوي على tvg-id حالي، ثم راجع القنوات ذات المعرّف الموجود لكنها ما زالت غير مرتبطة.',
+                'Commencez par les chaînes sans tvg-id, puis passez à celles qui ont déjà un identifiant mais restent non liées.',
+                'Start with channels that have no current tvg-id, then review channels that already have one but still remain unmatched.',
+              )}
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-end lg:w-auto">
+            <label className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={onlyMissingTvgId}
+                onChange={(e) => setOnlyMissingTvgId(e.target.checked)}
+                className="h-4 w-4 border-border text-primary focus:ring-primary"
+              />
+              {L('عرض القنوات بلا tvg-id فقط', 'Afficher uniquement sans tvg-id', 'Show only channels without tvg-id')}
+            </label>
+            <div className="relative w-full sm:w-72">
+              <input
+                type="text"
+                value={unmatchedSearch}
+                onChange={(e) => {
+                  setUnmatchedSearch(e.target.value);
+                  setUnmatchedPage(1);
+                }}
+                placeholder={L('ابحث باسم القناة أو معرّفها...', 'Rechercher une chaîne…', 'Search by name or id…')}
+                className="w-full h-9 ps-3 pe-3 border border-border bg-background text-sm placeholder:text-muted-foreground/50 focus-visible:outline-none focus-visible:border-primary"
+              />
+            </div>
+          </div>
+        </div>
+
+        {!unmatchedLoading && unmatched.length > 0 && (
+          <div className="border-b border-border bg-muted/20 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 font-medium">
+                {L('بدون tvg-id', 'Sans tvg-id', 'Without tvg-id')}: <strong className="tabular-nums text-foreground">{unmatchedWithoutTvgId}</strong>
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-border px-2.5 py-1 font-medium">
+                {L('بمعرّف موجود', 'Avec identifiant existant', 'With existing id')}: <strong className="tabular-nums text-foreground">{unmatchedWithExistingTvgId}</strong>
+              </span>
+              {unmatchedGroups.map(([group, count]) => (
+                <span key={group} className="inline-flex items-center gap-1 rounded-full bg-background px-2.5 py-1 text-muted-foreground ring-1 ring-border">
+                  <strong className="text-foreground">{group}</strong>
+                  <span className="tabular-nums">{count}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {unmatchedLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -645,9 +753,17 @@ export default function EpgPage() {
               'All channels are covered by the guide 🎉',
             )}
           </div>
+        ) : prioritizedUnmatched.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+            {L(
+              'لا توجد قنوات مطابقة لهذا الفلتر حاليًا.',
+              'Aucune chaîne ne correspond à ce filtre pour le moment.',
+              'No channels match this filter right now.',
+            )}
+          </div>
         ) : (
           <div className="divide-y divide-border">
-            {unmatched.map((ch) => (
+            {prioritizedUnmatched.map((ch) => (
               <div key={ch._id} className="px-4 py-3 flex flex-wrap items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate">{ch.channelName}</p>
@@ -660,8 +776,8 @@ export default function EpgPage() {
                   <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
                     {L('tvg-id الحالي', 'tvg-id actuel', 'current tvg-id')}:
                   </span>
-                  <code className="text-xs font-mono bg-muted px-1.5 py-0.5" dir="ltr">
-                    {ch.tvgId || '—'}
+                  <code className={`text-xs font-mono px-1.5 py-0.5 ${ch.tvgId ? 'bg-muted' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`} dir="ltr">
+                    {ch.tvgId || L('مفقود', 'Manquant', 'Missing')}
                   </code>
                   <input
                     type="text"

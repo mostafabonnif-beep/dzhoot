@@ -54,6 +54,10 @@ interface Channel {
   order?: number;
   epgId?: string;
   isActive?: boolean;
+  catchup?: {
+    type?: string | null;
+    days?: number | null;
+  };
   metadata?: {
     isWorking?: boolean;
     lastTested?: string;
@@ -182,12 +186,13 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   // Admin: row selection for bulk enable/disable/delete
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [bulkSelectionLoading, setBulkSelectionLoading] = useState(false);
+  const [adminFocusFilter, setAdminFocusFilter] = useState<'catchup' | 'epg' | 'timeshift_epg' | 'flagged' | 'alternates' | null>(null);
 
   // Clear row selection whenever the visible page changes (bulk actions apply
   // only to rows the admin can see, keeping destructive ops predictable).
   useEffect(() => {
     setSelectedRows(new Set());
-  }, [page, debouncedSearch, isAdmin]);
+  }, [page, debouncedSearch, isAdmin, adminFocusFilter]);
 
   // Admin: M3U Import
   const [showImport, setShowImport] = useState(false);
@@ -543,8 +548,59 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
     return sortDir === 'asc' ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
   }
 
-  const displayData = isAdmin ? channels : userPaginated;
-  const displayTotalCount = isAdmin ? totalCount : filtered.length;
+  const adminFocusedChannels = useMemo(() => {
+    if (!isAdmin || !adminFocusFilter) return channels;
+    if (adminFocusFilter === 'catchup') return channels.filter((c) => Boolean(c.catchup?.type));
+    if (adminFocusFilter === 'epg') return channels.filter((c) => Boolean(c.epgId));
+    if (adminFocusFilter === 'timeshift_epg') {
+      return channels.filter((c) => Boolean(c.catchup?.type) && Boolean(c.epgId));
+    }
+    if (adminFocusFilter === 'flagged') return channels.filter((c) => Boolean(c.flaggedBad?.isFlagged));
+    if (adminFocusFilter === 'alternates') {
+      return channels.filter(
+        (c) => (c.alternateStreams?.filter((alt) => !alt.flaggedBad?.isFlagged).length ?? 0) > 0,
+      );
+    }
+    return channels;
+  }, [adminFocusFilter, channels, isAdmin]);
+
+  const displayData = isAdmin ? adminFocusedChannels : userPaginated;
+  const displayTotalCount = isAdmin ? (adminFocusFilter ? adminFocusedChannels.length : totalCount) : filtered.length;
+  const workingCount =
+    isAdmin && healthStats
+      ? healthStats.working
+      : channels.filter((c) => c.metadata?.isWorking === true).length;
+  const deadCount =
+    isAdmin && healthStats
+      ? healthStats.notWorking
+      : channels.filter((c) => c.metadata?.isWorking === false).length;
+  const untestedCount =
+    isAdmin && healthStats ? healthStats.untested : Math.max(channels.length - workingCount - deadCount, 0);
+  const flaggedPrimaryCount = channels.filter((c) => c.flaggedBad?.isFlagged).length;
+  const alternateReadyCount = channels.filter(
+    (c) => (c.alternateStreams?.filter((alt) => !alt.flaggedBad?.isFlagged).length ?? 0) > 0,
+  ).length;
+  const catchupReadyCount = channels.filter((c) => Boolean(c.catchup?.type)).length;
+  const epgLinkedCount = channels.filter((c) => Boolean(c.epgId)).length;
+  const timeshiftReadyWithEpgCount = channels.filter((c) => Boolean(c.catchup?.type) && Boolean(c.epgId)).length;
+  const channelsReadinessLabel =
+    deadCount > 0
+      ? L('تحتاج معالجة تشغيلية', 'Assainissement opérationnel requis', 'Operational cleanup needed')
+      : untestedCount > 0
+        ? L('جاهزة جزئيًا', 'Partiellement prête', 'Partially ready')
+        : L('جاهزة تشغيليًا', 'Operationally ready', 'Operationally ready');
+  const channelsReadinessTone =
+    deadCount > 0
+      ? 'border-destructive/30 bg-destructive/5 text-destructive'
+      : untestedCount > 0
+        ? 'border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-300'
+        : 'border-signal-green/30 bg-signal-green/5 text-signal-green';
+  const channelsReadinessMessage =
+    deadCount > 0
+      ? L('هناك قنوات متعطلة تحتاج اختبارًا أو استبدالًا قبل الاعتماد على الكتالوج تجاريًا.', 'Certaines chaînes sont en panne et doivent être testées ou remplacées avant un usage commercial.', 'Some channels are broken and need testing or replacement before relying on the catalog commercially.')
+      : untestedCount > 0
+        ? L('الكتالوج جيد، لكن ما زالت هناك قنوات غير مختبرة تستحق فحصًا جماعيًا.', 'Le catalogue est bon, mais certaines chaînes non testées méritent une vérification groupée.', 'The catalog looks good, but some untested channels still need a bulk check.')
+        : L('الكتالوج الحالي نظيف نسبيًا ويمكن استخدامه كأساس للاستيراد والتوزيع.', 'Le catalogue actuel est propre et peut servir de base à l’import et à la distribution.', 'The current catalog is clean enough to support import and distribution.');
 
   // --- Admin actions ---
   async function handleAddChannel(e: React.FormEvent) {
@@ -1094,6 +1150,30 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   // Add-from-system panel: exclude already-owned channels (search is server-side now)
   const myIds = new Set(channels.map((c) => c._id));
   const availableChannels = allChannels.filter((c) => !myIds.has(c._id));
+  const detailCatchupMode = detailChannel?.catchup?.type
+    ? detailChannel.catchup.type === 'timeshift'
+      ? L('تايم شيفت', 'Timeshift', 'Timeshift')
+      : detailChannel.catchup.type === 'append'
+        ? L('أرشيف ملحق', 'Archive append', 'Archive append')
+        : detailChannel.catchup.type
+    : undefined;
+  const detailCatchupWindow =
+    typeof detailChannel?.catchup?.days === 'number' && detailChannel.catchup.days > 0
+      ? L(
+          `${detailChannel.catchup.days} يوم`,
+          `${detailChannel.catchup.days} jour${detailChannel.catchup.days > 1 ? 's' : ''}`,
+          `${detailChannel.catchup.days} day${detailChannel.catchup.days > 1 ? 's' : ''}`,
+        )
+      : undefined;
+  const detailReplayReadiness = detailChannel
+    ? detailChannel.catchup?.type && detailChannel.epgId
+      ? L('جاهزة للتايم شيفت من الدليل', 'Prête au timeshift depuis le guide', 'Ready for timeshift from guide')
+      : detailChannel.catchup?.type
+        ? L('تدعم Catch-up لكن تحتاج ربط EPG', 'Catch-up disponible mais liaison EPG requise', 'Catch-up available but needs EPG linkage')
+        : detailChannel.epgId
+          ? L('مرتبطة بـ EPG لكن بدون Catch-up', 'Liée à l’EPG mais sans catch-up', 'Linked to EPG but without catch-up')
+          : L('غير جاهزة للتايم شيفت بعد', 'Pas encore prête pour le timeshift', 'Not ready for timeshift yet')
+    : undefined;
 
   // Detail modal fields
   const detailFields: ChannelField[] = detailChannel
@@ -1107,10 +1187,20 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               { label: t('channels.quality'), value: detailChannel.metadata?.quality },
               { label: t('channels.network'), value: detailChannel.metadata?.network },
               { label: t('channels.website'), value: detailChannel.metadata?.website },
+              { label: L('جاهزية التايم شيفت', 'Préparation timeshift', 'Timeshift readiness'), value: detailReplayReadiness },
+              { label: L('معرّف EPG', 'ID EPG', 'EPG ID'), value: detailChannel.epgId },
+              { label: L('وضع Catch-up', 'Mode catch-up', 'Catch-up mode'), value: detailCatchupMode },
+              { label: L('نافذة Catch-up', 'Fenêtre catch-up', 'Catch-up window'), value: detailCatchupWindow },
               { label: t('channels.drmType'), value: detailChannel.channelDrmType },
               { label: t('channels.sortOrder'), value: detailChannel.order?.toString() },
             ]
-          : [{ label: t('channels.group'), value: detailChannel.channelGroup }]),
+          : [
+              { label: t('channels.group'), value: detailChannel.channelGroup },
+              { label: L('جاهزية التايم شيفت', 'Préparation timeshift', 'Timeshift readiness'), value: detailReplayReadiness },
+              { label: L('معرّف EPG', 'ID EPG', 'EPG ID'), value: detailChannel.epgId },
+              { label: L('وضع Catch-up', 'Mode catch-up', 'Catch-up mode'), value: detailCatchupMode },
+              { label: L('نافذة Catch-up', 'Fenêtre catch-up', 'Catch-up window'), value: detailCatchupWindow },
+            ]),
         {
           label: t('common.status'),
           value:
@@ -1614,6 +1704,107 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
           )}
         </div>
       </div>
+
+      <section className={`rounded-lg border px-4 py-3 ${channelsReadinessTone}`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.15em]">{L('ملخص تشغيلي للكتالوج', 'Résumé opérationnel du catalogue', 'Catalog operational summary')}</p>
+            <p className="mt-2 text-lg font-bold">{channelsReadinessLabel}</p>
+            <p className="mt-1 text-sm opacity-90">{channelsReadinessMessage}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm md:grid-cols-5">
+            <div>
+              <div className="text-xs opacity-70">{L('إجمالي القنوات', 'Total chaînes', 'Total channels')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{displayTotalCount}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-70">{L('سليمة', 'Saines', 'Working')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{workingCount}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-70">{L('متعطلة', 'En panne', 'Broken')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{deadCount}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-70">{L('غير مختبرة', 'Non testées', 'Untested')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{untestedCount}</div>
+            </div>
+            <div>
+              <div className="text-xs opacity-70">{L('بث بديل جاهز', 'Alternatives prêtes', 'Channels with alternates')}</div>
+              <div className="mt-1 text-xl font-bold tabular-nums">{alternateReadyCount}</div>
+            </div>
+          </div>
+        </div>
+        {(flaggedPrimaryCount > 0 || selectedRows.size > 0 || (isAdmin && catchupReadyCount > 0) || (isAdmin && epgLinkedCount > 0) || alternateReadyCount > 0) && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs opacity-90">
+            {isAdmin && catchupReadyCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'catchup' ? null : 'catchup'))}
+                aria-pressed={adminFocusFilter === 'catchup'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'catchup' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
+                {L('جاهزة لـ Catch-up', 'Prêtes pour le catch-up', 'Catch-up ready')}: <strong className="ms-1">{catchupReadyCount}</strong>
+              </button>
+            )}
+            {isAdmin && timeshiftReadyWithEpgCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'timeshift_epg' ? null : 'timeshift_epg'))}
+                aria-pressed={adminFocusFilter === 'timeshift_epg'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'timeshift_epg' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
+                {L('جاهزة للتايم شيفت مع EPG', 'Timeshift + EPG prêts', 'Timeshift + EPG ready')}: <strong className="ms-1">{timeshiftReadyWithEpgCount}</strong>
+              </button>
+            )}
+            {isAdmin && epgLinkedCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'epg' ? null : 'epg'))}
+                aria-pressed={adminFocusFilter === 'epg'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'epg' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
+                {L('مرتبطة بـ EPG', 'Liées à l’EPG', 'EPG linked')}: <strong className="ms-1">{epgLinkedCount}</strong>
+              </button>
+            )}
+            {alternateReadyCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'alternates' ? null : 'alternates'))}
+                aria-pressed={adminFocusFilter === 'alternates'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'alternates' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
+                {L('بث بديل جاهز', 'Alternatives prêtes', 'Channels with alternates')}: <strong className="ms-1">{alternateReadyCount}</strong>
+              </button>
+            )}
+            {flaggedPrimaryCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter((prev) => (prev === 'flagged' ? null : 'flagged'))}
+                aria-pressed={adminFocusFilter === 'flagged'}
+                className={`inline-flex items-center rounded-full px-2.5 py-1 transition-colors ${adminFocusFilter === 'flagged' ? 'bg-primary text-primary-foreground' : 'bg-background/70 hover:bg-background'}`}
+              >
+                {L('قنوات مُعلّمة كمشكلة', 'Chaînes signalées', 'Flagged channels')}: <strong className="ms-1">{flaggedPrimaryCount}</strong>
+              </button>
+            )}
+            {isAdmin && selectedRows.size > 0 && (
+              <span className="inline-flex items-center rounded-full bg-background/70 px-2.5 py-1">
+                {L('محددة للعمل الجماعي', 'Sélectionnées pour action groupée', 'Selected for bulk action')}: <strong className="ms-1">{selectedRows.size}</strong>
+              </span>
+            )}
+            {isAdmin && adminFocusFilter && (
+              <button
+                type="button"
+                onClick={() => setAdminFocusFilter(null)}
+                className="inline-flex items-center gap-1 rounded-full bg-background/70 px-2.5 py-1 text-muted-foreground hover:bg-background hover:text-foreground"
+              >
+                <X className="h-3 w-3" />
+                {L('عرض كل القنوات', 'Afficher toutes les chaînes', 'Show all channels')}
+              </button>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* Test results banner */}
       {testResults && (

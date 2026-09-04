@@ -71,11 +71,14 @@ fun CategoriesScreen(
                                         ?: channels.firstOrNull { it.logoUrl != null }?.logoUrl
                                 )
                             }
-                            // التنظيم: المفضلة أولًا ثم الأكبر عددًا + تجاهل التصنيفات الصغيرة جدًا (ضجيج)
-                            .filter { it.second >= 3 }
+                            // Show every category, including small and newly imported
+                            // groups. Hiding groups with fewer than three channels made
+                            // valid operator categories disappear from the app.
                             .sortedWith(
                                 compareByDescending<Triple<String, Int, String?>> { it.first in favorites }
                                     .thenByDescending { it.second }
+                                    .thenBy { CategoryLocalizer.localize(it.first) }
+                                    .thenBy { it.first }
                             )
                     }
 

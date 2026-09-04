@@ -84,7 +84,54 @@ async function fetchLatestRelease() {
 
 function pickApkAsset(release) {
   if (!release || !Array.isArray(release.assets)) return null;
-  return release.assets.find((a) => a.name && a.name.includes(GITHUB_APK_PATTERN)) || null;
+  return release.assets.find((a) => a.name && a.name.endsWith('.apk') && a.name.includes(GITHUB_APK_PATTERN)) || null;
+}
+
+function mapDbVersion(req, version) {
+  if (!version) return null;
+  return {
+    versionName: version.versionName,
+    versionCode: Number(version.versionCode) || 0,
+    releaseNotes: version.releaseNotes || '',
+    apkFileName: version.apkFileName,
+    apkFileSize: version.apkFileSize,
+    downloadUrl: publicDownloadUrl(req, version.downloadUrl),
+    isMandatory: version.isMandatory || false,
+    minCompatibleVersion: Number(version.minCompatibleVersion) || 1,
+    releasedAt: version.releasedAt,
+    source: 'db',
+  };
+}
+
+function mapGitHubVersion(release, apkAsset) {
+  if (!release || !apkAsset) return null;
+  const versionName = normalizeVersion(release.tag_name || release.name || APP_VERSION);
+  return {
+    versionName,
+    versionCode: versionNameToCode(versionName),
+    releaseNotes: release.body || '',
+    apkFileName: apkAsset.name,
+    apkFileSize: apkAsset.size,
+    downloadUrl: apkAsset.browser_download_url,
+    isMandatory: false,
+    minCompatibleVersion: 1,
+    releasedAt: release.published_at,
+    source: 'github',
+  };
+}
+
+async function getLatestPublishedVersion(req) {
+  const dbLatest = mapDbVersion(req, await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean());
+  let githubLatest = null;
+  try {
+    const release = await fetchLatestRelease();
+    githubLatest = mapGitHubVersion(release, pickApkAsset(release));
+  } catch (error) {
+    if (!dbLatest) throw error;
+  }
+  if (!dbLatest) return githubLatest;
+  if (!githubLatest) return dbLatest;
+  return githubLatest.versionCode > dbLatest.versionCode ? githubLatest : dbLatest;
 }
 
 router.get('/version', async (req, res) => {
@@ -107,63 +154,25 @@ router.get('/version', async (req, res) => {
       });
     }
 
-    // 1) DB-managed versions (set from the admin dashboard) take precedence —
-    //    this is how the server distributes APKs without needing a GitHub release.
-    const dbLatest = await AppVersion.findOne({ isActive: true })
-      .sort({ versionCode: -1 })
-      .lean();
-    if (dbLatest) {
-      const updateAvailable = dbLatest.versionCode > currentVersionCode;
-      return res.json({
-        success: true,
-        updateAvailable,
-        latestVersion: {
-          versionName: dbLatest.versionName,
-          versionCode: dbLatest.versionCode,
-          releaseNotes: dbLatest.releaseNotes || '',
-          apkFileSize: dbLatest.apkFileSize,
-          downloadUrl: publicDownloadUrl(req, dbLatest.downloadUrl),
-        },
-        currentVersion: currentVersionCode,
-        isMandatory: dbLatest.isMandatory || currentVersionCode < dbLatest.minCompatibleVersion,
-        releaseNotes: dbLatest.releaseNotes || '',
-        downloadUrl: publicDownloadUrl(req, dbLatest.downloadUrl),
-        minCompatibleVersion: dbLatest.minCompatibleVersion || 1,
-        source: 'db',
-      });
-    }
-
-    // 2) Fallback: GitHub releases (legacy path).
-    const release = await fetchLatestRelease();
-    const apkAsset = pickApkAsset(release);
-
-    if (!apkAsset) {
+    const latest = await getLatestPublishedVersion(req);
+    if (!latest) {
       return res.json({
         success: true,
         updateAvailable: false,
-        message: 'No APK asset found in latest GitHub release',
+        message: 'No APK asset found in the active release sources',
       });
     }
 
-    const latestVersionName = normalizeVersion(release.tag_name || release.name || APP_VERSION);
-    const latestVersionCode = versionNameToCode(latestVersionName);
-    const updateAvailable = latestVersionCode > currentVersionCode;
-
     return res.json({
       success: true,
-      updateAvailable,
-      latestVersion: {
-        versionName: latestVersionName,
-        versionCode: latestVersionCode,
-        releaseNotes: release.body || '',
-        apkFileSize: apkAsset.size,
-        downloadUrl: apkAsset.browser_download_url,
-      },
+      updateAvailable: latest.versionCode > currentVersionCode,
+      latestVersion: latest,
       currentVersion: currentVersionCode,
-      isMandatory: false,
-      releaseNotes: release.body || '',
-      downloadUrl: apkAsset.browser_download_url,
-      minCompatibleVersion: 1,
+      isMandatory: latest.isMandatory || currentVersionCode < latest.minCompatibleVersion,
+      releaseNotes: latest.releaseNotes,
+      downloadUrl: latest.downloadUrl,
+      minCompatibleVersion: latest.minCompatibleVersion,
+      source: latest.source,
     });
   } catch (error) {
     console.error('Error checking version via GitHub:', error.message || error);
@@ -176,50 +185,18 @@ router.get('/version', async (req, res) => {
 
 router.get('/latest', async (req, res) => {
   try {
-    // DB-managed version takes precedence.
-    const dbLatest = await AppVersion.findOne({ isActive: true })
-      .sort({ versionCode: -1 })
-      .lean();
-    if (dbLatest) {
-      return res.json({
-        success: true,
-        data: {
-          versionName: dbLatest.versionName,
-          versionCode: dbLatest.versionCode,
-          releaseNotes: dbLatest.releaseNotes || '',
-          apkFileName: dbLatest.apkFileName,
-          apkFileSize: dbLatest.apkFileSize,
-          downloadUrl: publicDownloadUrl(req, dbLatest.downloadUrl),
-          isMandatory: dbLatest.isMandatory || false,
-          releasedAt: dbLatest.releasedAt,
-        },
-        source: 'db',
-      });
-    }
-
-    const release = await fetchLatestRelease();
-    const apkAsset = pickApkAsset(release);
-
-    if (!apkAsset) {
+    const latest = await getLatestPublishedVersion(req);
+    if (!latest) {
       return res.status(404).json({
         success: false,
-        error: 'No APK asset available in latest GitHub release',
+        error: 'No APK asset available in active release sources',
       });
     }
-
-    const latestVersionName = release.tag_name || release.name || APP_VERSION;
 
     return res.json({
       success: true,
-      data: {
-        versionName: latestVersionName,
-        releaseNotes: release.body || '',
-        apkFileName: apkAsset.name,
-        apkFileSize: apkAsset.size,
-        downloadUrl: apkAsset.browser_download_url,
-        isMandatory: false,
-        releasedAt: release.published_at,
-      },
+      data: latest,
+      source: latest.source,
     });
   } catch (error) {
     console.error('Error fetching latest version from GitHub:', error.message || error);

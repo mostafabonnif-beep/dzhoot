@@ -11,6 +11,8 @@ const { sendNotificationToDevices, pushOutcome } = require('../services/fcm-serv
 router.use(requireAuth);
 router.use(requireAdmin);
 
+const activeSendLocks = new Set();
+
 function parseId(id) {
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
 }
@@ -67,9 +69,15 @@ router.post('/', async (req, res) => {
 
 // POST /:id/send — deliver through FCM when configured and mark as sent for in-app clients
 router.post('/:id/send', async (req, res) => {
+  let lockKey;
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid notification id' });
+    lockKey = String(id);
+    if (activeSendLocks.has(lockKey)) {
+      return res.status(409).json({ success: false, error: 'This notification is already being sent' });
+    }
+    activeSendLocks.add(lockKey);
     // Atomic claim: exactly one concurrent /send request may proceed. The
     // delivered-guard is part of the filter, so a notification that already
     // went out (SENT + push delivered) can't be claimed, and a racing second
@@ -118,6 +126,8 @@ router.post('/:id/send', async (req, res) => {
     return res.json({ success: true, data: notification, fcm, reason: outcome.reason });
   } catch (err) {
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  } finally {
+    if (lockKey) activeSendLocks.delete(lockKey);
   }
 });
 

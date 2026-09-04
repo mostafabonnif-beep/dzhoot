@@ -1,6 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
+import { HydratedDocument, Types } from 'mongoose';
+import { ISessionDocument, IUserDocument } from '@dzhoof/shared';
 import Session from '../models/Session';
 import User from '../models/User';
+
+type MinimalAuthUser = Pick<
+  IUserDocument,
+  'username' | 'email' | 'role' | 'channels' | 'channelListCode' | 'isActive' | 'emailVerified' | 'allCatalog'
+> & { _id: Types.ObjectId };
+
+type PopulatedSession = HydratedDocument<ISessionDocument> & {
+  userId: MinimalAuthUser | null;
+};
 
 /**
  * Middleware that authenticates via session OR TV channel list code.
@@ -41,11 +52,11 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
         isActive: true,
       }).select(
         'username email role channels channelListCode isActive emailVerified allCatalog',
-      )) as any;
+      )) as MinimalAuthUser | null;
 
       if (user) {
         req.user = {
-          id: user._id,
+          id: String(user._id),
           username: user.username,
           email: user.email,
           role: user.role,
@@ -73,10 +84,10 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
       });
     }
 
-    const session = await Session.findOne({ sessionId }).populate(
+    const session = (await Session.findOne({ sessionId }).populate(
       'userId',
       'username email role channels channelListCode isActive emailVerified allCatalog',
-    );
+    )) as PopulatedSession | null;
 
     if (!session) {
       return res.status(401).json({
@@ -93,7 +104,7 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
       });
     }
 
-    if (!session.userId || !(session.userId as any).isActive) {
+    if (!session.userId || !session.userId.isActive) {
       await Session.deleteOne({ sessionId });
       return res.status(401).json({
         success: false,
@@ -103,9 +114,9 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
 
     await session.updateActivity();
 
-    const user = session.userId as any;
+    const user = session.userId;
     req.user = {
-      id: user._id,
+      id: String(user._id),
       username: user.username,
       email: user.email,
       role: user.role,

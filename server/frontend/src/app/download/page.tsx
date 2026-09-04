@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import api from '@/lib/api';
 
-const DOWNLOAD_URL = 'https://iptv.ld-11.net/api/v1/app/download';
+const DOWNLOAD_URL = '/api/v1/app/download';
 
 interface LatestVersion {
   versionName: string;
@@ -95,7 +95,7 @@ export default function DownloadPage() {
         const res = await api.get('/app/latest');
         const data: LatestVersion | undefined = res.data?.data;
         if (!cancelled && data?.downloadUrl) {
-          setVersion(data);
+          setVersion({ ...data, downloadUrl: DOWNLOAD_URL });
         } else if (!cancelled) {
           setError('تعذر جلب معلومات الإصدار — حاول مجدداً.');
         }

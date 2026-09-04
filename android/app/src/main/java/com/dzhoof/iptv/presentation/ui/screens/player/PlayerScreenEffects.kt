@@ -77,29 +77,31 @@ internal suspend fun prepareChannelStream(
             )
             exoPlayer.setMediaSource(buildHlsMediaSource(catchupTarget.url))
         } else {
-            val slotTargets = coroutineScope {
-                // Probe slots sequentially instead of firing 4 concurrent token
-                // requests per channel load: every successful slot registers a
-                // long-lived server-side stream session, and concurrent fan-out
-                // while zapping can hit the per-user concurrent-stream limit
-                // (429) or spike the API rate limiter. 404s on empty slots are
-                // expected and ignored (see requestPlaybackUrl).
-                (0..3).mapNotNull { slot ->
-                    resolvePlaybackUrl(channel.id, slot, 0L, 0)
+            // Request only the primary token on startup. Optional fallback tokens
+            // are obtained on demand after a real playback failure, which makes
+            // channel zapping substantially faster and avoids consuming concurrent
+            // stream slots for sources that are never used.
+            val primaryTarget = resolvePlaybackUrl(channel.id, 0, 0L, 0) ?: return false
+            errorRecoveryManager.setStreamSlots(
+                listOf(
+                    ErrorRecoveryManager.StreamSlot(
+                        directUrl = primaryTarget.url,
+                        proxyUrl = primaryTarget.proxyUrl,
+                        isPrimary = true,
+                        mimeType = primaryTarget.mimeType,
+                    ),
+                ),
+            )
+            errorRecoveryManager.setFallbackResolver { slot ->
+                resolvePlaybackUrl(channel.id, slot, 0L, 0)?.let { playbackTarget ->
+                    ErrorRecoveryManager.StreamSlot(
+                        directUrl = playbackTarget.url,
+                        proxyUrl = playbackTarget.proxyUrl,
+                        isPrimary = false,
+                        mimeType = playbackTarget.mimeType,
+                    )
                 }
             }
-            val primaryTarget = slotTargets.firstOrNull() ?: return false
-            val slots = slotTargets.mapIndexed { index, playbackTarget ->
-                ErrorRecoveryManager.StreamSlot(
-                    directUrl = playbackTarget.url,
-                    // Server-relayed fallback for direct-mode sources: the
-                    // recovery manager retries through it after direct fails.
-                    proxyUrl = playbackTarget.proxyUrl,
-                    isPrimary = index == 0,
-                    mimeType = playbackTarget.mimeType,
-                )
-            }
-            errorRecoveryManager.setStreamSlots(slots)
             // Server playback serves a normalized HLS media playlist for HLS
             // upstreams, but relays progressive MPEG-TS upstreams (e.g. the
             // backup source) as a raw TS stream. Force an explicit HLS source

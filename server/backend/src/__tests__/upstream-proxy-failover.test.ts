@@ -24,6 +24,9 @@ jest.mock('../models/Channel', () => ({
     findById: jest.fn(() => ({
       select: () => ({ lean: async () => ({ _id: 'ch-1', channelId: 'CH-1' }) }),
     })),
+    findOne: jest.fn(() => ({
+      select: () => ({ lean: async () => ({ _id: 'ch-1', channelId: 'CH-1' }) }),
+    })),
   },
 }));
 
@@ -87,7 +90,7 @@ it('keeps pumping into the SAME client response when the primary dies mid-stream
 
   await new Promise((r) => setImmediate(r));
   primary.write(Buffer.from('PRIMARY-BYTES'));
-  primary.emit('error', new Error('ECONNRESET')); // upstream dies mid-play
+  primary.emit('error', Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' })); // upstream dies mid-play
 
   await new Promise((r) => setTimeout(r, 50));
   backup.write(Buffer.from('BACKUP-BYTES'));
@@ -114,7 +117,7 @@ it('does NOT fail over when no failover context is provided', async () => {
   const done = proxyUpstreamStream(req, res, 'http://primary.example/live/u/p/1.ts');
   await new Promise((r) => setImmediate(r));
   primary.write(Buffer.from('ONLY-PRIMARY'));
-  primary.emit('error', new Error('ECONNRESET'));
+  primary.emit('error', Object.assign(new Error('ECONNRESET'), { code: 'ECONNRESET' }));
   await done;
 
   const out = res.getChunks().toString();

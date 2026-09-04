@@ -58,11 +58,15 @@ router.post('/authorize', async (req, res) => {
     // Demo callers skip the subscription gate (they have no account, and the
     // 'demo' id would otherwise crash the ObjectId lookup with a CastError).
     const isDemo = isDemoRequest(req);
+    // Part 5: plans may be Live-only or VOD-only — map the requested content
+    // family onto the subscription gate. Legacy plans (no contentTypes) allow both.
+    const planContentType = contentType === 'LIVE' ? 'Live' : 'VOD';
     const playbackAccess = isDemo
       ? { required: false, allowed: true, subscription: null }
       : await checkPlaybackSubscription(
           req.user?.id ? String(req.user.id) : undefined,
           req.user?.role,
+          planContentType,
         );
     const isAdmin = req.user?.role === 'Admin';
     const subscriptionRequired = playbackAccess.required;

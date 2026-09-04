@@ -1,6 +1,7 @@
 import { iptvOrgCacheService } from './iptv-org-cache';
 import { externalSourceCacheService } from './external-source-cache';
 import { epgService } from './epg-service';
+import { runEpgRematch } from './epg-rematch-service';
 import { streamHealthService } from './stream-health-service';
 import { ExternalSourceCacheMeta, ExternalSourceChannel } from '../models/ExternalSourceCache';
 import { IptvOrgChannel } from '../models/IptvOrgCache';
@@ -48,6 +49,7 @@ function intervalMs(envValue: string | undefined, defaultMs: number): number {
 const LIVENESS_INTERVAL = intervalMs(process.env.LIVENESS_CHECK_INTERVAL_MS, 86400000);
 const EPG_INTERVAL = intervalMs(process.env.EPG_REFRESH_INTERVAL_MS, 21600000);
 const CACHE_INTERVAL = intervalMs(process.env.CACHE_REFRESH_INTERVAL_MS, 3600000);
+const EPG_REMATCH_INTERVAL = intervalMs(process.env.EPG_REMATCH_INTERVAL_MS, 24 * 60 * 60 * 1000);
 const STREAM_HEALTH_INTERVAL = intervalMs(process.env.STREAM_HEALTH_CHECK_INTERVAL_MS, 14400000);
 const YOUTUBE_REFRESH_INTERVAL = intervalMs(process.env.YOUTUBE_REFRESH_INTERVAL_MS, 14400000);
 const XTREAM_SYNC_INTERVAL = intervalMs(process.env.XTREAM_SYNC_INTERVAL_MS, 21600000);
@@ -670,6 +672,27 @@ const tasks: TaskDefinition[] = [
     description: 'Fetch and update electronic program guide data',
     intervalMs: EPG_INTERVAL,
     handler: epgHandler,
+  },
+  {
+    name: 'epg-rematch',
+    displayName: 'EPG Channel Re-match',
+    description:
+      'Re-match catalog channels against current guide ids so EPG coverage keeps climbing as new guides arrive',
+    intervalMs: EPG_REMATCH_INTERVAL,
+    handler: async () => {
+      const start = Date.now();
+      const result = await runEpgRematch();
+      return {
+        summary: {
+          ok: true,
+          availableGuideIds: result.availableGuideIds,
+          candidates: result.candidates,
+          matched: result.matched,
+          cleared: result.cleared,
+        },
+        subtasks: [{ name: 'epg-rematch', status: 'completed', durationMs: Date.now() - start, result: { matched: result.matched, cleared: result.cleared } }],
+      };
+    },
   },
   {
     name: 'cache-refresh',

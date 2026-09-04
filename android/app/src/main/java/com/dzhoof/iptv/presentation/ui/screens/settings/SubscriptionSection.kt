@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -15,15 +14,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.ui.components.Status
 import com.dzhoof.iptv.presentation.ui.components.StatusText
 import com.dzhoof.iptv.presentation.ui.screens.FocusAwareOutlinedButton
 import com.dzhoof.iptv.presentation.ui.screens.SettingRowLayout
 import com.dzhoof.iptv.presentation.ui.screens.SettingsCard
+import com.dzhoof.iptv.presentation.util.normalizeActivationCodeInput
 import com.dzhoof.iptv.presentation.viewmodel.SubscriptionViewModel
 
 /**
@@ -38,31 +42,34 @@ internal fun SubscriptionSection(
     val uiState by viewModel.uiState.collectAsState()
     var code by remember { mutableStateOf("") }
 
-    SettingsCard(title = "الاشتراك", modifier = modifier) {
+    SettingsCard(title = stringResource(R.string.subscription_title), modifier = modifier) {
         val sub = uiState.subscription
         val status = sub?.subscription?.status
         val active = status == "ACTIVE"
         val expired = status == "EXPIRED"
 
-        // Redeem input
         SettingRowLayout(
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        text = "تفعيل كود",
+                        text = stringResource(R.string.subscription_redeem_title),
                         fontWeight = FontWeight.Medium,
                     )
                     Spacer(modifier = Modifier.height(2.dp))
                     Text(
-                        text = "أدخل كودًا بصيغة DZHF-XXXX-XXXX-XXXX. تبدأ المدة عند التفعيل.",
+                        text = stringResource(R.string.subscription_redeem_hint),
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
                         value = code,
-                        onValueChange = { code = it },
+                        onValueChange = { code = normalizeActivationCodeInput(it) },
                         singleLine = true,
-                        placeholder = { Text("DZHF-XXXX-XXXX-XXXX") },
+                        placeholder = { Text(stringResource(R.string.activation_code_placeholder)) },
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Characters,
+                            keyboardType = KeyboardType.Ascii,
+                        ),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -76,7 +83,11 @@ internal fun SubscriptionSection(
                     },
                 ) {
                     Text(
-                        text = if (uiState.isRedeeming) "جارٍ التفعيل…" else "تفعيل",
+                        text = if (uiState.isRedeeming) {
+                            stringResource(R.string.subscription_activate_loading)
+                        } else {
+                            stringResource(R.string.subscription_activate)
+                        },
                         fontWeight = FontWeight.Medium,
                     )
                 }
@@ -92,43 +103,54 @@ internal fun SubscriptionSection(
             StatusText(text = error, status = Status.WARNING, fontWeight = FontWeight.Medium)
         }
 
-        // Subscription status
         if ((active || expired) && sub != null) {
             Spacer(modifier = Modifier.height(12.dp))
             SettingRowLayout(
                 text = {
                     Column {
-                        Text("الخطة: ${sub.plan?.name ?: "—"}", fontWeight = FontWeight.Medium)
                         Text(
-                            "${if (expired) "انتهى في" else "ينتهي في"}: ${sub.subscription?.expiresAt?.take(10) ?: "—"}",
+                            text = stringResource(R.string.subscription_plan_label, sub.plan?.name ?: "—"),
+                            fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            text = stringResource(
+                                if (expired) R.string.subscription_expired_on else R.string.subscription_expires_on,
+                                sub.subscription?.expiresAt?.take(10) ?: "—",
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                         )
                         Text(
-                            "الأجهزة: ${sub.devicesUsed} / ${sub.maxDevices}",
+                            text = stringResource(
+                                R.string.subscription_devices_usage,
+                                sub.devicesUsed,
+                                sub.maxDevices,
+                            ),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 },
                 action = {
                     FocusAwareOutlinedButton(onClick = { viewModel.refresh() }) {
-                        Text("تحديث", fontWeight = FontWeight.Medium)
+                        Text(
+                            text = stringResource(R.string.subscription_refresh),
+                            fontWeight = FontWeight.Medium,
+                        )
                     }
                 },
             )
         } else if (!uiState.isLoading && sub == null) {
             Spacer(modifier = Modifier.height(12.dp))
             StatusText(
-                text = "لا يوجد اشتراك فعال. أدخل كودًا للبدء.",
+                text = stringResource(R.string.subscription_none),
                 status = Status.WARNING,
                 fontWeight = FontWeight.Medium,
             )
         }
 
-        // Devices
         if (!sub?.devices.isNullOrEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "الأجهزة المسجلة",
+                text = stringResource(R.string.subscription_devices_title),
                 fontWeight = FontWeight.Medium,
             )
             sub?.devices?.forEach { device ->
@@ -137,7 +159,8 @@ internal fun SubscriptionSection(
                     text = {
                         Column {
                             Text(
-                                text = device.name?.takeIf { it.isNotBlank() } ?: (device.deviceId ?: "جهاز"),
+                                text = device.name?.takeIf { it.isNotBlank() }
+                                    ?: (device.deviceId ?: stringResource(R.string.subscription_device_fallback)),
                                 fontWeight = FontWeight.Medium,
                             )
                             Text(
@@ -150,7 +173,10 @@ internal fun SubscriptionSection(
                         FocusAwareOutlinedButton(
                             onClick = { viewModel.removeDevice(device) },
                         ) {
-                            Text("حذف", fontWeight = FontWeight.Medium)
+                            Text(
+                                text = stringResource(R.string.subscription_delete_device),
+                                fontWeight = FontWeight.Medium,
+                            )
                         }
                     },
                 )

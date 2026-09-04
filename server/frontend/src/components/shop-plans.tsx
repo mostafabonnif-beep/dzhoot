@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { MessageCircle, Loader2, CreditCard } from 'lucide-react';
 
 type Plan = { _id: string; name: string; durationDays: number; price: number };
-type ShopData = { brand: string; whatsapp: string; shop: { name: string; phone: string } | null; plans: Plan[] };
+type ShopBranding = { displayName?: string; logoUrl?: string; primaryColor?: string };
+type ShopData = { brand: string; whatsapp: string; shop: { name: string; phone: string; branding?: ShopBranding } | null; plans: Plan[] };
 
 function durationLabel(days: number): string {
   if (days >= 360) return 'سنة كاملة';
@@ -19,32 +20,55 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
   const [data, setData] = useState<ShopData | null>(null);
   const [error, setError] = useState(false);
   const [cardPayEnabled, setCardPayEnabled] = useState(false);
+  const [cinetPayEnabled, setCinetPayEnabled] = useState(false);
   const [payingPlanId, setPayingPlanId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     try {
       const q = shopId ? `?shop=${encodeURIComponent(shopId)}` : '';
-      const r = await fetch(`/api/v1/shop/plans${q}`, { cache: 'no-store' });
+      const r = await fetch(`/api/v1/shop/plans${q}`, { cache: 'no-store', signal });
       const j = await r.json();
-      if (j.success) setData(j.data);
-      else setError(true);
+      if (signal?.aborted) return;
+      if (j.success) {
+        setData(j.data);
+        setError(false);
+      } else {
+        setError(true);
+      }
     } catch {
-      setError(true);
+      if (!signal?.aborted) setError(true);
     }
   }, [shopId]);
 
   useEffect(() => {
-    load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, [load]);
 
   useEffect(() => {
-    fetch('/api/v1/payments/chargily/config', { cache: 'no-store' })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.success && j.data?.enabled) setCardPayEnabled(true);
+    const controller = new AbortController();
+    // Either gateway enables the "pay online" CTA; the checkout call records
+    // which provider was used so the success page polls the right status API.
+    Promise.all([
+      fetch('/api/v1/payments/chargily/config', { cache: 'no-store', signal: controller.signal })
+        .then((r) => r.json())
+        .catch(() => null),
+      fetch('/api/v1/payments/cinetpay/config', { cache: 'no-store', signal: controller.signal })
+        .then((r) => r.json())
+        .catch(() => null),
+    ])
+      .then(([chargily, cinetpay]) => {
+        if (controller.signal.aborted) return;
+        if (chargily?.success && chargily.data?.enabled) setCardPayEnabled(true);
+        if (cinetpay?.success && cinetpay.data?.enabled) {
+          setCardPayEnabled(true);
+          setCinetPayEnabled(true);
+        }
       })
       .catch(() => {});
+    return () => controller.abort();
   }, []);
 
   const payByCard = useCallback(
@@ -52,11 +76,14 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
       setPayError(null);
       setPayingPlanId(plan._id);
       try {
-        const r = await fetch('/api/v1/payments/chargily/checkout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ planId: plan._id, shopId }),
-        });
+        const r = await fetch(
+          cinetPayEnabled ? '/api/v1/payments/cinetpay/checkout' : '/api/v1/payments/chargily/checkout',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ planId: plan._id, shopId }),
+          },
+        );
         const j = await r.json();
         if (j.success && j.data?.checkoutUrl) {
           window.location.href = j.data.checkoutUrl;
@@ -88,7 +115,7 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
   }
 
   const phone = data.shop?.phone || data.whatsapp;
-  const shopLabel = data.shop ? data.shop.name : data.brand;
+  const shopLabel = data.shop ? data.shop.branding?.displayName || data.shop.name : data.brand;
   const waNumber = String(phone || '').replace(/[^\d]/g, '');
   const waLink = (plan: Plan) =>
     `https://wa.me/${waNumber}?text=${encodeURIComponent(
@@ -98,8 +125,23 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
   return (
     <div className="space-y-6">
       {data.shop && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
-          🏪 أنت تطلب من محل <strong>{data.shop.name}</strong>
+        <div
+          className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm flex items-center gap-3"
+          style={data.shop.branding?.primaryColor ? { borderColor: `${data.shop.branding.primaryColor}55` } : undefined}
+        >
+          {data.shop.branding?.logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.shop.branding.logoUrl}
+              alt={data.shop.branding.displayName || data.shop.name}
+              className="h-9 w-9 rounded-lg object-contain bg-background"
+            />
+          ) : (
+            <span aria-hidden>🏪</span>
+          )}
+          <span>
+            أنت تطلب من محل <strong>{data.shop.branding?.displayName || data.shop.name}</strong>
+          </span>
         </div>
       )}
       {payError && (

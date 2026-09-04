@@ -14,7 +14,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 export type PaymentStatus = 'pending' | 'processing' | 'paid' | 'failed' | 'canceled' | 'expired';
 
 export interface IPaymentDocument extends Document {
-  provider: 'chargily';
+  provider: 'chargily' | 'cinetpay';
   /** Random, unguessable token given to the browser (never the Mongo _id) so the
    * success/failure page can poll status without exposing an enumerable ID. */
   publicToken: string;
@@ -44,7 +44,7 @@ const paymentSchema = new Schema<IPaymentDocument>(
   {
     provider: {
       type: String,
-      enum: ['chargily'],
+      enum: ['chargily', 'cinetpay'],
       default: 'chargily',
       required: true,
     },
