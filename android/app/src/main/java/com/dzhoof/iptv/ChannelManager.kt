@@ -182,6 +182,11 @@ class ChannelManager private constructor(
                 put(TvContract.Channels.COLUMN_DISPLAY_NAME, truncateName(channel.name))
                 put(TvContract.Channels.COLUMN_DISPLAY_NUMBER, displayNumber)
                 put(TvContract.Channels.COLUMN_INTERNAL_PROVIDER_DATA, internalData.toString())
+                // Expose the channel to the system TV app: browsable makes it
+                // playable from the Live Channels grid, searchable lets it show
+                // up in the launcher/global TV search.
+                put(TvContractCompat.Channels.COLUMN_BROWSABLE, 1)
+                put(TvContractCompat.Channels.COLUMN_SEARCHABLE, 1)
                 channel.logoUrl?.takeIf { it.isNotEmpty() }?.let {
                     put(TvContractCompat.Channels.COLUMN_APP_LINK_ICON_URI, it)
                 }
