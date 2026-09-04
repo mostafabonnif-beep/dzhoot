@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Guide
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
@@ -80,6 +81,7 @@ private val topNavItems = listOf(
     NavItem(Screen.Home, Icons.Default.Home, "الرئيسية"),
     NavItem(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     NavItem(Screen.Search, Icons.Default.Search, "بحث"),
+    NavItem(Screen.Guide, Icons.Default.Guide, "دليل البرامج"),
     NavItem(Screen.Categories, Icons.Default.Category, "التصنيفات"),
     NavItem(Screen.Catalog, Icons.Default.Movie, "الأفلام"),
 )
@@ -88,7 +90,8 @@ private val bottomNavItem = NavItem(Screen.Settings, Icons.Default.Settings, "ا
 
 private fun NavItem.isSelectedFor(currentRoute: String?): Boolean =
     currentRoute == screen.route ||
-        (screen == Screen.Channels && currentRoute == Screen.ChannelsByCategory.route)
+        (screen == Screen.Channels && currentRoute == Screen.ChannelsByCategory.route) ||
+        (screen == Screen.Guide && currentRoute == Screen.Player.route)
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
