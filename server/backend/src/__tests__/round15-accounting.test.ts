@@ -15,12 +15,13 @@ import { recordCreditTx } from '../services/subscription-service';
 
 // --- Reseller portal (mock requireReseller) ---
 const RESELLER_ID = new mongoose.Types.ObjectId();
-jest.mock('../middleware/requireReseller', () => ({
-  requireReseller: (req: any, _res: any, next: any) => {
+jest.mock('../middleware/requireReseller', () => {
+  const requireReseller = (req: any, _res: any, next: any) => {
     req.reseller = { _id: RESELLER_ID, name: 'محل الاختبار', status: 'Active' };
     next();
-  },
-}));
+  };
+  return { requireReseller, requireResellerOrApiKeyForReads: requireReseller };
+});
 
 // --- Admin routes (mock auth) ---
 jest.mock('../routes/auth', () => ({

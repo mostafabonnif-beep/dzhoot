@@ -240,7 +240,7 @@ async function applyVodMirrorFallback(streamUrl, sourceId) {
 }
 
 async function ensurePlaybackSubscription(user, res) {
-  const access = await checkPlaybackSubscription(String(user?._id || user?.id || ''), user?.role);
+  const access = await checkPlaybackSubscription(String(user?._id || user?.id || ''), user?.role, 'Live');
   if (access.allowed) return true;
   res.status(403).json({
     success: false,
@@ -850,7 +850,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
 
     // Enforce the per-user concurrent stream limit (oldest session is evicted
     // when exceeded; no-op when Redis is not configured).
-    const playbackAccess = await checkPlaybackSubscription(String(user.id), user.role);
+    const playbackAccess = await checkPlaybackSubscription(String(user.id), user.role, 'Live');
     const session = await registerStreamSession({
       userId: String(user.id),
       sessionId: rootSessionId,

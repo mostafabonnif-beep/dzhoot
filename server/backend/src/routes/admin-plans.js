@@ -16,6 +16,20 @@ function parseId(id) {
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
 }
 
+// Part 5: plans may be scoped to Live TV and/or VOD. Accepts undefined (→ both,
+// legacy behavior), a string, or an array; dedupes and validates members.
+const PLAN_CONTENT_TYPES = ['Live', 'VOD'];
+function normalizeContentTypes(input) {
+  if (input === undefined) return undefined;
+  const raw = Array.isArray(input) ? input : [input];
+  const values = [...new Set(raw.map((v) => String(v).trim()).filter(Boolean))];
+  if (values.length === 0) return ['Live', 'VOD'];
+  for (const v of values) {
+    if (!PLAN_CONTENT_TYPES.includes(v)) return null;
+  }
+  return values;
+}
+
 // GET / — list plans with code/subscription counts
 router.get('/', async (req, res) => {
   try {
@@ -54,8 +68,12 @@ router.get('/', async (req, res) => {
 // POST / — create a plan
 router.post('/', async (req, res) => {
   try {
-    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features } =
+    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features, contentTypes } =
       req.body || {};
+    const normalizedContentTypes = normalizeContentTypes(contentTypes);
+    if (normalizedContentTypes === null) {
+      return res.status(400).json({ success: false, error: 'contentTypes must contain only Live and/or VOD' });
+    }
 
     if (!name || typeof name !== 'string') {
       return res.status(400).json({ success: false, error: 'name is required' });
@@ -82,6 +100,7 @@ router.post('/', async (req, res) => {
       price: priceNum,
       currency: currency || 'DZD',
       allowCustomDuration: allowCustomDuration === true,
+      contentTypes: normalizedContentTypes || ['Live', 'VOD'],
       status: status === 'Inactive' ? 'Inactive' : 'Active',
       features: features || {},
     });
@@ -104,8 +123,12 @@ router.patch('/:id', async (req, res) => {
     if (!plan) return res.status(404).json({ success: false, error: 'Plan not found' });
 
     const before = plan.toObject();
-    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features } =
+    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features, contentTypes } =
       req.body || {};
+    const normalizedContentTypes = normalizeContentTypes(contentTypes);
+    if (normalizedContentTypes === null) {
+      return res.status(400).json({ success: false, error: 'contentTypes must contain only Live and/or VOD' });
+    }
 
     if (name !== undefined) plan.name = String(name).trim();
     if (description !== undefined) plan.description = description;
@@ -133,6 +156,7 @@ router.patch('/:id', async (req, res) => {
     }
     if (currency !== undefined) plan.currency = String(currency).toUpperCase();
     if (allowCustomDuration !== undefined) plan.allowCustomDuration = allowCustomDuration === true;
+    if (normalizedContentTypes !== undefined) plan.contentTypes = normalizedContentTypes;
     if (status !== undefined) plan.status = status === 'Inactive' ? 'Inactive' : 'Active';
     if (features !== undefined) plan.features = features;
 

@@ -149,7 +149,7 @@ router.get('/playlist.m3u', requireJwtAuth, async (req, res) => {
     if (!user) {
       return res.status(404).send('#EXTM3U\n#ERROR:User not found');
     }
-    const playbackAccess = await checkPlaybackSubscription(String(user._id), user.role);
+    const playbackAccess = await checkPlaybackSubscription(String(user._id), user.role, 'Live');
     if (!playbackAccess.allowed) {
       return res.status(403).json({
         success: false,

@@ -7,10 +7,13 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "tsx watch src/server.js",
+    "prebuild": "cd .. && npm run build -w @dzhoof/shared",
     "build": "tsc && rm -rf dist/templates && cp -R src/templates dist/templates",
+    "pretypecheck": "cd .. && npm run build -w @dzhoof/shared",
     "typecheck": "tsc --noEmit",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint src/",
     "lint:fix": "ESLINT_USE_FLAT_CONFIG=false eslint src/ --fix",
+    "pretest": "cd .. && npm run build -w @dzhoof/shared",
     "test": "jest",
     "migrate:fix-indexes": "tsx src/scripts/migrations/0002-fix-indexes.ts",
     "migrate:sync-indexes": "tsx src/scripts/migrations/0003-sync-indexes.ts",

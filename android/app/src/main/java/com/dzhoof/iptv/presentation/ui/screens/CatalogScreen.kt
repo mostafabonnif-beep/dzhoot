@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -55,6 +56,7 @@ import com.dzhoof.iptv.presentation.viewmodel.CatalogViewModel
 fun CatalogScreen(
     onPlayMovie: (String, String) -> Unit,
     onPlayEpisode: (String, String) -> Unit,
+    onOpenSettings: () -> Unit = {},
     initialSeriesId: String? = null,
     initialSeriesTitle: String? = null,
     initialMovieId: String? = null,
@@ -96,6 +98,7 @@ fun CatalogScreen(
                 )
             } else if (state.selectedSeries == null) {
                 CatalogToolbar(
+                    onOpenSettings = onOpenSettings,
                     tab = state.tab,
                     query = state.query,
                     onTabSelected = viewModel::selectTab,
@@ -132,6 +135,7 @@ fun CatalogScreen(
 private fun CatalogToolbar(
     tab: CatalogTab,
     query: String,
+    onOpenSettings: () -> Unit,
     onTabSelected: (CatalogTab) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSearch: () -> Unit,
@@ -159,6 +163,11 @@ private fun CatalogToolbar(
             modifier = Modifier.weight(1f),
         )
         Button(onClick = onSearch) { Text("بحث") }
+        OutlinedButton(onClick = onOpenSettings) {
+            Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("الإعدادات")
+        }
     }
 }
 

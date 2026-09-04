@@ -178,12 +178,12 @@ export default function SchedulerPage() {
     } catch {
       setError(L('فشل تحميل بيانات المهام', 'Échec du chargement des tâches', 'Failed to load tasks'));
     }
-  }, [runsPage, taskFilter, L]);
+  }, [L, runsPage, taskFilter]);
 
   // Initial load
   useEffect(() => {
     Promise.all([fetchTasks(), fetchRuns()]).finally(() => setLoading(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetchRuns, fetchTasks]);
 
   // Refetch runs when page/filter changes
   useEffect(() => {

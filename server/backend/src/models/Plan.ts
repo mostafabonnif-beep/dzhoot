@@ -1,5 +1,8 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type PlanContentType = 'Live' | 'VOD';
+export const PLAN_CONTENT_TYPES: PlanContentType[] = ['Live', 'VOD'];
+
 export interface IPlanDocument extends Document {
   name: string;
   description?: string;
@@ -10,6 +13,8 @@ export interface IPlanDocument extends Document {
   currency?: string;
   /** When true, resellers may generate codes with a custom duration override. */
   allowCustomDuration?: boolean;
+  /** Which content families this plan unlocks. Empty/missing = both (legacy). */
+  contentTypes?: PlanContentType[];
   status: 'Active' | 'Inactive';
   features?: Record<string, unknown>;
   createdAt: Date;
@@ -62,6 +67,11 @@ const planSchema = new Schema<IPlanDocument>(
     allowCustomDuration: {
       type: Boolean,
       default: false,
+    },
+    contentTypes: {
+      type: [String],
+      enum: PLAN_CONTENT_TYPES,
+      default: PLAN_CONTENT_TYPES,
     },
     status: {
       type: String,

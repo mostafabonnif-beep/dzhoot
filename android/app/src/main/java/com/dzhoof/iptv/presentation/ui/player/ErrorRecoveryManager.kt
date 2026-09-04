@@ -42,6 +42,7 @@ class ErrorRecoveryManager(
     private var isRecoveringState = false
 
     private var streamSlots: List<StreamSlot> = emptyList()
+    private var fallbackResolver: (suspend (slot: Int) -> StreamSlot?)? = null
     private var currentSlotIndex = 0
     private var attemptInSlot = 0
     private var totalAttempts = 0
@@ -57,7 +58,8 @@ class ErrorRecoveryManager(
         }
 
     val maxTotalAttempts: Int
-        get() = streamSlots.mapIndexed { index, _ -> maxAttemptsForSlot(index) }.sum()
+        get() = streamSlots.mapIndexed { index, _ -> maxAttemptsForSlot(index) }.sum() +
+            if (fallbackResolver != null) (MAX_FALLBACK_SLOTS - streamSlots.size).coerceAtLeast(0) else 0
 
     private fun maxAttemptsForSlot(slotIndex: Int): Int {
         val slot = streamSlots.getOrNull(slotIndex) ?: return 0
@@ -130,6 +132,10 @@ class ErrorRecoveryManager(
         totalAttempts = 0
     }
 
+    fun setFallbackResolver(resolver: (suspend (slot: Int) -> StreamSlot?)?) {
+        fallbackResolver = resolver
+    }
+
     private fun handleError(error: PlaybackException) {
         val errorMessage = when (error.errorCode) {
             PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
@@ -185,9 +191,10 @@ class ErrorRecoveryManager(
 
     /** True when another URL (proxy for this slot, or a later slot) is still untried. */
     private fun hasFallbackRemaining(): Boolean {
-        val slot = streamSlots.getOrNull(currentSlotIndex) ?: return false
-        if (!isProxyAttempt() && slot.proxyUrl != null) return true
-        return currentSlotIndex < streamSlots.size - 1
+        val slot = streamSlots.getOrNull(currentSlotIndex)
+        if (slot != null && !isProxyAttempt() && slot.proxyUrl != null) return true
+        return currentSlotIndex < streamSlots.size - 1 ||
+            (fallbackResolver != null && currentSlotIndex < MAX_FALLBACK_SLOTS - 1)
     }
 
     /**
@@ -211,9 +218,14 @@ class ErrorRecoveryManager(
             // Check if we've exhausted attempts for the current slot
             val maxForSlot = maxAttemptsForSlot(currentSlotIndex)
             if (attemptInSlot > maxForSlot) {
-                // Move to next slot
+                // Resolve optional alternates only after the current stream fails.
                 currentSlotIndex++
                 attemptInSlot = 1
+
+                if (currentSlotIndex >= streamSlots.size) {
+                    val resolved = fallbackResolver?.invoke(currentSlotIndex)
+                    if (resolved != null) streamSlots = streamSlots + resolved
+                }
 
                 if (currentSlotIndex >= streamSlots.size) {
                     onStreamDead("استُنفدت جميع مصادر البث", "recovery_exhausted")
@@ -261,6 +273,7 @@ class ErrorRecoveryManager(
         isRecoveringState = false
         reconnectJob?.cancel()
         bufferWatchJob?.cancel()
+        fallbackResolver = null
     }
 
     fun retry() {
@@ -273,6 +286,10 @@ class ErrorRecoveryManager(
     }
 
     private var isReleased = false
+
+    companion object {
+        private const val MAX_FALLBACK_SLOTS = 4
+    }
 
     fun release() {
         if (isReleased) return

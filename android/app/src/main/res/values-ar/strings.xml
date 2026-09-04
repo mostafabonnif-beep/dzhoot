@@ -89,4 +89,24 @@
     <string name="guide_favorites">★ المفضلة</string>
     <string name="guide_loading">جارٍ تحميل دليل البرامج…</string>
     <string name="guide_empty">لا توجد قنوات متاحة في الدليل</string>
+    <string name="activation_welcome">مرحبًا بك في DZ HOOF</string>
+    <string name="activation_subtitle">فعّل جهازك وابدأ مشاهدة القنوات</string>
+    <string name="activation_instructions">أدخل كود التفعيل الذي استلمته من البائع. لا تحتاج إلى إدخال عنوان الخادم أو رمز PIN.</string>
+    <string name="activation_code_label">كود التفعيل</string>
+    <string name="activation_code_placeholder">DZHF-XXXX-XXXX-XXXX</string>
+    <string name="activation_submit">تفعيل الجهاز</string>
+    <string name="subscription_title">الاشتراك</string>
+    <string name="subscription_redeem_title">تفعيل كود</string>
+    <string name="subscription_redeem_hint">أدخل كودًا بصيغة DZHF-XXXX-XXXX-XXXX. تبدأ المدة عند التفعيل.</string>
+    <string name="subscription_activate">تفعيل</string>
+    <string name="subscription_activate_loading">جارٍ التفعيل…</string>
+    <string name="subscription_refresh">تحديث</string>
+    <string name="subscription_none">لا يوجد اشتراك فعال. أدخل كودًا للبدء.</string>
+    <string name="subscription_plan_label">الخطة: %1$s</string>
+    <string name="subscription_expired_on">انتهى في: %1$s</string>
+    <string name="subscription_expires_on">ينتهي في: %1$s</string>
+    <string name="subscription_devices_usage">الأجهزة: %1$d / %2$d</string>
+    <string name="subscription_devices_title">الأجهزة المسجلة</string>
+    <string name="subscription_delete_device">حذف</string>
+    <string name="subscription_device_fallback">جهاز</string>
 </resources>

@@ -148,7 +148,8 @@ userSchema.pre('save', async function (next) {
 
   try {
     const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
+    const currentPassword = String(this.password);
+    this.password = await bcrypt.hash(currentPassword, salt);
     next();
   } catch (error) {
     next(error as Error);
