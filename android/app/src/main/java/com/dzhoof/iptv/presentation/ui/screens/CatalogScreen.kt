@@ -1,9 +1,11 @@
 package com.dzhoof.iptv.presentation.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +38,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -83,10 +86,12 @@ fun CatalogScreen(
     }
 
     ScreenScaffold(title = "الأفلام والمسلسلات", modifier = modifier) {
+        val configuration = LocalConfiguration.current
+        val isCompact = configuration.screenWidthDp < 600
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(horizontal = if (isCompact) 16.dp else 24.dp, vertical = 16.dp),
         ) {
             val selectedMovie = state.selectedMovie
             if (selectedMovie != null) {
@@ -99,6 +104,7 @@ fun CatalogScreen(
                         viewModel.selectMovieById(selectedMovie.id, selectedMovie.title)
                     },
                     onPlay = { movie -> onPlayMovie(movie.id, movie.title) },
+                    isCompact = isCompact,
                 )
             } else if (state.selectedSeries == null) {
                 CatalogToolbar(
@@ -108,6 +114,7 @@ fun CatalogScreen(
                     onTabSelected = viewModel::selectTab,
                     onQueryChanged = viewModel::updateQuery,
                     onSearch = viewModel::submitSearch,
+                    isCompact = isCompact,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 CatalogContent(
@@ -143,12 +150,9 @@ private fun CatalogToolbar(
     onTabSelected: (CatalogTab) -> Unit,
     onQueryChanged: (String) -> Unit,
     onSearch: () -> Unit,
+    isCompact: Boolean,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val content: @Composable RowScope.() -> Unit = {
         FilterChip(
             selected = tab == CatalogTab.MOVIES,
             onClick = { onTabSelected(CatalogTab.MOVIES) },
@@ -172,6 +176,44 @@ private fun CatalogToolbar(
             Spacer(modifier = Modifier.width(6.dp))
             Text("الإعدادات")
         }
+    }
+    if (isCompact) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = tab == CatalogTab.MOVIES,
+                    onClick = { onTabSelected(CatalogTab.MOVIES) },
+                    label = { Text("أفلام") },
+                )
+                FilterChip(
+                    selected = tab == CatalogTab.SERIES,
+                    onClick = { onTabSelected(CatalogTab.SERIES) },
+                    label = { Text("مسلسلات") },
+                )
+            }
+            AppTextField(
+                value = query,
+                onValueChange = onQueryChanged,
+                placeholder = "ابحث في المحتوى",
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "بحث") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = onSearch, modifier = Modifier.weight(1f)) { Text("بحث") }
+                OutlinedButton(onClick = onOpenSettings, modifier = Modifier.weight(1f)) {
+                    Icon(Icons.Default.Settings, contentDescription = "الإعدادات")
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("الإعدادات")
+                }
+            }
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
     }
 }
 
@@ -242,6 +284,7 @@ private fun MovieDetails(
     onBack: () -> Unit,
     onRetry: () -> Unit,
     onPlay: (Movie) -> Unit,
+    isCompact: Boolean,
 ) {
     if (movie == null) return
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -250,23 +293,41 @@ private fun MovieDetails(
         Text(movie.title, style = MaterialTheme.typography.headlineSmall)
     }
     Spacer(modifier = Modifier.height(16.dp))
-    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        AsyncImage(
-            model = movie.poster,
-            contentDescription = movie.title,
-            modifier = Modifier
-                .width(180.dp)
-                .height(260.dp)
-                .clip(MaterialTheme.shapes.medium),
-            contentScale = ContentScale.Crop,
-        )
-        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val detailsContent: @Composable () -> Unit = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             movie.description?.takeIf { it.isNotBlank() }?.let { Text(it, maxLines = 6, overflow = TextOverflow.Ellipsis) }
             Text("التصنيف: ${movie.category}")
             movie.year?.let { Text("السنة: $it") }
             movie.rating?.let { Text("التقييم: $it") }
             movie.durationMinutes?.let { Text("المدة: $it دقيقة") }
             Button(onClick = { onPlay(movie) }) { Text("تشغيل الفيلم") }
+        }
+    }
+    if (isCompact) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            AsyncImage(
+                model = movie.poster,
+                contentDescription = movie.title,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp)
+                    .clip(MaterialTheme.shapes.medium),
+                contentScale = ContentScale.Crop,
+            )
+            detailsContent()
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            AsyncImage(
+                model = movie.poster,
+                contentDescription = movie.title,
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(260.dp)
+                    .clip(MaterialTheme.shapes.medium),
+                contentScale = ContentScale.Crop,
+            )
+            Box(modifier = Modifier.weight(1f)) { detailsContent() }
         }
     }
     if (isLoading) CircularProgressIndicator()
@@ -408,8 +469,8 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
                 model = episode.thumbnail,
                 contentDescription = episode.title,
                 modifier = Modifier
-                    .width(180.dp)
-                    .height(100.dp)
+                    .width(120.dp)
+                    .height(72.dp)
                     .clip(MaterialTheme.shapes.small),
                 contentScale = ContentScale.Crop,
             )
