@@ -20,6 +20,7 @@ interface PlanData {
   currency?: string;
   status: 'Active' | 'Inactive';
   allowCustomDuration?: boolean;
+  contentTypes?: string[];
   codeCount?: number;
   usedCodeCount?: number;
   activeSubs?: number;
@@ -27,6 +28,8 @@ interface PlanData {
 }
 
 interface PlanForm {
+  live: boolean;
+  vod: boolean;
   name: string;
   description: string;
   durationDays: string;
@@ -39,6 +42,8 @@ interface PlanForm {
 }
 
 const emptyForm: PlanForm = {
+  live: true,
+  vod: true,
   name: '',
   description: '',
   durationDays: '30',
@@ -49,6 +54,12 @@ const emptyForm: PlanForm = {
   status: 'Active',
   allowCustomDuration: false,
 };
+
+function planContentTypes(plan: PlanData): string[] {
+  return Array.isArray(plan.contentTypes) && plan.contentTypes.length > 0
+    ? plan.contentTypes
+    : ['Live', 'VOD'];
+}
 
 const inputClass =
   'flex h-10 w-full border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary';
@@ -115,6 +126,8 @@ export default function PlansPage() {
       currency: plan.currency || 'DZD',
       status: plan.status,
       allowCustomDuration: Boolean(plan.allowCustomDuration),
+      live: planContentTypes(plan).includes('Live'),
+      vod: planContentTypes(plan).includes('VOD'),
     });
     setFormError('');
     setFormOpen(true);
@@ -143,6 +156,10 @@ export default function PlansPage() {
       setFormError('السعر يجب أن يكون رقمًا غير سالب');
       return;
     }
+    if (!form.live && !form.vod) {
+      setFormError('يجب اختيار محتوى واحد على الأقل (Live أو VOD)');
+      return;
+    }
     setSaving(true);
     setFormError('');
     try {
@@ -156,6 +173,10 @@ export default function PlansPage() {
         currency: form.currency.toUpperCase(),
         status: form.status,
         allowCustomDuration: form.allowCustomDuration,
+        contentTypes: [
+          ...(form.live ? ['Live'] : []),
+          ...(form.vod ? ['VOD'] : []),
+        ],
       };
       if (editingId) {
         await api.patch(`/admin/plans/${editingId}`, payload);
@@ -242,6 +263,16 @@ export default function PlansPage() {
           {p.allowCustomDuration && (
             <span className="mr-2 inline-flex rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[11px] font-medium">
               {locale === 'ar' ? 'مدة مخصصة' : locale === 'fr' ? 'Durée libre' : 'Custom'}
+            </span>
+          )}
+          {!planContentTypes(p).includes('Live') && (
+            <span className="mr-1 inline-flex rounded-full bg-amber-500/10 text-amber-600 px-2 py-0.5 text-[11px] font-medium">
+              {locale === 'ar' ? 'VOD فقط' : locale === 'fr' ? 'VOD seul' : 'VOD only'}
+            </span>
+          )}
+          {!planContentTypes(p).includes('VOD') && (
+            <span className="mr-1 inline-flex rounded-full bg-sky-500/10 text-sky-600 px-2 py-0.5 text-[11px] font-medium">
+              {locale === 'ar' ? 'Live فقط' : locale === 'fr' ? 'Live seul' : 'Live only'}
             </span>
           )}
         </span>
@@ -529,6 +560,59 @@ export default function PlansPage() {
               السماح للموزعين بتوليد أكواد بمدة مخصصة (تتجاوز مدة الباقة الثابتة)
             </span>
           </label>
+          <div className="space-y-1.5 pt-1">
+            <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              المحتوى المشمول
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.live}
+                  onChange={(e) => setForm({ ...form, live: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <span>قنوات مباشرة (Live)</span>
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.vod}
+                  onChange={(e) => setForm({ ...form, vod: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <span>أفلام ومسلسلات (VOD)</span>
+              </label>
+            </div>
+            {!form.live && !form.vod && (
+              <p className="text-xs text-red-500">يجب اختيار محتوى واحد على الأقل</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              المحتوى المشمول
+            </label>
+            <div className="flex items-center gap-6 text-sm">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.live}
+                  onChange={(e) => setForm({ ...form, live: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <span>{locale === 'ar' ? 'قنوات مباشرة (Live)' : locale === 'fr' ? 'Chaînes Live' : 'Live channels'}</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.vod}
+                  onChange={(e) => setForm({ ...form, vod: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <span>{locale === 'ar' ? 'أفلام ومسلسلات (VOD)' : locale === 'fr' ? 'Films & séries (VOD)' : 'Movies & series (VOD)'}</span>
+              </label>
+            </div>
+          </div>
           <div className="flex items-center gap-3 pt-2">
             <button
               onClick={handleSave}
