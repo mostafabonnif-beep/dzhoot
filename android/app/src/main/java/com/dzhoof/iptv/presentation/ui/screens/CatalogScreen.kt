@@ -49,6 +49,7 @@ import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.Season
 import com.dzhoof.iptv.domain.model.Series
 import com.dzhoof.iptv.presentation.ui.components.AppTextField
+import com.dzhoof.iptv.presentation.ui.components.CatalogPosterCard
 import com.dzhoof.iptv.presentation.ui.components.EmptyState
 import com.dzhoof.iptv.presentation.ui.components.ErrorState
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
