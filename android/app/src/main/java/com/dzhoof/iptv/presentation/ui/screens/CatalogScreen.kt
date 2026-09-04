@@ -35,7 +35,6 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -225,7 +224,7 @@ private fun CatalogContent(
             posterContent = { series ->
                 PosterCard(
                     title = series.title,
-                    subtitle = series.year?.toString() ?: series.category,
+                    subtitle = series.releaseDate?.take(4) ?: series.category,
                     imageUrl = series.poster,
                     onClick = { onSeriesClick(series) },
                 )
