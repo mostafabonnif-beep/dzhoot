@@ -65,14 +65,20 @@ export async function getSignedImageUrl(url: string | undefined | null): Promise
   const pending = inflight.get(url);
   if (pending) return pending;
 
-  const { sessionId, accessToken } = useAuthStore.getState();
-  if (!sessionId && !accessToken) return ''; // nothing to sign with
+  const { sessionId, accessToken, user } = useAuthStore.getState();
+  // Nothing to sign with when fully anonymous. With only a persisted user
+  // (cookie-only session after a reload) the request below still authenticates
+  // via the httpOnly dzhoof_sid cookie (credentials: 'same-origin'), so a
+  // signed URL is obtainable — an invalid session simply 401s to ''.
+  if (!sessionId && !accessToken && !user) return '';
 
   const promise = (async () => {
     try {
       const headers: Record<string, string> = sessionId
         ? { 'x-session-id': sessionId }
-        : { Authorization: `Bearer ${accessToken}` };
+        : accessToken
+          ? { Authorization: `Bearer ${accessToken}` }
+          : {}; // cookie-only — headers stay empty, the cookie authenticates
       const res = await fetch(`${SIGN_PATH}?url=${encodeURIComponent(url)}`, {
         headers,
         credentials: 'same-origin',

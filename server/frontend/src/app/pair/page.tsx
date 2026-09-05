@@ -12,7 +12,9 @@ type PairState = 'loading' | 'no-pin' | 'needs-auth' | 'pairing' | 'success' | '
 
 function PairContent() {
   const searchParams = useSearchParams();
-  const { user, isAuthenticated } = useAuthStore();
+  // F11: isAuthenticated is not persisted anymore — user presence is the guard
+  // (after a reload the persisted user + httpOnly cookie authenticate API calls).
+  const user = useAuthStore((s) => s.user);
   const { t } = useLocale();
   const [state, setState] = useState<PairState>('loading');
   const [error, setError] = useState('');
@@ -69,7 +71,7 @@ function PairContent() {
       sessionStorage.setItem('dzhoof-pairing-pin', pin);
     }
 
-    if (!isAuthenticated || !user) {
+    if (!user) {
       setState('needs-auth');
       return;
     }
@@ -79,7 +81,7 @@ function PairContent() {
     attemptedPin.current = pin;
 
     attemptPairing(pin);
-  }, [hydrated, pin, isAuthenticated, user, attemptPairing]);
+  }, [hydrated, pin, user, attemptPairing]);
 
   const handleRetry = useCallback(() => {
     if (!pin) return;
