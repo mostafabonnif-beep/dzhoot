@@ -49,8 +49,20 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
     }
 
     fun getTvCode(context: Context): String {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.getString(TV_CODE_KEY, "") ?: ""
+        val secure = runCatching {
+            SecurePreferences(context).getString(TV_CODE_KEY, "") ?: ""
+        }.getOrDefault("")
+        if (secure.isNotEmpty()) return secure
+        // Upgrade path: codes written by older builds live in plain SharedPreferences.
+        // Read once, move to encrypted storage, then drop the plaintext copy.
+        val legacy = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(TV_CODE_KEY, "") ?: ""
+        if (legacy.isNotEmpty()) {
+            runCatching { SecurePreferences(context).putString(TV_CODE_KEY, legacy) }
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().remove(TV_CODE_KEY).apply()
+        }
+        return legacy
     }
 
     fun getSessionId(context: Context): String {
@@ -70,8 +82,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
     }
 
     fun hasChannelSelection(context: Context): Boolean {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        return prefs.contains(TV_CODE_KEY)
+        return getTvCode(context).isNotEmpty()
     }
 
     fun isDemoMode(context: Context): Boolean {
@@ -88,13 +99,16 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
 
     fun setTvCode(context: Context, code: String) {
         val sanitized = code.trim().replace(Regex("[^A-Za-z0-9]"), "")
+        // tv_code is a bearer credential for the managed API (X-TV-Code) — store it
+        // encrypted like the session id (security audit).
+        runCatching { SecurePreferences(context).putString(TV_CODE_KEY, sanitized) }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // Pairing is a server-backed source — clear any prior BYO playlist selection
         // so refreshChannels() hits the server instead of a stale M3U/Xtream source.
         // Also clear the demo flag: a manually-set code is a real pairing, not demo,
         // so isPaired resolves true instead of the source reading as "Demo".
         prefs.edit()
-            .putString(TV_CODE_KEY, sanitized)
+            .remove(TV_CODE_KEY)
             .putString(PLAYLIST_SOURCE_TYPE_KEY, SOURCE_PAIRED)
             .remove(DEMO_MODE_KEY)
             .apply()
@@ -102,9 +116,10 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
 
     fun setDemoMode(context: Context, code: String) {
         val sanitized = code.trim().replace(Regex("[^A-Za-z0-9]"), "")
+        runCatching { SecurePreferences(context).putString(TV_CODE_KEY, sanitized) }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
-            .putString(TV_CODE_KEY, sanitized)
+            .remove(TV_CODE_KEY)
             .putBoolean(DEMO_MODE_KEY, true)
             .putString(PLAYLIST_SOURCE_TYPE_KEY, SOURCE_PAIRED)
             .apply()
@@ -213,6 +228,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
     }
 
     fun clearPairing(context: Context) {
+        runCatching { SecurePreferences(context).remove(TV_CODE_KEY) }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .remove(TV_CODE_KEY)
