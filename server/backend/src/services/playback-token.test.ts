@@ -73,6 +73,14 @@ describe('playback tokens', () => {
     expect(verifyPlaybackToken(issued.token)?.sessionId).toBe('root-session-token');
   });
 
+  it('preserves the browser binding hash only inside the encrypted payload', () => {
+    const bindingHash = 'a'.repeat(64);
+    const issued = issuePlaybackToken({ ...input, clientBindingHash: bindingHash });
+
+    expect(issued.token).not.toContain(bindingHash);
+    expect(verifyPlaybackToken(issued.token)?.clientBindingHash).toBe(bindingHash);
+  });
+
   it('rejects tampered and expired tokens', () => {
     const issued = issuePlaybackToken({ ...input, ttlMs: 30_000 });
     const tokenParts = issued.token.split('.');

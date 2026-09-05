@@ -46,6 +46,53 @@ const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA ا�
   .split(',')
   .map((g) => g.trim())
   .filter(Boolean);
+const WEB_PLAYBACK_COOKIE = '__Host-dzhoof-playback';
+const WEB_PLAYBACK_CLIENT = 'web';
+
+function requestCookie(req, name) {
+  const parsed = req.cookies?.[name];
+  if (typeof parsed === 'string') return parsed;
+  const header = String(req.headers.cookie || '');
+  const entry = header.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
+  if (!entry) return '';
+  try {
+    return decodeURIComponent(entry.slice(name.length + 1));
+  } catch {
+    return '';
+  }
+}
+
+function webPlaybackBinding(req, res) {
+  if (String(req.headers['x-playback-client'] || '').toLowerCase() !== WEB_PLAYBACK_CLIENT) return undefined;
+  let cookie = requestCookie(req, WEB_PLAYBACK_COOKIE);
+  if (!/^[0-9a-f]{64}$/i.test(cookie)) {
+    cookie = crypto.randomBytes(32).toString('hex');
+    res.cookie(WEB_PLAYBACK_COOKIE, cookie, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 15 * 60 * 1000,
+    });
+  }
+  return crypto.createHash('sha256').update(cookie).digest('hex');
+}
+
+function enforceWebPlaybackBinding(req, res, payload) {
+  if (!payload?.clientBindingHash) return true;
+  const cookie = requestCookie(req, WEB_PLAYBACK_COOKIE);
+  if (!/^[0-9a-f]{64}$/i.test(cookie)) {
+    res.status(401).send('Playback is bound to the issuing browser');
+    return false;
+  }
+  const expected = Buffer.from(String(payload.clientBindingHash), 'hex');
+  const actual = crypto.createHash('sha256').update(cookie).digest();
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    res.status(401).send('Playback is bound to the issuing browser');
+    return false;
+  }
+  return true;
+}
 
 // GET /logo?url=… — relay channel logos through OUR server so customers and
 // resellers never see the upstream providers' image hosts. SSRF-guarded and
@@ -821,11 +868,13 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
             hls: isHlsPlayback(streamUrl),
           }
         : undefined;
+    const webBindingHash = webPlaybackBinding(req, res);
     const tokenOpts = {
       userId: String(user.id),
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
       channelRef: channelTokenRef,
+      clientBindingHash: webBindingHash,
       sessionId: rootSessionId,
       // Mid-stream proxy failover: v2 tokens carry the catalog channel ref so
       // the proxy resolves the current URL and any verified backup at play time.
@@ -1009,6 +1058,7 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
     }
     const payload = verifyPlaybackToken(token);
     if (!payload) return res.status(401).send('Playback token expired or invalid');
+    if (!enforceWebPlaybackBinding(req, res, payload)) return;
 
     const user = await User.findOne({
       _id: payload.userId,
@@ -1071,6 +1121,7 @@ router.get('/playback/:token', async (req, res) => {
     const token = String(req.params.token).replace(/\.m3u8$/, '');
     const payload = verifyPlaybackToken(token);
     if (!payload) return res.status(401).send('Playback token expired or invalid');
+    if (!enforceWebPlaybackBinding(req, res, payload)) return;
 
     const user = await User.findOne({
       _id: payload.userId,
@@ -1722,6 +1773,7 @@ router.get('/hls/:token/:file', async (req, res) => {
 
     const payload = verifyPlaybackToken(token);
     if (!payload) return res.status(401).send('Playback token expired or invalid');
+    if (!enforceWebPlaybackBinding(req, res, payload)) return;
 
     // Authorize once and cache positively for 30s — segment fetches arrive
     // every ~2s and must not hit Mongo/Redis per segment.

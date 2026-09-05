@@ -63,7 +63,11 @@ interface TokenResult {
 /** Issue a server playback token for a catalog channel slot. */
 async function fetchTokenizedUrl(channelId: string, slot: number): Promise<TokenResult> {
   try {
-    const res = await api.post('/tv/playback-token', { channelId, slot });
+    const res = await api.post(
+      '/tv/playback-token',
+      { channelId, slot },
+      { headers: { 'X-Playback-Client': 'web' } },
+    );
     const d = res.data;
     if (d?.success && d.data?.playbackUrl) {
       return {
