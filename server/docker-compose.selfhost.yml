@@ -92,7 +92,7 @@ services:
         max-file: '3'
 
   redis:
-    image: redis:7.2.5-alpine
+    image: redis:7.4.10-alpine
     container_name: dzhoof-redis
     restart: unless-stopped
     command: redis-server --appendonly yes

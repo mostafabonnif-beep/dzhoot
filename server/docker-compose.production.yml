@@ -189,7 +189,7 @@ services:
         max-file: '3'
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.10-alpine
     container_name: dzhoof-redis
     restart: unless-stopped
     command: ["sh", "-c", "exec redis-server --requirepass $${REDIS_PWD} --appendonly yes"]
