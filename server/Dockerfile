@@ -1,4 +1,4 @@
-FROM node:26-alpine AS builder
+FROM node:26.8.1-alpine AS builder
 
 ARG APP_VERSION=1.0.1
 
@@ -24,7 +24,7 @@ RUN npx tsc --project packages/shared/tsconfig.json && \
     npx tsc --project backend/tsconfig.json
 
 # --- Production stage ---
-FROM node:26-alpine
+FROM node:26.8.1-alpine
 
 ARG APP_VERSION=1.0.1
 ARG RELEASE_COMMIT=unknown
@@ -40,7 +40,8 @@ WORKDIR /app
 
 # Install dependencies for native modules, curl for health checks, and yt-dlp for YouTube stream resolution
 RUN apk add --no-cache python3 make g++ curl ffmpeg && \
-    wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp && \
+    wget -qO /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/download/2026.08.19/yt-dlp && \
+    echo "1fa6733c37ea6fb51c99ad8fe785e7b7e5f3246c9b980230329d4fb72ed8d4d6  /usr/local/bin/yt-dlp" | sha256sum -c - && \
     chmod +x /usr/local/bin/yt-dlp
 
 # Copy workspace root and package files
