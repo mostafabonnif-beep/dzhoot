@@ -50,6 +50,7 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
       const user = (await User.findOne({
         channelListCode: tvCode.toUpperCase(),
         isActive: true,
+        codeRevokedAt: null,
       }).select(
         'username email role channels channelListCode isActive emailVerified allCatalog',
       )) as MinimalAuthUser | null;

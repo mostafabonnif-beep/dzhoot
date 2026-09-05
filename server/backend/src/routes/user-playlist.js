@@ -310,6 +310,16 @@ router.post('/me/import-m3u', requireAuth, async (req, res) => {
       });
     }
 
+    // Bound the request body the same way admin imports are bounded
+    // (security audit: unbounded parse + insert = DB resource exhaustion).
+    const USER_IMPORT_MAX_BYTES = 5 * 1024 * 1024;
+    if (Buffer.byteLength(String(m3uContent), 'utf8') > USER_IMPORT_MAX_BYTES) {
+      return res.status(400).json({
+        success: false,
+        error: 'M3U content is too large (max 5 MB)',
+      });
+    }
+
     // Parse M3U content (same logic as admin import)
     const lines = m3uContent.split('\n');
     const parsedChannels = [];
@@ -355,6 +365,57 @@ router.post('/me/import-m3u', requireAuth, async (req, res) => {
     const importChannels = clubByChannelId(parsedChannels);
     await resolveChannelGroups(importChannels);
 
+    // SSRF gate on user-supplied URLs: these are stored and later fetched by
+    // the server (proxies, probes, HLS remux). A user must not point the
+    // server at internal/private networks (security audit).
+    const { validateUrlForSSRF } = require('../utils/ssrf-guard');
+    const candidateUrls = [];
+    for (const ch of importChannels) {
+      if (ch.channelUrl) candidateUrls.push(ch.channelUrl);
+      for (const alt of ch.alternateStreams || []) {
+        if (alt.streamUrl) candidateUrls.push(alt.streamUrl);
+      }
+    }
+    const uniqueUrls = [...new Set(candidateUrls)].slice(0, 20000);
+    const blockedUrls = new Set();
+    const SSRF_CHUNK = 10;
+    for (let i = 0; i < uniqueUrls.length; i += SSRF_CHUNK) {
+      const chunk = uniqueUrls.slice(i, i + SSRF_CHUNK);
+      const results = await Promise.all(
+        chunk.map(async (u) => ({ u, check: await validateUrlForSSRF(u) })),
+      );
+      for (const r of results) {
+        if (!r.check.safe) blockedUrls.add(r.u);
+      }
+    }
+    if (blockedUrls.size > 0) {
+      const sanitized = [];
+      for (const ch of importChannels) {
+        if (blockedUrls.has(ch.channelUrl)) continue;
+        const safeAlts = (ch.alternateStreams || []).filter(
+          (alt) => !blockedUrls.has(alt.streamUrl),
+        );
+        if (!ch.channelUrl && safeAlts.length === 0) continue;
+        sanitized.push({ ...ch, alternateStreams: safeAlts });
+      }
+      if (sanitized.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Import blocked: ${blockedUrls.size} URL(s) point to private/internal addresses, which are not allowed`,
+        });
+      }
+      importChannels.length = 0;
+      importChannels.push(...sanitized);
+    }
+
+    // The user must be loaded before we create Channel documents so creation
+    // is capped at the playlist budget (orphan Channel docs would otherwise
+    // accumulate without bound across imports — security audit).
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const USER_CHANNELS_MAX = Number(process.env.USER_CHANNELS_MAX) || 5000;
+    const playlistBudget = Math.max(0, USER_CHANNELS_MAX - (user.channels || []).length);
+
     // Dedup only against THIS user's own (private) channels — never the shared catalog
     // or other users' imports.
     const urls = importChannels.map((ch) => ch.channelUrl);
@@ -367,6 +428,7 @@ router.post('/me/import-m3u', requireAuth, async (req, res) => {
     // Create the rest as private channels owned by this user.
     const toCreate = importChannels
       .filter((ch) => !existingUrlMap.has(ch.channelUrl))
+      .slice(0, playlistBudget)
       .map((ch) => ({ ...ch, ownerId: req.user.id }));
     let createdChannels = [];
     if (toCreate.length > 0) {
@@ -384,10 +446,8 @@ router.post('/me/import-m3u', requireAuth, async (req, res) => {
       ...createdChannels.map((ch) => ch._id),
     ];
 
-    // Add to user's playlist (skip already-added)
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
-
+    // Add to user's playlist (skip already-added) — user was loaded above so
+    // Channel creation stays within the playlist budget.
     const userChannelIds = new Set(user.channels.map((id) => id.toString()));
     const wanted = allChannelIds.filter((id) => !userChannelIds.has(id.toString()));
     const { allowed: toAdd, rejected } = capChannelAdditions(user.channels.length, wanted);

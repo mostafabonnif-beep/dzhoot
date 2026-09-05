@@ -54,6 +54,27 @@ jobs:
           grep -q 'applicationId = "com.dzhoof.iptv"' android/app/build.gradle.kts
           case "$API_URL" in https://*) ;; *) echo 'api_url must use HTTPS' >&2; exit 1 ;; esac
 
+      - name: Validate version_name format
+        # version_name is interpolated into shell commands below (gradle -P and
+        # grep) whose step env carries the signing secrets — shell metacharacters
+        # would be a runner RCE + signing-key exfiltration (security audit).
+        env:
+          VERSION_NAME: ${{ inputs.version_name }}
+        run: |
+          set -euo pipefail
+          case "$VERSION_NAME" in
+            [0-9]*.[0-9]*.[0-9]*)
+              ;;
+            *)
+              echo 'version_name must look like X.Y.Z or X.Y.Z-suffix (e.g. 1.0.0-rc.1)' >&2
+              exit 1
+              ;;
+          esac
+          if ! printf '%s' "$VERSION_NAME" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$'; then
+            echo 'version_name must match ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$' >&2
+            exit 1
+          fi
+
       - name: Validate release secrets
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -85,7 +106,9 @@ jobs:
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
           DZHOOF_API_URL: ${{ inputs.api_url }}
-        run: ./gradlew assembleRelease --stacktrace -PversionName=${{ inputs.version_name }}
+          VERSION_NAME: ${{ inputs.version_name }}
+        run: ./gradlew assembleRelease --stacktrace -PversionName="$VERSION_NAME"
+
 
       - name: Verify and package official release APK
         working-directory: android
@@ -96,7 +119,8 @@ jobs:
           SDK_BUILD_TOOLS="${ANDROID_SDK_ROOT}/build-tools/34.0.0"
           "$SDK_BUILD_TOOLS/apksigner" verify --verbose "$APK"
           "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "package: name='com.dzhoof.iptv'"
-          "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "versionName='${{ inputs.version_name }}'"
+          VERSION_NAME="${{ inputs.version_name }}"
+          "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "versionName='$VERSION_NAME'"
           sha256sum "$APK" > app-official-release.apk.sha256
           ls -lh "$APK" app-official-release.apk.sha256
 

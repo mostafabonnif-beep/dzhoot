@@ -98,6 +98,11 @@ const qoeReportLimits = new Map();
 const healthSyncLimits = new Map();
 const flagLimits = new Map();
 
+// A channel is hidden from the customer catalog only after this many distinct
+// users report the same stream. A single account must not be able to silently
+// remove shared content (security audit). Admins bypass the quorum.
+const FLAG_HIDE_QUORUM = Math.max(2, Number(process.env.FLAG_HIDE_QUORUM) || 3);
+
 // Android and M3U clients use the external channelId (for example, m3u:source:hash),
 // while legacy clients may still send MongoDB _id values. Resolve both safely so a text
 // identifier never reaches a findById() cast path.
@@ -818,7 +823,18 @@ router.get('/:id/with-fallbacks', requireAuth, async (req, res) => {
   }
 });
 
-// Flag primary stream as bad (any authenticated user, rate-limited: 1 per channel per user per minute)
+// Flag primary stream as bad (authenticated user, rate-limited: 1 per channel per user per minute).
+// Scope: the caller must be able to watch the channel (playlist / allCatalog / owner / admin).
+// Effect: the stream is hidden from the shared catalog only after FLAG_HIDE_QUORUM distinct
+// reporters — one user cannot take shared content down (security audit).
+function canReportChannel(req, channel) {
+  if (req.user.role === 'Admin') return true;
+  if (req.user.allCatalog === true) return true;
+  if (channel.ownerId) return String(channel.ownerId) === String(req.user.id);
+  const channelId = String(channel._id || '');
+  return channelId.length > 0 && (req.user.channels || []).some((id) => String(id) === channelId);
+}
+
 router.post('/:id/flag', requireAuth, async (req, res) => {
   try {
     const flagKey = `${req.user.id}:${req.params.id}:primary`;
@@ -834,38 +850,60 @@ router.post('/:id/flag', requireAuth, async (req, res) => {
         .json({ success: false, error: `Reason must be one of: ${validReasons.join(', ')}` });
     }
 
-    const channel = await Channel.findByIdAndUpdate(
-      req.params.id,
-      {
-        $set: {
-          'flaggedBad.isFlagged': true,
-          'flaggedBad.reason': reason,
-          'flaggedBad.flaggedBy': req.user.id,
-          'flaggedBad.flaggedAt': new Date(),
-        },
-      },
-      { new: true },
-    );
-
+    const channel = await Channel.findById(req.params.id);
     if (!channel) {
       return res.status(404).json({ success: false, error: 'Channel not found' });
     }
+    if (!canReportChannel(req, channel)) {
+      // Do not reveal the channel's existence to callers that cannot see it.
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
 
-    // flaggedBad is part of the cached catalog payload — bust it so clients see the flag.
-    await invalidateCatalogCache();
+    const flaggedBad = channel.flaggedBad || {};
+    const reporters = Array.isArray(flaggedBad.reporters)
+      ? flaggedBad.reporters.map((id) => String(id))
+      : [];
+    if (reporters.includes(String(req.user.id))) {
+      return res.status(429).json({ success: false, error: 'You already reported this stream' });
+    }
+
+    const isAdmin = req.user.role === 'Admin';
+    const hideNow = isAdmin || reporters.length + 1 >= FLAG_HIDE_QUORUM;
+    const updatedReporters = reporters.concat(String(req.user.id)).slice(-20);
+
+    channel.flaggedBad = {
+      isFlagged: hideNow,
+      reason,
+      flaggedBy: req.user.id,
+      flaggedAt: new Date(),
+      reporters: updatedReporters,
+    };
+    await channel.save();
+
+    if (hideNow) {
+      // flaggedBad is part of the cached catalog payload — bust it so clients see the flag.
+      await invalidateCatalogCache();
+    }
     flagLimits.set(flagKey, Date.now());
 
     audit({
       userId: req.user.id,
-      action: 'flag_channel',
+      action: hideNow ? 'flag_channel' : 'report_channel',
       resource: 'channel',
       resourceId: req.params.id,
-      details: { reason },
+      details: { reason, hidden: hideNow, reporters: updatedReporters.length },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
 
-    res.json({ success: true, message: 'Stream flagged as bad' });
+    res.json({
+      success: true,
+      message: hideNow ? 'Stream flagged as bad' : 'Report recorded — the stream is hidden after multiple reports',
+      data: {
+        hidden: hideNow,
+        reportsNeeded: Math.max(0, FLAG_HIDE_QUORUM - updatedReporters.length),
+      },
+    });
   } catch (error) {
     console.error('Error flagging channel:', error);
     res.status(500).json({ success: false, error: 'Failed to flag channel' });
@@ -883,6 +921,7 @@ router.post('/:id/unflag', requireAuth, requireAdmin, async (req, res) => {
           'flaggedBad.reason': null,
           'flaggedBad.flaggedBy': null,
           'flaggedBad.flaggedAt': null,
+          'flaggedBad.reporters': [],
         },
       },
       { new: true },
@@ -909,7 +948,8 @@ router.post('/:id/unflag', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-// Flag an alternate stream as bad (any authenticated user, rate-limited)
+// Flag an alternate stream as bad (authenticated user, rate-limited). Same
+// scope + quorum rules as the primary flag (security audit).
 router.post('/:id/alternates/:index/flag', requireAuth, async (req, res) => {
   try {
     const { reason } = req.body;
@@ -931,33 +971,58 @@ router.post('/:id/alternates/:index/flag', requireAuth, async (req, res) => {
     if (!channel) {
       return res.status(404).json({ success: false, error: 'Channel not found' });
     }
+    if (!canReportChannel(req, channel)) {
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
 
     if (!channel.alternateStreams || index < 0 || index >= channel.alternateStreams.length) {
       return res.status(400).json({ success: false, error: 'Invalid alternate stream index' });
     }
 
+    const existing = channel.alternateStreams[index].flaggedBad || {};
+    const reporters = Array.isArray(existing.reporters)
+      ? existing.reporters.map((id) => String(id))
+      : [];
+    if (reporters.includes(String(req.user.id))) {
+      return res.status(429).json({ success: false, error: 'You already reported this stream' });
+    }
+
+    const isAdmin = req.user.role === 'Admin';
+    const hideNow = isAdmin || reporters.length + 1 >= FLAG_HIDE_QUORUM;
+    const updatedReporters = reporters.concat(String(req.user.id)).slice(-20);
+
     channel.alternateStreams[index].flaggedBad = {
-      isFlagged: true,
+      isFlagged: hideNow,
       reason,
       flaggedBy: req.user.id,
       flaggedAt: new Date(),
+      reporters: updatedReporters,
     };
     await channel.save();
 
-    await invalidateCatalogCache();
+    if (hideNow) {
+      await invalidateCatalogCache();
+    }
     flagLimits.set(flagKey, Date.now());
 
     audit({
       userId: req.user.id,
-      action: 'flag_alternate_stream',
+      action: hideNow ? 'flag_alternate_stream' : 'report_alternate_stream',
       resource: 'channel',
       resourceId: req.params.id,
-      details: { index, reason },
+      details: { index, reason, hidden: hideNow, reporters: updatedReporters.length },
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
 
-    res.json({ success: true, message: 'Alternate stream flagged as bad' });
+    res.json({
+      success: true,
+      message: hideNow ? 'Alternate stream flagged as bad' : 'Report recorded — the stream is hidden after multiple reports',
+      data: {
+        hidden: hideNow,
+        reportsNeeded: Math.max(0, FLAG_HIDE_QUORUM - updatedReporters.length),
+      },
+    });
   } catch (error) {
     console.error('Error flagging alternate stream:', error);
     res.status(500).json({ success: false, error: 'Failed to flag alternate stream' });
@@ -983,6 +1048,7 @@ router.post('/:id/alternates/:index/unflag', requireAuth, requireAdmin, async (r
       reason: null,
       flaggedBy: null,
       flaggedAt: null,
+      reporters: [],
     };
     await channel.save();
 
@@ -1010,6 +1076,18 @@ router.post('/:id/test', requireAuth, async (req, res) => {
     const channel = await Channel.findById(req.params.id);
     if (!channel) {
       return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+
+    // Test writes shared health state (metadata.isWorking) consumed by the whole
+    // customer catalog — a datacenter probe can false-negative channels that
+    // geo/WAF-block this VPS. Only admins may test shared catalog channels;
+    // owners may test their own private channels (security audit).
+    const isOwner = channel.ownerId && String(channel.ownerId) === String(req.user.id);
+    if (req.user.role !== 'Admin' && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        error: 'Only administrators can test shared catalog channels',
+      });
     }
 
     const ssrfCheck = await validateUrlForSSRF(channel.channelUrl);

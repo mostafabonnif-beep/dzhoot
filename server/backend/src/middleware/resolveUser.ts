@@ -48,6 +48,7 @@ async function resolveUser(req: Request, res: Response, next: NextFunction) {
       user = (await User.findOne({
         channelListCode: tvCode.toUpperCase(),
         isActive: true,
+        codeRevokedAt: null,
       }).select(
         'username email role channels channelListCode isActive emailVerified allCatalog',
       )) as ResolvedAuthUser | null;
