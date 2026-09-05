@@ -7,7 +7,7 @@ import api from '@/lib/api';
 
 export function useRequireAuth(requiredRole?: 'Admin' | 'User') {
   const router = useRouter();
-  const { user, sessionId, accessToken, setUser } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const [hydrated, setHydrated] = useState(false);
   const validated = useRef(false);
 
@@ -34,9 +34,14 @@ export function useRequireAuth(requiredRole?: 'Admin' | 'User') {
     };
   }, [hydrated]);
 
+  // Validate the session against the server once per mount. Credentials may be
+  // in-memory (sessionId/accessToken after login) or purely cookie-based after
+  // a reload (only `user` is persisted, the httpOnly cookie authenticates the
+  // request). A 401 is handled by the api response interceptor (silent cookie
+  // refresh, then logout + redirect).
   useEffect(() => {
     if (!hydrated || validated.current) return;
-    if (!user || (!sessionId && !accessToken)) return;
+    if (!user) return;
     validated.current = true;
     const controller = new AbortController();
     api
@@ -62,11 +67,15 @@ export function useRequireAuth(requiredRole?: 'Admin' | 'User') {
         // 401 is handled by the response interceptor (calls logout + redirects)
       });
     return () => controller.abort();
-  }, [hydrated, user, sessionId, accessToken, setUser]);
+  }, [hydrated, user, setUser]);
 
   useEffect(() => {
     if (!hydrated) return;
-    if (!user || (!sessionId && !accessToken)) {
+    // `user` presence decides the guard: after login it is set together with
+    // the in-memory credential, and after a reload it is the persisted profile
+    // while the httpOnly cookie authenticates API calls. Anything else gets
+    // sent to the login page.
+    if (!user) {
       router.replace('/login');
       return;
     }
@@ -78,11 +87,11 @@ export function useRequireAuth(requiredRole?: 'Admin' | 'User') {
       router.replace(user.role === 'Admin' ? '/admin' : '/user');
       return;
     }
-  }, [user, sessionId, accessToken, requiredRole, router, hydrated]);
+  }, [user, requiredRole, router, hydrated]);
 
   return {
     user,
-    isAuthenticated: !!user && (!!sessionId || !!accessToken) && user.emailVerified !== false,
+    isAuthenticated: !!user && user.emailVerified !== false,
     isLoading: !hydrated,
   };
 }

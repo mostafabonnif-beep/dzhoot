@@ -10,6 +10,11 @@ const RefreshToken = require('../models/RefreshToken');
 const { audit } = require('../services/audit-log');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/email');
 const { createTotpSetup, verifyTotpToken } = require('../services/totp-service');
+const {
+  setSessionCookie,
+  clearSessionCookie,
+  getSessionId,
+} = require('../utils/cookie-auth');
 
 function buildOwnedOtherSessionsFilter(userId, currentSessionId) {
   return {
@@ -79,7 +84,8 @@ const upload = multer({
  */
 const requireAuth = async (req, res, next) => {
   try {
-    const sessionId = req.headers['x-session-id'];
+    // x-session-id header (Android/API clients) or the httpOnly cookie (web).
+    const sessionId = getSessionId(req);
 
     if (!sessionId) {
       return res.status(401).json({
@@ -264,6 +270,11 @@ router.post('/login', async (req, res) => {
 
     await session.save();
 
+    // Mirror the session id into an httpOnly cookie for browser clients.
+    // The response body keeps `sessionId` unchanged so Android/API clients
+    // that read it from the JSON are unaffected.
+    setSessionCookie(req, res, sessionId);
+
     audit({
       userId: user._id,
       action: 'login',
@@ -370,6 +381,9 @@ router.post('/logout', requireAuth, async (req, res) => {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
     });
+
+    // Drop the httpOnly session cookie so the browser is signed out too.
+    clearSessionCookie(res);
 
     res.json({
       success: true,
@@ -1312,6 +1326,11 @@ router.get('/google/callback', async (req, res) => {
 
     await session.save();
 
+    // Mirror the session id into an httpOnly cookie: the subsequent
+    // oauth-exchange POST comes from the same browser on the same origin,
+    // so the cookie authenticates it even without the one-time code body.
+    setSessionCookie(req, res, sessionId);
+
     // Update last login
     user.lastLogin = new Date();
     await user.save();
@@ -1487,6 +1506,11 @@ router.get('/github/callback', async (req, res) => {
 
     await session.save();
 
+    // Mirror the session id into an httpOnly cookie: the subsequent
+    // oauth-exchange POST comes from the same browser on the same origin,
+    // so the cookie authenticates it even without the one-time code body.
+    setSessionCookie(req, res, sessionId);
+
     // Update last login
     user.lastLogin = new Date();
     await user.save();
@@ -1557,6 +1581,11 @@ router.post('/oauth-exchange', async (req, res) => {
         adminEmail: process.env.SUPER_ADMIN_EMAIL || null,
       });
     }
+
+    // The session was created during the provider callback — mirror it into an
+    // httpOnly cookie so this browser keeps working after a reload (the body
+    // sessionId below stays for header-based clients).
+    setSessionCookie(req, res, entry.sessionId);
 
     res.json({
       success: true,

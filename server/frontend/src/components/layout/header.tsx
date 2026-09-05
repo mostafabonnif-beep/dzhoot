@@ -6,7 +6,6 @@ import { Languages, LogOut, Menu, Moon, Search, Sun, UserCircle } from 'lucide-r
 import { useTheme } from 'next-themes';
 import { useAuthStore } from '@/store/auth-store';
 import { useUIStore } from '@/store/ui-store';
-import api from '@/lib/api';
 import { useLocale } from '@/components/locale-provider';
 import GlobalSearch from '@/components/global-search';
 
@@ -37,12 +36,10 @@ export function Header() {
           : null
       : null;
 
-  async function handleLogout() {
-    try {
-      await api.post('/auth/logout');
-    } catch {
-      // Logout even if API call fails
-    }
+  function handleLogout() {
+    // Store logout clears the store AND fires a best-effort POST /auth/logout
+    // (raw fetch + keepalive) so the backend deletes the DB session and clears
+    // the httpOnly cookie — no separate awaited call needed here.
     logout();
     router.push('/login');
   }

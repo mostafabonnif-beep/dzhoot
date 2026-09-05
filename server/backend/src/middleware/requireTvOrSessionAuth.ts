@@ -3,6 +3,8 @@ import { HydratedDocument, Types } from 'mongoose';
 import { ISessionDocument, IUserDocument } from '@dzhoof/shared';
 import Session from '../models/Session';
 import User from '../models/User';
+// Plain CommonJS util shared with the .js route modules (no new dependencies).
+import cookieAuth = require('../utils/cookie-auth');
 
 type MinimalAuthUser = Pick<
   IUserDocument,
@@ -76,8 +78,8 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
       });
     }
 
-    // 2. Fall back to session auth
-    const sessionId = req.headers['x-session-id'] as string | undefined;
+    // 2. Fall back to session auth (x-session-id header or httpOnly cookie)
+    const sessionId = cookieAuth.getSessionId(req);
     if (!sessionId) {
       return res.status(401).json({
         success: false,

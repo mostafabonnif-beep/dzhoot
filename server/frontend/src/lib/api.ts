@@ -42,6 +42,81 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// ---------------------------------------------------------------------------
+// Silent cookie refresh (F11)
+//
+// After a reload the store only has `user` (persisted); sessionId/accessToken
+// live in memory and are gone, so browser sessions authenticate purely via the
+// httpOnly cookies (dzhoof_sid for DB sessions, dzhoof_refresh for JWT pairs).
+// When such a cookie-only request 401s, try POST /jwt/refresh ONCE (no body —
+// the server reads the refresh cookie), then replay the original request with
+// the fresh access token. A failed refresh falls through to the normal
+// logout+redirect handling below. Concurrent 401s share one in-flight refresh
+// via the module-level promise; each caller replays its own request.
+// ---------------------------------------------------------------------------
+
+const PRE_AUTH_URLS = new Set([
+  '/auth/login',
+  '/auth/register',
+  '/auth/logout',
+  '/auth/verify-email',
+  '/auth/resend-verification',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+  '/auth/oauth-exchange',
+  '/reseller/auth/login',
+  '/jwt/login',
+  '/jwt/refresh',
+]);
+
+/** Request URL (path only, without query string), relative to the /api/v1 base. */
+function requestPath(config: { url?: string } | undefined): string {
+  const raw = String(config?.url || '');
+  const queryAt = raw.indexOf('?');
+  return queryAt === -1 ? raw : raw.slice(0, queryAt);
+}
+
+/** Pre-auth endpoints must never trigger a refresh (bad credentials, flows the
+ * server explicitly rejected). */
+function isPreAuthRequest(config: { url?: string } | undefined): boolean {
+  const path = requestPath(config);
+  if (PRE_AUTH_URLS.has(path)) return true;
+  // Public, unauthenticated surfaces never refresh either.
+  return path.startsWith('/config/') || path.startsWith('/public/') || path.startsWith('/oauth/');
+}
+
+async function performRefresh(): Promise<string> {
+  // No body: the server reads the httpOnly dzhoof_refresh cookie.
+  const resp = await api.post('/jwt/refresh', null, {
+    headers: { 'X-Skip-Auth-Redirect': '1' },
+  });
+  const data = resp.data as { accessToken?: unknown; refreshToken?: unknown; user?: unknown };
+  if (typeof data?.accessToken !== 'string' || !data.accessToken) {
+    throw new Error('Refresh response missing accessToken');
+  }
+  const current = useAuthStore.getState();
+  type StoreUser = ReturnType<typeof useAuthStore.getState>['user'];
+  useAuthStore.setState({
+    accessToken: data.accessToken,
+    refreshToken: typeof data.refreshToken === 'string' ? data.refreshToken : current.refreshToken,
+    user: (data.user as StoreUser | null | undefined) ?? current.user,
+    isAuthenticated: current.isAuthenticated || !!current.user,
+  });
+  return data.accessToken;
+}
+
+let refreshingPromise: Promise<string> | null = null;
+
+/** Shared, deduped refresh — concurrent 401s await the same in-flight request. */
+function getRefreshing(): Promise<string> {
+  if (!refreshingPromise) {
+    refreshingPromise = performRefresh().finally(() => {
+      refreshingPromise = null;
+    });
+  }
+  return refreshingPromise;
+}
+
 // Response interceptor: handle 401 (unauthorized)
 let isRedirecting = false;
 api.interceptors.response.use(
@@ -52,6 +127,27 @@ api.interceptors.response.use(
       if (error.config?.headers?.['X-Skip-Auth-Redirect']) {
         return Promise.reject(error);
       }
+
+      const state = useAuthStore.getState();
+      // Cookie-only session (no in-memory credential after a reload) and the
+      // failed request is not itself an auth flow → try one silent refresh.
+      // `_refreshed` caps it at a single retry so we can never loop.
+      if (
+        !state.accessToken &&
+        !state.sessionId &&
+        !error.config?._refreshed &&
+        !isPreAuthRequest(error.config)
+      ) {
+        try {
+          await getRefreshing();
+          const retryConfig = { ...error.config, _refreshed: true };
+          return await api.request(retryConfig);
+        } catch {
+          // Refresh failed (no refresh cookie, revoked, network…). Fall
+          // through to the normal logout + redirect handling below.
+        }
+      }
+
       // Skip redirect if already on auth pages
       if (
         typeof window !== 'undefined' &&

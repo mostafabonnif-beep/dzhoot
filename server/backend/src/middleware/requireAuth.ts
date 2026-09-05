@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { HydratedDocument } from 'mongoose';
 import { IUserDocument, ISessionDocument } from '@dzhoof/shared';
 import Session from '../models/Session';
+// Plain CommonJS util shared with the .js route modules (no new dependencies).
+import cookieAuth = require('../utils/cookie-auth');
 
 type PopulatedSession = HydratedDocument<ISessionDocument> & {
   userId: HydratedDocument<IUserDocument> | null;
@@ -13,7 +15,8 @@ type PopulatedSession = HydratedDocument<ISessionDocument> & {
  */
 const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const sessionId = req.headers['x-session-id'] as string | undefined;
+    // x-session-id header (Android/API clients) or the httpOnly cookie (web).
+    const sessionId = cookieAuth.getSessionId(req);
 
     if (!sessionId) {
       return res.status(401).json({

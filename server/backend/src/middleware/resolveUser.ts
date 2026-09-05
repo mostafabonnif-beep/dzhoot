@@ -4,6 +4,8 @@ import { HydratedDocument, Types } from 'mongoose';
 import { ISessionDocument, IUserDocument } from '@dzhoof/shared';
 import Session from '../models/Session';
 import User from '../models/User';
+// Plain CommonJS util shared with the .js route modules (no new dependencies).
+import cookieAuth = require('../utils/cookie-auth');
 
 type ResolvedAuthUser = Pick<
   IUserDocument,
@@ -21,7 +23,8 @@ type PopulatedSession = HydratedDocument<ISessionDocument> & {
  */
 async function resolveUser(req: Request, res: Response, next: NextFunction) {
   try {
-    const sessionId = req.headers['x-session-id'] as string | undefined;
+    // x-session-id header (Android/API clients) or the httpOnly cookie (web).
+    const sessionId = cookieAuth.getSessionId(req);
     const tvCode = req.headers['x-tv-code'] as string | undefined;
     const auth = req.headers.authorization || '';
     let user: ResolvedAuthUser | null = null;
@@ -86,7 +89,8 @@ async function resolveUser(req: Request, res: Response, next: NextFunction) {
  * continues anonymously (req.user = null). Used for browseable catalogs.
  */
 async function optionalAuth(req: Request, res: Response, next: NextFunction) {
-  const sessionId = req.headers['x-session-id'] as string | undefined;
+  // Session via header (API clients) or httpOnly cookie (web browsers).
+  const sessionId = cookieAuth.getSessionId(req);
   const auth = req.headers.authorization || '';
   req.user = undefined;
   req.userId = undefined;

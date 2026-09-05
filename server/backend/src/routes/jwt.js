@@ -11,6 +11,11 @@ const {
   hashToken,
   rotateRefreshToken,
 } = require('../utils/jwtUtil');
+const {
+  setRefreshCookie,
+  clearRefreshCookie,
+  getRefreshToken,
+} = require('../utils/cookie-auth');
 
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 if (!REFRESH_SECRET && process.env.NODE_ENV === 'production') {
@@ -54,6 +59,9 @@ router.post('/login', async (req, res) => {
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user);
     await persistRefreshToken(refreshToken, user, req);
+    // Mirror the refresh token into an httpOnly cookie for browser clients
+    // (the JSON body below keeps accessToken + refreshToken for API clients).
+    setRefreshCookie(req, res, refreshToken);
     return res.json({
       success: true,
       tokens: { accessToken, refreshToken },
@@ -75,7 +83,11 @@ router.post('/login', async (req, res) => {
 // Refresh endpoint
 router.post('/refresh', async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    // Accept the refresh token from the JSON body (documented API contract),
+    // the x-refresh-token header, or the httpOnly dzhoof_refresh cookie
+    // (browsers send no body — the cookie rides along automatically).
+    const fromBody = req.body && typeof req.body.refreshToken === 'string' ? req.body.refreshToken : null;
+    const refreshToken = fromBody || getRefreshToken(req);
     if (!refreshToken) {
       return res.status(400).json({ success: false, error: 'refreshToken required' });
     }
@@ -83,19 +95,25 @@ router.post('/refresh', async (req, res) => {
     try {
       decoded = jwt.verify(refreshToken, effectiveRefreshSecret, { algorithms: ['HS256'] });
     } catch {
+      // Token unusable — drop the cookie so the browser does not retry it.
+      clearRefreshCookie(res);
       return res.status(401).json({ success: false, error: 'Invalid refresh token' });
     }
     const tokenHash = hashToken(refreshToken);
     const tokenDoc = await RefreshToken.findOne({ tokenHash });
     if (!tokenDoc || !tokenDoc.isActive()) {
+      clearRefreshCookie(res);
       return res.status(401).json({ success: false, error: 'Refresh token inactive' });
     }
     const user = await User.findById(decoded.sub);
     if (!user || !user.isActive) {
+      clearRefreshCookie(res);
       return res.status(401).json({ success: false, error: 'User inactive' });
     }
     const newAccess = signAccessToken(user);
     const newRefresh = await rotateRefreshToken(refreshToken, user, req);
+    // Rotated refresh token goes back into the httpOnly cookie for browsers.
+    setRefreshCookie(req, res, newRefresh);
     return res.json({ success: true, accessToken: newAccess, refreshToken: newRefresh });
   } catch (e) {
     console.error('Refresh error', e);
@@ -106,13 +124,19 @@ router.post('/refresh', async (req, res) => {
 // Revoke refresh token
 router.post('/logout', async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    // Accept the refresh token from the JSON body (documented API contract),
+    // the x-refresh-token header, or the httpOnly dzhoof_refresh cookie.
+    const fromBody = req.body && typeof req.body.refreshToken === 'string' ? req.body.refreshToken : null;
+    const refreshToken = fromBody || getRefreshToken(req);
     if (!refreshToken) {
+      // Nothing to revoke server-side — still drop any stale cookie.
+      clearRefreshCookie(res);
       return res.status(400).json({ success: false, error: 'refreshToken required' });
     }
     try {
       jwt.verify(refreshToken, effectiveRefreshSecret, { algorithms: ['HS256'] });
     } catch {
+      clearRefreshCookie(res);
       return res.status(200).json({ success: true, message: 'Already invalid' });
     }
     const tokenHash = hashToken(refreshToken);
@@ -121,6 +145,7 @@ router.post('/logout', async (req, res) => {
       tokenDoc.revokedAt = new Date();
       await tokenDoc.save();
     }
+    clearRefreshCookie(res);
     return res.json({ success: true, message: 'Logged out' });
   } catch (e) {
     console.error('Logout error', e);
