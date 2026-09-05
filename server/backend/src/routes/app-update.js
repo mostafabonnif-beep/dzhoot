@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const AppVersion = require('../models/AppVersion');
+const { CacheService } = require('../services/cache');
 
 // GitHub APK update routes
 
@@ -66,7 +67,16 @@ function publicDownloadUrl(req, value) {
   return isStaleLocalDownloadUrl(req, value) ? getCanonicalDownloadUrl(req) : value;
 }
 
+// Cache GitHub release lookups in Redis (short TTL). Under load (every device
+// polling /version at boot) a live api.github.com call per request exhausts the
+// API rate limit and the app-update endpoints degrade to HTTP 429 — seen in the
+// 2026-09-05 production load test (0% success at 25 concurrent users).
+const ghReleaseCache = new CacheService('ghrel:', 600); // 10 minutes
+
 async function fetchLatestRelease() {
+  const cached = await ghReleaseCache.get('latest');
+  if (cached) return cached;
+
   const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`;
 
   const headers = {
@@ -79,6 +89,7 @@ async function fetchLatestRelease() {
   }
 
   const response = await axios.get(url, { headers });
+  await ghReleaseCache.set('latest', response.data);
   return response.data;
 }
 
