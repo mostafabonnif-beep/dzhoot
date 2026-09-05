@@ -1,6 +1,6 @@
 services:
   caddy:
-    image: caddy:2.8.4-alpine
+    image: caddy:2.11.4-alpine
     container_name: dzhoof-caddy
     restart: unless-stopped
     environment:
@@ -162,7 +162,7 @@ services:
         max-file: '3'
 
   mongodb:
-    image: mongo:7.0.19
+    image: mongo:8.0.29
     container_name: dzhoof-mongodb
     restart: unless-stopped
     # Authentication required — credentials provisioned at first boot

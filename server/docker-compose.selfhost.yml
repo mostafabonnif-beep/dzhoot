@@ -73,7 +73,7 @@ services:
         max-file: '3'
 
   mongodb:
-    image: mongo:7.0.19
+    image: mongo:8.0.29
     container_name: dzhoof-mongodb
     restart: unless-stopped
     volumes:
