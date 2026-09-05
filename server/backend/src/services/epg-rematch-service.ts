@@ -54,7 +54,12 @@ async function buildGuideIndex() {
   return { available, byLower, nameToId };
 }
 
-export async function runEpgRematch(limit = 2000): Promise<EpgRematchResult> {
+export async function runEpgRematch(limit = 100000): Promise<EpgRematchResult> {
+  // Default = full sweep. A small default (2000) made the scheduled task crawl
+  // natural-order candidates that are mostly unmatchable (24/7 loops, radios,
+  // relax feeds), matching a handful per night. A complete sweep is cheap
+  // (~0.5-1s for ~23k candidates, measured 2026-09-05) and catches every new
+  // guide match on each run. Callers may pass a smaller limit to bound work.
   const { available, byLower, nameToId } = await buildGuideIndex();
   const result: EpgRematchResult = {
     availableGuideIds: available.size,
