@@ -17,10 +17,11 @@ export function normalizeActivationCode(raw: string): string {
 
 /** Generate a single random block of the given length. */
 export function generateCodeBlock(len = 4): string {
-  const bytes = crypto.randomBytes(len);
+  // crypto.randomInt is unbiased; modulo sampling skewed indices 0-7 for a
+  // 31-char alphabet (security audit).
   let out = '';
   for (let i = 0; i < len; i++) {
-    out += CODE_ALPHABET[bytes[i] % CODE_ALPHABET.length];
+    out += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
   }
   return out;
 }

@@ -129,6 +129,10 @@ const channelSchema = new Schema<IChannelDocument>(
       reason: { type: String, default: null },
       flaggedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
       flaggedAt: { type: Date, default: null },
+      // Distinct users who reported this stream. A channel is hidden from the
+      // customer catalog only after FLAG_HIDE_QUORUM distinct reporters, so a
+      // single account cannot silently remove shared content (security audit).
+      reporters: { type: [Schema.Types.ObjectId], ref: 'User', default: [] },
     },
     alternateStreams: {
       type: [
@@ -150,6 +154,9 @@ const channelSchema = new Schema<IChannelDocument>(
             reason: { type: String, default: null },
             flaggedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
             flaggedAt: { type: Date, default: null },
+            // See primary flaggedBad: hide requires FLAG_HIDE_QUORUM distinct
+            // reporters, not a single user (security audit).
+            reporters: { type: [Schema.Types.ObjectId], ref: 'User', default: [] },
           },
           userAgent: { type: String, default: null },
           referrer: { type: String, default: null },

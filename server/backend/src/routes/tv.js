@@ -67,30 +67,67 @@ router.get('/logo', async (req, res) => {
     }
 
     // SSRF guard: logos must not be a gateway to internal network fetches.
-    const { validateUrlForSSRF } = require('../utils/ssrf-guard');
+    const { validateUrlForSSRF, createPinnedLookup, isPrivateIP } = require('../utils/ssrf-guard');
     const ssrf = await validateUrlForSSRF(raw);
     if (!ssrf.safe) {
       return res.status(400).json({ success: false, error: `Logo URL blocked: ${ssrf.reason}` });
     }
+    // Pin every request to the IPs the SSRF guard resolved (prevents DNS
+    // rebinding). Redirect hops are re-validated and re-pinned per hop below.
+    const http = require('http');
+    const https = require('https');
+    const { hostname: initialHostname } = new URL(raw);
+    const initialPinnedLookup = createPinnedLookup(ssrf.resolvedAddresses, initialHostname);
+    const httpAgent = new http.Agent({ lookup: initialPinnedLookup });
+    const httpsAgent = new https.Agent({ lookup: initialPinnedLookup });
     const axios = require('axios');
     const upstream = await axios.get(raw, {
       timeout: 6000,
       maxRedirects: 3,
       responseType: 'arraybuffer',
       maxContentLength: 300 * 1024,
+      httpAgent,
+      httpsAgent,
       validateStatus: (s) => s >= 200 && s < 400,
       headers: { 'User-Agent': 'Mozilla/5.0 DZ-HOOF', Accept: 'image/*' },
+      beforeRedirect: async (options) => {
+        // Re-validate and re-pin each redirect hop so a 302 cannot smuggle the
+        // fetch onto an internal address (the redirect URL is attacker-chosen).
+        const hopProtocol = String(options.protocol || '').replace(/:$/, '');
+        if (hopProtocol !== 'http' && hopProtocol !== 'https') {
+          throw new Error('Redirect to a non-http(s) scheme blocked');
+        }
+        const hopHost = String(options.hostname || '').replace(/^\[|\]$/g, '');
+        if (isPrivateIP(hopHost)) {
+          throw new Error('Redirect to private/internal address blocked');
+        }
+        const hopUrl = `${hopProtocol}://${options.hostname}${options.path || ''}`;
+        const hopCheck = await validateUrlForSSRF(hopUrl);
+        if (!hopCheck.safe) {
+          throw new Error(`Redirect target blocked: ${hopCheck.reason}`);
+        }
+        const hopLookup = createPinnedLookup(hopCheck.resolvedAddresses, hopHost);
+        options.httpAgent = new http.Agent({ lookup: hopLookup });
+        options.httpsAgent = new https.Agent({ lookup: hopLookup });
+      },
     });
     const contentType = String(upstream.headers['content-type'] || 'image/png').split(';')[0].trim();
     if (!/^image\//.test(contentType)) {
       return res.status(502).json({ success: false, error: 'Upstream did not return an image' });
     }
     const body = Buffer.from(upstream.data);
-    logoCache.set(cacheKey, { at: Date.now(), body, type: contentType });
-    // Keep the cache bounded.
-    if (logoCache.size > 5000) {
-      const oldest = logoCache.keys().next().value;
-      if (oldest) logoCache.delete(oldest);
+    // Byte-bounded cache: 5000 entries × up to 300 KB each could otherwise pin
+    // ~1.5 GB of attacker-controlled heap (each unique logo URL is cacheable).
+    const LOGO_CACHE_MAX_BYTES = 64 * 1024 * 1024;
+    logoCache.set(cacheKey, { at: Date.now(), body, type: contentType, bytes: body.length });
+    let cachedBytes = 0;
+    for (const [, entry] of logoCache) cachedBytes += entry.bytes || 0;
+    while (cachedBytes > LOGO_CACHE_MAX_BYTES && logoCache.size > 1) {
+      const oldestKey = logoCache.keys().next().value;
+      if (!oldestKey) break;
+      const evicted = logoCache.get(oldestKey);
+      logoCache.delete(oldestKey);
+      cachedBytes -= evicted ? evicted.bytes || 0 : 0;
     }
     res.setHeader('Content-Type', contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
@@ -961,6 +998,7 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
       _id: payload.userId,
       channelListCode: payload.channelListCode,
       isActive: true,
+      codeRevokedAt: null,
     }).select('_id channelListCode role');
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
@@ -1022,6 +1060,7 @@ router.get('/playback/:token', async (req, res) => {
       _id: payload.userId,
       channelListCode: payload.channelListCode,
       isActive: true,
+      codeRevokedAt: null,
     }).select('_id channelListCode role');
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
@@ -1676,6 +1715,7 @@ router.get('/hls/:token/:file', async (req, res) => {
         _id: payload.userId,
         channelListCode: payload.channelListCode,
         isActive: true,
+        codeRevokedAt: null,
       }).select('_id channelListCode role');
       if (!user) return res.status(401).send('Playback authorization revoked');
       if (!(await ensurePlaybackSubscription(user, res))) return;
@@ -1698,6 +1738,14 @@ router.get('/hls/:token/:file', async (req, res) => {
     if (!hlsSession) {
       const target = await resolvePlaybackTarget(payload);
       if (!target) return res.status(404).send('Stream not found');
+      // ffmpeg will fetch this URL on our behalf — it must not point at
+      // internal/private networks. v1 tokens can embed URLs that came from a
+      // user M3U import, which is attacker-controlled (security audit).
+      const { validateUrlForSSRF } = require('../utils/ssrf-guard');
+      const streamCheck = await validateUrlForSSRF(target.streamUrl);
+      if (!streamCheck.safe) {
+        return res.status(403).send('Stream URL blocked by security policy');
+      }
       const started = hlsRemux.startHlsSession(token, {
         streamUrl: target.streamUrl,
         upstreamHeaders: target.upstreamHeaders,

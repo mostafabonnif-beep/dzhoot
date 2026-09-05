@@ -20,6 +20,15 @@ Sentry.init({
   enabled: !!process.env.BACKEND_SENTRY_DSN,
 });
 
+// Security policy is enforced in every runtime except automated tests; local
+// development can explicitly opt out with ALLOW_INSECURE_DEV_SECRETS=1.
+// Deliberately NOT keyed off NODE_ENV alone: a production process started
+// without NODE_ENV=production used to boot with public dev fallback secrets
+// (security audit).
+const SECURITY_ENFORCED =
+  process.env.NODE_ENV !== 'test' &&
+  String(process.env.ALLOW_INSECURE_DEV_SECRETS || '').trim() !== '1';
+
 // Validate required environment variables
 {
   const required = [
@@ -36,7 +45,7 @@ Sentry.init({
   ];
   const missing = required.filter((key) => !process.env[key]);
   if (missing.length > 0) {
-    if (process.env.NODE_ENV === 'production') {
+    if (SECURITY_ENFORCED) {
       console.error(`Missing required environment variables: ${missing.join(', ')}`);
       process.exit(1);
     } else {
@@ -47,8 +56,10 @@ Sentry.init({
   }
 }
 
-// Reject known-default / weak secrets in production
-if (process.env.NODE_ENV === 'production') {
+// Reject known-default / weak secrets unless the operator explicitly opted out
+// for local development (ALLOW_INSECURE_DEV_SECRETS=1). Enforced in every
+// non-test runtime — not just NODE_ENV=production (security audit).
+if (SECURITY_ENFORCED) {
   const PLACEHOLDER_SECRETS = new Set([
     'your-access-secret',
     'your-refresh-secret',
@@ -99,7 +110,10 @@ if (process.env.NODE_ENV === 'production') {
     problems.push('DEMO_TV_CODE must be at least 16 characters and must not be a predictable demo/default value');
 
   if (problems.length > 0) {
-    console.error(`[SECURITY] Refusing to start in production:\n  - ${problems.join('\n  - ')}`);
+    console.error(`[SECURITY] Refusing to start:\n  - ${problems.join('\n  - ')}`);
+    console.error(
+      '[SECURITY] For local development only, set ALLOW_INSECURE_DEV_SECRETS=1 to bypass these checks.',
+    );
     process.exit(1);
   }
 }

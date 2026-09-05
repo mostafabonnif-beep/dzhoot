@@ -63,11 +63,14 @@ services:
       # Default hides radio streams (filler); set CATALOG_HIDE_GROUPS=none to disable.
       CATALOG_HIDE_GROUPS: ${CATALOG_HIDE_GROUPS:-RADIO}
       EPG_EXTRA_SOURCES: ${EPG_EXTRA_SOURCES:-}
-      MONGODB_URI: mongodb://mongodb:27017/dzhoof-iptv
+      # MongoDB runs with --auth and Redis with --requirepass (see service
+      # definitions below); production MONGODB_URI/REDIS_URL must carry the
+      # credentials from .env. Keep both in sync when changing the defaults.
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/dzhoof-iptv}
       # container_name, not the service name: the api/frontend also sit on the shared
       # gkz-network where another stack's redis carries the alias "redis" (and requires
       # auth) — the bare name resolves there and fails with NOAUTH.
-      REDIS_URL: redis://dzhoof-redis:6379
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PWD}@dzhoof-redis:6379}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
       XTREAM_SECRET_KEY: ${XTREAM_SECRET_KEY}
@@ -162,6 +165,9 @@ services:
     image: mongo:7.0.19
     container_name: dzhoof-mongodb
     restart: unless-stopped
+    # Authentication required — credentials provisioned at first boot
+    # (MONGO_INITDB_* in .env) and consumed through MONGODB_URI.
+    command: ["mongod", "--auth"]
     deploy:
       resources:
         limits:
@@ -186,13 +192,15 @@ services:
     image: redis:7-alpine
     container_name: dzhoof-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: ["sh", "-c", "exec redis-server --requirepass $${REDIS_PWD} --appendonly yes"]
+    environment:
+      REDIS_PWD: ${REDIS_PWD}
     volumes:
       - redis_data:/data
     networks:
       - dzhoof-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PWD}", "--no-auth-warning", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -209,11 +217,14 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      MONGODB_URI: mongodb://mongodb:27017/dzhoof-iptv
+      # MongoDB runs with --auth and Redis with --requirepass (see service
+      # definitions below); production MONGODB_URI/REDIS_URL must carry the
+      # credentials from .env. Keep both in sync when changing the defaults.
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/dzhoof-iptv}
       # container_name, not the service name: the api/frontend also sit on the shared
       # gkz-network where another stack's redis carries the alias "redis" (and requires
       # auth) — the bare name resolves there and fails with NOAUTH.
-      REDIS_URL: redis://dzhoof-redis:6379
+      REDIS_URL: ${REDIS_URL:-redis://:${REDIS_PWD}@dzhoof-redis:6379}
       LIVENESS_CHECK_INTERVAL_MS: ${LIVENESS_CHECK_INTERVAL_MS}
       EPG_REFRESH_INTERVAL_MS: ${EPG_REFRESH_INTERVAL_MS}
       CACHE_REFRESH_INTERVAL_MS: ${CACHE_REFRESH_INTERVAL_MS}
