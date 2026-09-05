@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Tv, Monitor, Zap, Download, Youtube, Radio } from 'lucide-react';
 import api from '@/lib/api';
-import { proxyImageUrl } from '@/lib/image-proxy';
 import { useToast } from '@/hooks/use-toast';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import { useStreamPlayer } from '@/components/stream-player-context';
@@ -46,7 +45,9 @@ export default function SourcesPageShell({ mode }: SourcesPageShellProps) {
         {
           name: ch.channelName || t('sources.streamPreview'),
           url: ch.channelUrl,
-          logo: ch.tvgLogo ? proxyImageUrl(ch.tvgLogo) : undefined,
+          // Raw upstream logo (stream player UI does not render it; never
+          // proxy here — an <img> cannot attach the session header).
+          logo: ch.tvgLogo || undefined,
         },
         { mode: 'direct-fallback' },
       );

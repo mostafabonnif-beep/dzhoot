@@ -20,7 +20,6 @@ import { useToast } from '@/hooks/use-toast';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
 import { useClientSideTable } from '@/hooks/use-client-side-table';
 import { useStreamPlayer } from '@/components/stream-player-context';
-import { proxyImageUrl } from '@/lib/image-proxy';
 import Pagination from '@/components/ui/pagination';
 import ColumnFilter from '@/components/ui/column-filter';
 import SearchInput from '@/components/ui/search-input';
@@ -193,7 +192,9 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
         {
           name: ch.channelName || 'Stream Preview',
           url: ch.channelUrl,
-          logo: ch.tvgLogo ? proxyImageUrl(ch.tvgLogo) : undefined,
+          // Raw upstream logo (stream player UI does not render it; never
+          // proxy here — an <img> cannot attach the session header).
+          logo: ch.tvgLogo || undefined,
         },
         { mode: 'direct-fallback' },
       );

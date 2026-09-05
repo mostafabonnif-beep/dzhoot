@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Loader2, CheckCircle, ArrowRight, RotateCcw } from 'lucide-react';
-import { proxyImageUrl } from '@/lib/image-proxy';
+import { getSignedImageUrl } from '@/lib/image-proxy';
 import { useLocale } from '@/components/locale-provider';
 import api from '@/lib/api';
 import type { WizardChannel } from '../wizard-shell';
@@ -12,6 +12,71 @@ const SOURCE_LABELS: Record<string, string> = {
   'pluto-tv': 'Pluto TV',
   'samsung-tv-plus': 'Samsung TV Plus',
 };
+
+const thumbLetterClass =
+  'h-6 w-6 rounded-sm bg-muted shrink-0 flex items-center justify-center text-xs font-bold text-muted-foreground';
+
+/**
+ * Channel thumbnail loaded through the signed image-proxy flow: the session is
+ * exchanged (in headers) for a short-lived HMAC signature, so the session ID /
+ * JWT never appears in the <img> URL, browser history, or server logs.
+ * Falls back to the first-letter avatar when no image is available or the
+ * signed load fails — same visuals as the previous inline fallback.
+ */
+function SignedChannelThumb({ url, name }: { url: string | undefined; name: string }) {
+  const [imgSrc, setImgSrc] = useState<string | null>(null); // null = resolving, '' = unavailable
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!url) {
+      setImgSrc('');
+      return undefined;
+    }
+    if (url.startsWith('/')) {
+      // Local/relative asset — served directly, never proxied.
+      setImgSrc(url);
+      return undefined;
+    }
+
+    setImgSrc(null);
+    getSignedImageUrl(url).then((signed) => {
+      if (!cancelled) setImgSrc(signed || '');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (imgSrc) {
+    return (
+      /* eslint-disable-next-line @next/next/no-img-element -- dynamic external URL with onError fallback */
+      <img
+        src={imgSrc}
+        alt={name}
+        loading="lazy"
+        width={24}
+        height={24}
+        className="h-6 w-6 rounded-sm object-contain shrink-0 bg-muted"
+        onError={(e) => {
+          const img = e.target as HTMLImageElement;
+          const fallback = document.createElement('div');
+          fallback.className = thumbLetterClass;
+          fallback.textContent = name.charAt(0).toUpperCase();
+          img.parentElement?.replaceChild(fallback, img);
+        }}
+      />
+    );
+  }
+
+  // Letter avatar while resolving (empty muted box to avoid flashing) and as
+  // the permanent fallback when the image is unavailable.
+  return (
+    <div className={thumbLetterClass}>
+      {imgSrc === null ? '' : name.charAt(0).toUpperCase()}
+    </div>
+  );
+}
 
 interface ConfirmStepProps {
   fetchedChannels: WizardChannel[];
@@ -184,29 +249,7 @@ export function ConfirmStep({
             <div className="divide-y divide-border max-h-[40vh] sm:max-h-[200px] overflow-y-auto">
               {channels.map((ch) => (
                 <div key={ch.uid} className="flex items-center gap-3 px-4 py-2">
-                  {ch.tvgLogo ? (
-                    /* eslint-disable-next-line @next/next/no-img-element -- dynamic external URL with onError fallback */
-                    <img
-                      src={proxyImageUrl(ch.tvgLogo)}
-                      alt={ch.channelName}
-                      loading="lazy"
-                      width={24}
-                      height={24}
-                      className="h-6 w-6 rounded-sm object-contain shrink-0 bg-muted"
-                      onError={(e) => {
-                        const img = e.target as HTMLImageElement;
-                        const fallback = document.createElement('div');
-                        fallback.className =
-                          'h-6 w-6 rounded-sm bg-muted shrink-0 flex items-center justify-center text-xs font-bold text-muted-foreground';
-                        fallback.textContent = ch.channelName.charAt(0).toUpperCase();
-                        img.parentElement?.replaceChild(fallback, img);
-                      }}
-                    />
-                  ) : (
-                    <div className="h-6 w-6 rounded-sm bg-muted shrink-0 flex items-center justify-center text-xs font-bold text-muted-foreground">
-                      {ch.channelName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <SignedChannelThumb url={ch.tvgLogo} name={ch.channelName} />
                   <span className="text-sm truncate flex-1">{ch.channelName}</span>
                   <span className="text-xs text-muted-foreground truncate max-w-[120px]">
                     {ch.groupTitle}
