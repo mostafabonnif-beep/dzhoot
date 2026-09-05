@@ -68,6 +68,7 @@ jobs:
             chmod 600 android/app/google-services.json
             grep -q '"package_name"[[:space:]]*:[[:space:]]*"com.dzhoof.iptv"' android/app/google-services.json
           fi
+          [ -s android/app/google-services.json ] || { echo 'Missing GOOGLE_SERVICES_JSON_BASE64: production APK must include Firebase configuration.' >&2; exit 1; }
 
       - name: Validate release secrets
         env:

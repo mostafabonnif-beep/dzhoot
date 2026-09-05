@@ -61,6 +61,6 @@ base64 -w0 android/app/google-services.json
 
 بعد وصول موافقة زيادة حصة المشاريع، أنشئ مشروعًا مستقلًا باسم **DZ HOOF**، ثم أضف تطبيق Android بالحزمة الصحيحة ونزّل `google-services.json`. بعدها يمكن تشغيل `assembleDebug` و`assembleRelease` على CI، ثم تسجيل جهاز Android TV فعلي واختبار وصول FCM وتسجيل token في مسار الاشتراك.
 
-يظل بناء التطبيق دون Firebase مدعومًا عمدًا؛ وهذا ضروري لتطوير واجهة Live TV واختبارات JVM قبل اكتمال إعداد الحساب الإنتاجي.
+يظل البناء المحلي واختبارات JVM دون Firebase مدعومين عمدًا. أما `Android Release` و`Release Candidate` على GitHub Actions فيتطلبان الآن السر `GOOGLE_SERVICES_JSON_BASE64` حتى لا يخرج APK تسويقي بدون FCM وCrashlytics.
 
 **ملاحظة أمنية:** ملف Firebase ليس بديلًا عن أسرار التوقيع أو مفاتيح Backend. يجب حفظ Keystore وأسرار التوقيع وبيانات الخادم في GitHub Secrets أو مدير أسرار مناسب، وعدم إرسالها داخل المحادثة.

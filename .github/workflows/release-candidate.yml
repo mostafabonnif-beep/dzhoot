@@ -41,8 +41,10 @@ jobs:
             chmod 600 android/app/google-services.json
             grep -q '"package_name"[[:space:]]*:[[:space:]]*"com.dzhoof.iptv"' android/app/google-services.json
           else
-            echo 'Firebase config not supplied; building with Firebase integrations disabled.'
+            echo 'Firebase config is required for a release candidate.' >&2
+            exit 1
           fi
+          [ -s android/app/google-services.json ] || { echo 'Missing GOOGLE_SERVICES_JSON_BASE64: release candidate must include Firebase configuration.' >&2; exit 1; }
 
       - name: Validate Android identity and API URL
         env:
