@@ -114,7 +114,9 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(data.playbackUrl).not.toContain('upstream.test');
     const payload = verifyPlaybackToken(tokenFromUrl(data.playbackUrl));
     expect(payload?.direct).not.toBe(true);
-    expect(payload?.streamUrl).toContain('upstream.test');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-LIVE');
+    expect(payload?.streamUrl).toBeUndefined();
     // No direct token, so no direct→proxy pair is minted either.
     expect(data.proxyPlaybackUrl).toBeUndefined();
     process.env.ALLOW_DIRECT_PLAYBACK = 'true';
@@ -164,7 +166,9 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.body.data.source).toBeUndefined();
     expect(getFailoverTarget).not.toHaveBeenCalled();
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toContain('upstream.test');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-LIVE');
+    expect(payload?.streamUrl).toBeUndefined();
   });
 
   it('primary down + verified backup map → token served from the backup source', async () => {
@@ -192,7 +196,9 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.body.data.source).toBe('backup');
     expect(String(res.body.data.failoverSourceId)).toBe(String(backup._id));
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toBe('http://ottstreambox.xyz:80/live/e/e/424242.m3u8');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-LIVE');
+    expect(payload?.streamUrl).toBeUndefined();
     expect(payload?.direct).toBe(true);
     // Direct + proxy fallback both minted over the backup URL, one session slot.
     expect(res.body.data.proxyPlaybackUrl).toBeTruthy();
@@ -229,7 +235,9 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBeUndefined();
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toContain('upstream.test');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-LIVE');
+    expect(payload?.streamUrl).toBeUndefined();
   });
 
   it('primary down + mirror configured → token stream rewritten to the mirror domain (source: mirror)', async () => {
@@ -251,8 +259,9 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.body.data.source).toBe('mirror');
     expect(res.body.data.mirrorBase).toBe('http://tv.business-cloud-neo.com');
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toBe('http://tv.business-cloud-neo.com/live/u/p/262849.m3u8');
-    expect(payload?.streamUrl).not.toContain('cf.business-cloud-neo.ru');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-MIRROR');
+    expect(payload?.streamUrl).toBeUndefined();
   });
 
   it('primary down + mirror but healthy → no rewrite (primary stays)', async () => {
@@ -272,7 +281,9 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBeUndefined();
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toContain('cf.business-cloud-neo.ru');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-MIRROR-OK');
+    expect(payload?.streamUrl).toBeUndefined();
   });
 
   it('mirror never applies to catch-up even when the primary is down', async () => {

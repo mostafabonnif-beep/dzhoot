@@ -42,6 +42,7 @@ services:
       # live HLS (fMP4, copy) served over HTTPS same-origin, so hls.js can play
       # providers whose media CDN is http:// only (browser mixed-content).
       ALLOW_HLS_REMUX: ${ALLOW_HLS_REMUX:-false}
+      PLAYBACK_TOKEN_TTL_MS: ${PLAYBACK_TOKEN_TTL_MS:-900000}
       MAX_HLS_REMUX: ${MAX_HLS_REMUX:-6}
       # Optional egress proxy for upstream fetches (some providers WAF-block
       # datacenter IPs on stream endpoints with HTTP 456/458).

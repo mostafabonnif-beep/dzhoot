@@ -212,7 +212,7 @@ async function resolvePlaybackTarget(payload) {
 
   const Channel = require('../models/Channel');
   const channel = await Channel.findOne({ channelId: payload.channelId, ownerId: null })
-    .select('channelUrl activeUserAgent activeReferrer alternateStreams')
+    .select('channelId channelUrl activeUserAgent activeReferrer alternateStreams metadata')
     .lean();
   if (!channel || !channel.channelUrl) return null;
 
@@ -240,12 +240,18 @@ async function resolvePlaybackTarget(payload) {
     const src = await XtreamSource.findById(channel.metadata.xtreamSourceId)
       .select('serverUrl mirrorServerUrls')
       .lean();
-    if (src && Array.isArray(src.mirrorServerUrls) && src.mirrorServerUrls.length) {
-      const primaryBase = String(src.serverUrl || '').replace(/\/+$/, '');
-      const mirrorBase = String(src.mirrorServerUrls[0]).replace(/\/+$/, '');
-      if (mirrorBase && primaryBase && streamUrl.startsWith(primaryBase) && (await isSourceDown(String(src._id)))) {
-        const rewritten = rewriteStreamUrlBase(streamUrl, mirrorBase);
-        if (rewritten) streamUrl = rewritten;
+    if (src) {
+      if (!payload.altUrlHash && (await isSourceDown(String(src._id)))) {
+        const failoverTarget = await getFailoverTarget(channel, src._id);
+        if (failoverTarget?.streamUrl) streamUrl = failoverTarget.streamUrl;
+      }
+      if (Array.isArray(src.mirrorServerUrls) && src.mirrorServerUrls.length) {
+        const primaryBase = String(src.serverUrl || '').replace(/\/+$/, '');
+        const mirrorBase = String(src.mirrorServerUrls[0]).replace(/\/+$/, '');
+        if (mirrorBase && primaryBase && streamUrl.startsWith(primaryBase) && (await isSourceDown(String(src._id)))) {
+          const rewritten = rewriteStreamUrlBase(streamUrl, mirrorBase);
+          if (rewritten) streamUrl = rewritten;
+        }
       }
     }
   }
@@ -806,13 +812,23 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
 
     const selectedAlternate = slot > 0 ? viableAlternates[slot - 1] : null;
     const rootSessionId = crypto.randomBytes(16).toString('hex');
+    const catalogChannelId = String(channel.channelId || '').trim();
+    const channelTokenRef =
+      catchupStartMs === 0 && catalogChannelId
+        ? {
+            channelId: catalogChannelId,
+            altUrlHash: selectedAlternate?.streamUrl ? altStreamHash(selectedAlternate.streamUrl) : undefined,
+            hls: isHlsPlayback(streamUrl),
+          }
+        : undefined;
     const tokenOpts = {
       userId: String(user.id),
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
+      channelRef: channelTokenRef,
       sessionId: rootSessionId,
-      // Mid-stream proxy failover: the token carries the catalog channel ref
-      // so the proxy can resolve a backup target if the upstream dies mid-play.
+      // Mid-stream proxy failover: v2 tokens carry the catalog channel ref so
+      // the proxy resolves the current URL and any verified backup at play time.
       channelId: String(channel._id),
       primarySourceId:
         channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId
