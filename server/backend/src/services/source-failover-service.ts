@@ -307,28 +307,74 @@ export async function getFailoverTarget(
  */
 async function probeSource(source: any): Promise<{ health: SourceHealth; error: string | null; latencyMs: number }> {
   const started = Date.now();
+  let error: string | null = null;
 
   if (source.directPlayback === true) {
-    // Direct playback: the CUSTOMER'S device fetches the stream from the
-    // provider, not this server. Many providers WAF-block datacenter egress on
-    // stream endpoints (HTTP 456/458/403/"Connection refused") while
-    // residential customer playback works fine — so server-side stream probes
-    // are NOT a customer-relevant signal and must never demote the source (a
-    // demotion here disables direct delivery and silently routes playback
-    // through this VPS, whose IP the provider blocks — killing every channel
-    // of the source).
-    //
-    // Account health is instead measured by the API auth probe: if
-    // player_api.php authenticates (auth=1, status Active) then customers can
-    // play the source's streams directly. Only a genuine auth failure —
-    // expired, disabled, revoked or invalid credentials — takes the source
-    // down, so the backup-source failover still works when an account really
-    // dies.
-    return probeApiOnly(source, started);
+    let probeUrls: string[] = [];
+    const map = await ChannelFailoverMap.findOne({
+      backupSourceId: source._id,
+      enabled: true,
+      backupStreamId: { $exists: true, $ne: '' },
+    }).lean().exec();
+    if (map) {
+      probeUrls.push(buildFailoverStreamUrl(getSourceCreds(source), map.backupStreamId));
+    } else {
+      // Primary source: sample a few catalog channels — a single flaky channel
+      // must not mark the whole source down.
+      const chs = await Channel.find({
+        isActive: { $ne: false },
+        'metadata.source': 'xtream',
+        'metadata.xtreamSourceId': source._id,
+        channelUrl: { $exists: true, $ne: '' },
+      })
+        .select('channelUrl')
+        .limit(3)
+        .lean()
+        .exec();
+      probeUrls = chs.map((c) => String(c.channelUrl || '')).filter(Boolean);
+    }
+
+    if (probeUrls.length === 0) {
+      // No stream to probe yet (backup before any maps) — API check as a
+      // fallback so the source at least reports auth health.
+      return probeApiOnly(source, started);
+    }
+
+    // Any live sample ⇒ the source serves customers.
+    const failures: string[] = [];
+    for (const probeUrl of probeUrls) {
+      const playbackOk = await probePlaybackUrl(probeUrl);
+      if (playbackOk.ok) {
+        return { health: 'verified', error: null, latencyMs: Date.now() - started };
+      }
+      if (playbackOk.error) {
+        failures.push(playbackOk.error);
+      }
+    }
+
+    // All stream samples failed. For DIRECT-playback sources the video bytes
+    // are fetched by the CUSTOMER from the provider, not relayed through this
+    // server. Several providers WAF-block datacenter egress on stream
+    // endpoints with non-standard HTTP 456/458 while residential customer
+    // playback works fine — in that case the failures are NOT a
+    // customer-relevant signal and must not demote the source (a demotion
+    // disables direct delivery, silently routes playback through this blocked
+    // VPS, and kills every channel of the source). Re-check the account via
+    // the player_api auth probe: if the account authenticates, customers can
+    // play; only a genuine auth failure (expired/disabled/revoked) blocks.
+    const allBlockSignatures =
+      failures.length > 0 && failures.every((e) => /HTTP 45[68]\b/.test(String(e)));
+    if (allBlockSignatures) {
+      return probeApiOnly(source, started);
+    }
+
+    return {
+      health: 'degraded',
+      error: failures[0] || 'Direct stream probe failed',
+      latencyMs: Date.now() - started,
+    };
   }
 
-  // Proxy-mode sources relay playback through this server, so API
-  // reachability IS the customer-relevant signal.
   return probeApiOnly(source, started);
 }
 
