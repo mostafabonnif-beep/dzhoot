@@ -307,7 +307,6 @@ export async function getFailoverTarget(
  */
 async function probeSource(source: any): Promise<{ health: SourceHealth; error: string | null; latencyMs: number }> {
   const started = Date.now();
-  let error: string | null = null;
 
   if (source.directPlayback === true) {
     let probeUrls: string[] = [];
@@ -341,19 +340,36 @@ async function probeSource(source: any): Promise<{ health: SourceHealth; error: 
     }
 
     // Any live sample ⇒ the source serves customers.
+    const failures: string[] = [];
     for (const probeUrl of probeUrls) {
       const playbackOk = await probePlaybackUrl(probeUrl);
       if (playbackOk.ok) {
         return { health: 'verified', error: null, latencyMs: Date.now() - started };
       }
       if (playbackOk.error) {
-        // keep the last error for diagnostics
-        error = playbackOk.error;
+        failures.push(playbackOk.error);
       }
     }
+
+    // All stream samples failed. For DIRECT-playback sources the video bytes
+    // are fetched by the CUSTOMER from the provider, not relayed through this
+    // server. Several providers WAF-block datacenter egress on stream
+    // endpoints with non-standard HTTP 456/458 while residential customer
+    // playback works fine — in that case the failures are NOT a
+    // customer-relevant signal and must not demote the source (a demotion
+    // disables direct delivery, silently routes playback through this blocked
+    // VPS, and kills every channel of the source). Re-check the account via
+    // the player_api auth probe: if the account authenticates, customers can
+    // play; only a genuine auth failure (expired/disabled/revoked) blocks.
+    const allBlockSignatures =
+      failures.length > 0 && failures.every((e) => /HTTP 45[68]\b/.test(String(e)));
+    if (allBlockSignatures) {
+      return probeApiOnly(source, started);
+    }
+
     return {
       health: 'degraded',
-      error: error || 'Direct stream probe failed',
+      error: failures[0] || 'Direct stream probe failed',
       latencyMs: Date.now() - started,
     };
   }
