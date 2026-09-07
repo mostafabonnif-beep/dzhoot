@@ -307,7 +307,6 @@ export async function getFailoverTarget(
  */
 async function probeSource(source: any): Promise<{ health: SourceHealth; error: string | null; latencyMs: number }> {
   const started = Date.now();
-  let error: string | null = null;
 
   if (source.directPlayback === true) {
     let probeUrls: string[] = [];
