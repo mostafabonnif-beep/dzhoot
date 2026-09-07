@@ -189,6 +189,37 @@ async function getDirectPlaybackSourceIds() {
   );
 }
 
+// The shared (allCatalog) catalog is identical for every client and every page.
+// Building it is the heaviest read on this route: it loads the full ~16k set from
+// Mongo and re-sorts it in JS *per page request*. Instead, load + sort once and
+// serve every page from the cached ordered array (web pagination AND the TV
+// app's paged sync both slice from it). Busts via the same 'catalog:*' pattern
+// as catalog:list (see invalidateCatalogCache). Direct-playback source ids are
+// cached alongside so per-page mapping stays consistent.
+// NOTE: values cross JSON (Redis), so ids are stored as an array, not a Set.
+async function orderedCatalogChannels({ dedup }) {
+  const key = dedup ? 'catalog:ordered:dedup:v1' : 'catalog:ordered:admin:v1';
+  const cached = await channelCache.get(key);
+  if (cached && Array.isArray(cached.ordered) && Array.isArray(cached.directIds)) {
+    return { ordered: cached.ordered, directIds: cached.directIds };
+  }
+  const baseQuery = { ownerId: null };
+  const query = await verifiedXtreamChannelQuery(baseQuery, { dedup });
+  const [catalogChannels, directSourceIds] = await Promise.all([
+    Channel.find(query)
+      .limit(TV_CHANNELS_MAX)
+      .select(CHANNEL_LIST_FIELDS)
+      .lean(),
+    getDirectPlaybackSourceIds(),
+  ]);
+  const ordered = sortClientCatalogChannels(catalogChannels);
+  const directIds = Array.from(directSourceIds);
+  // 600s TTL; every catalog mutation busts 'catalog:*' so staleness is bounded
+  // by the mutation path, not this TTL (see invalidateCatalogCache()).
+  await channelCache.set(key, { ordered, directIds }, 600);
+  return { ordered, directIds };
+}
+
 /**
  * TV list presentation for the Android app. Playback URLs are intentionally
  * NOT embedded: the app requests a short-lived token per play via
@@ -278,22 +309,35 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       const baseQuery = catalogView
         ? { ownerId: null }
         : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
-      const query = await verifiedXtreamChannelQuery(baseQuery, { dedup: req.user.role !== 'Admin' });
-      if (searchQ) {
-        const regex = new RegExp(escapeRegex(searchQ), 'i');
-        query.$or = [{ channelName: regex }, { channelGroup: regex }];
-      }
       // Country/category are derived at presentation time, not stored as a trusted
       // source field. Sort the bounded result set before slicing so pagination stays
       // globally consistent with /grouped rather than following raw supplier labels.
-      const [catalogChannels, directSourceIds] = await Promise.all([
-        Channel.find(query)
-          .limit(TV_CHANNELS_MAX)
-          .select(CHANNEL_LIST_FIELDS)
-          .lean(),
-        getDirectPlaybackSourceIds(),
-      ]);
-      const orderedChannels = sortClientCatalogChannels(catalogChannels);
+      let orderedChannels;
+      let directSourceIds;
+      if (catalogView && !searchQ) {
+        // Fast path: the shared allCatalog catalog is identical for every page —
+        // serve all pages from the cached ordered array instead of refetching and
+        // re-sorting the full ~16k catalog on every request.
+        const hit = await orderedCatalogChannels({ dedup: req.user.role !== 'Admin' });
+        orderedChannels = hit.ordered;
+        directSourceIds = new Set(hit.directIds);
+      } else {
+        // Per-user selection or text search: build the query per request as before.
+        const query = await verifiedXtreamChannelQuery(baseQuery, { dedup: req.user.role !== 'Admin' });
+        if (searchQ) {
+          const regex = new RegExp(escapeRegex(searchQ), 'i');
+          query.$or = [{ channelName: regex }, { channelGroup: regex }];
+        }
+        const [catalogChannels, fetchedDirectIds] = await Promise.all([
+          Channel.find(query)
+            .limit(TV_CHANNELS_MAX)
+            .select(CHANNEL_LIST_FIELDS)
+            .lean(),
+          getDirectPlaybackSourceIds(),
+        ]);
+        orderedChannels = sortClientCatalogChannels(catalogChannels);
+        directSourceIds = fetchedDirectIds;
+      }
       const channels = orderedChannels.slice((p - 1) * ps, p * ps);
       const data = isTvClient
         ? tokenizeListForClient(channels, req.user, req)
