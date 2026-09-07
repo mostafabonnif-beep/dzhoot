@@ -42,8 +42,13 @@ async function verifiedXtreamChannelQuery(baseQuery, options = {}) {
       { directPlayback: true },
     ],
   }).distinct('_id')).map((id) => String(id));
-  const directPlaybackSourceIds = (await XtreamSource.find({
-    directPlayback: true,
+  // Channels of operator-curated (customerVisible) or direct-playback sources
+  // stay visible regardless of the server datacenter probe verdict: those
+  // probes hit upstream WAF blocks (HTTP 456/458) that do not reflect what a
+  // customer's own network (or the server relay on their behalf) can play.
+  // Same policy as the watchdog fix (PR #186), extended to proxied sources.
+  const isWorkingExemptSourceIds = (await XtreamSource.find({
+    $or: [{ directPlayback: true }, { customerVisible: true }],
   }).distinct('_id')).map((id) => String(id));
   const dedupQuery = options.dedup ? await publicCatalogDedupQuery() : {};
   return {
@@ -64,10 +69,11 @@ async function verifiedXtreamChannelQuery(baseQuery, options = {}) {
             'metadata.xtreamSourceId': { $nin: verifiedSourceIds },
           },
           // isWorking is measured from the server datacenter IP — exempt
-          // direct-playback sources so their whole catalog stays visible.
+          // customer-visible and direct-playback sources so their catalog
+          // stays visible (probes cannot judge customer reachability).
           {
             'metadata.isWorking': false,
-            'metadata.xtreamSourceId': { $nin: directPlaybackSourceIds },
+            'metadata.xtreamSourceId': { $nin: isWorkingExemptSourceIds },
           },
         ],
       },
