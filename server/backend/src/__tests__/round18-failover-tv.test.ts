@@ -48,6 +48,7 @@ jest.mock('../services/stream-session-service', () => ({
 jest.mock('../services/source-failover-service', () => ({
   isSourceDown: jest.fn(),
   getFailoverTarget: jest.fn(),
+  getHttpsBackupStreamUrl: jest.fn().mockResolvedValue(null),
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports

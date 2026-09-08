@@ -947,7 +947,13 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     // exists, use that https twin as the WEB direct candidate — the browser
     // fetches from its residential IP (provider WAFs often return HTTP 456 to
     // datacenter relays, and http:// media is blocked as mixed content anyway).
-    if (!directCandidateUrl && directEnabled && channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId) {
+    if (
+      !directCandidateUrl &&
+      directEnabled &&
+      channel.metadata?.source === 'xtream' &&
+      channel.metadata?.xtreamSourceId &&
+      typeof getHttpsBackupStreamUrl === 'function'
+    ) {
       directCandidateUrl = await getHttpsBackupStreamUrl(channel);
     }
     if (directEnabled && directCandidateUrl) {
