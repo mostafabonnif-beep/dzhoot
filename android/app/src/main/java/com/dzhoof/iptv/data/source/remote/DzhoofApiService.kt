@@ -4,6 +4,7 @@ import com.dzhoof.iptv.data.model.dto.CategoriesResponse
 import com.dzhoof.iptv.data.model.dto.ChannelDto
 import com.dzhoof.iptv.data.model.dto.ChannelsResponse
 import com.dzhoof.iptv.data.model.dto.EpgGuideResponse
+import com.dzhoof.iptv.data.model.dto.MatchesTodayResponse
 import com.dzhoof.iptv.data.model.dto.FavoritesRequest
 import com.dzhoof.iptv.data.model.dto.FavoritesResponse
 import com.dzhoof.iptv.data.model.dto.HealthSyncRequest
@@ -210,6 +211,15 @@ interface DzhoofApiService {
         @Path("channelListCode") channelListCode: String,
         @Query("hours") hours: Int = 6
     ): Response<EpgGuideResponse>
+
+    /**
+     * Today's live/upcoming sports matches for the paired channel list
+     * (public endpoint — no auth beyond the 6-char channel list code).
+     */
+    @GET("api/v1/tv/epg/{channelListCode}/matches-today")
+    suspend fun getMatchesToday(
+        @Path("channelListCode") channelListCode: String
+    ): Response<MatchesTodayResponse>
 
     @GET("api/v1/app/demo-code")
     suspend fun getDemoCode(): Response<Map<String, String>>

@@ -35,6 +35,8 @@ data class ChannelsUiState(
     val categoryLogos: Map<String, List<String>> = emptyMap(),
     // Category favorite names
     val favoriteCategoryNames: Set<String> = emptySet(),
+    // HomeScreen: today's live/upcoming sports matches (server-derived)
+    val matchesToday: List<SportsMatchUiModel> = emptyList(),
     // QR code bitmap pointing to the "how to add channels" guide
     val guideQrBitmap: android.graphics.Bitmap? = null
 )

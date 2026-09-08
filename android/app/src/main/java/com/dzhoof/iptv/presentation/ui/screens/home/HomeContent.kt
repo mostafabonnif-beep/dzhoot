@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.CatalogPosterItem
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
+import com.dzhoof.iptv.presentation.model.SportsMatchUiModel
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
 import com.dzhoof.iptv.presentation.ui.components.ChannelRowSkeleton
@@ -52,6 +53,7 @@ fun HomeContent(
     popularCategories: List<PopularCategoryUiModel>,
     latestMovies: List<CatalogPosterItem>,
     latestSeries: List<CatalogPosterItem>,
+    matchesToday: List<SportsMatchUiModel>,
     lastPlayedChannelId: String?,
     onChannelClick: (String) -> Unit,
     onNavigateToChannels: (String) -> Unit,
@@ -133,11 +135,13 @@ fun HomeContent(
     // Stable entrance offset for category rows based on how many
     // optional sections are present (avoids mutable var during composition)
     val categoryRowOffset = remember(
+        matchesToday.isNotEmpty(),
         recentlyWatched.isNotEmpty(),
         forYou.isNotEmpty(),
         popularCategories.isNotEmpty()
     ) {
         var offset = 2 // Hero + featured row are always present
+        if (matchesToday.isNotEmpty()) offset++
         if (recentlyWatched.isNotEmpty()) offset++
         if (forYou.isNotEmpty()) offset++
         if (popularCategories.isNotEmpty()) offset++
@@ -189,6 +193,19 @@ fun HomeContent(
                     .padding(bottom = rowGap)
                     .animateItemEntrance(index = 1)
             )
+        }
+
+        if (matchesToday.isNotEmpty()) {
+            item(key = "matches_today") {
+                SportsMatchesRow(
+                    matches = matchesToday,
+                    onMatchClick = onChannelClick,
+                    horizontalPadding = horizontalPadding,
+                    modifier = Modifier
+                        .padding(bottom = rowGap)
+                        .animateItemEntrance(index = 2)
+                )
+            }
         }
 
         if (recentlyWatched.isNotEmpty()) {
