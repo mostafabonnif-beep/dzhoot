@@ -25,6 +25,7 @@ const { registerStreamSession, isStreamSessionActive } = require('../services/st
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { epgCache } = require('../services/cache');
 const { buildNowNext } = require('../utils/epg-now-next');
+const { buildSportsMatches } = require('../utils/sports-matches');
 const { decryptSecret } = require('../utils/crypto');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
@@ -1500,6 +1501,69 @@ router.get('/epg/:code/now-next', async (req, res) => {
   } catch (error) {
     console.error('Error fetching now/next EPG:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch now/next guide' });
+  }
+});
+
+// Today's sports matches across the user's channels ("مباريات اليوم" — C1).
+// Lightweight and cached per channel-list-code + UTC day, so TV apps and the
+// web player can poll it cheaply for a home "matches today" banner. Channel
+// scope mirrors /epg/:code (same visibility rules via loadEpgChannelIds).
+router.get('/epg/:code/matches-today', async (req, res) => {
+  try {
+    const user = await findUserByCode(req.params.code, res);
+    if (!user) return;
+
+    const now = new Date();
+    const dayKey = now.toISOString().slice(0, 10);
+    const cacheKey = `matches-today:${user.channelListCode}:${dayKey}`;
+    const cached = await epgCache.get(cacheKey);
+    if (cached) {
+      res.setHeader('Cache-Control', 'public, max-age=120');
+      return res.json(cached);
+    }
+
+    const { epgIds, channelInfoMap } = await loadEpgChannelIds(user);
+    let matches = [];
+    if (epgIds.length > 0) {
+      // UTC day window: deterministic, cache-friendly and index-friendly. A
+      // per-subscriber timezone param can come later without breaking this.
+      const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const endOfDay = new Date(startOfDay.getTime() + 24 * 3600000);
+      const scanLimit = Math.min(Math.max(parseInt(process.env.MATCHES_TODAY_SCAN_LIMIT, 10) || 6000, 100), 20000);
+      const maxMatches = Math.min(Math.max(parseInt(process.env.MATCHES_TODAY_MAX, 10) || 80, 5), 300);
+      const programs = await EpgProgram.find({
+        channelEpgId: { $in: epgIds },
+        startTime: { $gte: startOfDay, $lt: endOfDay },
+      })
+        .collation({ locale: 'en', strength: 2 })
+        .sort({ startTime: 1 })
+        .select('channelEpgId title description category startTime endTime language icon')
+        .limit(scanLimit)
+        .lean();
+
+      const baseUrl = getPublicBaseUrl(req);
+      matches = buildSportsMatches(programs, { nowMs: Date.now(), limit: maxMatches }).map((m) => {
+        const info = channelInfoMap.get(String(m.channelEpgId).toLowerCase()) || {};
+        const { channelEpgId, ...rest } = m;
+        return {
+          ...rest,
+          channel: {
+            epgId: channelEpgId,
+            channelId: info.channelId || '',
+            name: info.name || channelEpgId,
+            icon: info.icon ? proxyLogoUrl(baseUrl, info.icon) : '',
+          },
+        };
+      });
+    }
+
+    const body = { success: true, date: dayKey, count: matches.length, matches };
+    await epgCache.set(cacheKey, body, 120);
+    res.setHeader('Cache-Control', 'public, max-age=120');
+    return res.json(body);
+  } catch (error) {
+    console.error('Error fetching today matches:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch today matches' });
   }
 });
 

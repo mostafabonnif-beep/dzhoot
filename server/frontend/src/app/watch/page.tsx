@@ -16,6 +16,20 @@ interface WatchChannel {
   order?: number;
 }
 
+interface TodayMatch {
+  startTime: string;
+  endTime: string;
+  status: 'live' | 'upcoming';
+  title: string;
+  description?: string | null;
+  channel: {
+    epgId: string;
+    channelId: string;
+    name: string;
+    icon?: string | null;
+  };
+}
+
 export default function WatchPage() {
   const [codeInput, setCodeInput] = useState('');
   const [code, setCode] = useState('');
@@ -27,6 +41,38 @@ export default function WatchPage() {
   const [playingName, setPlayingName] = useState('');
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [matches, setMatches] = useState<TodayMatch[]>([]);
+
+  // "مباريات اليوم" — polled once per code entry; cached server-side per day.
+  useEffect(() => {
+    if (!code) {
+      setMatches([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get(`/tv/epg/${encodeURIComponent(code)}/matches-today`)
+      .then((res) => {
+        if (!cancelled) setMatches(res.data?.matches ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setMatches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
+
+  function formatMatchTime(iso: string) {
+    return new Date(iso).toLocaleTimeString('ar-DZ', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function playMatch(m: TodayMatch) {
+    const ch = channels.find((c) => c.channelId === m.channel.channelId);
+    if (!ch) return;
+    setSelected(ch);
+    setPlayingName(ch.channelName);
+  }
 
   useEffect(() => {
     const stored = window.localStorage.getItem('watch_tv_code');
@@ -192,6 +238,47 @@ export default function WatchPage() {
         <section className="mx-auto max-w-6xl px-4 py-6">
           {error && (
             <p className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">{error}</p>
+          )}
+
+          {!loading && matches.length > 0 && (
+            <section aria-label="مباريات اليوم" className="mb-6 overflow-hidden rounded-xl border border-border bg-card">
+              <h2 className="flex items-center gap-2 px-4 pt-4 font-extrabold">
+                <span aria-hidden="true">⚽</span> مباريات اليوم
+              </h2>
+              <div className="flex gap-3 overflow-x-auto p-4" dir="ltr">
+                {matches.map((m) => {
+                  const playable = channels.some((c) => c.channelId === m.channel.channelId);
+                  return (
+                    <button
+                      key={`${m.channel.epgId}:${m.startTime}`}
+                      type="button"
+                      dir="rtl"
+                      onClick={() => playMatch(m)}
+                      disabled={!playable}
+                      title={playable ? `مشاهدة: ${m.channel.name}` : 'هذه القناة غير متاحة في قائمتك'}
+                      className="flex min-w-[230px] max-w-[270px] shrink-0 flex-col gap-1.5 rounded-xl border border-border bg-background p-3 text-start transition hover:border-primary hover:bg-primary/5 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span className="flex items-center gap-2 text-xs">
+                        {m.status === 'live' ? (
+                          <span className="flex items-center gap-1.5 font-extrabold text-red-500">
+                            <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" aria-hidden="true" />
+                            مباشر الآن
+                          </span>
+                        ) : (
+                          <span className="font-bold text-primary">{formatMatchTime(m.startTime)}</span>
+                        )}
+                        <span className="text-muted-foreground">•</span>
+                        <span className="truncate text-muted-foreground">{m.channel.name}</span>
+                      </span>
+                      <span className="line-clamp-2 text-sm font-bold leading-tight">{m.title}</span>
+                      {m.description ? (
+                        <span className="line-clamp-1 text-xs text-muted-foreground">{m.description}</span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
           )}
 
           <div className="mb-6 flex items-center gap-2">
