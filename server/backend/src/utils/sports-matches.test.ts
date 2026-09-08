@@ -1,6 +1,10 @@
 import {
   buildSportsMatches,
   isLikelySportsProgram,
+  sportsTitleRegex,
+  sportsCategoryRegex,
+  SPORTS_TITLE_REGEX_SOURCE,
+  SPORTS_CATEGORY_REGEX_SOURCE,
   SportsMatchProgram,
 } from './sports-matches';
 
@@ -51,6 +55,40 @@ describe('isLikelySportsProgram', () => {
   it('rejects a bare "vs" without surrounding team names', () => {
     expect(isLikelySportsProgram(program({ title: 'vs' }))).toBe(false);
     expect(isLikelySportsProgram(program({ title: 'Live: vs coverage' }))).toBe(false);
+  });
+});
+
+describe('DB pre-filter regexes (parity with JS detection)', () => {
+  it('title regex matches the same sports titles the JS detector accepts', () => {
+    const titleRe = sportsTitleRegex();
+    expect(titleRe.test('مباراة الجزائر والمغرب')).toBe(true);
+    expect(titleRe.test('كأس العالم 2026')).toBe(true);
+    expect(titleRe.test('دوري أبطال أوروبا: الجولة الثالثة')).toBe(true);
+    expect(titleRe.test('PSG vs Marseille')).toBe(true);
+    expect(titleRe.test('Champions League: Real Madrid - Bayern')).toBe(true);
+    expect(titleRe.test('Grand Prix de Monaco')).toBe(true);
+  });
+
+  it('title regex does not match generic programs (coarse but directional)', () => {
+    const titleRe = sportsTitleRegex();
+    expect(titleRe.test('أخبار المساء')).toBe(false);
+    expect(titleRe.test('The Evening News')).toBe(false);
+    expect(titleRe.test('Movie Night')).toBe(false);
+    expect(titleRe.test('vs')).toBe(false);
+  });
+
+  it('category regex matches Sport/Sports/Football case-insensitively', () => {
+    const catRe = sportsCategoryRegex();
+    expect(catRe.test('Sport')).toBe(true);
+    expect(catRe.test('Sports')).toBe(true);
+    expect(catRe.test('Football')).toBe(true);
+    expect(catRe.test('News')).toBe(false);
+    expect(catRe.test('Series')).toBe(false);
+  });
+
+  it('exports stable regex sources', () => {
+    expect(SPORTS_TITLE_REGEX_SOURCE.length).toBeGreaterThan(20);
+    expect(SPORTS_CATEGORY_REGEX_SOURCE).toContain('sport');
   });
 });
 
