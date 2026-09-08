@@ -43,6 +43,10 @@ services:
       # providers whose media CDN is http:// only (browser mixed-content).
       ALLOW_HLS_REMUX: ${ALLOW_HLS_REMUX:-false}
       MAX_HLS_REMUX: ${MAX_HLS_REMUX:-6}
+      # Home relay (residential egress): when set, ffmpeg remux/relay upstream
+      # fetches exit through the operator's home proxy (127.0.0.1:9001 via ssh
+      # -R) — bypasses providers that WAF-block datacenter IPs (HTTP 456).
+      UPSTREAM_HTTP_PROXY: ${UPSTREAM_HTTP_PROXY:-}
       # Optional egress proxy for upstream fetches (some providers WAF-block
       # datacenter IPs on stream endpoints with HTTP 456/458).
       UPSTREAM_HTTP_PROXY: ${UPSTREAM_HTTP_PROXY:-}
