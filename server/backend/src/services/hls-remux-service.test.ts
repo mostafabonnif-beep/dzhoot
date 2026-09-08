@@ -122,4 +122,25 @@ describe('hls-remux shared sessions (D1)', () => {
     expect(remux.startHlsSession(B, { streamUrl: URL1 }).ok).toBe(true);
     expect(spawnMock).toHaveBeenCalledTimes(2);
   });
+
+  it('sends a desktop-browser UA when the channel has none (no Lavf fingerprint)', () => {
+    const spawnMock = mockSpawn();
+    remux.startHlsSession(A, { streamUrl: URL1 });
+    const args: string[] = spawnMock.mock.calls[0][1];
+    const uaIndex = args.indexOf('-user_agent');
+    expect(uaIndex).toBeGreaterThan(-1);
+    expect(args[uaIndex + 1]).toMatch(/^Mozilla\/5\.0 .*Chrome\//);
+    expect(args[uaIndex + 1]).not.toMatch(/^Lavf/);
+  });
+
+  it('passes through the channel UA when configured', () => {
+    const spawnMock = mockSpawn();
+    remux.startHlsSession(A, {
+      streamUrl: URL1,
+      upstreamHeaders: { userAgent: 'ExoPlayerLib/2.19.1 (Linux; Android 13)' },
+    });
+    const args: string[] = spawnMock.mock.calls[0][1];
+    const uaIndex = args.indexOf('-user_agent');
+    expect(args[uaIndex + 1]).toBe('ExoPlayerLib/2.19.1 (Linux; Android 13)');
+  });
 });
