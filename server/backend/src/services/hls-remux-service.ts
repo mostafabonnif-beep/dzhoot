@@ -5,22 +5,33 @@ import path from 'path';
 import os from 'os';
 
 /**
- * Server-side HLS remux sessions (ffmpeg).
+ * Server-side HLS remux sessions (ffmpeg) — SHARED per upstream stream.
  *
  * Raw MPEG-TS upstreams cannot be played by browsers on HTTPS pages directly
  * (the provider media CDN is http:// only → mixed content, and hls.js cannot
  * parse a raw TS pipe). This service remuxes the upstream TS into a live HLS
  * (fMP4) window with ffmpeg (`-c copy`, no transcoding) and serves the
- * playlist + segments over HTTPS same-origin, so the web player uses hls.js —
- * the most robust live player available.
+ * playlist + segments over HTTPS same-origin, so the web player uses hls.js.
+ *
+ * SHARING (D1 — segment/capacity scaling):
+ *   One ffmpeg process per UPSTREAM STREAM, not per viewer. Every playback
+ *   token that resolves to the same upstream URL joins the same session and
+ *   serves the same on-disk playlist/segments. 100 viewers on one channel =
+ *   ONE upstream fetch (one stream through the operator's home relay, one
+ *   provider connection), the rest is local disk reads. Viewers keep their
+ *   own token/session entries (per-request auth in the route is unchanged),
+ *   so sharing is purely a media-fetch optimization.
  *
  * Lifecycle:
- *  - One ffmpeg process per playback token, lazily started on first request.
- *  - Segment/playlist requests refresh lastAccess; an idle sweep (30s) kills
- *    sessions untouched for HLS_IDLE_MS (default 90s).
- *  - Process exit (upstream died / ffmpeg error) deletes the session so the
- *    next request restarts it (the player falls back meanwhile).
- *  - MAX_HLS_REMUX caps concurrent processes (2-core VPS).
+ *  - A session starts lazily on the first viewer's request; later viewers of
+ *    the same stream join it instead of spawning another ffmpeg.
+ *  - Segment/playlist requests refresh each viewer's lastAccess; an idle
+ *    sweep (30s) drops viewers untouched for HLS_IDLE_MS (default 90s) and
+ *    only kills the ffmpeg process when the LAST viewer of a stream leaves.
+ *  - Process exit (upstream died / ffmpeg error) tears the whole stream
+ *    session down; the next viewer request restarts it.
+ *  - MAX_HLS_REMUX caps concurrent ffmpeg PROCESSES (= concurrent streams),
+ *    which is exactly what scales: 100 viewers of one stream cost 1 slot.
  */
 
 interface HlsSession {
@@ -29,9 +40,11 @@ interface HlsSession {
   dir: string;
   startedAt: number;
   lastAccess: number;
+  streamKey: string;
 }
 
 const sessions = new Map<string, HlsSession>();
+const streamMembers = new Map<string, Set<string>>();
 
 const MAX_CONCURRENT = Math.max(1, Number(process.env.MAX_HLS_REMUX || 6));
 const IDLE_MS = Math.max(30_000, Number(process.env.HLS_IDLE_MS || 90_000));
@@ -45,6 +58,31 @@ function baseDir(): string {
 
 function safeTokenName(token: string): string {
   return token.replace(/[^A-Za-z0-9_.-]/g, '_').slice(0, 64);
+}
+
+function isRunning(proc: ChildProcess): boolean {
+  return proc.exitCode === null && proc.signalCode === null && !proc.killed;
+}
+
+function streamKeyFor(streamUrl: string, headers?: { userAgent?: string; referrer?: string }): string {
+  // The same channel resolves to the same upstream URL (channel.channelUrl) —
+  // viewer identity is NOT part of the key, so all viewers share the fetch.
+  return `${streamUrl}|${headers?.userAgent || ''}|${headers?.referrer || ''}`;
+}
+
+function tearDownStream(streamKey: string, dir: string): void {
+  const members = streamMembers.get(streamKey);
+  if (members) {
+    for (const token of members) {
+      sessions.delete(token);
+    }
+    streamMembers.delete(streamKey);
+  }
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    /* best effort */
+  }
 }
 
 export function getHlsSessionDir(token: string): string {
@@ -63,16 +101,22 @@ export function touchHlsSession(token: string): void {
 export function stopHlsSession(token: string): void {
   const s = sessions.get(token);
   if (!s) return;
+  const members = streamMembers.get(s.streamKey);
+  members?.delete(token);
   sessions.delete(token);
-  try {
-    s.proc.kill('SIGKILL');
-  } catch {
-    /* already gone */
-  }
-  try {
-    fs.rmSync(s.dir, { recursive: true, force: true });
-  } catch {
-    /* best effort */
+  // Kill the shared ffmpeg only when this was the LAST viewer of the stream.
+  if (!members || members.size === 0) {
+    streamMembers.delete(s.streamKey);
+    try {
+      s.proc.kill('SIGKILL');
+    } catch {
+      /* already gone */
+    }
+    try {
+      fs.rmSync(s.dir, { recursive: true, force: true });
+    } catch {
+      /* best effort */
+    }
   }
 }
 
@@ -90,7 +134,42 @@ export function startHlsSession(
     existing.lastAccess = Date.now();
     return { ok: true };
   }
-  if (sessions.size >= MAX_CONCURRENT) {
+
+  const streamKey = streamKeyFor(opts.streamUrl, opts.upstreamHeaders);
+
+  // 1) Join an already-running session for the SAME upstream stream.
+  const members = streamMembers.get(streamKey);
+  if (members && members.size > 0) {
+    let live: HlsSession | null = null;
+    for (const memberToken of members) {
+      const member = sessions.get(memberToken);
+      if (member && isRunning(member.proc)) {
+        live = member;
+        break;
+      }
+    }
+    if (live) {
+      sessions.set(token, {
+        token,
+        proc: live.proc,
+        dir: live.dir,
+        startedAt: Date.now(),
+        lastAccess: Date.now(),
+        streamKey,
+      });
+      members.add(token);
+      return { ok: true };
+    }
+    // Stale members (proc exited, cleanup pending/racing) — drop them and
+    // start a fresh process below.
+    streamMembers.delete(streamKey);
+    for (const memberToken of Array.from(members)) {
+      sessions.delete(memberToken);
+    }
+  }
+
+  // 2) Capacity: MAX_HLS_REMUX counts concurrent ffmpeg PROCESSES (= streams).
+  if (streamMembers.size >= MAX_CONCURRENT) {
     return { ok: false, busy: true };
   }
 
@@ -162,18 +241,15 @@ export function startHlsSession(
     dir,
     startedAt: Date.now(),
     lastAccess: Date.now(),
+    streamKey,
   };
   sessions.set(token, session);
+  const memberSet = new Set<string>([token]);
+  streamMembers.set(streamKey, memberSet);
 
   proc.on('exit', (code, signal) => {
-    if (sessions.get(token) === session) {
-      sessions.delete(token);
-      try {
-        fs.rmSync(dir, { recursive: true, force: true });
-      } catch {
-        /* best effort */
-      }
-    }
+    // Any viewer can hit this: tear down the whole stream session.
+    tearDownStream(streamKey, dir);
     if (code !== 0 && code !== null) {
       console.error(
         `[hls-remux] ffmpeg exited code=${code} signal=${signal ?? ''} token=${token.slice(0, 8)}… stderr=${stderrChunks.join(' ').slice(0, 500)}`,
