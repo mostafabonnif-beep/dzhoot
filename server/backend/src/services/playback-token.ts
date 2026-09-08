@@ -29,6 +29,8 @@ export interface PlaybackTokenPayload {
   expiresAt: number;
   nonce: string;
   sessionId?: string;
+  /** Hash of the browser-only playback cookie when the web client requested binding. */
+  clientBindingHash?: string;
 }
 
 /**
@@ -52,6 +54,8 @@ export interface PlaybackTokenChannelRefPayload {
   /** Container hint (mirrors the v1 suffix decision at issue time). */
   hls?: boolean;
   direct?: boolean;
+  /** Optional hash of the browser playback cookie; web tokens cannot be replayed from a different browser. */
+  clientBindingHash?: string;
   /** Never set for v2 (headers are re-derived from the Channel doc at resolve
    *  time); declared so consumers can treat both payload shapes uniformly. */
   upstreamHeaders?: {
@@ -147,6 +151,7 @@ export function issuePlaybackToken(input: {
   /** The channel's primary Xtream source id (excluded when picking a backup). */
   primarySourceId?: string;
   direct?: boolean;
+  clientBindingHash?: string;
   ttlMs?: number;
   sessionId?: string;
 }): { token: string; expiresAt: number } {
@@ -172,6 +177,9 @@ export function issuePlaybackToken(input: {
       expiresAt: now + ttlMs,
       nonce: crypto.randomBytes(16).toString('hex'),
       sessionId: input.sessionId ? String(input.sessionId).slice(0, 256) : undefined,
+      clientBindingHash: /^[0-9a-f]{64}$/i.test(String(input.clientBindingHash || ''))
+        ? String(input.clientBindingHash).toLowerCase()
+        : undefined,
     };
   } else {
     if (typeof input.streamUrl !== 'string') {
@@ -190,6 +198,9 @@ export function issuePlaybackToken(input: {
       expiresAt: now + ttlMs,
       nonce: crypto.randomBytes(16).toString('hex'),
       sessionId: input.sessionId ? String(input.sessionId).slice(0, 256) : undefined,
+      clientBindingHash: /^[0-9a-f]{64}$/i.test(String(input.clientBindingHash || ''))
+        ? String(input.clientBindingHash).toLowerCase()
+        : undefined,
     };
   }
 
