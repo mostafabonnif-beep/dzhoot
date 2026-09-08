@@ -10,10 +10,14 @@ import User from '../models/User';
 import { proxyLogoUrl } from '../utils/logo-proxy';
 
 // Same harness as tv-playback-proxy-fallback.test.ts (Round 16).
+// Fixed ObjectId so tokens minted via POST /playback-token can be PLAYED back
+// through GET /playback/:token (that route resolves the user by Mongo _id).
+const TEST_USER_ID = '66c000000000000000000001';
+
 jest.mock('../middleware/requireTvOrSessionAuth', () => ({
   requireTvOrSessionAuth: (req: any, _res: any, next: any) => {
     req.user = {
-      id: 'user-id',
+      id: TEST_USER_ID,
       username: 'tvuser',
       role: 'User',
       channels: [],
@@ -36,6 +40,7 @@ jest.mock('../services/playback-access-service', () => ({
 
 jest.mock('../services/stream-session-service', () => ({
   registerStreamSession: jest.fn().mockResolvedValue({ allowed: true, max: 2, active: 1 }),
+  isStreamSessionActive: jest.fn().mockResolvedValue(true),
 }));
 
 // The failover decision itself is unit-tested in round18-failover-service.test.ts;
@@ -73,6 +78,17 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     await ChannelFailoverMap.deleteMany({});
     await Movie.deleteMany({});
     await User.deleteMany({});
+    // The GET /playback/:token route re-checks the token's user against the DB.
+    await User.create({
+      _id: TEST_USER_ID,
+      username: 'tvuser',
+      password: 'password123',
+      email: 'tv@example.com',
+      channelListCode: 'TVTEST',
+      allCatalog: true,
+      role: 'User',
+      isActive: true,
+    });
     process.env.ALLOW_DIRECT_PLAYBACK = 'true';
     process.env.PLAYBACK_TOKEN_SECRET = 'round18-test-secret-for-playback-tokens';
     (isSourceDown as jest.Mock).mockReset();
@@ -114,7 +130,11 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(data.playbackUrl).not.toContain('upstream.test');
     const payload = verifyPlaybackToken(tokenFromUrl(data.playbackUrl));
     expect(payload?.direct).not.toBe(true);
-    expect(payload?.streamUrl).toContain('upstream.test');
+    // v2 channel-reference token: the payload carries NO upstream URL at all,
+    // so the provider host cannot leak through a decoded token by construction.
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-LIVE');
+    expect(payload?.streamUrl).toBeUndefined();
     // No direct token, so no direct→proxy pair is minted either.
     expect(data.proxyPlaybackUrl).toBeUndefined();
     process.env.ALLOW_DIRECT_PLAYBACK = 'true';
@@ -137,7 +157,8 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
       channelImg: 'http://51.158.145.100/picons/logos/x.png', isActive: true,
       metadata: { source: 'xtream', xtreamSourceId: String(source._id) },
     });
-    await User.create({ username: 'tvuser', password: 'password123', email: 'tv@example.com', channelListCode: 'TVTEST', allCatalog: true, role: 'User' });
+    // The playlist route resolves the user by channelListCode — the beforeEach
+    // seed (channelListCode TVTEST) already covers it.
 
     const res = await request(buildApp()).get('/api/v1/tv/playlist/TVTEST/json');
     expect(res.status).toBe(200);
@@ -164,7 +185,14 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.body.data.source).toBeUndefined();
     expect(getFailoverTarget).not.toHaveBeenCalled();
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toContain('upstream.test');
+    // v2 token: references the catalog channel; the URL is resolved at play time.
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-LIVE');
+    expect((payload as { altUrlHash?: string } | null)?.altUrlHash).toBeUndefined();
+    // Play-time resolution serves the CURRENT primary URL (direct → 302).
+    const playRes = await request(buildApp()).get(`/api/v1/tv/playback/${tokenFromUrl(res.body.data.playbackUrl)}`);
+    expect(playRes.status).toBe(302);
+    expect(playRes.headers.location).toContain('upstream.test');
   });
 
   it('primary down + verified backup map → token served from the backup source', async () => {
@@ -192,10 +220,17 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.body.data.source).toBe('backup');
     expect(String(res.body.data.failoverSourceId)).toBe(String(backup._id));
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toBe('http://ottstreambox.xyz:80/live/e/e/424242.m3u8');
+    // v2: the token references the catalog channel — the backup selection now
+    // happens at play time (resolvePlaybackTarget), not inside the token.
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-LIVE');
     expect(payload?.direct).toBe(true);
     // Direct + proxy fallback both minted over the backup URL, one session slot.
     expect(res.body.data.proxyPlaybackUrl).toBeTruthy();
+    // Play-time: the primary is still down → resolution fails over to the backup.
+    const playRes = await request(buildApp()).get(`/api/v1/tv/playback/${tokenFromUrl(res.body.data.playbackUrl)}`);
+    expect(playRes.status).toBe(302);
+    expect(playRes.headers.location).toBe('http://ottstreambox.xyz:80/live/e/e/424242.m3u8');
   });
 
   it('catch-up request never fails over even when the primary is down', async () => {
@@ -229,7 +264,12 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBeUndefined();
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toContain('upstream.test');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-LIVE');
+    // Play-time resolution keeps the primary URL (no backup map, no mirror).
+    const playRes = await request(buildApp()).get(`/api/v1/tv/playback/${tokenFromUrl(res.body.data.playbackUrl)}`);
+    expect(playRes.status).toBe(302);
+    expect(playRes.headers.location).toContain('upstream.test');
   });
 
   it('primary down + mirror configured → token stream rewritten to the mirror domain (source: mirror)', async () => {
@@ -251,8 +291,13 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.body.data.source).toBe('mirror');
     expect(res.body.data.mirrorBase).toBe('http://tv.business-cloud-neo.com');
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toBe('http://tv.business-cloud-neo.com/live/u/p/262849.m3u8');
-    expect(payload?.streamUrl).not.toContain('cf.business-cloud-neo.ru');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-MIRROR');
+    // Play-time resolution rewrites the primary domain to the mirror.
+    const playRes = await request(buildApp()).get(`/api/v1/tv/playback/${tokenFromUrl(res.body.data.playbackUrl)}`);
+    expect(playRes.status).toBe(302);
+    expect(playRes.headers.location).toBe('http://tv.business-cloud-neo.com/live/u/p/262849.m3u8');
+    expect(playRes.headers.location).not.toContain('cf.business-cloud-neo.ru');
   });
 
   it('primary down + mirror but healthy → no rewrite (primary stays)', async () => {
@@ -272,7 +317,12 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.source).toBeUndefined();
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
-    expect(payload?.streamUrl).toContain('cf.business-cloud-neo.ru');
+    expect(payload?.v).toBe(2);
+    expect(payload?.channelId).toBe('CH-MIRROR-OK');
+    // Healthy primary: play-time resolution leaves the URL untouched.
+    const playRes = await request(buildApp()).get(`/api/v1/tv/playback/${tokenFromUrl(res.body.data.playbackUrl)}`);
+    expect(playRes.status).toBe(302);
+    expect(playRes.headers.location).toContain('cf.business-cloud-neo.ru');
   });
 
   it('mirror never applies to catch-up even when the primary is down', async () => {
@@ -328,5 +378,84 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
     expect(res.status).toBe(200);
     const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
     expect(payload?.streamUrl).toBe('https://cf.business-cloud-neo.ru/movie/u/p/456.mp4');
+  });
+
+  it('web client header → httpOnly binding cookie issued + clientBindingHash in the token', async () => {
+    const source = await XtreamSource.create({
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true,
+    });
+    await seedChannel(source);
+    (isSourceDown as jest.Mock).mockResolvedValue(false);
+
+    const res = await request(buildApp())
+      .post('/api/v1/tv/playback-token')
+      .set('X-Playback-Client', 'web')
+      .send({ channelId: 'CH-LIVE', slot: 0 });
+    expect(res.status).toBe(200);
+    const setCookie = (res.headers['set-cookie'] as unknown as string[]) || [];
+    const bindingCookie = setCookie.find((c) => c.startsWith('__Host-dzhoof-playback='));
+    expect(bindingCookie).toBeTruthy();
+    expect(bindingCookie).toContain('HttpOnly');
+    expect(bindingCookie).toContain('Secure');
+    const payload = verifyPlaybackToken(tokenFromUrl(res.body.data.playbackUrl));
+    expect(payload?.clientBindingHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('web-bound token is rejected without/with a wrong cookie and plays with the right one', async () => {
+    const source = await XtreamSource.create({
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true,
+    });
+    await seedChannel(source);
+    (isSourceDown as jest.Mock).mockResolvedValue(false);
+
+    const issue = await request(buildApp())
+      .post('/api/v1/tv/playback-token')
+      .set('X-Playback-Client', 'web')
+      .send({ channelId: 'CH-LIVE', slot: 0 });
+    expect(issue.status).toBe(200);
+    const token = tokenFromUrl(issue.body.data.playbackUrl);
+    const setCookie = ((issue.headers['set-cookie'] as unknown as string[]) || [])
+      .find((c) => c.startsWith('__Host-dzhoof-playback=')) || '';
+    const cookiePair = setCookie.split(';')[0] || '';
+
+    // No cookie → the token alone is not enough (stolen-URL scenario).
+    const noCookie = await request(buildApp()).get(`/api/v1/tv/playback/${token}`);
+    expect(noCookie.status).toBe(401);
+
+    // Wrong cookie value → hash mismatch → rejected.
+    const wrongCookie = await request(buildApp())
+      .get(`/api/v1/tv/playback/${token}`)
+      .set('Cookie', `__Host-dzhoof-playback=${'0'.repeat(64)}`);
+    expect(wrongCookie.status).toBe(401);
+
+    // The issuing browser's cookie → playback proceeds (direct → 302).
+    const okRes = await request(buildApp())
+      .get(`/api/v1/tv/playback/${token}`)
+      .set('Cookie', cookiePair);
+    expect(okRes.status).toBe(302);
+    expect(okRes.headers.location).toContain('upstream.test');
+  });
+
+  it('non-web clients are NOT bound: no cookie is issued and playback needs none', async () => {
+    const source = await XtreamSource.create({
+      name: 'Upstream', serverUrl: 'https://cf.upstream-host-redacted', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      status: 'Active', verificationStatus: 'verified', directPlayback: true,
+    });
+    await seedChannel(source);
+    (isSourceDown as jest.Mock).mockResolvedValue(false);
+
+    const issue = await request(buildApp())
+      .post('/api/v1/tv/playback-token')
+      .send({ channelId: 'CH-LIVE', slot: 0 });
+    expect(issue.status).toBe(200);
+    const setCookie = (issue.headers['set-cookie'] as unknown as string[]) || [];
+    expect(setCookie.find((c) => c.startsWith('__Host-dzhoof-playback='))).toBeUndefined();
+    const payload = verifyPlaybackToken(tokenFromUrl(issue.body.data.playbackUrl));
+    expect(payload?.clientBindingHash).toBeUndefined();
+
+    const playRes = await request(buildApp()).get(`/api/v1/tv/playback/${tokenFromUrl(issue.body.data.playbackUrl)}`);
+    expect(playRes.status).toBe(302);
   });
 });
