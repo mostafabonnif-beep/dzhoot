@@ -165,8 +165,9 @@ export const SPORTS_TITLE_REGEX_SOURCE = ((): string => {
   const arabic = LOWERCASE_ARABIC.map(escapeRegExp).join('|');
   const phrases = LATIN_SPORTS_PHRASES.map(escapeRegExp).join('|');
   const words = LATIN_SPORTS_WORDS.map((w) => `\\b${escapeRegExp(w)}\\b`).join('|');
-  const teamVsTeam =
-    "\\b(?:[a-z0-9\\u00C0-\\u024F .'-]+\\s+vs\\.?\\s+[a-z0-9\\u00C0-\\u024F .'-]+)\\b";
+  // Loose DB-side "team vs team" (PCRE2 rejects the \uXXXX escapes the precise
+  // JS detector uses, and the coarse filter must be a SUPERSET of the JS rule).
+  const teamVsTeam = '\\S+\\s+vs\\.?\\s+\\S+';
   return `(?:${arabic}|${phrases}|${words}|${teamVsTeam})`;
 })();
 
