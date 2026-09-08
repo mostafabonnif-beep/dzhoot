@@ -49,65 +49,55 @@ const URL1 = 'http://panel.example/live/u/p/101.m3u8';
 const URL2 = 'http://panel.example/live/u/p/202.m3u8';
 const RELAY_PROXY = 'http://172.18.0.1:9001';
 
-describe('upstream egress proxy args (regression: no -https_proxy)', () => {
-  const ORIG_PROXY = process.env.UPSTREAM_HTTP_PROXY;
-  const ORIG_HOSTS = process.env.UPSTREAM_PROXY_HOSTS;
-
-  afterEach(() => {
-    if (ORIG_PROXY === undefined) delete process.env.UPSTREAM_HTTP_PROXY;
-    else process.env.UPSTREAM_HTTP_PROXY = ORIG_PROXY;
-    if (ORIG_HOSTS === undefined) delete process.env.UPSTREAM_PROXY_HOSTS;
-    else process.env.UPSTREAM_PROXY_HOSTS = ORIG_HOSTS;
+describe('upstream egress proxy routing (host allowlist)', () => {
+  // Pure helper: no env, no process — cannot perturb the shared worker.
+  it('matches the WAF-blocked panel host and its subdomains', () => {
+    expect(
+      remux.upstreamHostNeedsProxy('http://tv.business-cloud-neo.com/live/u/p/101.m3u8', ['business-cloud-neo.com']),
+    ).toBe(true);
+    expect(
+      remux.upstreamHostNeedsProxy('https://cf.business-cloud-neo.com/live/u/p/101.m3u8', ['business-cloud-neo.com']),
+    ).toBe(true);
   });
 
-  it('never passes -https_proxy to ffmpeg (it is not a real ffmpeg option)', () => {
-    process.env.UPSTREAM_HTTP_PROXY = RELAY_PROXY;
-    const spawnMock = mockSpawn();
-    remux.startHlsSession('tok-ua-regress', {
-      streamUrl: 'http://tv.business-cloud-neo.com/live/u/p/101.m3u8',
-    });
-    const args: string[] = spawnMock.mock.calls[0][1];
-    expect(args).not.toContain('-https_proxy');
-    expect(args).not.toContain('https_proxy');
+  it('keeps https-mirror and unrelated hosts direct', () => {
+    expect(
+      remux.upstreamHostNeedsProxy('https://cf.business-cloud-neo.ru/live/u/p/202.m3u8', ['business-cloud-neo.com']),
+    ).toBe(false);
+    expect(
+      remux.upstreamHostNeedsProxy('http://panel.example/live/u/p/303.m3u8', ['business-cloud-neo.com']),
+    ).toBe(false);
   });
 
-  it('routes the WAF-blocked panel host through the residential proxy', () => {
-    process.env.UPSTREAM_HTTP_PROXY = RELAY_PROXY;
-    const spawnMock = mockSpawn();
-    remux.startHlsSession('tok-proxy-a', {
-      streamUrl: 'http://tv.business-cloud-neo.com/live/u/p/101.m3u8',
-    });
-    const args: string[] = spawnMock.mock.calls[0][1];
-    expect(args).toContain('-http_proxy');
-    expect(args[args.indexOf('-http_proxy') + 1]).toBe(RELAY_PROXY);
+  it('honors a custom allowlist and ignores unparseable URLs', () => {
+    expect(remux.upstreamHostNeedsProxy('http://proxy.example.com/live/1.m3u8', ['proxy.example.com'])).toBe(true);
+    expect(remux.upstreamHostNeedsProxy('not a url', ['proxy.example.com'])).toBe(false);
+    expect(remux.upstreamHostNeedsProxy('http://tv.business-cloud-neo.com/x', [])).toBe(false);
   });
 
-  it('keeps direct fetch (no proxy args) for hosts that allow datacenter IPs', () => {
+  it('regression: ffmpeg args never contain -https_proxy, only -http_proxy for allowlisted hosts', () => {
+    const hadProxy = Object.prototype.hasOwnProperty.call(process.env, 'UPSTREAM_HTTP_PROXY');
+    const hadHosts = Object.prototype.hasOwnProperty.call(process.env, 'UPSTREAM_PROXY_HOSTS');
+    const oldProxy = process.env.UPSTREAM_HTTP_PROXY;
+    const oldHosts = process.env.UPSTREAM_PROXY_HOSTS;
     process.env.UPSTREAM_HTTP_PROXY = RELAY_PROXY;
-    const spawnMock = mockSpawn();
-    remux.startHlsSession('tok-proxy-b', {
-      streamUrl: 'https://cf.business-cloud-neo.ru/live/u/p/202.m3u8',
-    });
-    const args: string[] = spawnMock.mock.calls[0][1];
-    expect(args).not.toContain('-http_proxy');
-    expect(args).not.toContain('-https_proxy');
-  });
-
-  it('honors a custom UPSTREAM_PROXY_HOSTS allowlist', () => {
-    process.env.UPSTREAM_HTTP_PROXY = RELAY_PROXY;
-    process.env.UPSTREAM_PROXY_HOSTS = 'proxy.example.com';
-    const spawnMock = mockSpawn();
-    remux.startHlsSession('tok-proxy-c', {
-      streamUrl: 'http://tv.business-cloud-neo.com/live/u/p/303.m3u8',
-    });
-    const args: string[] = spawnMock.mock.calls[0][1];
-    expect(args).not.toContain('-http_proxy');
-    remux.stopHlsSession('tok-proxy-c');
-    remux.startHlsSession('tok-proxy-d', {
-      streamUrl: 'http://proxy.example.com/live/u/p/404.m3u8',
-    });
-    const args2: string[] = spawnMock.mock.calls[1][1];
-    expect(args2).toContain('-http_proxy');
+    process.env.UPSTREAM_PROXY_HOSTS = 'business-cloud-neo.com';
+    try {
+      const spawnMock = mockSpawn();
+      remux.startHlsSession('tok-proxy-regress', {
+        streamUrl: 'http://tv.business-cloud-neo.com/live/u/p/101.m3u8',
+      });
+      const args: string[] = spawnMock.mock.calls[0][1];
+      expect(args).not.toContain('-https_proxy');
+      expect(args).not.toContain('https_proxy');
+      expect(args).toContain('-http_proxy');
+      expect(args[args.indexOf('-http_proxy') + 1]).toBe(RELAY_PROXY);
+    } finally {
+      if (hadProxy) process.env.UPSTREAM_HTTP_PROXY = oldProxy;
+      else delete process.env.UPSTREAM_HTTP_PROXY;
+      if (hadHosts) process.env.UPSTREAM_PROXY_HOSTS = oldHosts;
+      else delete process.env.UPSTREAM_PROXY_HOSTS;
+    }
   });
 });
 
