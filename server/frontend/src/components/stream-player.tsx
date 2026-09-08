@@ -63,7 +63,13 @@ interface TokenResult {
 /** Issue a server playback token for a catalog channel slot. */
 async function fetchTokenizedUrl(channelId: string, slot: number): Promise<TokenResult> {
   try {
-    const res = await api.post('/tv/playback-token', { channelId, slot });
+    const res = await api.post(
+      '/tv/playback-token',
+      { channelId, slot },
+      // Web client marker: the API binds direct/playback tokens to an httpOnly
+      // browser cookie so a stolen token can't be replayed from another browser.
+      { headers: { 'X-Playback-Client': 'web' } },
+    );
     const d = res.data;
     if (d?.success && d.data?.playbackUrl) {
       return {

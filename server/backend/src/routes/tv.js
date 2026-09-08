@@ -46,6 +46,53 @@ const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA ا�
   .split(',')
   .map((g) => g.trim())
   .filter(Boolean);
+const WEB_PLAYBACK_COOKIE = '__Host-dzhoof-playback';
+const WEB_PLAYBACK_CLIENT = 'web';
+
+function requestCookie(req, name) {
+  const parsed = req.cookies?.[name];
+  if (typeof parsed === 'string') return parsed;
+  const header = String(req.headers.cookie || '');
+  const entry = header.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
+  if (!entry) return '';
+  try {
+    return decodeURIComponent(entry.slice(name.length + 1));
+  } catch {
+    return '';
+  }
+}
+
+function webPlaybackBinding(req, res) {
+  if (String(req.headers['x-playback-client'] || '').toLowerCase() !== WEB_PLAYBACK_CLIENT) return undefined;
+  let cookie = requestCookie(req, WEB_PLAYBACK_COOKIE);
+  if (!/^[0-9a-f]{64}$/i.test(cookie)) {
+    cookie = crypto.randomBytes(32).toString('hex');
+    res.cookie(WEB_PLAYBACK_COOKIE, cookie, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 15 * 60 * 1000,
+    });
+  }
+  return crypto.createHash('sha256').update(cookie).digest('hex');
+}
+
+function enforceWebPlaybackBinding(req, res, payload) {
+  if (!payload?.clientBindingHash) return true;
+  const cookie = requestCookie(req, WEB_PLAYBACK_COOKIE);
+  if (!/^[0-9a-f]{64}$/i.test(cookie)) {
+    res.status(401).send('Playback is bound to the issuing browser');
+    return false;
+  }
+  const expected = Buffer.from(String(payload.clientBindingHash), 'hex');
+  const actual = crypto.createHash('sha256').update(cookie).digest();
+  if (expected.length !== actual.length || !crypto.timingSafeEqual(expected, actual)) {
+    res.status(401).send('Playback is bound to the issuing browser');
+    return false;
+  }
+  return true;
+}
 
 // GET /logo?url=… — relay channel logos through OUR server so customers and
 // resellers never see the upstream providers' image hosts. SSRF-guarded and
@@ -212,7 +259,7 @@ async function resolvePlaybackTarget(payload) {
 
   const Channel = require('../models/Channel');
   const channel = await Channel.findOne({ channelId: payload.channelId, ownerId: null })
-    .select('channelUrl activeUserAgent activeReferrer alternateStreams')
+    .select('channelId channelUrl activeUserAgent activeReferrer alternateStreams metadata')
     .lean();
   if (!channel || !channel.channelUrl) return null;
 
@@ -233,22 +280,30 @@ async function resolvePlaybackTarget(payload) {
     };
   }
 
-  const value = { streamUrl, upstreamHeaders };
   // Same-panel mirror fallback for v2 channel-reference tokens: resolve the
   // source once and rewrite the primary domain to the mirror when it is down.
   if (channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId) {
     const src = await XtreamSource.findById(channel.metadata.xtreamSourceId)
       .select('serverUrl mirrorServerUrls')
       .lean();
-    if (src && Array.isArray(src.mirrorServerUrls) && src.mirrorServerUrls.length) {
-      const primaryBase = String(src.serverUrl || '').replace(/\/+$/, '');
-      const mirrorBase = String(src.mirrorServerUrls[0]).replace(/\/+$/, '');
-      if (mirrorBase && primaryBase && streamUrl.startsWith(primaryBase) && (await isSourceDown(String(src._id)))) {
-        const rewritten = rewriteStreamUrlBase(streamUrl, mirrorBase);
-        if (rewritten) streamUrl = rewritten;
+    if (src) {
+      if (!payload.altUrlHash && (await isSourceDown(String(src._id)))) {
+        const failoverTarget = await getFailoverTarget(channel, src._id);
+        if (failoverTarget?.streamUrl) streamUrl = failoverTarget.streamUrl;
+      }
+      if (Array.isArray(src.mirrorServerUrls) && src.mirrorServerUrls.length) {
+        const primaryBase = String(src.serverUrl || '').replace(/\/+$/, '');
+        const mirrorBase = String(src.mirrorServerUrls[0]).replace(/\/+$/, '');
+        if (mirrorBase && primaryBase && streamUrl.startsWith(primaryBase) && (await isSourceDown(String(src._id)))) {
+          const rewritten = rewriteStreamUrlBase(streamUrl, mirrorBase);
+          if (rewritten) streamUrl = rewritten;
+        }
       }
     }
   }
+  // Build the resolved target AFTER the failover/mirror rewrites above —
+  // capturing it earlier would cache and return the pre-failover primary URL.
+  const value = { streamUrl, upstreamHeaders };
   if (resolvedTargetCache.size > 4000) resolvedTargetCache.clear();
   resolvedTargetCache.set(payload.nonce, { at: Date.now(), value });
   return value;
@@ -806,13 +861,25 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
 
     const selectedAlternate = slot > 0 ? viableAlternates[slot - 1] : null;
     const rootSessionId = crypto.randomBytes(16).toString('hex');
+    const catalogChannelId = String(channel.channelId || '').trim();
+    const channelTokenRef =
+      catchupStartMs === 0 && catalogChannelId
+        ? {
+            channelId: catalogChannelId,
+            altUrlHash: selectedAlternate?.streamUrl ? altStreamHash(selectedAlternate.streamUrl) : undefined,
+            hls: isHlsPlayback(streamUrl),
+          }
+        : undefined;
+    const webBindingHash = webPlaybackBinding(req, res);
     const tokenOpts = {
       userId: String(user.id),
       channelListCode: String(user.channelListCode || ''),
       streamUrl,
+      channelRef: channelTokenRef,
+      clientBindingHash: webBindingHash,
       sessionId: rootSessionId,
-      // Mid-stream proxy failover: the token carries the catalog channel ref
-      // so the proxy can resolve a backup target if the upstream dies mid-play.
+      // Mid-stream proxy failover: v2 tokens carry the catalog channel ref so
+      // the proxy resolves the current URL and any verified backup at play time.
       channelId: String(channel._id),
       primarySourceId:
         channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId
@@ -993,6 +1060,7 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
     }
     const payload = verifyPlaybackToken(token);
     if (!payload) return res.status(401).send('Playback token expired or invalid');
+    if (!enforceWebPlaybackBinding(req, res, payload)) return;
 
     const user = await User.findOne({
       _id: payload.userId,
@@ -1055,6 +1123,7 @@ router.get('/playback/:token', async (req, res) => {
     const token = String(req.params.token).replace(/\.m3u8$/, '');
     const payload = verifyPlaybackToken(token);
     if (!payload) return res.status(401).send('Playback token expired or invalid');
+    if (!enforceWebPlaybackBinding(req, res, payload)) return;
 
     const user = await User.findOne({
       _id: payload.userId,
@@ -1112,7 +1181,10 @@ router.get('/playback/:token', async (req, res) => {
       // client. Operators should enable this only when their provider contract
       // permits direct client playback and source-URL exposure is acceptable.
       if (process.env.ALLOW_DIRECT_PLAYBACK !== 'true') {
-        return proxyUpstreamStream(req, res, payload.streamUrl, proxyContext, undefined, payload.upstreamHeaders, failoverCtx);
+        // Use the RESOLVED target (not payload.streamUrl — v2 channel-reference
+        // tokens carry no embedded URL) so the relay still works when direct
+        // playback is disabled after the token was minted.
+        return proxyUpstreamStream(req, res, target.streamUrl, proxyContext, undefined, target.upstreamHeaders, failoverCtx);
       }
 
       const parsed = new URL(target.streamUrl);
@@ -1706,6 +1778,7 @@ router.get('/hls/:token/:file', async (req, res) => {
 
     const payload = verifyPlaybackToken(token);
     if (!payload) return res.status(401).send('Playback token expired or invalid');
+    if (!enforceWebPlaybackBinding(req, res, payload)) return;
 
     // Authorize once and cache positively for 30s — segment fetches arrive
     // every ~2s and must not hit Mongo/Redis per segment.
