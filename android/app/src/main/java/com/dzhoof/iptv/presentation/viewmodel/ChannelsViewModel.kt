@@ -29,6 +29,7 @@ import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.CatalogPosterItem
 import com.dzhoof.iptv.presentation.model.ChannelsUiState
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
+import com.dzhoof.iptv.presentation.model.toUiModels
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.WriterException
@@ -82,6 +83,7 @@ class ChannelsViewModel @Inject constructor(
     private var refreshJob: Job? = null
     private var recentlyWatchedJob: Job? = null
     private var popularCategoriesJob: Job? = null
+    private var matchesTodayJob: Job? = null
     private var hasResumedBefore = false
 
     init {
@@ -100,6 +102,7 @@ class ChannelsViewModel @Inject constructor(
         loadChannels()
         loadHomeData()
         observeFavoriteCategories()
+        loadMatchesToday()
         refresh()
         generateGuideQrCode()
     }
@@ -371,9 +374,24 @@ class ChannelsViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Fetches today's sports matches for the Home row. Best-effort and
+     * non-blocking: empty list hides the row, failures are swallowed (the row
+     * simply doesn't appear until the next refresh). Re-run on every refresh
+     * so LIVE/upcoming state stays reasonably fresh while Home is open.
+     */
+    private fun loadMatchesToday() {
+        matchesTodayJob?.cancel()
+        matchesTodayJob = viewModelScope.launch {
+            val matches = runCatching { epgRepository.getMatchesToday() }.getOrDefault(emptyList())
+            _uiState.update { it.copy(matchesToday = matches.toUiModels()) }
+        }
+    }
+
     fun refresh() {
         if (refreshJob?.isActive == true) return
         loadCatalogRows() // best-effort refresh of the home VOD rows
+        loadMatchesToday()
         refreshJob = viewModelScope.launch {
             val hasContent = _uiState.value.channels.isNotEmpty()
             _uiState.update { it.copy(

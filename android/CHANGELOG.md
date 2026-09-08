@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.0] - 2026-09-08
+
+### Added
+- Home "مباريات اليوم": today's live/upcoming sports matches row (server EPG detection), with LIVE badge / kickoff time per match — tap to tune straight to the carrying channel. Works on phone, TV, and boxes; row hides automatically when empty or when the device isn't paired.
+- VOD playback speed control: tap the floating chip in the movie/episode player to cycle 0.75× → 1× → 1.25× → 1.5× → 2× (applies to the current and following items in the session).
+
+### Notes
+- Server API consumed: `GET /api/v1/tv/epg/:code/matches-today` (already live in production; no server change needed).
+
+---
+
 ## [2.2.3] - 2026-07-14
 
 ### Added

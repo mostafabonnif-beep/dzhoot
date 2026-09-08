@@ -21,6 +21,8 @@
     <string name="home">الرئيسية</string>
     <string name="search">البحث</string>
     <string name="home_featured">مميز</string>
+    <string name="home_matches_today">مباريات اليوم</string>
+    <string name="match_live_badge">مباشر</string>
     <string name="home_popular_categories">الفئات الشائعة</string>
     <string name="home_recently_watched">شاهدتها مؤخرًا</string>
     <string name="home_for_you">مقترح لك</string>

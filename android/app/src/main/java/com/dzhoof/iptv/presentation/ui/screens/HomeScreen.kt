@@ -102,6 +102,7 @@ fun HomeScreen(
                     popularCategories = uiState.popularCategories,
                     latestMovies = uiState.latestMovies,
                     latestSeries = uiState.latestSeries,
+                    matchesToday = uiState.matchesToday,
                     lastPlayedChannelId = uiState.lastPlayedChannelId,
                     onChannelClick = openChannel,
                     onNavigateToChannels = onNavigateToChannels,

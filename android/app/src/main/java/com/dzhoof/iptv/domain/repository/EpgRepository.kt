@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.domain.repository
 
 import com.dzhoof.iptv.domain.model.EpgProgram
+import com.dzhoof.iptv.domain.model.SportsMatch
 import java.time.Instant
 
 interface EpgRepository {
@@ -26,6 +27,15 @@ interface EpgRepository {
         from: Instant,
         to: Instant
     ): Map<String, List<EpgProgram>>
+
+    /**
+     * Today's live/upcoming sports matches for the paired account, straight from
+     * the server (no local cache — the server builds it once per UTC day and
+     * caches it 120 s). Empty when the device is not paired, the code is blank,
+     * the call fails, or there are simply no detected matches today.
+     * Never throws.
+     */
+    suspend fun getMatchesToday(): List<SportsMatch>
 
     /**
      * Purge all cached guide data (Room rows + in-memory cache) and re-arm the
