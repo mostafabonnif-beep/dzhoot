@@ -7,18 +7,24 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,6 +33,22 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
 import com.dzhoof.iptv.presentation.viewmodel.VodPlayerViewModel
+
+/** Playback speeds offered by the VOD speed chip, in increasing order. */
+internal val VOD_SPEED_OPTIONS: List<Float> = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+
+/** Cycles to the next speed (wraps around); used by both the chip and unit tests. */
+internal fun nextPlaybackSpeed(current: Float, options: List<Float> = VOD_SPEED_OPTIONS): Float {
+    val index = options.indexOfFirst { kotlin.math.abs(it - current) < 0.001f }
+    if (index < 0) return options.firstOrNull() ?: 1.0f
+    return options[(index + 1) % options.size]
+}
+
+/** Compact chip label: "1×", "1.25×", "2×" … */
+internal fun speedLabel(speed: Float): String {
+    val text = if (speed % 1f == 0f) speed.toInt().toString() else speed.toString()
+    return "$text×"
+}
 
 @Composable
 fun VodPlayerScreen(
@@ -76,6 +98,14 @@ fun VodPlayerScreen(
         }
     }
 
+    // Playback speed chip — cycles 0.75× → 1× → 1.25× → 1.5× → 2×.
+    // Starts at 1× per screen instance; the chosen speed stays on the player
+    // for the next episode/movie opened within the same session.
+    var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    LaunchedEffect(playbackSpeed) {
+        player.setPlaybackSpeed(playbackSpeed)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -93,6 +123,26 @@ fun VodPlayerScreen(
             },
             update = { it.player = player },
         )
+
+        // Speed chip (top corner). Tap/OK cycles the speed; the label always
+        // shows the currently active value. Semi-transparent so it never
+        // blocks the picture, small so it never blocks the controller.
+        Surface(
+            onClick = { playbackSpeed = nextPlaybackSpeed(playbackSpeed) },
+            shape = RoundedCornerShape(50),
+            color = Color.Black.copy(alpha = 0.55f),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(12.dp)
+        ) {
+            Text(
+                text = speedLabel(playbackSpeed),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold
+            )
+        }
 
         if (state.isLoading || state.isRefreshing) {
             CircularProgressIndicator(

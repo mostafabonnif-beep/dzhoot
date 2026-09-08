@@ -3,12 +3,14 @@ package com.dzhoof.iptv.data.repository
 import android.content.Context
 import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.model.dto.EpgProgramDto
+import com.dzhoof.iptv.data.model.dto.SportsMatchDto
 import com.dzhoof.iptv.data.source.local.dao.EpgDao
 import com.dzhoof.iptv.data.source.local.entity.EpgProgramEntity
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.data.source.remote.epg.XmltvEpgDataSource
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.model.EpgProgram
+import com.dzhoof.iptv.domain.model.SportsMatch
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -87,6 +89,18 @@ class EpgRepositoryImpl @Inject constructor(
             (cache[keyOf(tvgId)] ?: emptyList())
                 .filter { it.startTime < to && it.endTime > from }
                 .sortedBy { it.startTime }
+        }
+    }
+
+    override suspend fun getMatchesToday(): List<SportsMatch> = withContext(dispatcher) {
+        val channelListCode = AppPreferences.getTvCode(context)
+        if (channelListCode.isBlank()) return@withContext emptyList()
+        try {
+            val response = apiService.getMatchesToday(channelListCode)
+            if (!response.isSuccessful) return@withContext emptyList()
+            response.body()?.matches.orEmpty().mapNotNull { it.toDomain() }
+        } catch (_: Exception) {
+            emptyList() // best-effort — Home simply hides the row
         }
     }
 
@@ -218,6 +232,32 @@ class EpgRepositoryImpl @Inject constructor(
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun SportsMatchDto.toDomain(): SportsMatch? {
+        val channel = channel ?: return null
+        val start = try {
+            startTime?.let(Instant::parse)
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        val title = title?.trim().orEmpty()
+        val channelId = channel.channelId?.trim().orEmpty()
+        if (channelId.isEmpty() || title.isEmpty()) return null
+        return SportsMatch(
+            channelId = channelId,
+            channelName = channel.name?.trim()?.takeIf { it.isNotEmpty() },
+            channelIcon = channel.icon,
+            title = title,
+            description = description?.trim()?.takeIf { it.isNotEmpty() },
+            isLive = status.equals("live", ignoreCase = true),
+            startTime = start,
+            endTime = try {
+                endTime?.let(Instant::parse)
+            } catch (_: Exception) {
+                null
+            }
+        )
     }
 
     private fun EpgProgramEntity.toDomain(): EpgProgram = EpgProgram(

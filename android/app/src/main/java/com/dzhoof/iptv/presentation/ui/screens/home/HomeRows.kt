@@ -1,8 +1,13 @@
 package com.dzhoof.iptv.presentation.ui.screens.home
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -10,28 +15,43 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import com.dzhoof.iptv.R
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
+import com.dzhoof.iptv.presentation.model.SportsMatchUiModel
 import com.dzhoof.iptv.presentation.ui.components.CategoryCard
 import com.dzhoof.iptv.presentation.ui.components.ChannelCard
 import com.dzhoof.iptv.presentation.ui.components.SectionHeader
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
+import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
+import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 
 internal const val COMPACT_WIDTH_DP = 600
@@ -224,5 +244,130 @@ internal fun ChannelRow(
                 )
             }
         }
+    }
+}
+
+/**
+ * "مباريات اليوم" — today's live/upcoming sports matches from the server EPG.
+ * Tapping a card tunes straight to the catalog channel carrying the match.
+ * The row is hidden entirely when there is nothing to show.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+internal fun SportsMatchesRow(
+    matches: List<SportsMatchUiModel>,
+    onMatchClick: (String) -> Unit,
+    horizontalPadding: Dp,
+    modifier: Modifier = Modifier
+) {
+    val isCompact = LocalConfiguration.current.screenWidthDp < COMPACT_WIDTH_DP
+    val cardWidth = if (isCompact) 168.dp else 240.dp
+    val cardHeight = if (isCompact) 96.dp else 116.dp
+    val titleGap = if (isCompact) Dimens.RowTitleGapMobile else Dimens.RowTitleGap
+    val cardGap = if (isCompact) Dimens.CardGapMobile else Dimens.CardGap
+
+    Column(modifier = modifier.padding(horizontal = horizontalPadding)) {
+        SectionHeader(
+            title = stringResource(R.string.home_matches_today),
+            accentColor = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(titleGap))
+        LazyRow(
+            state = rememberLazyListState(),
+            modifier = Modifier.focusRestorer(),
+            contentPadding = PaddingValues(vertical = if (isCompact) Dimens.Space1 else 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(cardGap)
+        ) {
+            items(matches.size, key = { i -> "${matches[i].channelId}:${matches[i].startEpochMs}" }) { i ->
+                SportsMatchCard(
+                    match = matches[i],
+                    onClick = { onMatchClick(matches[i].channelId) },
+                    modifier = Modifier
+                        .width(cardWidth)
+                        .height(cardHeight)
+                )
+            }
+        }
+    }
+}
+
+/** Compact schedule card: kickoff/LIVE badge + teams, channel name at the foot. */
+@Composable
+private fun SportsMatchCard(
+    match: SportsMatchUiModel,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    Card(
+        onClick = onClick,
+        modifier = modifier.onFocusChanged { isFocused = it.isFocused },
+        shape = RoundedCornerShape(12.dp),
+        border = if (isFocused) {
+            BorderStroke(2.dp, FocusBorder)
+        } else {
+            BorderStroke(1.dp, subtleBorder)
+        },
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+        ) {
+            if (match.isLive) {
+                LiveBadge()
+            } else {
+                Text(
+                    text = match.timeLabel,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = match.title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            match.channelName?.let { channelName ->
+                Text(
+                    text = channelName,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+/** Red "مباشر" pill shown while the match is already on air. */
+@Composable
+private fun LiveBadge(modifier: Modifier = Modifier) {
+    val liveColor = Color(0xFFE53935)
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(8.dp)
+                .height(8.dp)
+                .background(liveColor, CircleShape)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = stringResource(R.string.match_live_badge),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold,
+            color = liveColor
+        )
     }
 }
