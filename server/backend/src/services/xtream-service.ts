@@ -21,6 +21,11 @@ import {
   cleanChannelName,
   channelVariantRank,
 } from './source-failover-service';
+// Customer-facing cleaner: strips provider decoration (ᴿᴬᵂ, wrappers, country
+// prefixes) so synced catalogs stay professional no matter how the upstream
+// panel names its streams. Applied at IMPORT time so every scheduled sync
+// re-persists already-clean names instead of re-dirtying operator curation.
+import { cleanDisplayChannelName } from '../utils/catalog-name-cleaner';
 // isForeignCatalogChannel is exported at runtime (module.exports) but not as a
 // TS export — pull it via require alongside the typed imports above.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -440,6 +445,14 @@ function toStringOrEmpty(value: unknown): string {
   return String(value || '').trim();
 }
 
+/** Customer-facing cleaner with a safe fallback (never returns empty for a non-empty input). */
+function cleanDisplay(value: unknown, fallback = 'Uncategorized'): string {
+  const raw = String(value ?? '').trim();
+  if (!raw) return fallback;
+  const cleaned = cleanDisplayChannelName(raw);
+  return cleaned || raw;
+}
+
 function iconUrl(value: unknown): string {
   // Some panels return stream_icon as an array of URLs for VOD/Series.
   if (Array.isArray(value)) return String(value[0] || '').trim();
@@ -489,19 +502,23 @@ const XTREAM_TIMESHIFT_DAYS = Number(process.env.XTREAM_TIMESHIFT_DAYS) || 3;
 
 async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials, playbackFormat: XtreamPlaybackFormat = 'm3u8') {
   const channelId = `xt:${String(sourceId)}:${item.stream_id}`;
+  const rawName = String(item.name || `Channel ${item.stream_id}`).trim();
   const update: Record<string, any> = {
     $set: {
       channelId,
-      channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
+      channelName: cleanDisplay(rawName, rawName),
       channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
       channelImg: iconUrl(item.stream_icon),
-      channelGroup: group || 'Uncategorized',
+      channelGroup: cleanDisplay(group),
+      // Provider's original name kept for reference / re-import diagnosis; the
+      // customer-facing channelName above is always the cleaned display name.
+      'metadata.providerName': rawName,
       // tvgId is set ONLY on INSERT ($setOnInsert) and never overwritten by a
       // sync: operator-assigned tvgIds (which may point at a better guide than
       // the provider's epg_channel_id, e.g. epgshare TR1 real schedules vs
       // iptv-org "No Data" placeholders) must survive scheduled syncs. New
       // channels still inherit the provider's epg_channel_id on first import.
-      tvgName: String(item.name || '').trim(),
+      tvgName: rawName,
       isActive: true,
       order: Number(item.num) || 0,
       'metadata.source': 'xtream',
@@ -537,7 +554,7 @@ async function upsertMovie(sourceId: mongoose.Types.ObjectId, item: any, group: 
     {
       $set: {
         title: String(item.name || `Movie ${item.stream_id}`).trim(),
-        category: group || 'Uncategorized',
+        category: cleanDisplay(group),
         poster: iconUrl(item.stream_icon),
         backdrop: '',
         description: toStringOrEmpty(item.plot || item.description),
@@ -563,7 +580,7 @@ async function upsertSeries(sourceId: mongoose.Types.ObjectId, item: any, group:
     {
       $set: {
         title: String(item.name || `Series ${item.series_id}`).trim(),
-        category: group || 'Uncategorized',
+        category: cleanDisplay(group),
         poster: item.cover || '',
         backdrop: iconUrl(item.backdrop_path),
         plot: item.plot || '',
@@ -715,14 +732,15 @@ export async function ensureSeasonEpisodes(seasonId: string): Promise<number> {
 }
 
 function liveChannelSnapshot(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials, playbackFormat: XtreamPlaybackFormat = 'm3u8') {
+  const rawName = String(item.name || `Channel ${item.stream_id}`).trim();
   return {
     channelId: `xt:${String(sourceId)}:${item.stream_id}`,
-    channelName: String(item.name || `Channel ${item.stream_id}`).trim(),
+    channelName: cleanDisplay(rawName, rawName),
     channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
     channelImg: iconUrl(item.stream_icon),
-    channelGroup: group || 'Uncategorized',
+    channelGroup: cleanDisplay(group),
     tvgId: item.epg_channel_id || '',
-    tvgName: String(item.name || '').trim(),
+    tvgName: rawName,
     order: Number(item.num) || 0,
     metadata: {
       source: 'xtream',
