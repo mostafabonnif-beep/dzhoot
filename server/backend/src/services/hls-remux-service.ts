@@ -125,6 +125,27 @@ export interface StartHlsOptions {
   upstreamHeaders?: { userAgent?: string; referrer?: string };
 }
 
+/**
+ * True when an upstream stream URL belongs to a host that must egress through
+ * the residential relay (WAF blocks datacenter IPs on its /live endpoints).
+ * Matches exact host or any subdomain of the configured suffixes.
+ */
+export function upstreamHostNeedsProxy(
+  streamUrl: string,
+  proxyHostSuffixes: string[],
+): boolean {
+  if (!proxyHostSuffixes || proxyHostSuffixes.length === 0) return false;
+  let host: string;
+  try {
+    host = new URL(streamUrl).hostname.toLowerCase();
+  } catch {
+    return false; // unparseable URL — never break the direct fetch path
+  }
+  return proxyHostSuffixes.some(
+    (suffix) => host === suffix || host.endsWith(`.${suffix}`),
+  );
+}
+
 export function startHlsSession(
   token: string,
   opts: StartHlsOptions,
@@ -185,12 +206,22 @@ export function startHlsSession(
     '-loglevel', 'error',
   ];
   // Optional egress proxy: IPTV providers commonly WAF-block datacenter IPs on
-  // stream endpoints (HTTP 456/458). Pointing UPSTREAM_HTTP_PROXY at a
-  // residential/ISP proxy lets the remux fetch the upstream from an allowed IP.
+  // stream endpoints (HTTP 456/458). UPSTREAM_HTTP_PROXY points at a
+  // residential/ISP proxy so the remux fetches the upstream from an allowed IP.
+  // NOTE: ffmpeg has exactly ONE proxy option (-http_proxy) covering both http
+  // and https — there is no -https_proxy (that option kills ffmpeg with
+  // "Unrecognized option"). Only route hosts that genuinely block datacenter
+  // IPs (UPSTREAM_PROXY_HOSTS, comma-separated host suffixes) so sessions that
+  // work direct (e.g. the https mirror panel) don't depend on the home tunnel.
   const upstreamProxy = String(process.env.UPSTREAM_HTTP_PROXY || '').trim();
-  if (upstreamProxy) {
+  const proxyHostSuffixes = String(
+    process.env.UPSTREAM_PROXY_HOSTS || 'business-cloud-neo.com',
+  )
+    .split(',')
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+  if (upstreamProxy && upstreamHostNeedsProxy(opts.streamUrl, proxyHostSuffixes)) {
     args.push('-http_proxy', upstreamProxy);
-    args.push('-https_proxy', upstreamProxy);
   }
   // Provider panels fingerprint server-side fetchers by User-Agent. Use the
   // channel's configured UA when present, otherwise a plain desktop-browser UA

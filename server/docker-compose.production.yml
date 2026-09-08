@@ -47,9 +47,11 @@ services:
       # fetches exit through the operator's home proxy (127.0.0.1:9001 via ssh
       # -R) — bypasses providers that WAF-block datacenter IPs (HTTP 456).
       UPSTREAM_HTTP_PROXY: ${UPSTREAM_HTTP_PROXY:-}
+      UPSTREAM_PROXY_HOSTS: ${UPSTREAM_PROXY_HOSTS:-business-cloud-neo.com}
       # Optional egress proxy for upstream fetches (some providers WAF-block
       # datacenter IPs on stream endpoints with HTTP 456/458).
       UPSTREAM_HTTP_PROXY: ${UPSTREAM_HTTP_PROXY:-}
+      UPSTREAM_PROXY_HOSTS: ${UPSTREAM_PROXY_HOSTS:-business-cloud-neo.com}
       PORT: 3000
       APP_VERSION: ${APP_VERSION:-1.0.1}
       RELEASE_COMMIT: ${RELEASE_COMMIT:-unknown}
