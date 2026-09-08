@@ -665,7 +665,7 @@ const common = {
 } as const;
 
 const navigation: Dictionary = {
-  'nav.dashboard': 'لوحة التحكم', 'nav.quickPick': 'اختيار سريع', 'nav.channels': 'القنوات المباشرة',
+  'nav.dashboard': 'لوحة التحكم', 'nav.discover': 'استكشف', 'nav.quickPick': 'اختيار سريع', 'nav.channels': 'القنوات المباشرة',
   'nav.movies': 'الأفلام (VOD)', 'nav.series': 'المسلسلات', 'nav.users': 'المستخدمون', 'nav.liveViewers': 'المشاهدون الآن', 'nav.devices': 'الأجهزة',
   'nav.plans': 'الباقات', 'nav.codes': 'أكواد التفعيل', 'nav.resellers': 'المحلات', 'nav.tickets': 'التذاكر', 'nav.codeBatches': 'الدفعات', 'nav.import': 'استيراد IPTV',
   'nav.m3uSources': 'مصادر M3U التلقائية', 'nav.xtreamSources': 'مصادر Xtream', 'nav.sources': 'مصادر أخرى',
@@ -689,7 +689,7 @@ function buildDictionary(localeIndex: 0 | 1 | 2, translatedNavigation: Dictionar
 const dictionaries: Record<Locale, Dictionary> = {
   ar: buildDictionary(0, navigation),
   en: buildDictionary(1, {
-    'nav.dashboard': 'Dashboard', 'nav.quickPick': 'Quick pick', 'nav.channels': 'Live channels', 'nav.movies': 'Movies (VOD)',
+    'nav.dashboard': 'Dashboard', 'nav.discover': 'Discover', 'nav.quickPick': 'Quick pick', 'nav.channels': 'Live channels', 'nav.movies': 'Movies (VOD)',
     'nav.series': 'Series', 'nav.users': 'Users', 'nav.liveViewers': 'Live viewers', 'nav.devices': 'Devices', 'nav.plans': 'Plans', 'nav.codes': 'Activation codes', 'nav.resellers': 'Resellers', 'nav.tickets': 'Tickets', 'nav.codeBatches': 'Batches',
     'nav.import': 'IPTV import', 'nav.m3uSources': 'Automatic M3U sources', 'nav.xtreamSources': 'Xtream sources', 'nav.sources': 'Other sources',
     'nav.catalogOrdering': 'Channel list ordering',
@@ -702,7 +702,7 @@ const dictionaries: Record<Locale, Dictionary> = {
     'header.darkMode': 'Switch to dark mode', 'header.logout': 'Log out',
   }),
   fr: buildDictionary(2, {
-    'nav.dashboard': 'Tableau de bord', 'nav.quickPick': 'Sélection rapide', 'nav.channels': 'Chaînes en direct', 'nav.movies': 'Films (VOD)',
+    'nav.dashboard': 'Tableau de bord', 'nav.discover': 'Découvrir', 'nav.quickPick': 'Sélection rapide', 'nav.channels': 'Chaînes en direct', 'nav.movies': 'Films (VOD)',
     'nav.series': 'Séries', 'nav.users': 'Utilisateurs', 'nav.liveViewers': 'Spectateurs en direct', 'nav.devices': 'Appareils', 'nav.plans': 'Forfaits', 'nav.codes': "Codes d’activation", 'nav.resellers': 'Revendeurs', 'nav.tickets': 'Tickets', 'nav.codeBatches': 'Lots',
     'nav.import': 'Import IPTV', 'nav.m3uSources': 'Sources M3U automatiques', 'nav.xtreamSources': 'Sources Xtream', 'nav.sources': 'Autres sources',
     'nav.catalogOrdering': 'Organisation des listes',

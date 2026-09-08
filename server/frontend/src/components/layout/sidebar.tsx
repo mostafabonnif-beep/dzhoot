@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
+  Compass,
   Tv,
   Film,
   Users,
@@ -81,6 +82,7 @@ const dz1TvStudioLinks: NavigationLink[] = hasSafeDz1TvStudioUrl
 
 const userLinks: NavigationLink[] = [
   { href: '/user', labelKey: 'nav.dashboard', icon: LayoutDashboard },
+  { href: '/user/discover', labelKey: 'nav.discover', icon: Compass },
   { href: '/user/quick-pick', labelKey: 'nav.quickPick', icon: Zap },
   { href: '/user/channels', labelKey: 'nav.myChannels', icon: Tv },
   { href: '/user/import', labelKey: 'nav.import', icon: Globe },
