@@ -1,9 +1,38 @@
 import http from 'http';
 import https from 'https';
 import axios, { AxiosRequestConfig } from 'axios';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import { issuePlaybackToken } from './playback-token';
 import { createPinnedLookup, isPrivateIP, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
+
+// Residential egress (home relay / hosted ISP proxy): when UPSTREAM_HTTP_PROXY
+// is set, every upstream stream fetch in this relay tunnels through it (CONNECT
+// via HttpsProxyAgent works for http:// and https:// targets alike). This keeps
+// provider credentials server-side for relayed playback and bypasses providers
+// that WAF-block datacenter IPs (HTTP 456). DNS pinning is intentionally
+// skipped in proxy mode — the proxy resolves; SSRF string-level validation
+// still runs on every URL before it reaches this point.
+let cachedProxyAgent: HttpsProxyAgent<string> | null | undefined;
+
+export function getUpstreamProxyAgent(): HttpsProxyAgent<string> | null {
+  if (cachedProxyAgent !== undefined) return cachedProxyAgent;
+  cachedProxyAgent = null;
+  const raw = String(process.env.UPSTREAM_HTTP_PROXY || '').trim();
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      cachedProxyAgent = new HttpsProxyAgent(raw);
+    } catch {
+      cachedProxyAgent = null;
+    }
+  }
+  return cachedProxyAgent;
+}
+
+/** Test hook only — clears the cached agent so env changes take effect. */
+export function resetUpstreamProxyAgentCache(): void {
+  cachedProxyAgent = undefined;
+}
 
 const MAX_MANIFEST_SIZE = 10 * 1024 * 1024;
 
@@ -49,6 +78,17 @@ async function fetchUpstreamWithRetry(
   let lastError: unknown;
   for (let attempt = 0; attempt <= MAX_UPSTREAM_RETRIES; attempt++) {
     try {
+      const proxyAgent = getUpstreamProxyAgent();
+      if (proxyAgent) {
+        // Residential egress: tunnel this upstream fetch through the proxy.
+        // (Type note: HttpsProxyAgent is protocol-agnostic CONNECT tunneling,
+        // so it serves as both the http and https agent.)
+        options = {
+          ...options,
+          httpAgent: proxyAgent as unknown as http.Agent,
+          httpsAgent: proxyAgent as unknown as https.Agent,
+        };
+      }
       return await axios.get(url, options);
     } catch (error) {
       lastError = error;
@@ -591,4 +631,9 @@ export async function proxyUpstreamStream(
   }
 }
 
-module.exports = { proxyUpstreamStream, resolveSegmentUrlBySequence };
+module.exports = {
+  proxyUpstreamStream,
+  resolveSegmentUrlBySequence,
+  getUpstreamProxyAgent,
+  resetUpstreamProxyAgentCache,
+};

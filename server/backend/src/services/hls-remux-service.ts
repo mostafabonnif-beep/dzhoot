@@ -192,9 +192,12 @@ export function startHlsSession(
     args.push('-http_proxy', upstreamProxy);
     args.push('-https_proxy', upstreamProxy);
   }
-  if (opts.upstreamHeaders?.userAgent) {
-    args.push('-user_agent', opts.upstreamHeaders.userAgent);
-  }
+  // Provider panels fingerprint server-side fetchers by User-Agent. Use the
+  // channel's configured UA when present, otherwise a plain desktop-browser UA
+  // instead of ffmpeg's default "Lavf/…" so the upstream sees a normal viewer.
+  const DEFAULT_BROWSER_UA =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+  args.push('-user_agent', opts.upstreamHeaders?.userAgent || DEFAULT_BROWSER_UA);
   if (opts.upstreamHeaders?.referrer) {
     args.push('-headers', `Referer: ${opts.upstreamHeaders.referrer}\r\n`);
   }
