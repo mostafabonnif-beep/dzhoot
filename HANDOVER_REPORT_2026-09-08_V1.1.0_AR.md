@@ -35,9 +35,26 @@
   - SHA-256 للملف: `1f8359cd75afe9edb5a81998222fe4703d0eed84a709c0e5401f8ec42c0d66af` — الحجم 23,285,529 بايت.
 - ملاحظة تشغيلية: بناء الاختبارات + R8 معًا على خادم إنتاج (5.8GB RAM) سبّب ضغط ذاكرة وOOM جزئي؛ أُعيد البناء بنجاح. للجولات القادمة: شغّل `testOfficialReleaseUnitTest` ثم `assembleOfficialRelease` كخطوتين منفصلتين، أو ارفع ذاكرة الخادم.
 
-## خطوات النشر للإنتاج (بانتظار موافقة المالك — لم تنفَّذ)
-1. اختبار APK يدويًا على هاتف/تلفاز/Box (تثبيت جانبي).
-2. رفع `dzhoof-tv-v1.1.0-official.apk` إلى مجلد `downloads` على الخادم.
-3. تسجيل صف `AppVersion` جديد (versionName 1.1.0 / versionCode 10100) في MongoDB appversions — ليظهر التحديث داخل التطبيق.
-4. دمج الفرع في `main` ورفعه إلى GitHub (يتطلب توكن مستخدم — مفتاح SSH الحالي ليس مفتاح GitHub).
+## النشر للإنتاج — ✅ نُفّذ بالكامل (2026-09-08 ~21:45 UTC)
+> بموافقة المالك ("طبق التغييرات وفعّل التحديث التلقائي").
+
+1. **GitHub**: فرع `feature/v1.1.0-matches-today-vod-speed` دُفع → **PR #217** → دمج squash في `main` (`1acdcd2`).
+2. **GitHub Release v1.1.0**: أُنشئ بأصول `app-official-release.apk` (SHA-256 `1f8359cd…`) + `.sha256`.
+3. **قاعدة البيانات** (appversions): أُدرج صف 1.1.0 (code 10100) نشطًا مع downloadUrl canonical `/api/v1/app/download`، وأُلغي تنشيط 1.0.50 و1.0.43 (كانا نشطين معًا ورابط 1.0.50 يعطي 404 — أصلحنا الحالة).
+4. **التحقق الحي (public)**:
+   - `/api/v1/app/version?currentVersion=10050` → `updateAvailable: true`، latest 1.1.0/10100.
+   - `/api/v1/app/latest` → source `db`، 1.1.0، 23,285,529 بايت.
+   - `/api/v1/app/download` (متابعة التحويلات) → HTTP 200، الحجم 23,285,529، SHA-256 `1f8359cd75…` = تطابق تام مع APK الموقّع.
+   - ملاحظة: كان كاش Redis (`ghrel:latest`) يوجّه التحميل لنسخة قديمة — أُبطل الكاش فورًا.
+5. **CI**: `DZ HOOF CI` يعمل على main بعد الدمج (Android lint/tests + backend)؛ workflow «Android Release» يفشل على الوسم v1.1.0 بسبب غياب السيكرتس في GitHub (البناء يتم على VPS — لا أثر على التحديث الحي).
+
+**النتيجة**: أي جهاز زبون على إصدار ≤1.0.50 سيرى إشعار تحديث 1.1.0 عند فتح التطبيق (تحديث اختياري، غير إلزامي، لا يتطلب إعادة ربط).
+
+## مسار النشر القياسي للجولات القادمة
+1. عدّل الكود → ادفع فرعًا → PR → دمج في main.
+2. ابنِ APK موقّعًا على VPS (سكربت `/opt/dzhoot-android/build-v110.sh` — اختبارات ثم assemble بذاكرة محدودة).
+3. أنشئ GitHub Release v1.1.x بالوسم + ارفع الأصلين (APK + sha256).
+4. أدرج صف AppVersion في MongoDB (أو حدّث النص فقط) وألغِ تنشيط القديم.
+5. أبطِل كاش `ghrel:latest` في Redis، ثم تحقق من `/version` و`/download` كما أعلاه.
+
 
