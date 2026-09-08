@@ -150,6 +150,37 @@ const SPORTS_CATEGORY_HINTS = [
 
 const LOWERCASE_ARABIC = ARABIC_SPORTS_KEYWORDS.map((k) => k.toLowerCase());
 
+/**
+ * Single-source regex alternations so the route can push a coarse sports
+ * pre-filter into the MongoDB query (before the scan limit is applied) while
+ * the pure JS logic above stays the final authority. Sharing the constants
+ * here keeps DB pre-filter and JS filter from drifting apart.
+ */
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\const LOWERCASE_ARABIC = ARABIC_SPORTS_KEYWORDS.map((k) => k.toLowerCase());');
+}
+
+export const SPORTS_TITLE_REGEX_SOURCE = ((): string => {
+  const arabic = LOWERCASE_ARABIC.map(escapeRegExp).join('|');
+  const phrases = LATIN_SPORTS_PHRASES.map(escapeRegExp).join('|');
+  const words = LATIN_SPORTS_WORDS.map((w) => `\\b${escapeRegExp(w)}\\b`).join('|');
+  const teamVsTeam =
+    "\\b(?:[a-z0-9\\u00C0-\\u024F .'-]+\\s+vs\\.?\\s+[a-z0-9\\u00C0-\\u024F .'-]+)\\b";
+  return `(?:${arabic}|${phrases}|${words}|${teamVsTeam})`;
+})();
+
+export const SPORTS_CATEGORY_REGEX_SOURCE = SPORTS_CATEGORY_HINTS.map(escapeRegExp).join('|');
+
+/** Coarse DB pre-filter predicate mirror — exported for tests. */
+export function sportsTitleRegex(): RegExp {
+  return new RegExp(SPORTS_TITLE_REGEX_SOURCE, 'i');
+}
+
+export function sportsCategoryRegex(): RegExp {
+  return new RegExp(SPORTS_CATEGORY_REGEX_SOURCE, 'i');
+}
+
 function titleHasArabicKeyword(title: string): boolean {
   return LOWERCASE_ARABIC.some((keyword) => title.includes(keyword));
 }

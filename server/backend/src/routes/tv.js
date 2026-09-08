@@ -25,7 +25,11 @@ const { registerStreamSession, isStreamSessionActive } = require('../services/st
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const { epgCache } = require('../services/cache');
 const { buildNowNext } = require('../utils/epg-now-next');
-const { buildSportsMatches } = require('../utils/sports-matches');
+const {
+  buildSportsMatches,
+  SPORTS_TITLE_REGEX_SOURCE,
+  SPORTS_CATEGORY_REGEX_SOURCE,
+} = require('../utils/sports-matches');
 const { decryptSecret } = require('../utils/crypto');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
@@ -1531,9 +1535,17 @@ router.get('/epg/:code/matches-today', async (req, res) => {
       const endOfDay = new Date(startOfDay.getTime() + 24 * 3600000);
       const scanLimit = Math.min(Math.max(parseInt(process.env.MATCHES_TODAY_SCAN_LIMIT, 10) || 6000, 100), 20000);
       const maxMatches = Math.min(Math.max(parseInt(process.env.MATCHES_TODAY_MAX, 10) || 80, 5), 300);
+      // Coarse sports pre-filter INSIDE the query: a 6k scan cap over a whole
+      // catalog day (~320k programs) would otherwise take the earliest
+      // non-sports programs of the morning and starve the sports filter.
+      // The pure JS filter in sports-matches remains the final authority.
       const programs = await EpgProgram.find({
         channelEpgId: { $in: epgIds },
         startTime: { $gte: startOfDay, $lt: endOfDay },
+        $or: [
+          { title: { $regex: SPORTS_TITLE_REGEX_SOURCE, $options: 'i' } },
+          { category: { $regex: SPORTS_CATEGORY_REGEX_SOURCE, $options: 'i' } },
+        ],
       })
         .collation({ locale: 'en', strength: 2 })
         .sort({ startTime: 1 })
