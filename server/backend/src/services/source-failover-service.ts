@@ -43,6 +43,70 @@ const lastAlertedHealth = new Map<string, SourceHealth>();
 // whole catalog between primary and backup.
 const consecutiveVerified = new Map<string, number>();
 
+// Web-direct https fallback cache (channelRef -> resolved https URL or null).
+// 5 min TTL: mapping changes are rare, and this sits on the hot playback path.
+const HTTPS_BACKUP_CACHE_TTL_MS = 5 * 60 * 1000;
+const httpsBackupCache = new Map<string, { at: number; url: string | null }>();
+
+/**
+ * Web-direct HTTPS fallback ("الشغّل المباشر عبر https"):
+ *
+ * Browsers refuse http:// media on https pages (mixed content), and several
+ * Xtream panels WAF-block datacenter relays on their /live endpoints (HTTP
+ * 456) while their HTTPS CDN streams work fine from residential IPs. For a
+ * channel whose OWN upstream is http:// only, consult the failover map for a
+ * mapped twin on another source and, when that twin's stored stream URL is
+ * https://, hand it to the WEB client as a direct candidate — the browser
+ * fetches from the residential IP and playback works with no server relay.
+ * Non-web clients are untouched (they keep their own direct/proxy paths).
+ */
+export async function getHttpsBackupStreamUrl(channel: {
+  _id?: mongoose.Types.ObjectId | string;
+  channelId?: string;
+}): Promise<string | null> {
+  const ref = String(channel.channelId || channel._id || '');
+  if (!ref) return null;
+
+  const hit = httpsBackupCache.get(ref);
+  if (hit && Date.now() - hit.at < HTTPS_BACKUP_CACHE_TTL_MS) return hit.url;
+
+  const orClauses: Record<string, unknown>[] = [];
+  if (channel.channelId) orClauses.push({ channelRef: String(channel.channelId) });
+  if (channel._id) orClauses.push({ channelId: channel._id });
+  if (orClauses.length === 0) return null;
+
+  let url: string | null = null;
+  const maps = await ChannelFailoverMap.aggregate([
+    { $match: { enabled: true, $or: orClauses } },
+    { $addFields: { _priority: { $ifNull: ['$priority', 100] } } },
+    { $sort: { _priority: 1, updatedAt: -1 } },
+  ]).exec();
+
+  for (const map of maps.slice(0, 3)) {
+    const streamId = String(map.backupStreamId || '');
+    if (!streamId) continue;
+    const numericId = Number(streamId);
+    const idMatch = Number.isFinite(numericId)
+      ? { 'metadata.xtreamStreamId': numericId }
+      : { 'metadata.xtreamStreamId': streamId };
+    const twin = await Channel.findOne({
+      'metadata.xtreamSourceId': map.backupSourceId,
+      ...idMatch,
+    })
+      .select('channelUrl')
+      .lean()
+      .exec();
+    if (twin?.channelUrl && /^https:/i.test(String(twin.channelUrl))) {
+      url = String(twin.channelUrl);
+      break;
+    }
+  }
+
+  if (httpsBackupCache.size > 20000) httpsBackupCache.clear();
+  httpsBackupCache.set(ref, { at: Date.now(), url });
+  return url;
+}
+
 /** Build the HLS live URL for a stream on a given Xtream source. */
 export function buildFailoverStreamUrl(
   creds: { serverUrl: string; username: string; password: string },
@@ -694,6 +758,7 @@ module.exports = {
   getSourceHealth,
   isSourceDown,
   getFailoverTarget,
+  getHttpsBackupStreamUrl,
   runSourceWatchdog,
   autoMatchFailoverMaps,
   cleanChannelName,

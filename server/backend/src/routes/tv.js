@@ -41,7 +41,7 @@ const {
   presentChannelForClient,
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
-const { isSourceDown, getFailoverTarget } = require('../services/source-failover-service');
+const { isSourceDown, getFailoverTarget, getHttpsBackupStreamUrl } = require('../services/source-failover-service');
 const { rewriteStreamUrlBase } = require('../services/xtream-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
 
@@ -934,7 +934,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     // The direct browser URL must be the ORIGINAL provider URL (pre-mirror
     // rewrite): the mirror is http:// and only reflects server-side
     // reachability. Residential browsers reach the https primary fine.
-    const directCandidateUrl =
+    let directCandidateUrl =
       failoverTarget && /^https:/i.test(failoverTarget.streamUrl)
         ? failoverTarget.streamUrl
         : /^https:/i.test(preMirrorStreamUrl)
@@ -942,6 +942,14 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
           : /^https:/i.test(streamUrl)
             ? streamUrl
             : null;
+    // No https upstream of our own (http://-only providers): some panels serve
+    // the same channel over https on a twin source/account. If a failover map
+    // exists, use that https twin as the WEB direct candidate — the browser
+    // fetches from its residential IP (provider WAFs often return HTTP 456 to
+    // datacenter relays, and http:// media is blocked as mixed content anyway).
+    if (!directCandidateUrl && directEnabled && channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId) {
+      directCandidateUrl = await getHttpsBackupStreamUrl(channel);
+    }
     if (directEnabled && directCandidateUrl) {
       directUrl = directCandidateUrl;
       if (/\.ts(\?|$)/i.test(directCandidateUrl) && channel.metadata?.source === 'xtream') {
