@@ -64,6 +64,7 @@ fun CatalogScreen(
     onPlayMovie: (String, String) -> Unit,
     onPlayEpisode: (String, String) -> Unit,
     onOpenSettings: () -> Unit = {},
+    initialTab: CatalogTab = CatalogTab.MOVIES,
     initialSeriesId: String? = null,
     initialSeriesTitle: String? = null,
     initialMovieId: String? = null,
@@ -72,6 +73,11 @@ fun CatalogScreen(
     viewModel: CatalogViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // Entry from Categories shortcut tiles / bottom nav: open on the wanted tab
+    LaunchedEffect(initialTab) {
+        viewModel.selectTab(initialTab)
+    }
 
     LaunchedEffect(initialMovieId) {
         initialMovieId?.takeIf { it.isNotBlank() }?.let { id ->
