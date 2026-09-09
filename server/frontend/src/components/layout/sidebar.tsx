@@ -83,6 +83,7 @@ const dz1TvStudioLinks: NavigationLink[] = hasSafeDz1TvStudioUrl
 const userLinks: NavigationLink[] = [
   { href: '/user', labelKey: 'nav.dashboard', icon: LayoutDashboard },
   { href: '/user/discover', labelKey: 'nav.discover', icon: Compass },
+  { href: '/user/vod', labelKey: 'nav.vod', icon: Film },
   { href: '/user/quick-pick', labelKey: 'nav.quickPick', icon: Zap },
   { href: '/user/channels', labelKey: 'nav.myChannels', icon: Tv },
   { href: '/user/import', labelKey: 'nav.import', icon: Globe },

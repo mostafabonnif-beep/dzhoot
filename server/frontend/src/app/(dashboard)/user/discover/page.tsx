@@ -310,10 +310,10 @@ export default function DiscoverPage() {
           {/* Latest movies */}
           {data!.latestMovies.length > 0 ? (
             <section>
-              <SectionHeader icon={Film} title={t.latestMovies} href="/user/channels?tab=movies" browseLabel={t.browse} />
+              <SectionHeader icon={Film} title={t.latestMovies} href="/user/vod" browseLabel={t.browse} />
               <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
                 {data!.latestMovies.map((m) => (
-                  <VodCard key={m._id} item={m} href="/user/channels?tab=movies" />
+                  <VodCard key={m._id} item={m} href="/user/vod" />
                 ))}
               </div>
             </section>
@@ -322,10 +322,10 @@ export default function DiscoverPage() {
           {/* Latest series */}
           {data!.latestSeries.length > 0 ? (
             <section>
-              <SectionHeader icon={MonitorPlay} title={t.latestSeries} href="/user/channels?tab=series" browseLabel={t.browse} />
+              <SectionHeader icon={MonitorPlay} title={t.latestSeries} href="/user/vod?kind=series" browseLabel={t.browse} />
               <div className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:thin]">
                 {data!.latestSeries.map((s) => (
-                  <VodCard key={s._id} item={s} href="/user/channels?tab=series" />
+                  <VodCard key={s._id} item={s} href="/user/vod?kind=series" />
                 ))}
               </div>
             </section>
