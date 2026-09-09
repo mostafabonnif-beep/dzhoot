@@ -36,6 +36,8 @@ fun HomeScreen(
     onMultiviewClick: (String) -> Unit = {},
     onMovieClick: (String) -> Unit = {},
     onSeriesClick: (String) -> Unit = {},
+    onSeeAllMovies: (() -> Unit)? = null,
+    onSeeAllSeries: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: ChannelsViewModel = hiltViewModel()
 ) {
@@ -110,6 +112,8 @@ fun HomeScreen(
                     onMultiviewClick = onMultiviewClick,
                     onMovieClick = onMovieClick,
                     onSeriesClick = onSeriesClick,
+                    onSeeAllMovies = onSeeAllMovies,
+                    onSeeAllSeries = onSeeAllSeries,
                     isDemo = isDemo
                 )
             }

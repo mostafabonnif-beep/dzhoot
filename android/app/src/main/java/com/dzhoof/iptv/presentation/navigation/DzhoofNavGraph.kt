@@ -122,6 +122,16 @@ fun DzhoofNavGraph(
                 },
                 onSeriesClick = { seriesId ->
                     navController.navigate(Screen.SeriesDetails.createRoute(seriesId))
+                },
+                onSeeAllMovies = {
+                    navController.navigate(Screen.Catalog.createRoute("movies")) {
+                        launchSingleTop = true
+                    }
+                },
+                onSeeAllSeries = {
+                    navController.navigate(Screen.Catalog.createRoute("series")) {
+                        launchSingleTop = true
+                    }
                 }
             )
         }

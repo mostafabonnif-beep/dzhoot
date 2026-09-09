@@ -391,7 +391,7 @@ private val tvBottomNavItems = listOf(
     Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
     Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     Triple(Screen.Guide, Icons.Default.Tv, "دليل البرامج"),
-    Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
+    Triple(Screen.Categories, Icons.Default.Category, "القنوات"),
     Triple(Screen.Catalog, Icons.Default.Movie, "أفلام ومسلسلات"),
     Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
 )
@@ -404,7 +404,7 @@ private val tvBottomNavItems = listOf(
 private val phoneBottomNavItems = listOf(
     Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
     Triple(Screen.Catalog, Icons.Default.Movie, "الأفلام"),
-    Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
+    Triple(Screen.Categories, Icons.Default.Category, "القنوات"),
     Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
 )
@@ -451,13 +451,14 @@ private fun BottomNavBar(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                     modifier = Modifier
+                        .weight(1f)
                         .clip(RoundedCornerShape(18.dp))
                         .background(
                             if (isSelected) accent.copy(alpha = 0.16f)
                             else Color.Transparent
                         )
                         .clickable { onScreenSelected(screen) }
-                        .padding(horizontal = 12.dp, vertical = 5.dp)
+                        .padding(horizontal = 2.dp, vertical = 5.dp)
                 ) {
                     Icon(
                         imageVector = icon,
