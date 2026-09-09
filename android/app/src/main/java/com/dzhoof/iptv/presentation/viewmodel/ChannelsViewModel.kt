@@ -141,7 +141,8 @@ class ChannelsViewModel @Inject constructor(
                 getChannelsUseCase(Unit)
             }
 
-            channelFlow.combine(
+            combine(
+                channelFlow,
                 channelHealthDao.getAllHealth()
                     .debounce(HEALTH_SCAN_DEBOUNCE_MS)
                     .onStart { emit(emptyList()) },
