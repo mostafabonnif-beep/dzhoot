@@ -915,10 +915,16 @@ class PlayerViewModel @Inject constructor(
 
     /**
      * Marks the current media item as manually configured. Auto-apply then
-     * stands down for this item even if a decision was still queued.
+     * stands down for this item: a still-queued decision is dropped and later
+     * tracks-changed events for the item never auto-apply.
      */
     fun markCurrentItemManuallySet() {
-        currentMediaKey()?.let { manuallySetMediaKeys += it }
+        val mediaKey = currentMediaKey() ?: return
+        manuallySetMediaKeys += mediaKey
+        val pending = _pendingTrackDecision.value
+        if (pending?.mediaKey == mediaKey) {
+            _pendingTrackDecision.value = null
+        }
     }
 
     /** Persist the user's audio-track choice for [channelId] (null = clear). */
