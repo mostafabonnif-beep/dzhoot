@@ -27,6 +27,7 @@ sealed class Screen(val route: String) {
     object Favorites : Screen("favorites")
     object Settings : Screen("settings")
     object AddSource : Screen("add_source")
+    object ManageChannels : Screen("manage_channels")
     object VodPlayer : Screen("vod_player/{contentType}/{contentId}?title={title}") {
         fun createRoute(contentType: String, contentId: String, title: String): String =
             "vod_player/${URLEncoder.encode(contentType, "UTF-8")}/${URLEncoder.encode(contentId, "UTF-8")}?title=${URLEncoder.encode(title, "UTF-8")}"

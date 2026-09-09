@@ -39,6 +39,7 @@ import com.dzhoof.iptv.presentation.ui.components.ParentalPinDialog
 import com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.screens.player.ASPECT_MODES
+import com.dzhoof.iptv.presentation.ui.screens.player.DisplayModeMatchEffect
 import com.dzhoof.iptv.presentation.ui.screens.player.MobileChromeActions
 import com.dzhoof.iptv.presentation.ui.screens.player.PipRemoteActionsEffect
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerGestureActions
@@ -47,6 +48,8 @@ import com.dzhoof.iptv.presentation.ui.screens.player.PlayerOverlays
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerPlaybackListenerEffect
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerPortraitSections
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerStateOverlays
+import com.dzhoof.iptv.presentation.ui.screens.player.PlayerTrackPickKind
+import com.dzhoof.iptv.presentation.ui.screens.player.PlayerTrackPreferenceEffect
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerTracksPanel
 import com.dzhoof.iptv.presentation.ui.screens.player.PortraitSectionActions
 import com.dzhoof.iptv.presentation.ui.screens.player.TvBackgroundPauseEffect
@@ -76,6 +79,7 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val lockedChannelIds by viewModel.lockedChannelIds.collectAsStateWithLifecycle(initialValue = emptySet())
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val isMobile = isMobileDevice(context)
@@ -139,6 +143,13 @@ fun PlayerScreen(
     var parentalUnlocked by remember { mutableStateOf(AppPreferences.isParentalUnlockedThisSession()) }
     val parentalLocked = AppPreferences.isParentalLockEnabled(context) && !parentalUnlocked
 
+    // Per-channel lock (v1.2.0 manage screen): a channel can be locked even
+    // when the global parental switch is off. Same session-wide unlock is used.
+    val currentChannelIdForLock = uiState.channel?.id
+    val channelLocked = currentChannelIdForLock != null &&
+        currentChannelIdForLock in lockedChannelIds && !parentalUnlocked
+    val gateActive = parentalLocked || channelLocked
+
     // Sleep timer expiry: pause playback while the "Still watching?" prompt shows
     LaunchedEffect(uiState.sleepTimerExpired) {
         if (uiState.sleepTimerExpired) exoPlayer.pause()
@@ -183,7 +194,12 @@ fun PlayerScreen(
         uiState.channel?.alternateStreamUrls,
         catchupStartMs,
         catchupDurationMin,
+        channelLocked,
     ) {
+        // Per-channel lock gate: a locked channel never starts playing. Once
+        // the PIN unlocks the session, channelLocked flips false and this
+        // effect re-runs, preparing the stream automatically.
+        if (channelLocked) return@LaunchedEffect
         uiState.channel?.let { channel ->
             val prepared = prepareChannelStream(
                 context = context,
@@ -214,6 +230,20 @@ fun PlayerScreen(
         errorRecoveryManager = errorRecoveryManager,
         getPlayerView = { playerViewRef },
         shouldCaptureThumbnail = { uiState.isPlaying || uiState.channel != null }
+    )
+
+    // Auto-applies the channel's saved audio/subtitle preferences once per
+    // prepared media item (see PlayerScreenEffects for the state flow).
+    PlayerTrackPreferenceEffect(
+        exoPlayer = exoPlayer,
+        viewModel = viewModel
+    )
+
+    // Match the display refresh rate to the video frame rate while playing
+    // (restores the default mode on pause/stop/leave — see PlayerScreenEffects).
+    DisplayModeMatchEffect(
+        context = context,
+        exoPlayer = exoPlayer
     )
 
     TvBackgroundPauseEffect(exoPlayer)
@@ -421,7 +451,23 @@ fun PlayerScreen(
             if (showTracksPanel) {
                 PlayerTracksPanel(
                     exoPlayer = exoPlayer,
-                    onDismiss = { showTracksPanel = false }
+                    onDismiss = { showTracksPanel = false },
+                    onTrackSelected = { pick ->
+                        val channelId = uiState.channel?.id ?: return@PlayerTracksPanel
+                        // Manual wins: stop auto-apply for this media item and
+                        // persist the per-channel choice for future visits.
+                        viewModel.markCurrentItemManuallySet()
+                        when (pick.kind) {
+                            PlayerTrackPickKind.AUDIO ->
+                                viewModel.saveAudioTrackPreference(channelId, pick.language)
+                            PlayerTrackPickKind.SUBTITLE -> {
+                                viewModel.saveSubtitleTrackPreference(channelId, pick.language)
+                                viewModel.saveSubtitlesDisabled(channelId, false)
+                            }
+                            PlayerTrackPickKind.SUBTITLES_OFF ->
+                                viewModel.saveSubtitlesDisabled(channelId, true)
+                        }
+                    }
                 )
             }
 
@@ -446,15 +492,25 @@ fun PlayerScreen(
             )
         }
 
-        if (parentalLocked) {
+        if (gateActive) {
             ParentalPinDialog(
-                title = "Parental lock",
+                title = if (channelLocked) "القناة مقفلة" else "Parental lock",
                 verify = { AppPreferences.verifyParentalPin(context, it) },
                 onSuccess = {
                     AppPreferences.setParentalUnlockedThisSession(true)
                     parentalUnlocked = true
                 },
-                onDismiss = onNavigateBack
+                onDismiss = if (channelLocked) {
+                    {
+                        if (uiState.lastChannel != null) {
+                            viewModel.recallLastChannel()
+                        } else {
+                            onNavigateBack()
+                        }
+                    }
+                } else {
+                    onNavigateBack
+                }
             )
         }
     }
