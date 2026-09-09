@@ -12,6 +12,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -326,7 +327,7 @@ private fun DzhoofAppShell(
     val isMobile = remember { isMobileDevice(context) }
 
     val onNavigate: (Screen) -> Unit = { screen ->
-        navController.navigate(screen.route) {
+        navController.navigate(screen.defaultRoute()) {
             popUpTo(Screen.Home.route) { saveState = true }
             launchSingleTop = true
             restoreState = true
@@ -391,22 +392,26 @@ private val tvBottomNavItems = listOf(
     Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     Triple(Screen.Guide, Icons.Default.Tv, "دليل البرامج"),
     Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
-    Triple(Screen.Catalog, Icons.Default.Movie, "فيديو"),
+    Triple(Screen.Catalog, Icons.Default.Movie, "أفلام ومسلسلات"),
     Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
 )
 
 /**
- * Phone navigation intentionally stays focused on five high-frequency actions.
- * Search is a first-class destination rather than a floating-only shortcut;
- * Guide and VOD remain reachable from the catalog/categories flows.
+ * Phone navigation is content-first: Live (categories), Movies & Series and
+ * favorites are one tap away — the pattern of mainstream IPTV apps. Search
+ * stays available via the floating search button on the browse screens.
  */
 private val phoneBottomNavItems = listOf(
     Triple(Screen.Home, Icons.Default.Home, "الرئيسية"),
-    Triple(Screen.Search, Icons.Default.Search, "بحث"),
-    Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
+    Triple(Screen.Catalog, Icons.Default.Movie, "الأفلام"),
     Triple(Screen.Categories, Icons.Default.Category, "التصنيفات"),
+    Triple(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     Triple(Screen.Settings, Icons.Default.Settings, "الإعدادات"),
 )
+
+/** Route used when a bottom/rail item is opened without extra state. */
+private fun Screen.defaultRoute(): String =
+    if (this == Screen.Catalog) Screen.Catalog.createRoute() else route
 
 @Composable
 private fun BottomNavBar(
@@ -466,6 +471,7 @@ private fun BottomNavBar(
                         maxLines = 1,
                         fontSize = labelSize,
                         fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        overflow = TextOverflow.Ellipsis,
                         color = if (isSelected) accent else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
