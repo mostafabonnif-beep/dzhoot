@@ -20,6 +20,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -234,9 +235,10 @@ fun VodPlayerScreen(
                 else -> "نوم: إيقاف"
             }
             VodControlChip(text = sleepLabel, onClick = cycleSleepTimer)
-            VodControlChip(text = ASPECT_MODES[aspectIndex].second) {
-                aspectIndex = nextAspectIndex(aspectIndex)
-            }
+            VodControlChip(
+                text = ASPECT_MODES[aspectIndex].second,
+                onClick = { aspectIndex = nextAspectIndex(aspectIndex) }
+            )
         }
         VodControlChip(
             text = speedLabel(playbackSpeed),
