@@ -10,6 +10,7 @@ import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.model.EpgProgram
 import com.dzhoof.iptv.domain.model.PlaybackTarget
+import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
 import com.dzhoof.iptv.domain.repository.ChannelTrackPreferencesRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
@@ -88,7 +89,8 @@ class PlayerViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val playerFactory: PlayerFactory,
     private val apiService: DzhoofApiService,
-    private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository
+    private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository,
+    private val channelPrefsRepository: ChannelPrefsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -101,6 +103,15 @@ class PlayerViewModel @Inject constructor(
 
     /** Current channel id, or null before a channel is loaded. */
     fun currentChannelId(): String? = _uiState.value.channel?.id
+
+    /** Channel ids the user hid from lists (v1.2.0 manage screen). */
+    private val _hiddenChannelIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Channel ids locked behind the parental PIN (v1.2.0 manage screen). */
+    private val _lockedChannelIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /** Reactive locked-channel set — the player screen gates playback on it. */
+    val lockedChannelIds: StateFlow<Set<String>> = _lockedChannelIds.asStateFlow()
 
     /** Media keys for which auto-apply already ran in this session. */
     val appliedTrackPrefsForMediaKey: Set<String>
@@ -208,6 +219,16 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             userPreferencesRepository.getInfoBarTimeoutSeconds().collect { seconds ->
                 _uiState.update { it.copy(infoBarTimeoutSeconds = seconds) }
+            }
+        }
+        viewModelScope.launch {
+            channelPrefsRepository.observeHiddenIds().collect { hidden ->
+                _hiddenChannelIds.value = hidden
+            }
+        }
+        viewModelScope.launch {
+            channelPrefsRepository.observeLockedIds().collect { locked ->
+                _lockedChannelIds.value = locked
             }
         }
     }
@@ -964,9 +985,11 @@ class PlayerViewModel @Inject constructor(
     /** Same-category channels excluding offline ones (current channel always kept). */
     private fun zapList(): List<ChannelUiModel> {
         val currentChannel = _uiState.value.channel ?: return emptyList()
+        val hidden = _hiddenChannelIds.value
         return _uiState.value.overlayChannels
             .filter { it.category == currentChannel.category &&
-                    (it.id == currentChannel.id || it.healthStatus != ChannelHealthStatus.OFFLINE) }
+                    (it.id == currentChannel.id || it.healthStatus != ChannelHealthStatus.OFFLINE) &&
+                    it.id !in hidden }
     }
 
     fun nextChannel() {

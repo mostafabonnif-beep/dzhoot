@@ -79,6 +79,7 @@ fun PlayerScreen(
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val lockedChannelIds by viewModel.lockedChannelIds.collectAsStateWithLifecycle(initialValue = emptySet())
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val isMobile = isMobileDevice(context)
@@ -141,6 +142,18 @@ fun PlayerScreen(
     // playback stays suspended until the correct PIN is entered.
     var parentalUnlocked by remember { mutableStateOf(AppPreferences.isParentalUnlockedThisSession()) }
     val parentalLocked = AppPreferences.isParentalLockEnabled(context) && !parentalUnlocked
+
+    // Per-channel lock (v1.2.0 manage screen): a channel can be locked even
+    // when the global parental switch is off. Same session-wide unlock is used.
+    val currentChannelIdForLock = uiState.channel?.id
+    val channelLocked = currentChannelIdForLock != null &&
+        currentChannelIdForLock in lockedChannelIds && !parentalUnlocked
+    val gateActive = parentalLocked || channelLocked
+
+    // Never keep playing a channel the user locked: pause immediately.
+    LaunchedEffect(channelLocked) {
+        if (channelLocked && !parentalLocked) exoPlayer.pause()
+    }
 
     // Sleep timer expiry: pause playback while the "Still watching?" prompt shows
     LaunchedEffect(uiState.sleepTimerExpired) {
@@ -479,15 +492,25 @@ fun PlayerScreen(
             )
         }
 
-        if (parentalLocked) {
+        if (gateActive) {
             ParentalPinDialog(
-                title = "Parental lock",
+                title = if (channelLocked) "القناة مقفلة" else "Parental lock",
                 verify = { AppPreferences.verifyParentalPin(context, it) },
                 onSuccess = {
                     AppPreferences.setParentalUnlockedThisSession(true)
                     parentalUnlocked = true
                 },
-                onDismiss = onNavigateBack
+                onDismiss = if (channelLocked) {
+                    {
+                        if (uiState.lastChannel != null) {
+                            viewModel.recallLastChannel()
+                        } else {
+                            onNavigateBack()
+                        }
+                    }
+                } else {
+                    onNavigateBack
+                }
             )
         }
     }
