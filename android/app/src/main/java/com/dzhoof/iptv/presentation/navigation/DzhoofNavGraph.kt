@@ -15,6 +15,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.dzhoof.iptv.presentation.viewmodel.CatalogTab
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_ENTRANCE
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
@@ -130,13 +131,23 @@ fun DzhoofNavGraph(
             CategoriesScreen(
                 onCategoryClick = { category ->
                     navController.navigate(Screen.ChannelsByCategory.createRoute(category))
-                }
+                },
+                onOpenVod = { tab ->
+                    navController.navigate(
+                        Screen.Catalog.createRoute(if (tab == CatalogTab.SERIES) "series" else "movies"),
+                    )
+                },
             )
         }
 
         // ── VOD catalog ──────────────────────────────────────────────────
-        composable(route = Screen.Catalog.route) {
+        composable(
+            route = Screen.Catalog.route,
+            arguments = listOf(navArgument("tab") { type = NavType.StringType; defaultValue = "movies" }),
+        ) { backStackEntry ->
+            val tab = backStackEntry.arguments?.getString("tab") ?: "movies"
             CatalogScreen(
+                initialTab = if (tab == "series") CatalogTab.SERIES else CatalogTab.MOVIES,
                 onPlayMovie = { id, title ->
                     navController.navigate(Screen.VodPlayer.createRoute("MOVIE", id, title))
                 },

@@ -2,16 +2,29 @@ package com.dzhoof.iptv.presentation.ui.screens
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -21,11 +34,13 @@ import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.components.*
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
+import com.dzhoof.iptv.presentation.viewmodel.CatalogTab
 import com.dzhoof.iptv.presentation.viewmodel.ChannelsViewModel
 @Composable
 fun CategoriesScreen(
     onCategoryClick: (String) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenVod: (CatalogTab) -> Unit = {},
     viewModel: ChannelsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -103,6 +118,37 @@ fun CategoriesScreen(
                             if (isCompact) Dimens.CategoryCardGap else Dimens.GridGap
                         )
                     ) {
+                        item(key = "vod_shortcut", span = { GridItemSpan(maxLineSpan) }) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(
+                                    if (isCompact) Dimens.CategoryCardGap else Dimens.GridGap
+                                ),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                VodShortcutTile(
+                                    icon = Icons.Default.Movie,
+                                    title = "الأفلام",
+                                    subtitle = "مكتبة الأفلام والمسلسلات — تصفح وشاهد",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { onOpenVod(CatalogTab.MOVIES) },
+                                )
+                                VodShortcutTile(
+                                    icon = Icons.Default.LiveTv,
+                                    title = "المسلسلات",
+                                    subtitle = "المواسم والحلقات كاملة",
+                                    modifier = Modifier.weight(1f),
+                                    onClick = { onOpenVod(CatalogTab.SERIES) },
+                                )
+                            }
+                        }
+                        item(key = "channels_header", span = { GridItemSpan(maxLineSpan) }) {
+                            Text(
+                                text = "القنوات حسب التصنيف",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
+                            )
+                        }
                         itemsIndexed(categoriesData) { index, (category, count, imageUrl) ->
                             CategoryCard(
                                 name = CategoryLocalizer.localize(category),
@@ -132,6 +178,59 @@ fun CategoriesScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+
+/** Big content shortcut shown above the live categories (VOD front and center). */
+@Composable
+private fun VodShortcutTile(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier
+            .height(72.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .background(
+                Brush.linearGradient(
+                    listOf(
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.90f),
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                    ),
+                ),
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = title,
+            tint = MaterialTheme.colorScheme.onPrimary,
+            modifier = Modifier.size(30.dp),
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }
