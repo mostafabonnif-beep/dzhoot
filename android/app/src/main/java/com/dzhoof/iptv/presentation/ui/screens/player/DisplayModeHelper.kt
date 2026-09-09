@@ -62,29 +62,33 @@ internal object DisplayModeHelper {
     }
 
     /** All display modes the current display supports, with their refresh rates. */
-    fun supportedModesOf(context: Context): List<DisplayModeDecision.DisplayModeInfo> = try {
-        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-            ?: return emptyList()
-        val display = windowManager.defaultDisplay
-        display.supportedModes.map { mode ->
-            DisplayModeDecision.DisplayModeInfo(
-                modeId = mode.modeId,
-                refreshRateHz = mode.refreshRate,
-                width = mode.physicalWidth,
-                height = mode.physicalHeight,
-            )
+    fun supportedModesOf(context: Context): List<DisplayModeDecision.DisplayModeInfo> {
+        return try {
+            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                ?: return emptyList()
+            val display = windowManager.defaultDisplay
+            display.supportedModes.map { mode ->
+                DisplayModeDecision.DisplayModeInfo(
+                    modeId = mode.modeId,
+                    refreshRateHz = mode.refreshRate,
+                    width = mode.physicalWidth,
+                    height = mode.physicalHeight,
+                )
+            }
+        } catch (_: Throwable) {
+            emptyList()
         }
-    } catch (_: Throwable) {
-        emptyList()
     }
 
     /** Mode id of the display mode currently in use, or -1 when unavailable. */
-    fun currentModeId(context: Context): Int = try {
-        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
-            ?: return -1
-        windowManager.defaultDisplay.mode.modeId
-    } catch (_: Throwable) {
-        -1
+    fun currentModeId(context: Context): Int {
+        return try {
+            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as? WindowManager
+                ?: return -1
+            windowManager.defaultDisplay.mode.modeId
+        } catch (_: Throwable) {
+            -1
+        }
     }
 
     /**
@@ -140,17 +144,19 @@ internal object DisplayModeHelper {
         }
     }
 
-    private fun chooseModeForVideo(activity: Activity, videoFrameRateHz: Float): Int? = try {
-        val modes = supportedModesOf(activity)
-        if (modes.isEmpty()) return null
-        val currentModeId = currentModeId(activity)
-        if (currentModeId < 0) return null
-        DisplayModeDecision.chooseDisplayMode(
-            availableModes = modes,
-            videoFrameRateHz = videoFrameRateHz,
-            currentModeId = currentModeId,
-        )
-    } catch (_: Throwable) {
-        null
+    private fun chooseModeForVideo(activity: Activity, videoFrameRateHz: Float): Int? {
+        return try {
+            val modes = supportedModesOf(activity)
+            if (modes.isEmpty()) return null
+            val currentModeId = currentModeId(activity)
+            if (currentModeId < 0) return null
+            DisplayModeDecision.chooseDisplayMode(
+                availableModes = modes,
+                videoFrameRateHz = videoFrameRateHz,
+                currentModeId = currentModeId,
+            )
+        } catch (_: Throwable) {
+            null
+        }
     }
 }
