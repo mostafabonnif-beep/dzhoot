@@ -8,6 +8,7 @@ import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.model.EpgProgram
 import com.dzhoof.iptv.domain.model.PlaybackState
+import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
 import com.dzhoof.iptv.domain.repository.ChannelTrackPreferencesRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.repository.PlayerKeyAction
@@ -79,6 +80,7 @@ class PlayerViewModelTest {
         every { getInfoBarTimeoutSeconds() } returns flowOf(4)
     }
     private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository = mockk()
+    private val channelPrefsRepository: ChannelPrefsRepository = mockk()
 
     private lateinit var viewModel: PlayerViewModel
 
@@ -108,6 +110,8 @@ class PlayerViewModelTest {
         coEvery { channelTrackPreferencesRepository.getAudioLanguage(any()) } returns flowOf(null)
         coEvery { channelTrackPreferencesRepository.getSubtitleLanguage(any()) } returns flowOf(null)
         coEvery { channelTrackPreferencesRepository.getSubtitlesDisabled(any()) } returns flowOf(false)
+        every { channelPrefsRepository.observeHiddenIds() } returns flowOf(emptySet())
+        every { channelPrefsRepository.observeLockedIds() } returns flowOf(emptySet())
 
         viewModel = PlayerViewModel(
             getChannelByIdUseCase, getChannelsUseCase, getChannelsByCategoryUseCase,
@@ -115,7 +119,8 @@ class PlayerViewModelTest {
             reportStreamStatusUseCase, reportStreamPlayUseCase, reportPlaybackQoeUseCase, channelUiMapper,
             channelHealthDao, thumbnailExtractor, epgRepository, getGuideProgramsUseCase,
             analyticsHelper, userPreferencesRepository, playerFactory, apiService,
-            channelTrackPreferencesRepository
+            channelTrackPreferencesRepository,
+            channelPrefsRepository
         )
     }
 
@@ -291,6 +296,51 @@ class PlayerViewModelTest {
         advanceUntilIdle()
 
         assertEquals("ch2", viewModel.uiState.value.channel?.id)
+    }
+
+    @Test
+    fun `nextChannel skips hidden channels`() = runTest {
+        val channels = listOf(createChannel("ch1"), createChannel("ch2"), createChannel("ch3"))
+        every { getChannelByIdUseCase("ch1") } returns flowOf(Result.Success(channels[0]))
+        every { getChannelByIdUseCase("ch3") } returns flowOf(Result.Success(channels[2]))
+        every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(channels))
+        every { channelPrefsRepository.observeHiddenIds() } returns flowOf(setOf("ch2"))
+
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+        viewModel.loadChannelList(null)
+        advanceUntilIdle()
+
+        viewModel.nextChannel()
+        advanceUntilIdle()
+
+        assertEquals("ch3", viewModel.uiState.value.channel?.id)
+    }
+
+    @Test
+    fun `previousChannel skips hidden channels going backwards`() = runTest {
+        val channels = listOf(createChannel("ch1"), createChannel("ch2"), createChannel("ch3"))
+        every { getChannelByIdUseCase("ch1") } returns flowOf(Result.Success(channels[0]))
+        every { getChannelByIdUseCase("ch3") } returns flowOf(Result.Success(channels[2]))
+        every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(channels))
+        every { channelPrefsRepository.observeHiddenIds() } returns flowOf(setOf("ch2"))
+
+        viewModel.loadChannel("ch3")
+        advanceUntilIdle()
+        viewModel.loadChannelList(null)
+        advanceUntilIdle()
+
+        viewModel.previousChannel()
+        advanceUntilIdle()
+
+        assertEquals("ch1", viewModel.uiState.value.channel?.id)
+    }
+
+    @Test
+    fun `lockedChannelIds reflects repository locked set`() = runTest {
+        every { channelPrefsRepository.observeLockedIds() } returns flowOf(setOf("ch1", "ch9"))
+        advanceUntilIdle()
+        assertEquals(setOf("ch1", "ch9"), viewModel.lockedChannelIds.value)
     }
 
     @Test
