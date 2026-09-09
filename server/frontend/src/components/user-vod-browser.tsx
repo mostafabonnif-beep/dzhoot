@@ -106,11 +106,13 @@ interface CategoryRow {
 const fmt = (template: string, vars: Record<string, string | number>) =>
   template.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ''));
 
-export default function UserVodBrowser() {
+export type VodKind = Kind;
+
+export default function UserVodBrowser({ initialKind = 'movies' }: { initialKind?: VodKind }) {
   const { locale } = useLocale();
   const t: Strings = STR[locale];
 
-  const [kind, setKind] = useState<Kind>('movies');
+  const [kind, setKind] = useState<Kind>(initialKind);
   const [category, setCategory] = useState('All');
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [search, setSearch] = useState('');
