@@ -44,19 +44,38 @@ import com.dzhoof.iptv.presentation.ui.theme.ScrimHeavy
 import com.dzhoof.iptv.presentation.ui.theme.ShapeLarge
 import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
 
+/** What kind of row the user picked in [PlayerTracksPanel]. */
+internal enum class PlayerTrackPickKind { AUDIO, SUBTITLE, SUBTITLES_OFF }
+
+/**
+ * A manual track selection from [PlayerTracksPanel], reported for persistence.
+ * The panel applies the override itself; the callback exists so the caller can
+ * save the per-channel choice and stop auto-apply for this media item.
+ * [language] is the track's Media3 language (BCP-47-ish), null when unset or
+ * for the "subtitles off" row.
+ */
+internal data class PlayerTrackPick(
+    val kind: PlayerTrackPickKind,
+    val language: String?,
+)
+
 /**
  * Audio-track and subtitle selection panel — the TiviMate-parity controls the player
  * previously lacked. Reads the live [ExoPlayer] track groups and applies overrides via
  * [ExoPlayer.trackSelectionParameters]. Subtitles render automatically in PlayerView's
  * SubtitleView once a text track is selected. D-pad friendly: rows are focusable, back
  * dismisses.
+ *
+ * [onTrackSelected] reports every manual pick so the caller can persist the per-channel
+ * choice and stop the auto-apply machinery from overriding it for this media item.
  */
 @OptIn(UnstableApi::class)
 @Composable
 internal fun PlayerTracksPanel(
     exoPlayer: ExoPlayer,
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onTrackSelected: ((PlayerTrackPick) -> Unit)? = null
 ) {
     // Bump to re-read tracks after a selection change.
     var tick by remember { mutableIntStateOf(0) }
@@ -68,11 +87,18 @@ internal fun PlayerTracksPanel(
     }
 
     fun selectTrack(group: Tracks.Group, index: Int) {
+        val language = group.getTrackFormat(index).language
         exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters.buildUpon()
             .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, index))
             .setTrackTypeDisabled(group.type, false)
             .build()
         tick++
+        onTrackSelected?.invoke(
+            PlayerTrackPick(
+                kind = if (group.type == C.TRACK_TYPE_TEXT) PlayerTrackPickKind.SUBTITLE else PlayerTrackPickKind.AUDIO,
+                language = language
+            )
+        )
     }
 
     fun disableSubtitles() {
@@ -80,6 +106,9 @@ internal fun PlayerTracksPanel(
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
             .build()
         tick++
+        onTrackSelected?.invoke(
+            PlayerTrackPick(kind = PlayerTrackPickKind.SUBTITLES_OFF, language = null)
+        )
     }
 
     BackHandler { onDismiss() }
