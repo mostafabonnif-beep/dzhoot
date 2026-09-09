@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.2.0 player strings (default locale fallback). Kept separate from
+     strings.xml so the main file stays untouched. -->
+<resources>
+    <!-- Content description for the channel-number chip in the zap info bar. -->
+    <string name="player_channel_number_desc">Channel %1$d</string>
+</resources>
