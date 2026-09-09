@@ -322,6 +322,16 @@ internal fun DisplayModeMatchEffect(
     exoPlayer: ExoPlayer
 ) {
     val activity = remember(context) { context as? Activity }
+
+    // Whatever the poll loop was doing, leaving the screen must hand the
+    // display mode back to the system default (runs even if the player is
+    // released before the next poll tick).
+    DisposableEffect(activity) {
+        onDispose {
+            activity?.let(DisplayModeHelper::restoreDefaultMode)
+        }
+    }
+
     LaunchedEffect(exoPlayer, activity) {
         if (activity == null) return@LaunchedEffect
 
