@@ -3,6 +3,7 @@ package com.dzhoof.iptv.presentation.ui.screens.player
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -12,9 +13,10 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.source.MediaSource
 import com.dzhoof.iptv.domain.model.PlaybackTarget
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.dzhoof.iptv.ComposeMainActivity
@@ -236,6 +238,57 @@ internal fun PlayerPlaybackListenerEffect(
             errorRecoveryManager.release()
             exoPlayer.stop()
             exoPlayer.release()
+        }
+    }
+}
+
+/**
+ * Auto-applies the current channel's saved audio/subtitle preferences once
+ * track groups become available for a prepared media item, and applies the
+ * resulting decision to the real player.
+ *
+ * One-shot flow per prepared item:
+ * 1. `onTracksChanged` with empty groups ⇒ a new item is being prepared, so the
+ *    ViewModel forgets the previous auto-apply for the current media key.
+ * 2. `onTracksChanged` with groups ⇒ the effect snapshots the player's tracks
+ *    into the pure model and hands them to [PlayerViewModel.onTrackGroupsAvailable].
+ * 3. The ViewModel reads the channel's stored preferences, computes a decision
+ *    and publishes it on `pendingTrackDecision`; this effect applies it via
+ *    [TrackPreferenceApplier] and clears the request.
+ *
+ * Manual picks (PlayerTracksPanel) mark the media item in the ViewModel, which
+ * makes any still-queued decision a no-op (manual wins over auto-apply).
+ */
+@Composable
+internal fun PlayerTrackPreferenceEffect(
+    exoPlayer: ExoPlayer,
+    viewModel: PlayerViewModel
+) {
+    DisposableEffect(exoPlayer, viewModel) {
+        val listener = object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                val mediaKey = viewModel.currentMediaKey() ?: return
+                if (tracks.groups.isEmpty()) {
+                    // New item being prepared — allow one fresh auto-apply when
+                    // its tracks arrive (recovery re-prepares reuse the key).
+                    viewModel.resetTrackAutoApplyForCurrentItem()
+                    return
+                }
+                val snapshot = TrackPreferenceApplier.snapshotOf(exoPlayer) ?: return
+                viewModel.onTrackGroupsAvailable(mediaKey, snapshot)
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose { exoPlayer.removeListener(listener) }
+    }
+
+    LaunchedEffect(exoPlayer) {
+        viewModel.pendingTrackDecision.collect { request ->
+            if (request == null) return@collect
+            TrackPreferenceApplier.apply(exoPlayer, request.decision)
+            // Applied (or abandoned because the item changed under us): either
+            // way the request is consumed so it can never hit a later item.
+            viewModel.onTrackDecisionApplied(request.mediaKey)
         }
     }
 }

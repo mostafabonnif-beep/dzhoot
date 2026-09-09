@@ -47,6 +47,8 @@ import com.dzhoof.iptv.presentation.ui.screens.player.PlayerOverlays
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerPlaybackListenerEffect
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerPortraitSections
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerStateOverlays
+import com.dzhoof.iptv.presentation.ui.screens.player.PlayerTrackPickKind
+import com.dzhoof.iptv.presentation.ui.screens.player.PlayerTrackPreferenceEffect
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerTracksPanel
 import com.dzhoof.iptv.presentation.ui.screens.player.PortraitSectionActions
 import com.dzhoof.iptv.presentation.ui.screens.player.TvBackgroundPauseEffect
@@ -214,6 +216,13 @@ fun PlayerScreen(
         errorRecoveryManager = errorRecoveryManager,
         getPlayerView = { playerViewRef },
         shouldCaptureThumbnail = { uiState.isPlaying || uiState.channel != null }
+    )
+
+    // Auto-applies the channel's saved audio/subtitle preferences once per
+    // prepared media item (see PlayerScreenEffects for the state flow).
+    PlayerTrackPreferenceEffect(
+        exoPlayer = exoPlayer,
+        viewModel = viewModel
     )
 
     TvBackgroundPauseEffect(exoPlayer)
@@ -421,7 +430,23 @@ fun PlayerScreen(
             if (showTracksPanel) {
                 PlayerTracksPanel(
                     exoPlayer = exoPlayer,
-                    onDismiss = { showTracksPanel = false }
+                    onDismiss = { showTracksPanel = false },
+                    onTrackSelected = { pick ->
+                        val channelId = uiState.channel?.id ?: return@PlayerTracksPanel
+                        // Manual wins: stop auto-apply for this media item and
+                        // persist the per-channel choice for future visits.
+                        viewModel.markCurrentItemManuallySet()
+                        when (pick.kind) {
+                            PlayerTrackPickKind.AUDIO ->
+                                viewModel.saveAudioTrackPreference(channelId, pick.language)
+                            PlayerTrackPickKind.SUBTITLE -> {
+                                viewModel.saveSubtitleTrackPreference(channelId, pick.language)
+                                viewModel.saveSubtitlesDisabled(channelId, false)
+                            }
+                            PlayerTrackPickKind.SUBTITLES_OFF ->
+                                viewModel.saveSubtitlesDisabled(channelId, true)
+                        }
+                    }
                 )
             }
 
