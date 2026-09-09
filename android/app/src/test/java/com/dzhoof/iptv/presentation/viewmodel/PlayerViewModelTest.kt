@@ -31,6 +31,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -79,8 +80,12 @@ class PlayerViewModelTest {
         every { getAlwaysShowProgramBar() } returns flowOf(false)
         every { getInfoBarTimeoutSeconds() } returns flowOf(4)
     }
-    private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository = mockk()
-    private val channelPrefsRepository: ChannelPrefsRepository = mockk()
+    private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository = mockk(relaxed = true)
+    private val channelPrefsRepository: ChannelPrefsRepository = mockk(relaxed = true)
+
+    /** Live hidden/locked sets — init-block collects stay subscribed, tests mutate .value. */
+    private val hiddenIdsFlow = MutableStateFlow<Set<String>>(emptySet())
+    private val lockedIdsFlow = MutableStateFlow<Set<String>>(emptySet())
 
     private lateinit var viewModel: PlayerViewModel
 
@@ -110,8 +115,8 @@ class PlayerViewModelTest {
         coEvery { channelTrackPreferencesRepository.getAudioLanguage(any()) } returns flowOf(null)
         coEvery { channelTrackPreferencesRepository.getSubtitleLanguage(any()) } returns flowOf(null)
         coEvery { channelTrackPreferencesRepository.getSubtitlesDisabled(any()) } returns flowOf(false)
-        every { channelPrefsRepository.observeHiddenIds() } returns flowOf(emptySet())
-        every { channelPrefsRepository.observeLockedIds() } returns flowOf(emptySet())
+        every { channelPrefsRepository.observeHiddenIds() } returns hiddenIdsFlow
+        every { channelPrefsRepository.observeLockedIds() } returns lockedIdsFlow
 
         viewModel = PlayerViewModel(
             getChannelByIdUseCase, getChannelsUseCase, getChannelsByCategoryUseCase,
@@ -304,7 +309,7 @@ class PlayerViewModelTest {
         every { getChannelByIdUseCase("ch1") } returns flowOf(Result.Success(channels[0]))
         every { getChannelByIdUseCase("ch3") } returns flowOf(Result.Success(channels[2]))
         every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(channels))
-        every { channelPrefsRepository.observeHiddenIds() } returns flowOf(setOf("ch2"))
+        hiddenIdsFlow.value = setOf("ch2")
 
         viewModel.loadChannel("ch1")
         advanceUntilIdle()
@@ -323,7 +328,7 @@ class PlayerViewModelTest {
         every { getChannelByIdUseCase("ch1") } returns flowOf(Result.Success(channels[0]))
         every { getChannelByIdUseCase("ch3") } returns flowOf(Result.Success(channels[2]))
         every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(channels))
-        every { channelPrefsRepository.observeHiddenIds() } returns flowOf(setOf("ch2"))
+        hiddenIdsFlow.value = setOf("ch2")
 
         viewModel.loadChannel("ch3")
         advanceUntilIdle()
@@ -338,7 +343,7 @@ class PlayerViewModelTest {
 
     @Test
     fun `lockedChannelIds reflects repository locked set`() = runTest {
-        every { channelPrefsRepository.observeLockedIds() } returns flowOf(setOf("ch1", "ch9"))
+        lockedIdsFlow.value = setOf("ch1", "ch9")
         advanceUntilIdle()
         assertEquals(setOf("ch1", "ch9"), viewModel.lockedChannelIds.value)
     }
