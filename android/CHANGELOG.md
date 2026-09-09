@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0] - 2026-09-09
+
+### Added
+- Channel management per channel: hide and PIN-lock any channel from the channel list; hidden channels disappear from browse, search and zap, locked channels ask for the PIN in the player.
+- Manage Channels screen (Settings): review, search, unhide and unlock channels in one place.
+- Per-channel track preferences: the audio/subtitle tracks you pick are remembered per channel and auto-applied on the next tune; manual picks always win.
+- Display refresh-rate matching: during live playback the player matches the display refresh rate to the video frame rate (with safe fallbacks) for smoother motion.
+- Channel number chip on the zap info bar (live TV).
+- VOD player controls: sleep timer (30/60/90/120 min with live countdown and tap-to-resume), aspect ratio cycle (ملاءمة / تكبير / ملء الشاشة) and playback speed widened to 0.5×–2×.
+- Room schema v11 (channel_prefs).
+
+### Notes
+- All features are client-side; no server change required.
+
+---
 ## [1.1.0] - 2026-09-08
 
 ### Added
