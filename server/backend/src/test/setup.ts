@@ -1,3 +1,11 @@
+// Pin NODE_ENV before ANY test file (and its top-level imports) loads in this
+// worker. Several suites temporarily set NODE_ENV='production'; if such a value
+// leaks to the next file that imports src/server.js at top level, the server's
+// SECURITY_ENFORCED guard calls process.exit(1) at import time — the worker
+// dies, jest silently retries the file in a fresh worker, and the run ends
+// "all tests passed" yet exits 1 (seen on CI, order/cache dependent).
+process.env.NODE_ENV = 'test';
+
 import { createHash } from 'crypto';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 import mongoose from 'mongoose';
