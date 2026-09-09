@@ -1,0 +1,15 @@
+[Unit]
+Description=DZ HOOF weekly docker/disk hygiene (image+builder prune, old rollback images)
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/opt/dzhoot/server/scripts/cleanup-docker.sh
+# Never touch backups or repositories; the script only prunes docker objects.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/log
