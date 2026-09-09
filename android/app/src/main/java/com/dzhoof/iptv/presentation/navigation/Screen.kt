@@ -55,7 +55,7 @@ sealed class Screen(val route: String) {
 
     companion object {
         /** Route strings for top-level screens that show the sidebar navigation rail. */
-        val sidebarRoutes = setOf("home", "channels", "categories", "catalog", "guide", "search", "favorites", "settings", "channels/category/{categoryId}")
+        val sidebarRoutes = setOf("home", "channels", "categories", Catalog.route, "guide", "search", "favorites", "settings", "channels/category/{categoryId}")
 
         /** Routes where the mobile Search FAB is offered (excludes Search itself + Settings). */
         val searchableRoutes = setOf("home", "channels", "categories", "guide", "favorites", "channels/category/{categoryId}")
