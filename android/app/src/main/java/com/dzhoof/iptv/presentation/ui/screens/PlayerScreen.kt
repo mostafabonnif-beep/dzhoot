@@ -39,6 +39,7 @@ import com.dzhoof.iptv.presentation.ui.components.ParentalPinDialog
 import com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.screens.player.ASPECT_MODES
+import com.dzhoof.iptv.presentation.ui.screens.player.DisplayModeMatchEffect
 import com.dzhoof.iptv.presentation.ui.screens.player.MobileChromeActions
 import com.dzhoof.iptv.presentation.ui.screens.player.PipRemoteActionsEffect
 import com.dzhoof.iptv.presentation.ui.screens.player.PlayerGestureActions
@@ -223,6 +224,13 @@ fun PlayerScreen(
     PlayerTrackPreferenceEffect(
         exoPlayer = exoPlayer,
         viewModel = viewModel
+    )
+
+    // Match the display refresh rate to the video frame rate while playing
+    // (restores the default mode on pause/stop/leave — see PlayerScreenEffects).
+    DisplayModeMatchEffect(
+        context = context,
+        exoPlayer = exoPlayer
     )
 
     TvBackgroundPauseEffect(exoPlayer)
