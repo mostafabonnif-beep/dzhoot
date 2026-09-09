@@ -27,7 +27,10 @@ class TrackPreferenceMatcherTest {
         subtitleLang: String? = null,
         subtitlesDisabled: Boolean? = null
     ) = TrackPreferenceMatcher.decide(
-        snapshot = TrackSelectionSnapshot(audioLanguages, textLanguages),
+        snapshot = TrackSelectionSnapshot(
+            audioTracks = audio(*audioLanguages.toTypedArray()),
+            textTracks = text(*textLanguages.toTypedArray()),
+        ),
         storedAudioLanguage = audioLang,
         storedSubtitleLanguage = subtitleLang,
         storedSubtitlesDisabled = subtitlesDisabled,
