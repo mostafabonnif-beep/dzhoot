@@ -35,6 +35,7 @@ import com.dzhoof.iptv.presentation.ui.screens.VodPlayerScreen
 import com.dzhoof.iptv.presentation.ui.screens.SearchScreen
 import com.dzhoof.iptv.presentation.ui.screens.AddSourceScreen
 import com.dzhoof.iptv.presentation.ui.screens.SettingsScreen
+import com.dzhoof.iptv.presentation.ui.screens.settings.ManageChannelsScreen
 
 /**
  * Navigation graph for DZ HOOF IPTV app.
@@ -307,7 +308,17 @@ fun DzhoofNavGraph(
                 },
                 onNavigateToSelfHost = {
                     navController.navigate(Screen.AddSource.route)
+                },
+                onNavigateToManageChannels = {
+                    navController.navigate(Screen.ManageChannels.route)
                 }
+            )
+        }
+
+        // ── Channel management (hide / lock channels) ───────────────────
+        composable(route = Screen.ManageChannels.route) {
+            ManageChannelsScreen(
+                onNavigateBack = { navController.popBackStack() }
             )
         }
 
