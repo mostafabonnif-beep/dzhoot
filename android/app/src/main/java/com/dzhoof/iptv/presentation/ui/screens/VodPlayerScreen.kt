@@ -163,10 +163,11 @@ fun VodPlayerScreen(
     var sleepExpired by remember { mutableStateOf(false) }
 
     LaunchedEffect(sleepMinutes) {
-        if (sleepMinutes == null) {
+        val minutes = sleepMinutes // local copy — delegated state cannot smart-cast
+        if (minutes == null) {
             sleepRemainingSeconds = 0
         } else {
-            sleepRemainingSeconds = sleepMinutes * 60
+            sleepRemainingSeconds = minutes * 60
             while (sleepRemainingSeconds > 0) {
                 delay(1_000)
                 sleepRemainingSeconds -= 1
