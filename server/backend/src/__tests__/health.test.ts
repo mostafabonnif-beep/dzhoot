@@ -54,4 +54,43 @@ describe('health endpoints', () => {
     expect(response.body.details).toHaveProperty('redis');
     expect(response.body.details).toHaveProperty('uptime');
   });
+
+  it('GET /health?details=true reports alerting configured when only Telegram is set (env)', async () => {
+    const prevToken = process.env.ALERT_TELEGRAM_BOT_TOKEN;
+    const prevChat = process.env.ALERT_TELEGRAM_CHAT_ID;
+    const prevWebhook = process.env.ALERT_WEBHOOK_URL;
+    process.env.ALERT_TELEGRAM_BOT_TOKEN = '123456:test-token';
+    process.env.ALERT_TELEGRAM_CHAT_ID = '-1001234567890';
+    delete process.env.ALERT_WEBHOOK_URL;
+    try {
+      const response = await request(app).get('/health?details=true');
+      expect(response.status).toBe(200);
+      expect(response.body.details.alertingConfigured).toBe(true);
+    } finally {
+      if (prevToken === undefined) delete process.env.ALERT_TELEGRAM_BOT_TOKEN;
+      else process.env.ALERT_TELEGRAM_BOT_TOKEN = prevToken;
+      if (prevChat === undefined) delete process.env.ALERT_TELEGRAM_CHAT_ID;
+      else process.env.ALERT_TELEGRAM_CHAT_ID = prevChat;
+      if (prevWebhook === undefined) delete process.env.ALERT_WEBHOOK_URL;
+      else process.env.ALERT_WEBHOOK_URL = prevWebhook;
+    }
+  });
+
+  it('GET /health?details=true reports alerting NOT configured with no channel set', async () => {
+    const prevToken = process.env.ALERT_TELEGRAM_BOT_TOKEN;
+    const prevChat = process.env.ALERT_TELEGRAM_CHAT_ID;
+    const prevWebhook = process.env.ALERT_WEBHOOK_URL;
+    delete process.env.ALERT_TELEGRAM_BOT_TOKEN;
+    delete process.env.ALERT_TELEGRAM_CHAT_ID;
+    delete process.env.ALERT_WEBHOOK_URL;
+    try {
+      const response = await request(app).get('/health?details=true');
+      expect(response.status).toBe(200);
+      expect(response.body.details.alertingConfigured).toBe(false);
+    } finally {
+      if (prevToken !== undefined) process.env.ALERT_TELEGRAM_BOT_TOKEN = prevToken;
+      if (prevChat !== undefined) process.env.ALERT_TELEGRAM_CHAT_ID = prevChat;
+      if (prevWebhook !== undefined) process.env.ALERT_WEBHOOK_URL = prevWebhook;
+    }
+  });
 });

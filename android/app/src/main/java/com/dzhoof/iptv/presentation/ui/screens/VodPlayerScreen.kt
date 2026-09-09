@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,16 +35,61 @@ import androidx.media3.common.MediaItem
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.compose.ui.viewinterop.AndroidView
+import com.dzhoof.iptv.presentation.ui.screens.player.ASPECT_MODES
+import com.dzhoof.iptv.presentation.ui.screens.player.nextSleepTimerStep
 import com.dzhoof.iptv.presentation.viewmodel.VodPlayerViewModel
+import kotlinx.coroutines.delay
 
-/** Playback speeds offered by the VOD speed chip, in increasing order. */
-internal val VOD_SPEED_OPTIONS: List<Float> = listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
+/**
+ * Playback speeds offered by the VOD speed chip, in increasing order.
+ * Full range 0.5×–2× — half speed is useful for re-watching action scenes
+ * and for slow connections when the source only offers one bitrate.
+ */
+internal val VOD_SPEED_OPTIONS: List<Float> = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
 
 /** Cycles to the next speed (wraps around); used by both the chip and unit tests. */
 internal fun nextPlaybackSpeed(current: Float, options: List<Float> = VOD_SPEED_OPTIONS): Float {
     val index = options.indexOfFirst { kotlin.math.abs(it - current) < 0.001f }
     if (index < 0) return options.firstOrNull() ?: 1.0f
     return options[(index + 1) % options.size]
+}
+
+/** Next aspect/zoom preset index (Fit → Zoom → Fill → Fit …); used by the chip and tests. */
+internal fun nextAspectIndex(current: Int, size: Int = ASPECT_MODES.size): Int =
+    if (size <= 0) 0 else (current + 1).mod(size)
+
+/** mm:ss countdown label for the armed sleep timer, e.g. 29:59, 0:42. */
+internal fun sleepCountdownLabel(remainingSeconds: Int): String {
+    val safe = remainingSeconds.coerceAtLeast(0)
+    val seconds = (safe % 60).toString().padStart(2, '0')
+    return "${safe / 60}:$seconds"
+}
+
+/**
+ * Small round control chip used by the VOD player (sleep timer, aspect ratio,
+ * playback speed). Tap/OK cycles the value; the label shows the current state.
+ * Kept visually identical to the pre-existing speed chip.
+ */
+@Composable
+private fun VodControlChip(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(50),
+        color = Color.Black.copy(alpha = 0.55f),
+        modifier = modifier
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            color = Color.White,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.Bold
+        )
+    }
 }
 
 /** Compact chip label: "1×", "1.25×", "2×" … */
@@ -98,13 +146,59 @@ fun VodPlayerScreen(
         }
     }
 
-    // Playback speed chip — cycles 0.75× → 1× → 1.25× → 1.5× → 2×.
+    // Playback speed chip — cycles 0.5× → 0.75× → 1× → 1.25× → 1.5× → 2×.
     // Starts at 1× per screen instance; the chosen speed stays on the player
     // for the next episode/movie opened within the same session.
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
     LaunchedEffect(playbackSpeed) {
         player.setPlaybackSpeed(playbackSpeed)
     }
+
+    // Sleep timer (Off → 30 → 60 → 90 → 120 → Off — same preset steps as the
+    // live player). When the countdown reaches zero, playback pauses and a
+    // tap-to-resume grace window starts before the screen closes, matching the
+    // live player's sleep-timer semantics.
+    var sleepMinutes by remember { mutableStateOf<Int?>(null) }
+    var sleepRemainingSeconds by remember { mutableIntStateOf(0) }
+    var sleepExpired by remember { mutableStateOf(false) }
+
+    LaunchedEffect(sleepMinutes) {
+        val minutes = sleepMinutes // local copy — delegated state cannot smart-cast
+        if (minutes == null) {
+            sleepRemainingSeconds = 0
+        } else {
+            sleepRemainingSeconds = minutes * 60
+            while (sleepRemainingSeconds > 0) {
+                delay(1_000)
+                sleepRemainingSeconds -= 1
+            }
+            sleepExpired = true
+            player.pause()
+        }
+    }
+
+    // Grace window once the timer fires: leave the screen unless the user
+    // taps the chip to resume first.
+    LaunchedEffect(sleepExpired) {
+        if (sleepExpired) {
+            delay(10_000)
+            if (sleepExpired) onNavigateBack()
+        }
+    }
+
+    val cycleSleepTimer: () -> Unit = {
+        if (sleepExpired) {
+            // Resume instead of leaving: disarm and keep watching.
+            player.play()
+            sleepExpired = false
+            sleepMinutes = null
+        } else {
+            sleepMinutes = nextSleepTimerStep(sleepMinutes)
+        }
+    }
+
+    // Aspect/zoom preset (ملاءمة → تكبير → ملء الشاشة), applied to the view.
+    var aspectIndex by remember { mutableIntStateOf(0) }
 
     Box(
         modifier = Modifier
@@ -121,28 +215,39 @@ fun VodPlayerScreen(
                     useController = true
                 }
             },
-            update = { it.player = player },
+            update = { view ->
+                view.player = player
+                view.resizeMode = ASPECT_MODES[aspectIndex].first
+            },
         )
 
-        // Speed chip (top corner). Tap/OK cycles the speed; the label always
-        // shows the currently active value. Semi-transparent so it never
-        // blocks the picture, small so it never blocks the controller.
-        Surface(
+        // Control chips (top corners). Tap/OK cycles the value; the label
+        // always shows the current state. Semi-transparent so they never
+        // block the picture, small so they never block the controller.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(12.dp)
+        ) {
+            val sleepLabel = when {
+                sleepExpired -> "انتهى النوم — للمتابعة اضغط"
+                sleepMinutes != null -> "نوم ${sleepCountdownLabel(sleepRemainingSeconds)}"
+                else -> "نوم: إيقاف"
+            }
+            VodControlChip(text = sleepLabel, onClick = cycleSleepTimer)
+            VodControlChip(
+                text = ASPECT_MODES[aspectIndex].second,
+                onClick = { aspectIndex = nextAspectIndex(aspectIndex) }
+            )
+        }
+        VodControlChip(
+            text = speedLabel(playbackSpeed),
             onClick = { playbackSpeed = nextPlaybackSpeed(playbackSpeed) },
-            shape = RoundedCornerShape(50),
-            color = Color.Black.copy(alpha = 0.55f),
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(12.dp)
-        ) {
-            Text(
-                text = speedLabel(playbackSpeed),
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        )
 
         if (state.isLoading || state.isRefreshing) {
             CircularProgressIndicator(
