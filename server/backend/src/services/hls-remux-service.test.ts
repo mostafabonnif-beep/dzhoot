@@ -42,6 +42,29 @@ beforeEach(() => {
   remux.shutdownHlsSessions();
 });
 
+afterEach(async () => {
+  // kill() mirrors real child_process by emitting 'exit' on a setImmediate.
+  // If a test (or the beforeEach shutdown above) kills a fake ffmpeg and the
+  // callback fires after jest has closed this suite's console, jest hard-fails
+  // with "Cannot log after tests are done" even though every assertion passed
+  // (seen repeatedly on CI, order/cache dependent). Drain the immediates while
+  // the suite lifecycle is still open so the exit handler logs deterministically.
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
+afterAll(async () => {
+  // The service installs a 30s idle-sweep interval (unref'd) the first time a
+  // session starts. A session left alive by the LAST test of this file would be
+  // killed by that sweep while jest is already running a LATER file — the exit
+  // handler then logs after this suite's console closed and jest exits 1
+  // (seen on CI: hls-remux passed at T, "Cannot log…" fired ~60s later, token A).
+  // Empty the session map so later sweep ticks are no-ops.
+  remux.shutdownHlsSessions();
+  for (let pass = 0; pass < 2; pass += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+});
+
 const A = 'token-aaaaaaaa';
 const B = 'token-bbbbbbbb';
 const C = 'token-cccccccc';
