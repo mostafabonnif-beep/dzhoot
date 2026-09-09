@@ -191,8 +191,10 @@ class ChannelsViewModel @Inject constructor(
                                 channels = uiChannels,
                                 categories = allCategories,
                                 categoryLogos = catLogos,
-                                // Only recompute For You from the unfiltered catalog; a
-                                // category filter shows a subset and would skew the mix.
+                                // Only recompute For You from the full (unhidden)
+                                // catalog; a category filter shows a subset and
+                                // would skew the mix. Hidden channels were already
+                                // dropped above, so they never reach For You either.
                                 forYou = if (category == null) deriveForYou(uiChannels, it.recentlyWatched) else it.forYou,
                                 isLoading = refreshJob?.isActive == true,
                                 error = if (uiChannels.isNotEmpty()) null else it.error,
