@@ -637,14 +637,33 @@ app.get('/health', async (req, res) => {
   };
   if (req.query.details === 'true') {
     try {
-      let alertingConfigured = Boolean(String(process.env.ALERT_WEBHOOK_URL || '').trim());
-      try {
-        const AppSetting = require('./models/AppSetting').default || require('./models/AppSetting');
-        const doc = await AppSetting.findOne({ key: 'alert_webhook_url' }).lean().exec();
-        if (doc && String(doc.value || '').trim()) alertingConfigured = true;
-      } catch {
-        // env value already considered above
-      }
+      // Truthful alerting status — counts ANY fully configured channel, not
+      // just the webhook: webhook URL, alert email, or Telegram bot token +
+      // chat id. Each value comes from AppSettings (admin panel) with an env
+      // fallback, mirroring the channel getters in services/alert-notifier.ts
+      // (keep both in sync). /health previously reported alertingConfigured:
+      // false while Telegram alerts were live and delivering.
+      const AppSettingModule = require('./models/AppSetting');
+      const AppSetting = AppSettingModule.default || AppSettingModule;
+      const setting = async (key) => {
+        try {
+          const doc = await AppSetting.findOne({ key }).lean().exec();
+          return doc ? String(doc.value || '').trim() : '';
+        } catch {
+          return '';
+        }
+      };
+      const [webhook, email, tgToken, tgChat] = await Promise.all([
+        setting('alert_webhook_url'),
+        setting('alert_email'),
+        setting('alert_telegram_bot_token'),
+        setting('alert_telegram_chat_id'),
+      ]);
+      const webhookUrl = webhook || String(process.env.ALERT_WEBHOOK_URL || '').trim();
+      const alertEmail = email || String(process.env.ALERT_EMAIL || '').trim();
+      const telegramToken = tgToken || String(process.env.ALERT_TELEGRAM_BOT_TOKEN || '').trim();
+      const telegramChatId = tgChat || String(process.env.ALERT_TELEGRAM_CHAT_ID || '').trim();
+      const alertingConfigured = Boolean(webhookUrl || alertEmail || (telegramToken && telegramChatId));
       response.details = {
         uptime: process.uptime(),
         mongodb: healthy ? 'connected' : 'disconnected',
