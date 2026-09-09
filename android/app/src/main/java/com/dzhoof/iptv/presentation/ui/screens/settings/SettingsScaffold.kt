@@ -53,6 +53,7 @@ internal class SettingsActions(
     val onResetPairing: () -> Unit,
     val onPairDevice: () -> Unit,
     val onNavigateToSelfHost: () -> Unit,
+    val onNavigateToManageChannels: () -> Unit,
     val onCheckLiveliness: () -> Unit,
     val onClearCache: () -> Unit,
     val onResetGuide: () -> Unit,
@@ -289,6 +290,7 @@ private fun SectionContent(
             guideReset = uiState.guideReset,
             onResetGuide = actions.onResetGuide,
             onResetAppData = actions.onResetAppData,
+            onManageChannels = actions.onNavigateToManageChannels,
             modifier = modifier
         )
         SettingsSection.Controls -> ControlsSection(

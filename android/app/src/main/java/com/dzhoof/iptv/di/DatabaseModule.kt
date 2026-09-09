@@ -6,6 +6,7 @@ import com.dzhoof.iptv.data.source.local.DzhoofDatabase
 import com.dzhoof.iptv.data.source.local.dao.CategoryDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
+import com.dzhoof.iptv.data.source.local.dao.ChannelPrefsDao
 import com.dzhoof.iptv.data.source.local.dao.EpgDao
 import com.dzhoof.iptv.data.source.local.dao.FavoriteCategoryDao
 import com.dzhoof.iptv.data.source.local.dao.FavoriteDao
@@ -50,7 +51,8 @@ object DatabaseModule {
                 DzhoofDatabase.MIGRATION_6_7,
                 DzhoofDatabase.MIGRATION_7_8,
                 DzhoofDatabase.MIGRATION_8_9,
-                DzhoofDatabase.MIGRATION_9_10
+                DzhoofDatabase.MIGRATION_9_10,
+                DzhoofDatabase.MIGRATION_10_11
             )
             .build()
     }
@@ -128,5 +130,17 @@ object DatabaseModule {
     @Provides
     fun provideEpgDao(database: DzhoofDatabase): EpgDao {
         return database.epgDao()
+    }
+
+    /**
+     * Provides ChannelPrefsDao for per-channel preference operations
+     * (hidden / locked flags).
+     *
+     * @param database DzhoofDatabase instance
+     * @return ChannelPrefsDao instance
+     */
+    @Provides
+    fun provideChannelPrefsDao(database: DzhoofDatabase): ChannelPrefsDao {
+        return database.channelPrefsDao()
     }
 }

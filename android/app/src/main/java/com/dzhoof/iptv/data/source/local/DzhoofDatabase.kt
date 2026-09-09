@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.dzhoof.iptv.data.source.local.dao.CategoryDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
+import com.dzhoof.iptv.data.source.local.dao.ChannelPrefsDao
 import com.dzhoof.iptv.data.source.local.dao.EpgDao
 import com.dzhoof.iptv.data.source.local.dao.FavoriteCategoryDao
 import com.dzhoof.iptv.data.source.local.dao.FavoriteDao
@@ -16,6 +17,7 @@ import com.dzhoof.iptv.data.source.local.dao.StreamMetricsDao
 import com.dzhoof.iptv.data.source.local.entity.CategoryEntity
 import com.dzhoof.iptv.data.source.local.entity.ChannelEntity
 import com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity
+import com.dzhoof.iptv.data.source.local.entity.ChannelPrefsEntity
 import com.dzhoof.iptv.data.source.local.entity.EpgProgramEntity
 import com.dzhoof.iptv.data.source.local.entity.FavoriteCategoryEntity
 import com.dzhoof.iptv.data.source.local.entity.FavoriteEntity
@@ -50,9 +52,10 @@ import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
         ChannelHealthEntity::class,
         FavoriteCategoryEntity::class,
         StreamMetricsEntity::class,
-        EpgProgramEntity::class
+        EpgProgramEntity::class,
+        ChannelPrefsEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = true
 )
 abstract class DzhoofDatabase : RoomDatabase() {
@@ -226,6 +229,24 @@ abstract class DzhoofDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE `channels` ADD COLUMN `order` INTEGER NOT NULL DEFAULT 0")
             }
         }
+
+        /** v10→v11: Add channel_prefs table (per-channel hidden/locked flags).
+         *  Local-only user preferences — no FK to channels so channel syncs
+         *  (which replace all rows) never cascade into user prefs. */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `channel_prefs` (
+                        `channelId` TEXT NOT NULL,
+                        `hidden` INTEGER NOT NULL DEFAULT 0,
+                        `locked` INTEGER NOT NULL DEFAULT 0,
+                        PRIMARY KEY(`channelId`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_channel_prefs_hidden` ON `channel_prefs` (`hidden`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_channel_prefs_locked` ON `channel_prefs` (`locked`)")
+            }
+        }
     }
 
     /**
@@ -263,4 +284,9 @@ abstract class DzhoofDatabase : RoomDatabase() {
     abstract fun streamMetricsDao(): StreamMetricsDao
 
     abstract fun epgDao(): EpgDao
+
+    /**
+     * Provides access to per-channel preference data operations.
+     */
+    abstract fun channelPrefsDao(): ChannelPrefsDao
 }

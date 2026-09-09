@@ -2,6 +2,7 @@ package com.dzhoof.iptv.di
 
 import com.dzhoof.iptv.data.repository.CategoryRepositoryImpl
 import com.dzhoof.iptv.data.repository.CatalogRepositoryImpl
+import com.dzhoof.iptv.data.repository.ChannelPrefsRepositoryImpl
 import com.dzhoof.iptv.data.repository.ChannelRepositoryImpl
 import com.dzhoof.iptv.data.repository.ChannelTrackPreferencesRepositoryImpl
 import com.dzhoof.iptv.data.repository.EpgRepositoryImpl
@@ -13,6 +14,7 @@ import com.dzhoof.iptv.data.repository.SubscriptionRepositoryImpl
 import com.dzhoof.iptv.data.repository.UserPreferencesRepositoryImpl
 import com.dzhoof.iptv.domain.repository.CategoryRepository
 import com.dzhoof.iptv.domain.repository.CatalogRepository
+import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
 import com.dzhoof.iptv.domain.repository.ChannelRepository
 import com.dzhoof.iptv.domain.repository.ChannelTrackPreferencesRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
@@ -136,4 +138,10 @@ abstract class RepositoryModule {
     abstract fun bindSubscriptionRepository(
         impl: SubscriptionRepositoryImpl
     ): SubscriptionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindChannelPrefsRepository(
+        impl: ChannelPrefsRepositoryImpl
+    ): ChannelPrefsRepository
 }

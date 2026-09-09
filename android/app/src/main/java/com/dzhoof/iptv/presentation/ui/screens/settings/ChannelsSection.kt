@@ -67,11 +67,18 @@ internal fun ChannelsSection(
     guideReset: Boolean,
     onResetGuide: () -> Unit,
     onResetAppData: () -> Unit,
+    onManageChannels: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isCompact = LocalConfiguration.current.screenWidthDp < 600
     val dividerGap = if (isCompact) 14.dp else 10.dp
     SettingsCard(title = "القنوات", modifier = modifier) {
+        ManageChannelsRow(onManageChannels = onManageChannels)
+
+        Spacer(modifier = Modifier.height(dividerGap))
+        HorizontalDivider(color = subtleBorder)
+        Spacer(modifier = Modifier.height(dividerGap))
+
         StreamHealthRow(scanProgress = scanProgress, onCheckLiveliness = onCheckLiveliness)
 
         Spacer(modifier = Modifier.height(dividerGap))
@@ -100,6 +107,35 @@ internal fun ChannelsSection(
 
         ResetAppDataRow(onResetAppData = onResetAppData)
     }
+}
+
+@Composable
+private fun ManageChannelsRow(onManageChannels: () -> Unit) {
+    // Navigation entry to the v1.2.0 channel-management screen (hide / lock).
+    SettingRowLayout(
+        text = {
+            Text(
+                text = "إدارة القنوات",
+                color = MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = "إخفاء القنوات من القوائم أو قفلها برمز PIN",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall
+            )
+        },
+        action = {
+            FocusAwareOutlinedButton(onClick = onManageChannels) {
+                Text(
+                    text = "إدارة  ▸",
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    )
 }
 
 @Composable
