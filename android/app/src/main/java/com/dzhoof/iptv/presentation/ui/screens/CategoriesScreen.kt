@@ -50,7 +50,7 @@ fun CategoriesScreen(
         viewModel.loadChannels()
     }
 
-    ScreenScaffold(title = "التصنيفات", modifier = modifier) {
+    ScreenScaffold(title = "القنوات", modifier = modifier) {
         val contentState = when {
             uiState.isLoading && uiState.categories.isEmpty() -> "loading"
             uiState.error != null && uiState.categories.isEmpty() -> "error"
@@ -119,35 +119,44 @@ fun CategoriesScreen(
                         )
                     ) {
                         item(key = "vod_shortcut", span = { GridItemSpan(maxLineSpan) }) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(
-                                    if (isCompact) Dimens.CategoryCardGap else Dimens.GridGap
-                                ),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                VodShortcutTile(
-                                    icon = Icons.Default.Movie,
-                                    title = "الأفلام",
-                                    subtitle = "مكتبة الأفلام والمسلسلات — تصفح وشاهد",
-                                    modifier = Modifier.weight(1f),
-                                    onClick = { onOpenVod(CatalogTab.MOVIES) },
-                                )
-                                VodShortcutTile(
-                                    icon = Icons.Default.LiveTv,
-                                    title = "المسلسلات",
-                                    subtitle = "المواسم والحلقات كاملة",
-                                    modifier = Modifier.weight(1f),
-                                    onClick = { onOpenVod(CatalogTab.SERIES) },
-                                )
+                            if (isCompact) {
+                                Column(verticalArrangement = Arrangement.spacedBy(Dimens.CategoryCardGap)) {
+                                    VodShortcutTile(
+                                        icon = Icons.Default.Movie,
+                                        title = "الأفلام",
+                                        subtitle = "مكتبة الأفلام والمسلسلات — تصفح وشاهد",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = { onOpenVod(CatalogTab.MOVIES) },
+                                    )
+                                    VodShortcutTile(
+                                        icon = Icons.Default.LiveTv,
+                                        title = "المسلسلات",
+                                        subtitle = "المواسم والحلقات كاملة",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        onClick = { onOpenVod(CatalogTab.SERIES) },
+                                    )
+                                }
+                            } else {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(Dimens.GridGap),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    VodShortcutTile(
+                                        icon = Icons.Default.Movie,
+                                        title = "الأفلام",
+                                        subtitle = "مكتبة الأفلام والمسلسلات — تصفح وشاهد",
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { onOpenVod(CatalogTab.MOVIES) },
+                                    )
+                                    VodShortcutTile(
+                                        icon = Icons.Default.LiveTv,
+                                        title = "المسلسلات",
+                                        subtitle = "المواسم والحلقات كاملة",
+                                        modifier = Modifier.weight(1f),
+                                        onClick = { onOpenVod(CatalogTab.SERIES) },
+                                    )
+                                }
                             }
-                        }
-                        item(key = "channels_header", span = { GridItemSpan(maxLineSpan) }) {
-                            Text(
-                                text = "القنوات حسب التصنيف",
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
-                            )
                         }
                         itemsIndexed(categoriesData) { index, (category, count, imageUrl) ->
                             CategoryCard(
