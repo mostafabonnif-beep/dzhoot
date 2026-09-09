@@ -1,5 +1,6 @@
 package com.dzhoof.iptv.presentation.model
 
+import com.dzhoof.iptv.data.repository.TrackPreferenceMatcher
 import com.dzhoof.iptv.domain.model.EpgProgram
 import com.dzhoof.iptv.domain.repository.PlayerKeyAction
 
@@ -62,3 +63,13 @@ data class PlayerUiState(
     // Last watched channel (for quick recall)
     val lastChannel: ChannelUiModel? get() = recentChannels.firstOrNull()
 }
+
+/**
+ * A computed track-preference decision waiting to be applied by the UI layer.
+ * [PlayerViewModel] computes it (pure logic, no media3 types) and the player
+ * effect applies it to the real ExoPlayer, then calls back to clear it.
+ */
+data class TrackPreferenceDecisionRequest(
+    val mediaKey: String,
+    val decision: TrackPreferenceMatcher.TrackPreferenceDecision,
+)

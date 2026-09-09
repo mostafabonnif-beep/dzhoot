@@ -3,6 +3,7 @@ package com.dzhoof.iptv.di
 import com.dzhoof.iptv.data.repository.CategoryRepositoryImpl
 import com.dzhoof.iptv.data.repository.CatalogRepositoryImpl
 import com.dzhoof.iptv.data.repository.ChannelRepositoryImpl
+import com.dzhoof.iptv.data.repository.ChannelTrackPreferencesRepositoryImpl
 import com.dzhoof.iptv.data.repository.EpgRepositoryImpl
 import com.dzhoof.iptv.data.repository.FavoriteRepositoryImpl
 import com.dzhoof.iptv.data.repository.PlaybackRepositoryImpl
@@ -13,6 +14,7 @@ import com.dzhoof.iptv.data.repository.UserPreferencesRepositoryImpl
 import com.dzhoof.iptv.domain.repository.CategoryRepository
 import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.ChannelRepository
+import com.dzhoof.iptv.domain.repository.ChannelTrackPreferencesRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.repository.FavoriteRepository
 import com.dzhoof.iptv.domain.repository.PlaybackRepository
@@ -110,6 +112,12 @@ abstract class RepositoryModule {
     abstract fun bindUserPreferencesRepository(
         impl: UserPreferencesRepositoryImpl
     ): UserPreferencesRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindChannelTrackPreferencesRepository(
+        impl: ChannelTrackPreferencesRepositoryImpl
+    ): ChannelTrackPreferencesRepository
 
     @Binds
     @Singleton

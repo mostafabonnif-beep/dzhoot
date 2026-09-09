@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.domain.model.EpgProgram
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.theme.BodyOverlay
@@ -39,6 +40,9 @@ import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.theme.softShadow
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 
 // Flat vertical scrim — no blur/shadow, cheap on low-end boxes
 private val InfoBarScrim = Brush.verticalGradient(
@@ -169,6 +173,7 @@ private fun CompactInfoBar(
 @Composable
 private fun ChannelInfoRow(channel: ChannelUiModel) {
     val catColor = categoryColor(channel.category)
+    val channelNumberDescription = stringResource(R.string.player_channel_number_desc, channel.order)
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -187,6 +192,26 @@ private fun ChannelInfoRow(channel: ChannelUiModel) {
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
+        }
+
+        // Channel number chip (curated supplier order within the category) —
+        // the anchor for direct number entry after a zap. Only rendered when
+        // the model actually carries a number (order > 0).
+        if (channel.order > 0) {
+            Surface(
+                shape = ShapeSmall,
+                color = OnVideo.copy(alpha = 0.14f),
+                border = BorderStroke(1.dp, OnVideo.copy(alpha = 0.35f))
+            ) {
+                Text(
+                    text = channel.order.toString(),
+                    style = LabelBadge.copy(fontWeight = FontWeight.Bold),
+                    color = OnVideo,
+                    modifier = Modifier
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .semantics { contentDescription = channelNumberDescription }
+                )
+            }
         }
 
         Text(
