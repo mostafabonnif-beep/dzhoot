@@ -19,7 +19,7 @@ class VodPlayerControlsTest {
         assertEquals(60, nextSleepTimerStep(30)!!)
         assertEquals(90, nextSleepTimerStep(60)!!)
         assertEquals(120, nextSleepTimerStep(90)!!)
-        assertEquals(null, nextSleepTimerStep(120)) // wrap back to off
+        assertEquals(null as Int?, nextSleepTimerStep(120)) // wrap back to off
     }
 
     @Test
