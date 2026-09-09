@@ -82,7 +82,7 @@ private val topNavItems = listOf(
     NavItem(Screen.Favorites, Icons.Default.Favorite, "المفضلة"),
     NavItem(Screen.Search, Icons.Default.Search, "بحث"),
     NavItem(Screen.Guide, Icons.Default.Tv, "دليل البرامج"),
-    NavItem(Screen.Categories, Icons.Default.Category, "التصنيفات"),
+    NavItem(Screen.Categories, Icons.Default.Category, "القنوات"),
     NavItem(Screen.Catalog, Icons.Default.Movie, "أفلام ومسلسلات"),
 )
 

@@ -61,6 +61,8 @@ fun HomeContent(
     onMultiviewClick: (String) -> Unit,
     onMovieClick: (String) -> Unit = {},
     onSeriesClick: (String) -> Unit = {},
+    onSeeAllMovies: (() -> Unit)? = null,
+    onSeeAllSeries: (() -> Unit)? = null,
     isDemo: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -263,6 +265,7 @@ fun HomeContent(
                     title = "أحدث الأفلام",
                     items = latestMovies,
                     onItemClick = onMovieClick,
+                    onSeeAllClick = onSeeAllMovies,
                     horizontalPadding = horizontalPadding,
                     modifier = Modifier
                         .padding(bottom = rowGap)
@@ -277,6 +280,7 @@ fun HomeContent(
                     title = "المسلسلات",
                     items = latestSeries,
                     onItemClick = onSeriesClick,
+                    onSeeAllClick = onSeeAllSeries,
                     horizontalPadding = horizontalPadding,
                     modifier = Modifier
                         .padding(bottom = rowGap)
