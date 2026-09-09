@@ -150,11 +150,6 @@ fun PlayerScreen(
         currentChannelIdForLock in lockedChannelIds && !parentalUnlocked
     val gateActive = parentalLocked || channelLocked
 
-    // Never keep playing a channel the user locked: pause immediately.
-    LaunchedEffect(channelLocked) {
-        if (channelLocked && !parentalLocked) exoPlayer.pause()
-    }
-
     // Sleep timer expiry: pause playback while the "Still watching?" prompt shows
     LaunchedEffect(uiState.sleepTimerExpired) {
         if (uiState.sleepTimerExpired) exoPlayer.pause()
@@ -199,7 +194,12 @@ fun PlayerScreen(
         uiState.channel?.alternateStreamUrls,
         catchupStartMs,
         catchupDurationMin,
+        channelLocked,
     ) {
+        // Per-channel lock gate: a locked channel never starts playing. Once
+        // the PIN unlocks the session, channelLocked flips false and this
+        // effect re-runs, preparing the stream automatically.
+        if (channelLocked) return@LaunchedEffect
         uiState.channel?.let { channel ->
             val prepared = prepareChannelStream(
                 context = context,

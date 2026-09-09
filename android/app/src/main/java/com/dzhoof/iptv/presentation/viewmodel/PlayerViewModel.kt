@@ -788,6 +788,9 @@ class PlayerViewModel @Inject constructor(
                     is Result.Success -> {
                         val uiChannels = channelUiMapper.toUiModelsWithHealth(result.data, healthList)
                             .map(::enrichWithEpgIfReady)
+                            // Hidden channels stay out of the in-player browser
+                            // too (the currently playing channel always stays).
+                            .filter { it.id !in _hiddenChannelIds.value || it.id == _uiState.value.channel?.id }
                         val categories = uiChannels.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
                         _uiState.update {
                             it.copy(
@@ -835,6 +838,9 @@ class PlayerViewModel @Inject constructor(
                     is Result.Success -> {
                         val uiChannels = channelUiMapper.toUiModelsWithHealth(result.data, healthList)
                             .map(::enrichWithEpgIfReady)
+                            // Hidden channels stay out of the in-player browser
+                            // too (the currently playing channel always stays).
+                            .filter { it.id !in _hiddenChannelIds.value || it.id == _uiState.value.channel?.id }
                         // Always load all categories when loading all channels
                         val categories = if (category == null || _uiState.value.overlayCategories.isEmpty()) {
                             uiChannels.map { it.category }.filter { it.isNotBlank() }.distinct().sorted()
