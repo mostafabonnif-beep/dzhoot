@@ -19,6 +19,7 @@ import com.dzhoof.iptv.data.source.local.dao.PlaybackPositionDao
 import com.dzhoof.iptv.data.source.local.entity.FavoriteCategoryEntity
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.repository.CatalogRepository
+import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.usecase.GetChannelsByCategoryUseCase
 import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
@@ -73,7 +74,8 @@ class ChannelsViewModel @Inject constructor(
     private val channelDao: ChannelDao,
     private val favoriteDao: FavoriteDao,
     private val playbackPositionDao: PlaybackPositionDao,
-    private val favoriteCategoryDao: FavoriteCategoryDao
+    private val favoriteCategoryDao: FavoriteCategoryDao,
+    private val channelPrefsRepository: ChannelPrefsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChannelsUiState())
@@ -142,15 +144,21 @@ class ChannelsViewModel @Inject constructor(
             channelFlow.combine(
                 channelHealthDao.getAllHealth()
                     .debounce(HEALTH_SCAN_DEBOUNCE_MS)
-                    .onStart { emit(emptyList()) }
-            ) { result, healthList ->
-                result to healthList
-            }.collect { (result, healthList) ->
+                    .onStart { emit(emptyList()) },
+                channelPrefsRepository.observeHiddenIds()
+            ) { result, healthList, hiddenIds ->
+                Triple(result, healthList, hiddenIds)
+            }.collect { (result, healthList, hiddenIds) ->
                 when (result) {
                     is Result.Success -> {
+                        // User-hidden channels are dropped before sorting so they
+                        // never surface in the grid, category chips or derived rows.
                         val uiChannels = sortChannelsForTv(
-                            channelUiMapper.toUiModelsWithHealth(result.data, healthList)
-                                .map { enrichWithEpgIfReady(it) }
+                            filterHidden(
+                                channelUiMapper.toUiModelsWithHealth(result.data, healthList)
+                                    .map { enrichWithEpgIfReady(it) },
+                                hiddenIds
+                            )
                         )
 
                         // Only rebuild categories/logos when showing all channels (no filter).
@@ -183,8 +191,10 @@ class ChannelsViewModel @Inject constructor(
                                 channels = uiChannels,
                                 categories = allCategories,
                                 categoryLogos = catLogos,
-                                // Only recompute For You from the unfiltered catalog; a
-                                // category filter shows a subset and would skew the mix.
+                                // Only recompute For You from the full (unhidden)
+                                // catalog; a category filter shows a subset and
+                                // would skew the mix. Hidden channels were already
+                                // dropped above, so they never reach For You either.
                                 forYou = if (category == null) deriveForYou(uiChannels, it.recentlyWatched) else it.forYou,
                                 isLoading = refreshJob?.isActive == true,
                                 error = if (uiChannels.isNotEmpty()) null else it.error,
@@ -463,6 +473,16 @@ class ChannelsViewModel @Inject constructor(
                 .thenBy { it.order }
                 .thenBy { it.name.lowercase() }
         )
+
+    /**
+     * Drops channels the user hid via "إدارة القنوات" (channel management).
+     * Empty set short-circuits to avoid an allocation on the hot path.
+     */
+    private fun filterHidden(
+        channels: List<ChannelUiModel>,
+        hiddenIds: Set<String>
+    ): List<ChannelUiModel> =
+        if (hiddenIds.isEmpty()) channels else channels.filter { it.id !in hiddenIds }
 
     /**
      * Personalized "For You": channels from the categories the user watches

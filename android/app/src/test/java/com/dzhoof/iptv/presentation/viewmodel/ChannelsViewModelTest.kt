@@ -14,6 +14,7 @@ import com.dzhoof.iptv.data.source.remote.UnauthorizedException
 import com.dzhoof.iptv.data.source.remote.ServerException
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.repository.CatalogRepository
+import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.usecase.GetChannelsByCategoryUseCase
 import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
@@ -63,8 +64,10 @@ class ChannelsViewModelTest {
     private val favoriteDao: FavoriteDao = mockk()
     private val playbackPositionDao: PlaybackPositionDao = mockk()
     private val favoriteCategoryDao: FavoriteCategoryDao = mockk()
+    private val channelPrefsRepository: ChannelPrefsRepository = mockk()
 
     private val healthFlow = MutableStateFlow(emptyList<com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity>())
+    private val hiddenIdsFlow = MutableStateFlow<Set<String>>(emptySet())
 
     private val testChannel = Channel(
         id = "ch1",
@@ -86,6 +89,7 @@ class ChannelsViewModelTest {
         coEvery { epgRepository.ensureLoaded() } returns Unit
         every { epgRepository.getNowNextIfCached(any()) } returns null
         every { channelHealthDao.getAllHealth() } returns healthFlow
+        every { channelPrefsRepository.observeHiddenIds() } returns hiddenIdsFlow
         every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(testChannel)))
         coEvery { refreshChannelsUseCase(Unit) } returns Result.Success(Unit)
 
@@ -114,7 +118,8 @@ class ChannelsViewModelTest {
         channelDao = channelDao,
         favoriteDao = favoriteDao,
         playbackPositionDao = playbackPositionDao,
-        favoriteCategoryDao = favoriteCategoryDao
+        favoriteCategoryDao = favoriteCategoryDao,
+        channelPrefsRepository = channelPrefsRepository
     )
 
     @Test
@@ -350,5 +355,64 @@ class ChannelsViewModelTest {
         runCurrent()
 
         assertEquals(setOf("News", "Sports"), vm.uiState.value.favoriteCategoryNames)
+    }
+
+    @Test
+    fun `hidden channels are excluded from the list`() = runTest {
+        val second = testChannel.copy(id = "ch2", name = "Second Channel")
+        every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(testChannel, second)))
+
+        val vm = createViewModel()
+        advanceTimeBy(600)
+        runCurrent()
+
+        assertEquals(2, vm.uiState.value.channels.size)
+
+        // Hide ch1 → it must disappear from the list (and its count)
+        hiddenIdsFlow.value = setOf("ch1")
+        runCurrent()
+
+        assertEquals(1, vm.uiState.value.channels.size)
+        assertEquals("ch2", vm.uiState.value.channels[0].id)
+    }
+
+    @Test
+    fun `unhiding a channel restores it to the list`() = runTest {
+        val second = testChannel.copy(id = "ch2", name = "Second Channel")
+        every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(testChannel, second)))
+
+        hiddenIdsFlow.value = setOf("ch1")
+        val vm = createViewModel()
+        advanceTimeBy(600)
+        runCurrent()
+
+        assertEquals(1, vm.uiState.value.channels.size)
+
+        hiddenIdsFlow.value = emptySet()
+        runCurrent()
+
+        assertEquals(2, vm.uiState.value.channels.size)
+        assertEquals(
+            setOf("ch1", "ch2"),
+            vm.uiState.value.channels.map { it.id }.toSet()
+        )
+    }
+
+    @Test
+    fun `hiding every channel of a category removes it from the category chips`() = runTest {
+        val news1 = testChannel.copy(id = "n1", category = "News")
+        val news2 = testChannel.copy(id = "n2", category = "News")
+        val sports = testChannel.copy(id = "s1", name = "Sport One", category = "Sports")
+        every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(news1, news2, sports)))
+
+        hiddenIdsFlow.value = setOf("n1", "n2")
+        val vm = createViewModel()
+        advanceTimeBy(600)
+        runCurrent()
+
+        // News is fully hidden → no channels, no category chip; Sports survives
+        assertEquals(listOf("Sports"), vm.uiState.value.categories)
+        assertEquals(1, vm.uiState.value.channels.size)
+        assertEquals("s1", vm.uiState.value.channels[0].id)
     }
 }
