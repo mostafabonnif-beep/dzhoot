@@ -90,6 +90,12 @@ describe('UserVodBrowser', () => {
     await waitFor(() => expect(screen.getByText('تعذّر تحميل المحتوى. حاول مرة أخرى.')).toBeInTheDocument());
   });
 
+  it('preselects the series tab when initialKind=series is given', async () => {
+    mockCatalog('series', [series]);
+    render(<UserVodBrowser initialKind="series" />);
+    await waitFor(() => expect(screen.getByText('مسلسل تجريبي')).toBeInTheDocument());
+  });
+
   it('opens the episodes drill-down when a series card is clicked', async () => {
     const season = { _id: 'sea1', seasonNumber: 1, name: 'الموسم 1' };
     const episode = { _id: 'ep1', episodeNumber: 1, title: 'الحلقة الأولى', duration: 2400 };
