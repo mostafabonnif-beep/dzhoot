@@ -78,7 +78,7 @@ class PlayerViewModelTest {
         every { getAlwaysShowProgramBar() } returns flowOf(false)
         every { getInfoBarTimeoutSeconds() } returns flowOf(4)
     }
-    private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository = mockk()
+    private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository = mockk(relaxed = true)
 
     private lateinit var viewModel: PlayerViewModel
 
