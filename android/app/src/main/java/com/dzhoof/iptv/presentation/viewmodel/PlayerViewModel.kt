@@ -10,6 +10,7 @@ import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.model.EpgProgram
 import com.dzhoof.iptv.domain.model.PlaybackTarget
+import com.dzhoof.iptv.domain.repository.ChannelTrackPreferencesRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
 import com.dzhoof.iptv.domain.service.AnalyticsHelper
@@ -24,6 +25,7 @@ import com.dzhoof.iptv.domain.usecase.ReportPlaybackQoeUseCase
 import com.dzhoof.iptv.domain.usecase.ReportStreamStatusUseCase
 import com.dzhoof.iptv.domain.usecase.SavePlaybackPositionUseCase
 import com.dzhoof.iptv.domain.usecase.ToggleFavoriteUseCase
+import com.dzhoof.iptv.data.repository.TrackPreferenceMatcher
 import com.dzhoof.iptv.presentation.mapper.ChannelUiMapper
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.PlayerUiState
@@ -39,6 +41,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -83,11 +86,32 @@ class PlayerViewModel @Inject constructor(
     private val analyticsHelper: AnalyticsHelper,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val playerFactory: PlayerFactory,
-    private val apiService: DzhoofApiService
+    private val apiService: DzhoofApiService,
+    private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
     val uiState: StateFlow<PlayerUiState> = _uiState.asStateFlow()
+
+    /** Computed per-channel track decision awaiting application by the player effect. */
+    private val _pendingTrackDecision = MutableStateFlow<TrackPreferenceDecisionRequest?>(null)
+    val pendingTrackDecision: StateFlow<TrackPreferenceDecisionRequest?> =
+        _pendingTrackDecision.asStateFlow()
+
+    /** Current channel id, or null before a channel is loaded. */
+    fun currentChannelId(): String? = _uiState.value.channel?.id
+
+    /** Media keys for which auto-apply already ran in this session. */
+    val appliedTrackPrefsForMediaKey: Set<String>
+        get() = autoAppliedMediaKeys.toSet()
+
+    /**
+     * Records that saved track preferences were applied for [mediaKey] so a
+     * later tracks-changed event for the same prepared item does not re-apply.
+     */
+    fun markTracksApplied(mediaKey: String) {
+        if (mediaKey.isNotBlank()) autoAppliedMediaKeys += mediaKey
+    }
 
     /** Builds an IPTV-tuned ExoPlayer (buffers, timeouts, decoder fallback). */
     fun createPlayer(): ExoPlayer = playerFactory.create()
@@ -215,6 +239,13 @@ class PlayerViewModel @Inject constructor(
     private var sleepTimerDefaultApplied = false
     private var lastInteractionTime: Long = System.currentTimeMillis()
 
+    // ── Per-channel track-preference auto-apply (v1.2.0) ──
+    // In-memory bookkeeping only — the durable per-channel choices live in
+    // ChannelTrackPreferencesRepository. Sets are keyed by the current media
+    // item identity (see currentMediaKey()) and cleared when the channel changes.
+    private val autoAppliedMediaKeys = mutableSetOf<String>()
+    private val manuallySetMediaKeys = mutableSetOf<String>()
+
     private fun beginPlaybackQoeSession(channelId: String) {
         playbackQoeChannelId = channelId
         playbackQoeStartedAt = System.currentTimeMillis()
@@ -278,6 +309,7 @@ class PlayerViewModel @Inject constructor(
                 when (result) {
                     is Result.Success -> {
                         val channel = result.data
+                        val previousChannelId = _uiState.value.channel?.id
                         val uiModel = channelUiMapper.toUiModel(channel)
                         _uiState.update {
                             it.copy(
@@ -287,6 +319,9 @@ class PlayerViewModel @Inject constructor(
                                 nowPlaying = null,
                                 nextProgram = null
                             )
+                        }
+                        if (previousChannelId != null && previousChannelId != channelId) {
+                            resetTrackAutoApplyForChannelChange()
                         }
                         channelViewStartTime = System.currentTimeMillis()
                         beginPlaybackQoeSession(channelId)
@@ -803,6 +838,117 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    // ── Per-Channel Track Preferences (audio/subtitle auto-apply) ──
+
+    /**
+     * Identity of the currently prepared media item: channel id + stream slots.
+     * Auto-apply runs at most once per media item; a re-prepare of the *same*
+     * channel + stream (error recovery, favorite-toggle rebuild) therefore
+     * never re-fights an in-session manual choice, while a genuinely new item
+     * (different channel or changed stream URL) starts clean.
+     */
+    fun currentMediaKey(): String? {
+        val channel = _uiState.value.channel ?: return null
+        return buildString {
+            append(channel.id)
+            append('|')
+            append(channel.streamUrl ?: "")
+            append('|')
+            append(channel.alternateStreamUrls.orEmpty().joinToString(","))
+        }
+    }
+
+    /**
+     * Auto-apply entry point, called by the player effect whenever track groups
+     * become available for the current media item ([mediaKey]). Reads the
+     * channel's saved preferences, computes a pure [TrackPreferenceMatcher]
+     * decision and publishes it on [pendingTrackDecision] for the UI layer to
+     * apply to the real ExoPlayer.
+     *
+     * One-shot guard: a media key is only auto-applied once, and never when the
+     * user already picked a track manually for that item (manual wins).
+     */
+    fun onTrackGroupsAvailable(mediaKey: String, snapshot: TrackPreferenceMatcher.TrackSelectionSnapshot) {
+        if (mediaKey.isBlank()) return
+        if (snapshot.isEmpty) return
+        if (mediaKey in autoAppliedMediaKeys) return
+        if (mediaKey in manuallySetMediaKeys) return
+        val channelId = _uiState.value.channel?.id ?: return
+        viewModelScope.launch {
+            // Re-check after the suspension points: the user may have opened the
+            // panel and picked a track while the preferences were loading.
+            if (mediaKey in autoAppliedMediaKeys || mediaKey in manuallySetMediaKeys) return@launch
+            if (_uiState.value.channel?.id != channelId) return@launch // zapped away meanwhile
+            val audioLanguage = channelTrackPreferencesRepository.getAudioLanguage(channelId).first()
+            val subtitleLanguage = channelTrackPreferencesRepository.getSubtitleLanguage(channelId).first()
+            val subtitlesDisabled = channelTrackPreferencesRepository.getSubtitlesDisabled(channelId).first()
+            if (mediaKey in autoAppliedMediaKeys || mediaKey in manuallySetMediaKeys) return@launch
+            if (_uiState.value.channel?.id != channelId) return@launch
+            val decision = TrackPreferenceMatcher.decide(
+                snapshot = snapshot,
+                storedAudioLanguage = audioLanguage,
+                storedSubtitleLanguage = subtitleLanguage,
+                storedSubtitlesDisabled = subtitlesDisabled,
+            )
+            autoAppliedMediaKeys += mediaKey
+            _pendingTrackDecision.value = TrackPreferenceDecisionRequest(mediaKey, decision)
+        }
+    }
+
+    /**
+     * Forget that the current media item was auto-applied. Called when the
+     * player's track groups are cleared (a new item is being prepared) so a
+     * re-prepare of the same channel+stream applies saved preferences again.
+     */
+    fun resetTrackAutoApplyForCurrentItem() {
+        currentMediaKey()?.let { autoAppliedMediaKeys.remove(it) }
+        if (_pendingTrackDecision.value != null) _pendingTrackDecision.value = null
+    }
+
+    /** Clear a pending decision after the UI layer applied it for [mediaKey]. */
+    fun onTrackDecisionApplied(mediaKey: String) {
+        val pending = _pendingTrackDecision.value
+        if (pending?.mediaKey == mediaKey) {
+            _pendingTrackDecision.value = null
+        }
+    }
+
+    /**
+     * Marks the current media item as manually configured. Auto-apply then
+     * stands down for this item even if a decision was still queued.
+     */
+    fun markCurrentItemManuallySet() {
+        currentMediaKey()?.let { manuallySetMediaKeys += it }
+    }
+
+    /** Persist the user's audio-track choice for [channelId] (null = clear). */
+    fun saveAudioTrackPreference(channelId: String, language: String?) {
+        viewModelScope.launch {
+            channelTrackPreferencesRepository.setAudioLanguage(channelId, language)
+        }
+    }
+
+    /** Persist the user's subtitle-track choice for [channelId] (null = clear). */
+    fun saveSubtitleTrackPreference(channelId: String, language: String?) {
+        viewModelScope.launch {
+            channelTrackPreferencesRepository.setSubtitleLanguage(channelId, language)
+        }
+    }
+
+    /** Persist the subtitles-off choice for [channelId]. */
+    fun saveSubtitlesDisabled(channelId: String, disabled: Boolean) {
+        viewModelScope.launch {
+            channelTrackPreferencesRepository.setSubtitlesDisabled(channelId, disabled)
+        }
+    }
+
+    /** Drop auto-apply bookkeeping when the channel changes (called after the new channel lands). */
+    private fun resetTrackAutoApplyForChannelChange() {
+        autoAppliedMediaKeys.clear()
+        manuallySetMediaKeys.clear()
+        _pendingTrackDecision.value = null
+    }
+
     // ── Next / Previous Channel (D-Pad & remote buttons) ───────────
 
     /** Zap order for the mobile portrait Channels tab — same list ▲▼/swipe zap walks. */
@@ -884,6 +1030,7 @@ class PlayerViewModel @Inject constructor(
                     is Result.Success -> {
                         val channel = result.data
                         beginPlaybackQoeSession(channelId)
+                        val previousChannelId = _uiState.value.channel?.id
                         _uiState.update {
                             it.copy(
                                 channel = channelUiMapper.toUiModel(channel),
@@ -894,6 +1041,9 @@ class PlayerViewModel @Inject constructor(
                                 nowPlaying = null,
                                 nextProgram = null
                             )
+                        }
+                        if (previousChannelId != null && previousChannelId != channelId) {
+                            resetTrackAutoApplyForChannelChange()
                         }
                         loadPlaybackPosition(channelId)
                         fetchEpg(channel.tvgId)

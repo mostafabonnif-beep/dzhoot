@@ -2,11 +2,13 @@ package com.dzhoof.iptv.presentation.viewmodel
 
 import com.dzhoof.iptv.MainDispatcherRule
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.data.repository.TrackPreferenceMatcher
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.model.EpgProgram
 import com.dzhoof.iptv.domain.model.PlaybackState
+import com.dzhoof.iptv.domain.repository.ChannelTrackPreferencesRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.repository.PlayerKeyAction
 import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
@@ -35,6 +37,8 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -74,6 +78,7 @@ class PlayerViewModelTest {
         every { getAlwaysShowProgramBar() } returns flowOf(false)
         every { getInfoBarTimeoutSeconds() } returns flowOf(4)
     }
+    private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository = mockk()
 
     private lateinit var viewModel: PlayerViewModel
 
@@ -100,13 +105,17 @@ class PlayerViewModelTest {
         coEvery { epgRepository.getNowNext(any()) } returns Pair(null, null)
         every { epgRepository.getNowNextIfCached(any()) } returns null
         coEvery { getGuideProgramsUseCase(any()) } returns emptyMap()
+        coEvery { channelTrackPreferencesRepository.getAudioLanguage(any()) } returns flowOf(null)
+        coEvery { channelTrackPreferencesRepository.getSubtitleLanguage(any()) } returns flowOf(null)
+        coEvery { channelTrackPreferencesRepository.getSubtitlesDisabled(any()) } returns flowOf(false)
 
         viewModel = PlayerViewModel(
             getChannelByIdUseCase, getChannelsUseCase, getChannelsByCategoryUseCase,
             savePlaybackPositionUseCase, getPlaybackPositionUseCase, toggleFavoriteUseCase,
             reportStreamStatusUseCase, reportStreamPlayUseCase, reportPlaybackQoeUseCase, channelUiMapper,
             channelHealthDao, thumbnailExtractor, epgRepository, getGuideProgramsUseCase,
-            analyticsHelper, userPreferencesRepository, playerFactory, apiService
+            analyticsHelper, userPreferencesRepository, playerFactory, apiService,
+            channelTrackPreferencesRepository
         )
     }
 
@@ -657,5 +666,206 @@ class PlayerViewModelTest {
         runCurrent()
 
         assertTrue(viewModel.uiState.value.shouldNavigateBack)
+    }
+
+    // ── Per-Channel Track Preferences (audio/subtitle auto-apply) ─
+
+    private fun stubLoadedChannel(channel: Channel) {
+        every { getChannelByIdUseCase(channel.id) } returns flowOf(Result.Success(channel))
+        every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(channel)))
+    }
+
+    private fun snapshotWith(
+        audioLanguages: List<String?> = emptyList(),
+        textLanguages: List<String?> = emptyList()
+    ) = TrackPreferenceMatcher.TrackSelectionSnapshot(
+        audioTracks = audioLanguages.mapIndexed { index, language ->
+            TrackPreferenceMatcher.AudioTrackLike(groupIndex = 0, trackIndex = index, language = language)
+        },
+        textTracks = textLanguages.mapIndexed { index, language ->
+            TrackPreferenceMatcher.TextTrackLike(groupIndex = 0, trackIndex = index, language = language)
+        }
+    )
+
+    @Test
+    fun `currentMediaKey encodes channel id and stream slots`() = runTest {
+        val channel = createChannel("ch1")
+        stubLoadedChannel(channel)
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+
+        assertEquals("ch1|http://stream/ch1|", viewModel.currentMediaKey())
+        assertEquals("ch1", viewModel.currentChannelId())
+    }
+
+    @Test
+    fun `saveAudioTrackPreference persists via repository`() = runTest {
+        val channel = createChannel("ch1")
+        stubLoadedChannel(channel)
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+
+        viewModel.saveAudioTrackPreference("ch1", "fr")
+        advanceUntilIdle()
+        coVerify { channelTrackPreferencesRepository.setAudioLanguage("ch1", "fr") }
+
+        // null clears the stored choice
+        viewModel.saveAudioTrackPreference("ch1", null)
+        advanceUntilIdle()
+        coVerify { channelTrackPreferencesRepository.setAudioLanguage("ch1", null) }
+    }
+
+    @Test
+    fun `saveSubtitleTrackPreference and saveSubtitlesDisabled persist via repository`() = runTest {
+        val channel = createChannel("ch1")
+        stubLoadedChannel(channel)
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+
+        viewModel.saveSubtitleTrackPreference("ch1", "ar")
+        viewModel.saveSubtitlesDisabled("ch1", true)
+        advanceUntilIdle()
+        coVerify { channelTrackPreferencesRepository.setSubtitleLanguage("ch1", "ar") }
+        coVerify { channelTrackPreferencesRepository.setSubtitlesDisabled("ch1", true) }
+    }
+
+    @Test
+    fun `onTrackGroupsAvailable emits matching decision from stored prefs`() = runTest {
+        val channel = createChannel("ch1")
+        stubLoadedChannel(channel)
+        coEvery { channelTrackPreferencesRepository.getAudioLanguage("ch1") } returns flowOf("ar")
+        coEvery { channelTrackPreferencesRepository.getSubtitleLanguage("ch1") } returns flowOf("fr")
+
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+        val key = viewModel.currentMediaKey()!!
+
+        viewModel.onTrackGroupsAvailable(
+            key,
+            snapshotWith(audioLanguages = listOf("ar", "en"), textLanguages = listOf("fr", "ar"))
+        )
+        advanceUntilIdle()
+
+        val request = viewModel.pendingTrackDecision.value
+        assertNotNull(request)
+        assertEquals(key, request?.mediaKey)
+        assertEquals(TrackPreferenceMatcher.TrackRef(0, 0), request?.decision?.selectAudio)
+        assertEquals(TrackPreferenceMatcher.TrackRef(0, 0), request?.decision?.selectSubtitle)
+        assertFalse(request?.decision?.subtitlesDisabled ?: true)
+        assertTrue(key in viewModel.appliedTrackPrefsForMediaKey)
+    }
+
+    @Test
+    fun `auto-apply runs once per media key`() = runTest {
+        val channel = createChannel("ch1")
+        stubLoadedChannel(channel)
+        coEvery { channelTrackPreferencesRepository.getAudioLanguage("ch1") } returns flowOf("ar")
+
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+        val key = viewModel.currentMediaKey()!!
+
+        viewModel.onTrackGroupsAvailable(key, snapshotWith(audioLanguages = listOf("ar", "en")))
+        advanceUntilIdle()
+        assertNotNull(viewModel.pendingTrackDecision.value)
+
+        viewModel.onTrackDecisionApplied(key)
+        assertNull(viewModel.pendingTrackDecision.value)
+
+        // Same media key again: already auto-applied → no second decision.
+        viewModel.onTrackGroupsAvailable(key, snapshotWith(audioLanguages = listOf("ar", "en")))
+        advanceUntilIdle()
+        assertNull(viewModel.pendingTrackDecision.value)
+        coVerify(exactly = 1) { channelTrackPreferencesRepository.getAudioLanguage("ch1") }
+    }
+
+    @Test
+    fun `manual selection beats queued auto-apply`() = runTest {
+        val channel = createChannel("ch1")
+        stubLoadedChannel(channel)
+        coEvery { channelTrackPreferencesRepository.getAudioLanguage("ch1") } returns flowOf("ar")
+
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+        val key = viewModel.currentMediaKey()!!
+
+        // Auto-apply launched (async pref read), then the user picks a track
+        // before the coroutine resumes.
+        viewModel.onTrackGroupsAvailable(key, snapshotWith(audioLanguages = listOf("ar", "en")))
+        viewModel.markCurrentItemManuallySet()
+        advanceUntilIdle()
+
+        assertNull(viewModel.pendingTrackDecision.value)
+        assertFalse(key in viewModel.appliedTrackPrefsForMediaKey)
+        coVerify(exactly = 0) { channelTrackPreferencesRepository.getAudioLanguage("ch1") }
+    }
+
+    @Test
+    fun `markTracksApplied suppresses later auto-apply for the item`() = runTest {
+        val channel = createChannel("ch1")
+        stubLoadedChannel(channel)
+        coEvery { channelTrackPreferencesRepository.getAudioLanguage("ch1") } returns flowOf("ar")
+
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+        val key = viewModel.currentMediaKey()!!
+
+        viewModel.markTracksApplied(key)
+        viewModel.onTrackGroupsAvailable(key, snapshotWith(audioLanguages = listOf("ar")))
+        advanceUntilIdle()
+
+        assertNull(viewModel.pendingTrackDecision.value)
+    }
+
+    @Test
+    fun `no stored prefs still publishes default decision for the item`() = runTest {
+        val channel = createChannel("ch1")
+        stubLoadedChannel(channel)
+        // Repository defaults: no audio/subtitle language, subtitles enabled.
+
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+        val key = viewModel.currentMediaKey()!!
+
+        viewModel.onTrackGroupsAvailable(key, snapshotWith(audioLanguages = listOf("ar"), textLanguages = listOf("ar")))
+        advanceUntilIdle()
+
+        val request = viewModel.pendingTrackDecision.value
+        assertNotNull(request)
+        assertNull(request?.decision?.selectAudio)
+        assertNull(request?.decision?.selectSubtitle)
+        assertFalse(request?.decision?.subtitlesDisabled ?: true)
+    }
+
+    @Test
+    fun `switching channel resets auto-apply bookkeeping`() = runTest {
+        val ch1 = createChannel("ch1")
+        val ch2 = createChannel("ch2")
+        every { getChannelByIdUseCase("ch1") } returns flowOf(Result.Success(ch1))
+        every { getChannelByIdUseCase("ch2") } returns flowOf(Result.Success(ch2))
+        every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(ch1, ch2)))
+        coEvery { channelTrackPreferencesRepository.getAudioLanguage("ch1") } returns flowOf("ar")
+
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+        val key1 = viewModel.currentMediaKey()!!
+        viewModel.onTrackGroupsAvailable(key1, snapshotWith(audioLanguages = listOf("ar")))
+        advanceUntilIdle()
+        assertNotNull(viewModel.pendingTrackDecision.value)
+        assertTrue(key1 in viewModel.appliedTrackPrefsForMediaKey)
+
+        viewModel.onTrackDecisionApplied(key1)
+        viewModel.switchChannel("ch2")
+        advanceUntilIdle()
+
+        // Bookkeeping cleared for the previous item; ch2 auto-apply is free to run.
+        assertFalse(key1 in viewModel.appliedTrackPrefsForMediaKey)
+        val key2 = viewModel.currentMediaKey()!!
+        assertNotEquals(key1, key2)
+        viewModel.onTrackGroupsAvailable(key2, snapshotWith(audioLanguages = listOf("ar")))
+        advanceUntilIdle()
+        val request = viewModel.pendingTrackDecision.value
+        assertNotNull(request)
+        assertEquals(key2, request?.mediaKey)
     }
 }
