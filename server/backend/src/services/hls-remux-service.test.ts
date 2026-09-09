@@ -42,6 +42,16 @@ beforeEach(() => {
   remux.shutdownHlsSessions();
 });
 
+afterEach(async () => {
+  // kill() mirrors real child_process by emitting 'exit' on a setImmediate.
+  // If a test (or the beforeEach shutdown above) kills a fake ffmpeg and the
+  // callback fires after jest has closed this suite's console, jest hard-fails
+  // with "Cannot log after tests are done" even though every assertion passed
+  // (seen repeatedly on CI, order/cache dependent). Drain the immediates while
+  // the suite lifecycle is still open so the exit handler logs deterministically.
+  await new Promise((resolve) => setImmediate(resolve));
+});
+
 const A = 'token-aaaaaaaa';
 const B = 'token-bbbbbbbb';
 const C = 'token-cccccccc';
