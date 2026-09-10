@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
@@ -58,6 +59,7 @@ import androidx.compose.ui.Alignment
 import com.dzhoof.iptv.BuildConfig
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import com.dzhoof.iptv.presentation.ui.components.PortalQrCode
 
 private const val HERO_SWAP_DEBOUNCE_MS = 300L
 private const val HOME_CATEGORY_ROWS_LIMIT = 4
@@ -260,14 +262,23 @@ fun HomeContent(
                     .padding(horizontal = horizontalPadding)
                     .padding(bottom = rowGap),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Top
             ) {
-                SubscriptionStatusChip(expiresAt = subscriptionExpiresAt)
-                Text(
-                    text = "DZ HOOF TV  ·  v${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    SubscriptionStatusChip(expiresAt = subscriptionExpiresAt)
+                    Spacer(modifier = Modifier.height(Dimens.Space2))
+                    Text(
+                        text = "DZ HOOF TV  ·  v${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                // Scan-to-manage portal code, opposite the status line — the
+                // phone reaches the plan/devices pages without typing an address
+                // off the TV. TV only: the phone has it inside settings.
+                if (!isCompact) {
+                    PortalQrCode(showHint = false)
+                }
             }
         }
 

@@ -67,6 +67,9 @@ object Dimens {
     val PortalTileHeightMobile = 96.dp
     val PortalTileGap = 14.dp
     val PortalIconSizeTv = 34.dp
+
+    /** Side of the subscriber-portal QR (settings device card / home footer). */
+    val PortalQrSize = 108.dp
     val PortalIconSizeMobile = 26.dp
     // Decorative corner icon scales with card height (home row cards are
     // 80-100dp tall, the Categories grid 130dp) instead of a fixed size.
