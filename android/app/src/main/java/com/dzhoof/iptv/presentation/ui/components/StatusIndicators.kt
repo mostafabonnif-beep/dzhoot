@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
@@ -34,6 +33,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import com.dzhoof.iptv.presentation.ui.theme.Success
 import com.dzhoof.iptv.presentation.ui.theme.Warning
+import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
+import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 
 /** Small filled dot used to flag a banner/state's status. */
 @Composable
@@ -89,7 +90,7 @@ fun LiveBadge(modifier: Modifier = Modifier) {
     )
     Row(
         modifier = modifier
-            .clip(RoundedCornerShape(6.dp))
+            .clip(ShapeSmall)
             .background(DzRed500.copy(alpha = 0.92f))
             .padding(horizontal = 7.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -117,9 +118,9 @@ fun DemoModeBanner(modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(ShapeMedium)
             .background(DzGold400.copy(alpha = 0.14f))
-            .border(1.dp, DzGold400.copy(alpha = 0.45f), RoundedCornerShape(12.dp))
+            .border(1.dp, DzGold400.copy(alpha = 0.45f), ShapeMedium)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)

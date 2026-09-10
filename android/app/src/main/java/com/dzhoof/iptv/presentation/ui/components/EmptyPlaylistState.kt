@@ -32,7 +32,7 @@ import com.dzhoof.iptv.presentation.ui.animation.animateFadeIn
 import com.dzhoof.iptv.presentation.ui.theme.Amber
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.ShapeBadge
-import com.dzhoof.iptv.presentation.ui.theme.ShapeLarge
+import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 import com.dzhoof.iptv.presentation.ui.theme.SteelBlue
 
 @Composable
@@ -89,7 +89,7 @@ fun EmptyPlaylistState(
                         containerColor = SteelBlue,
                         contentColor = Color.White
                     ),
-                    shape = ShapeLarge,
+                    shape = ShapeMedium,
                     modifier = Modifier.height(48.dp)
                 ) {
                     Icon(
