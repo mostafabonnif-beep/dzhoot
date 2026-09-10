@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +38,7 @@ import com.dzhoof.iptv.presentation.ui.screens.player.ASPECT_MODES
 import com.dzhoof.iptv.presentation.ui.screens.player.nextSleepTimerStep
 import com.dzhoof.iptv.presentation.viewmodel.VodPlayerViewModel
 import kotlinx.coroutines.delay
+import com.dzhoof.iptv.presentation.ui.theme.ShapePill
 
 /**
  * Playback speeds offered by the VOD speed chip, in increasing order.
@@ -78,7 +78,7 @@ private fun VodControlChip(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(50),
+        shape = ShapePill,
         color = Color.Black.copy(alpha = 0.55f),
         modifier = modifier
     ) {

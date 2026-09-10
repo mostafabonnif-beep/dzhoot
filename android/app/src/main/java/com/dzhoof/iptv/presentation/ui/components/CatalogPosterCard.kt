@@ -35,6 +35,7 @@ import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.Void700
 import com.dzhoof.iptv.presentation.ui.theme.Void800
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
+import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 
 /**
  * Portrait poster card (2:3) for movies/series rows. Uses the same TV focus
@@ -50,7 +51,7 @@ fun CatalogPosterCard(
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val cardShape = RoundedCornerShape(14.dp)
+    val cardShape = ShapeMedium
     val cardBorder = when {
         isFocused -> BorderStroke(2.dp, FocusBorder)
         else -> BorderStroke(1.dp, subtleBorder)

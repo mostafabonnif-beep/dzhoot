@@ -54,15 +54,7 @@ fun ScreenHeaderTitle(
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         if (ScreenHeaderDefaults.showAccentBar) {
-            Box(
-                modifier = Modifier
-                    .width(Dimens.HeaderAccentBarWidth)
-                    .height(Dimens.HeaderAccentBarHeight)
-                    .background(
-                        accentColor ?: ScreenHeaderDefaults.accentColor,
-                        MaterialTheme.shapes.extraSmall
-                    )
-            )
+            BrandAccentBar(accentColor = accentColor ?: ScreenHeaderDefaults.accentColor)
             Spacer(modifier = Modifier.width(Dimens.HeaderAccentBarGap))
         }
         Text(
