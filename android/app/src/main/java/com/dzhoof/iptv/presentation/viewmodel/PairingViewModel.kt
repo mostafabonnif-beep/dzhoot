@@ -31,11 +31,12 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import com.dzhoof.iptv.presentation.model.StatusTone
 
 data class PairingUiState(
     val pin: String = "------",
     val statusMessage: String = "جارٍ إنشاء PIN…",
-    val statusColor: Color = Color.White,
+    val statusTone: StatusTone = StatusTone.NEUTRAL,
     val countdownText: String = "",
     val isLoading: Boolean = true,
     val showRetryButton: Boolean = false,
@@ -85,7 +86,7 @@ class PairingViewModel @Inject constructor(
             it.copy(
                 pin = "------",
                 statusMessage = "جارٍ الاتصال بالخادم…",
-                statusColor = Color.White,
+                statusTone = StatusTone.NEUTRAL,
                 isLoading = true,
                 showRetryButton = false,
                 showCountdown = false,
@@ -120,7 +121,7 @@ class PairingViewModel @Inject constructor(
                                 it.copy(
                                     pin = pin,
                                     statusMessage = "في انتظار التأكيد…",
-                                    statusColor = Color.White,
+                                    statusTone = StatusTone.NEUTRAL,
                                     isLoading = false,
                                     showCountdown = true,
                                     pairingUrl = "$baseUrl/pair?pin=$pin"
@@ -258,7 +259,7 @@ class PairingViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 statusMessage = "تم الاقتران بنجاح! أهلًا بك، $username!",
-                statusColor = Color(0xFF4CAF50),
+                statusTone = StatusTone.SUCCESS,
                 showCountdown = false,
                 isPaired = true
             )
@@ -273,7 +274,7 @@ class PairingViewModel @Inject constructor(
             it.copy(
                 isLoading = false,
                 statusMessage = message,
-                statusColor = Color(0xFFF44336),
+                statusTone = StatusTone.ERROR,
                 showRetryButton = true,
                 showCountdown = false
             )
