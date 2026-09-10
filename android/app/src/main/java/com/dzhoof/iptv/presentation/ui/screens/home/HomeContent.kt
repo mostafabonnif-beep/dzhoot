@@ -54,6 +54,10 @@ import kotlinx.coroutines.delay
 import com.dzhoof.iptv.presentation.ui.components.SubscriptionStatusChip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.Alignment
+import com.dzhoof.iptv.BuildConfig
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 
 private const val HERO_SWAP_DEBOUNCE_MS = 300L
 private const val HOME_CATEGORY_ROWS_LIMIT = 4
@@ -221,19 +225,6 @@ fun HomeContent(
                 )
             }
         }
-        item(key = "subscription_status") {
-            if (subscriptionExpiresAt != null) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = horizontalPadding, vertical = Dimens.Space2),
-                    horizontalArrangement = Arrangement.Start
-                ) {
-                    SubscriptionStatusChip(expiresAt = subscriptionExpiresAt)
-                }
-            }
-        }
-
         item(key = "hero") {
             heroChannel?.let { hero ->
                 HomeHero(
@@ -251,7 +242,7 @@ fun HomeContent(
         }
 
         item(key = "portal") {
-            HomePortalRow(
+            HomePortalTiles(
                 tiles = portalTiles,
                 onTileClick = onPortalTileClick,
                 horizontalPadding = horizontalPadding,
@@ -260,6 +251,24 @@ fun HomeContent(
                     .padding(bottom = rowGap)
                     .animateItemEntrance(index = 1)
             )
+        }
+
+        item(key = "portal_footer") {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = horizontalPadding)
+                    .padding(bottom = rowGap),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                SubscriptionStatusChip(expiresAt = subscriptionExpiresAt)
+                Text(
+                    text = "DZ HOOF TV  ·  v${BuildConfig.VERSION_NAME}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         item(key = "featured") {
