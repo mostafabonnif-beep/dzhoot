@@ -173,4 +173,12 @@
     <string name="cd_favorite">المفضلة</string>
     <string name="cd_pairing_qr">رمز QR للاقتران</string>
     <string name="cd_fullscreen">ملء الشاشة</string>
+
+    <!-- Device & account -->
+    <string name="settings_device_title">الجهاز والحساب</string>
+    <string name="device_key_label">مفتاح الجهاز</string>
+    <string name="devices_usage_label">الأجهزة المسجّلة</string>
+    <string name="devices_usage_fmt">%1$d من %2$d</string>
+    <string name="device_last_seen_fmt">آخر ظهور: %1$s</string>
+    <string name="devices_managed_hint">تُدار الأجهزة من لوحة DZ HOOF</string>
 </resources>

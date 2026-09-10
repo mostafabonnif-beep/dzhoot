@@ -51,6 +51,9 @@ import com.dzhoof.iptv.presentation.ui.theme.DzGreen400
 import com.dzhoof.iptv.presentation.ui.theme.DzRed500
 import com.dzhoof.iptv.presentation.ui.theme.SteelBlueDark
 import kotlinx.coroutines.delay
+import com.dzhoof.iptv.presentation.ui.components.SubscriptionStatusChip
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
 
 private const val HERO_SWAP_DEBOUNCE_MS = 300L
 private const val HOME_CATEGORY_ROWS_LIMIT = 4
@@ -76,6 +79,9 @@ fun HomeContent(
     onSeriesClick: (String) -> Unit = {},
     onSeeAllMovies: (() -> Unit)? = null,
     onSeeAllSeries: (() -> Unit)? = null,
+    // Subscription end date (ISO-8601, from /me/subscription). The status chip
+    // is hidden when the device has no subscription yet.
+    subscriptionExpiresAt: String? = null,
     isDemo: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -215,6 +221,19 @@ fun HomeContent(
                 )
             }
         }
+        item(key = "subscription_status") {
+            if (subscriptionExpiresAt != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = horizontalPadding, vertical = Dimens.Space2),
+                    horizontalArrangement = Arrangement.Start
+                ) {
+                    SubscriptionStatusChip(expiresAt = subscriptionExpiresAt)
+                }
+            }
+        }
+
         item(key = "hero") {
             heroChannel?.let { hero ->
                 HomeHero(
