@@ -37,6 +37,7 @@ import com.dzhoof.iptv.presentation.ui.components.AppTextField
 import com.dzhoof.iptv.presentation.ui.components.Status
 import com.dzhoof.iptv.presentation.ui.components.StatusText
 import com.dzhoof.iptv.presentation.ui.components.ThemeAwareQrCode
+import com.dzhoof.iptv.presentation.ui.components.qrCodeBitmap
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
@@ -207,7 +208,7 @@ private fun SelfHostContent(
     isPortrait: Boolean
 ) {
     val guideQrBitmap = remember(isPortrait) {
-        if (!isPortrait) generateQrBitmap(SERVER_GUIDE_URL) else null
+        if (!isPortrait) qrCodeBitmap(SERVER_GUIDE_URL) else null
     }
 
     if (isPortrait) {
@@ -573,20 +574,3 @@ private fun PairWithPinLink(onClick: () -> Unit) {
     }
 }
 
-private fun generateQrBitmap(url: String): Bitmap? {
-    return try {
-        val writer = QRCodeWriter()
-        val bitMatrix = writer.encode(url, BarcodeFormat.QR_CODE, 512, 512)
-        val w = bitMatrix.width
-        val h = bitMatrix.height
-        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.RGB_565)
-        for (x in 0 until w) {
-            for (y in 0 until h) {
-                bmp.setPixel(x, y, if (bitMatrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
-            }
-        }
-        bmp
-    } catch (e: Exception) {
-        null
-    }
-}
