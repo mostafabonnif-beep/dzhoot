@@ -133,7 +133,13 @@ jobs:
           "$sdk_build_tools/apksigner" verify --verbose "$apk"
           "$sdk_build_tools/aapt" dump badging "$apk" | grep -q "package: name='com.dzhoof.iptv'"
           "$sdk_build_tools/aapt" dump badging "$apk" | grep -q "versionName='${VERSION}'"
-          sha256sum "$apk" > app-official-release.apk.sha256
+          # Publish every release under the same self-describing name pattern, so
+          # a downloaded file (and the checksum next to it) says which version it
+          # is — v1.2.3 shipped as dzhoof-tv-v1.2.3-official.apk, while the
+          # workflow was still uploading app-official-release.apk.
+          named="dzhoof-tv-v${VERSION}-official.apk"
+          cp "$apk" "$named"
+          sha256sum "$named" > "${named}.sha256"
 
       - name: Create GitHub Release and upload APK
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
@@ -142,8 +148,8 @@ jobs:
           name: DZ HOOF v${{ env.VERSION }}
           generate_release_notes: true
           files: |
-            android/app/build/outputs/apk/official/release/app-official-release.apk
-            android/app-official-release.apk.sha256
+            android/dzhoof-tv-v${{ env.VERSION }}-official.apk
+            android/dzhoof-tv-v${{ env.VERSION }}-official.apk.sha256
 
       - name: Remove signing material
         if: always()
