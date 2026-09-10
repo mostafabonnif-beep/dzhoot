@@ -4,7 +4,6 @@ import android.view.KeyEvent
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
@@ -27,6 +26,9 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.dzhoof.iptv.presentation.ui.theme.*
+import com.dzhoof.iptv.presentation.ui.theme.ShapePill
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 
 /**
  * Shared category card with thumbnail background, gradient, icon, and name.
@@ -153,7 +155,7 @@ fun CategoryCard(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(Dimens.CardContentPadding)
-                    .clip(RoundedCornerShape(50))
+                    .clip(ShapePill)
                     .background(Color.White.copy(alpha = 0.22f))
                     .padding(horizontal = 8.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -171,7 +173,7 @@ fun CategoryCard(
             if (isFavorite) {
                 Icon(
                     imageVector = Icons.Filled.Favorite,
-                    contentDescription = "Favorite",
+                    contentDescription = stringResource(R.string.cd_favorite),
                     tint = DzRed400,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)

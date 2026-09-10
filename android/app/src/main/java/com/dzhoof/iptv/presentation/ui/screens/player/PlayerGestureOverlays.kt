@@ -43,7 +43,7 @@ import com.dzhoof.iptv.presentation.model.PlayerUiState
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_EXIT
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.BodyOverlay
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
@@ -93,7 +93,7 @@ internal fun BoxScope.GestureLevelIndicator(state: PlayerOverlayState) {
                     modifier = Modifier
                         .fillMaxHeight()
                         .fillMaxWidth(indicator.level)
-                        .background(Amber, LevelBarShape)
+                        .background(DzGreen300, LevelBarShape)
                 )
             }
         }
@@ -181,7 +181,7 @@ internal fun BoxScope.BufferingOverlay(uiState: PlayerUiState) {
             contentAlignment = Alignment.Center
         ) {
             CircularProgressIndicator(
-                color = Amber,
+                color = DzGreen300,
                 strokeWidth = 3.dp,
                 modifier = Modifier.size(Dimens.IconLarge)
             )
@@ -223,7 +223,7 @@ internal fun BoxScope.LockChip(state: PlayerOverlayState) {
             Icon(
                 imageVector = Icons.Filled.Lock,
                 contentDescription = stringResource(R.string.player_screen_locked),
-                tint = if (state.unlockArmed) Amber else OnVideo,
+                tint = if (state.unlockArmed) DzGreen300 else OnVideo,
                 modifier = Modifier.size(Dimens.IconSmall)
             )
             Text(

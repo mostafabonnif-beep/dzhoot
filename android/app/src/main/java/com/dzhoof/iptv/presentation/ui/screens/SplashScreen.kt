@@ -23,7 +23,7 @@ import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.animation.SPLASH_FADE_OUT_DURATION
 import com.dzhoof.iptv.presentation.ui.animation.SPLASH_MIN_DISPLAY_MS
-import com.dzhoof.iptv.presentation.ui.theme.Void950
+import com.dzhoof.iptv.presentation.ui.theme.Ink950
 import kotlinx.coroutines.delay
 
 /**
@@ -53,7 +53,7 @@ fun SplashScreen(onSplashFinished: () -> Unit) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Void950)
+            .background(Ink950)
             .graphicsLayer { this.alpha = alpha },
         contentAlignment = Alignment.Center
     ) {

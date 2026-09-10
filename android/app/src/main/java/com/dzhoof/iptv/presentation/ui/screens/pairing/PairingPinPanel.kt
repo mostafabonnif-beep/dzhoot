@@ -20,7 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.screens.FocusAwareButton
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.DisplayPairingCode
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
@@ -60,7 +60,7 @@ internal fun PinSection(
                     .softShadow(Elevation.Level2, MaterialTheme.shapes.medium)
                     .border(
                         width = 1.dp,
-                        color = Amber.copy(alpha = 0.4f),
+                        color = DzGreen300.copy(alpha = 0.4f),
                         shape = MaterialTheme.shapes.medium
                     )
                     .background(
@@ -72,7 +72,7 @@ internal fun PinSection(
             ) {
                 Text(
                     text = pin,
-                    color = Amber,
+                    color = DzGreen300,
                     style = DisplayPairingCode
                 )
             }
@@ -101,7 +101,7 @@ internal fun PinSection(
             FocusAwareButton(
                 onClick = onRetryClick,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
+                    containerColor = DzGreen300,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 )
             ) {

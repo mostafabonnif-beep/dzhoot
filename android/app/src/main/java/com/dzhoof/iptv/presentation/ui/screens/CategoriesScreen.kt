@@ -36,6 +36,7 @@ import com.dzhoof.iptv.presentation.ui.components.*
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.viewmodel.CatalogTab
 import com.dzhoof.iptv.presentation.viewmodel.ChannelsViewModel
+import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 @Composable
 fun CategoriesScreen(
     onCategoryClick: (String) -> Unit,
@@ -205,7 +206,7 @@ private fun VodShortcutTile(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .height(72.dp)
-            .clip(RoundedCornerShape(18.dp))
+            .clip(ShapeMedium)
             .background(
                 Brush.linearGradient(
                     listOf(

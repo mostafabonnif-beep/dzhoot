@@ -27,7 +27,7 @@ import com.dzhoof.iptv.presentation.ui.animation.DURATION_ENTRANCE
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_EXIT
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
 import com.dzhoof.iptv.presentation.ui.theme.SurfaceElevated
@@ -92,7 +92,7 @@ fun ChannelOverlay(
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
-                    color = Amber,
+                    color = DzGreen300,
                     strokeWidth = 3.dp,
                     modifier = Modifier.size(48.dp)
                 )

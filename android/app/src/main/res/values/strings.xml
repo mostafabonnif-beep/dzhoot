@@ -168,4 +168,9 @@
     <string name="pairing_timeout">انتهت مهلة الاقتران. أعد المحاولة.</string>
     <string name="pairing_pin_expired_retry">انتهت صلاحية الرمز. أنشئ رمزًا جديدًا.</string>
     <string name="pairing_pin_expired">انتهت صلاحية الرمز</string>
+
+    <!-- Accessibility -->
+    <string name="cd_favorite">المفضلة</string>
+    <string name="cd_pairing_qr">رمز QR للاقتران</string>
+    <string name="cd_fullscreen">ملء الشاشة</string>
 </resources>

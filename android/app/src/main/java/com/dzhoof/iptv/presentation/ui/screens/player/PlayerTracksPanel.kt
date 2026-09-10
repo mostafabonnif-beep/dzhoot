@@ -37,7 +37,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.dzhoof.iptv.presentation.ui.components.SelectableRow
 import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.OnVideo
 import com.dzhoof.iptv.presentation.ui.theme.ScrimHeavy

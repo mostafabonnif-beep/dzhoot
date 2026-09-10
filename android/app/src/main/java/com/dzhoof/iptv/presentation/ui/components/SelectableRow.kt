@@ -17,7 +17,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
 
@@ -36,7 +36,7 @@ fun SelectableRow(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    accentColor: Color = Amber
+    accentColor: Color = DzGreen300
 ) {
     var isFocused by remember { mutableStateOf(false) }
     androidx.compose.foundation.layout.Box(
