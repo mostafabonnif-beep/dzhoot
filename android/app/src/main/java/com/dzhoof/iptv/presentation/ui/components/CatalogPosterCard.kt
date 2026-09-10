@@ -32,8 +32,6 @@ import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.theme.DzGold400
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
-import com.dzhoof.iptv.presentation.ui.theme.Void700
-import com.dzhoof.iptv.presentation.ui.theme.Void800
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 
@@ -57,7 +55,7 @@ fun CatalogPosterCard(
         else -> BorderStroke(1.dp, subtleBorder)
     }
     val containerColor by animateColorAsState(
-        targetValue = if (isFocused) Void700 else Void800,
+        targetValue = if (isFocused) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
         animationSpec = tween(DURATION_FAST, easing = EaseOutQuart),
         label = "posterCardContainer",
     )

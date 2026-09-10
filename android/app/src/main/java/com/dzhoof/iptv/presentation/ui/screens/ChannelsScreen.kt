@@ -191,7 +191,7 @@ private fun CategoryChips(
                 CategoryChip(
                     label = "الكل",
                     isSelected = selectedCategory == null,
-                    selectedContainerColor = Amber,
+                    selectedContainerColor = DzGreen300,
                     selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                     onClick = onAllSelected,
                     modifier = Modifier.focusRequester(allChipFocusRequester)

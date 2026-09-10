@@ -29,7 +29,7 @@ import androidx.compose.animation.core.tween
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.animation.animateFadeIn
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.ShapeBadge
 import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium

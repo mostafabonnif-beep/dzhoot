@@ -43,7 +43,7 @@ import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.PlayerUiState
 import com.dzhoof.iptv.presentation.ui.components.EpgProgressBar
 import com.dzhoof.iptv.presentation.ui.components.formatEpgTimeRange
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.BodyOverlay
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.EmphasisMedium
@@ -54,6 +54,8 @@ import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
 import com.dzhoof.iptv.presentation.ui.theme.SurfaceElevated
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 
 /** Callbacks for the portrait sections below the docked video. */
 internal class PortraitSectionActions(
@@ -158,7 +160,7 @@ private fun PortraitDetailSection(
             IconButton(onClick = actions.onToggleFavorite) {
                 Icon(
                     imageVector = if (channel?.isFavorite == true) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                    contentDescription = "Favorite",
+                    contentDescription = stringResource(R.string.cd_favorite),
                     tint = if (channel?.isFavorite == true) MaterialTheme.colorScheme.error else OnVideo
                 )
             }
@@ -194,7 +196,7 @@ private fun PortraitDetailSection(
             PortraitActionButton(
                 icon = Icons.Filled.Bedtime,
                 label = sleepLabel,
-                tint = if (uiState.sleepTimerMinutes != null) Amber else OnVideo,
+                tint = if (uiState.sleepTimerMinutes != null) DzGreen300 else OnVideo,
                 onClick = { actions.onCycleSleepTimer(nextSleepTimerStep(uiState.sleepTimerMinutes)) }
             )
             PortraitActionButton(

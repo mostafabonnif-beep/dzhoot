@@ -27,6 +27,8 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.dzhoof.iptv.presentation.ui.theme.*
 import com.dzhoof.iptv.presentation.ui.theme.ShapePill
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 
 /**
  * Shared category card with thumbnail background, gradient, icon, and name.
@@ -171,7 +173,7 @@ fun CategoryCard(
             if (isFavorite) {
                 Icon(
                     imageVector = Icons.Filled.Favorite,
-                    contentDescription = "Favorite",
+                    contentDescription = stringResource(R.string.cd_favorite),
                     tint = DzRed400,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)

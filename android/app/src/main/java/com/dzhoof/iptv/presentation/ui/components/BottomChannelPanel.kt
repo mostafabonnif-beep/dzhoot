@@ -40,7 +40,7 @@ import com.dzhoof.iptv.domain.model.EpgProgram
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.animation.animateItemEntrance
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.SurfaceDark
 
 // Flush, square-topped sheet — edge-to-edge, no rounded corner or drag handle.
@@ -178,7 +178,7 @@ internal fun BottomChannelPanel(
                 contentAlignment = Alignment.Center
             ) {
                 CircularProgressIndicator(
-                    color = Amber,
+                    color = DzGreen300,
                     strokeWidth = 2.dp,
                     modifier = Modifier.size(32.dp)
                 )
