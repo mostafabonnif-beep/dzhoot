@@ -47,6 +47,22 @@ import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.FocusGlow
 import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CardMembership
+import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Tv
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material3.Icon
+import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
+import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
+import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
 /** Callbacks for the settings screen, grouped to keep composable signatures small. */
 internal class SettingsActions(
@@ -70,14 +86,17 @@ internal class SettingsActions(
     val onUpdateNow: () -> Unit
 )
 
-internal enum class SettingsSection(val label: String) {
-    Connection("الاتصال"),
-    Channels("القنوات"),
-    Controls("التحكم"),
-    Parental("الرقابة الأبوية"),
-    Appearance("المظهر"),
-    Subscription("الاشتراك"),
-    About("حول التطبيق")
+internal enum class SettingsSection(
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+) {
+    Connection("الاتصال", Icons.Filled.Wifi),
+    Channels("القنوات", Icons.Filled.Tv),
+    Controls("التحكم", Icons.Filled.Gamepad),
+    Parental("الرقابة الأبوية", Icons.Filled.Lock),
+    Appearance("المظهر", Icons.Filled.Palette),
+    Subscription("الاشتراك", Icons.Filled.CardMembership),
+    About("حول التطبيق", Icons.Filled.Info)
 }
 
 private val SectionListWidth = 280.dp
@@ -207,8 +226,16 @@ private fun SectionListItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .tvFocusVisuals(focused = isFocused, shape = ShapeSmall)
             .clip(ShapeSmall)
             .background(backgroundColor)
+            .border(
+                BorderStroke(
+                    if (isFocused) 2.dp else 1.dp,
+                    if (isFocused) FocusBorder else subtleBorder
+                ),
+                ShapeSmall
+            )
             .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) onSelect()
@@ -221,6 +248,26 @@ private fun SectionListItem(
             .padding(horizontal = 14.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Icon chip — the settings list reads as branded tiles, like the
+        // icon-grid settings screens on comparable boxes.
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(ShapeSmall)
+                .background(
+                    if (isSelected || isFocused) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                    else MaterialTheme.colorScheme.surfaceVariant
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = section.icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
             text = section.label,
             color = contentColor,
