@@ -147,6 +147,46 @@ internal fun SubscriptionSection(
             )
         }
 
+        // This install's key + plan device usage — the identifiers a customer
+        // is asked for when contacting support (mirrors the panel + the
+        // device info every IPTV box shows at the foot of its settings).
+        Spacer(modifier = Modifier.height(12.dp))
+        SettingRowLayout(
+            text = {
+                Text(
+                    text = stringResource(R.string.device_key_label),
+                    fontWeight = FontWeight.Medium,
+                )
+            },
+            action = {
+                Text(
+                    text = uiState.deviceId.ifBlank { "—" },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            },
+        )
+        if (sub != null) {
+            Spacer(modifier = Modifier.height(6.dp))
+            SettingRowLayout(
+                text = {
+                    Text(
+                        text = stringResource(R.string.devices_usage_label),
+                        fontWeight = FontWeight.Medium,
+                    )
+                },
+                action = {
+                    Text(
+                        text = stringResource(
+                            R.string.devices_usage_fmt,
+                            sub.devicesUsed,
+                            sub.maxDevices,
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                },
+            )
+        }
+
         if (!sub?.devices.isNullOrEmpty()) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
