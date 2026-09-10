@@ -46,12 +46,14 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.source.remote.playlist.StreamUrlTemplate
 import com.dzhoof.iptv.domain.model.Channel
@@ -155,7 +157,7 @@ fun MultiviewScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Layout",
+                    text = stringResource(R.string.multiview_layout),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -392,7 +394,7 @@ private fun ChannelPickerOverlay(
                 .padding(16.dp)
         ) {
             Text(
-                text = "Choose channel",
+                text = stringResource(R.string.multiview_choose_channel),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 6.dp)

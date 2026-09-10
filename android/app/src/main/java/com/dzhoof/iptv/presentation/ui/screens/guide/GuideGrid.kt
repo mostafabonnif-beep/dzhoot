@@ -45,6 +45,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.GuideFocusedProgram
@@ -137,6 +140,13 @@ internal fun GuideGrid(
         if (firstChannelId != null) runCatching { firstChannelFocus.requestFocus() }
     }
 
+    // The guide grid is intentionally laid out LTR: the timeline runs left→right,
+    // the channel column is pinned to the physical left, and the "now" line plus
+    // every cell offset use physical start coordinates. Arabic text inside cells
+    // still renders RTL through the bidi algorithm, so content stays correct while
+    // the grid math never mirrors (mirroring previously desynced the axis, the
+    // sticky column and the now line).
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
     Column(modifier = modifier.fillMaxSize()) {
         // ── Time axis header (channel-column spacer + scrolling ticks) ──
         Row(modifier = Modifier.fillMaxWidth()) {
@@ -197,6 +207,7 @@ internal fun GuideGrid(
                 }
             }
         }
+    }
     }
 }
 

@@ -25,7 +25,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.model.PlayerUiState
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_EXIT
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
@@ -156,7 +158,7 @@ internal fun BoxScope.PlayerOverlays(
                 modifier = Modifier.size(28.dp)
             )
             Text(
-                text = if (isFav) "Added to Favorites" else "Removed from Favorites",
+                text = if (isFav) stringResource(R.string.player_favorites_added) else stringResource(R.string.player_favorites_removed),
                 style = BodyOverlay,
                 color = OnVideo
             )
@@ -173,7 +175,7 @@ internal fun BoxScope.PlayerOverlays(
             .align(Alignment.TopStart)
             .padding(32.dp)
     ) {
-        OverlayToast("Sleep in ${sleepRemaining ?: 0}s")
+        OverlayToast(stringResource(R.string.player_sleep_in_seconds, sleepRemaining ?: 0))
     }
 
     // Sleep timer expired — "Still watching?" prompt with a cancel window
@@ -183,7 +185,7 @@ internal fun BoxScope.PlayerOverlays(
         exit = fadeOut(tween(DURATION_EXIT, easing = EaseOutQuart)),
         modifier = Modifier.align(Alignment.Center)
     ) {
-        OverlayToast("Still watching? Press any button to continue")
+        OverlayToast(stringResource(R.string.player_still_watching))
     }
 
     // Channel number entry — top-right while typing

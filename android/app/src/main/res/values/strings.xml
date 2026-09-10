@@ -121,4 +121,44 @@
     <string name="subscription_devices_title">الأجهزة المسجلة</string>
     <string name="subscription_delete_device">حذف</string>
     <string name="subscription_device_fallback">جهاز</string>
+
+    <!-- Player quick actions & overlays -->
+    <string name="player_favorite_on">في المفضلة</string>
+    <string name="player_favorite_off">المفضلة</string>
+    <string name="player_sleep_minutes">النوم %1$d د</string>
+    <string name="player_sleep_off">إيقاف النوم</string>
+    <string name="player_favorites_added">أُضيف إلى المفضلة</string>
+    <string name="player_favorites_removed">أُزيل من المفضلة</string>
+    <string name="player_sleep_in_seconds">النوم خلال %1$d ث</string>
+    <string name="player_still_watching">هل ما زلت تشاهد؟ اضغط أي زر للمتابعة</string>
+    <string name="player_brightness">السطوع</string>
+    <string name="player_volume">الصوت</string>
+    <string name="player_screen_locked">الشاشة مقفلة</string>
+    <string name="player_tap_again_to_unlock">اضغط مرة أخرى لفتح القفل</string>
+
+    <!-- Program guide -->
+    <string name="guide_highlight_hint">حدّد برنامجًا لعرض التفاصيل</string>
+    <string name="guide_live_now">مباشر الآن</string>
+    <string name="guide_duration_minutes">%1$d دقيقة</string>
+
+    <!-- Multiview -->
+    <string name="multiview_layout">التخطيط</string>
+    <string name="multiview_choose_channel">اختر قناة</string>
+
+    <!-- About & updates -->
+    <string name="about">حول</string>
+    <string name="version_label">الإصدار</string>
+    <string name="version_up_to_date">%1$s  ·  على أحدث إصدار</string>
+    <string name="update_available_version">تحديث متوفر: v%1$s</string>
+    <string name="update_current_version">الحالي: %1$s</string>
+    <string name="update_mandatory">إلزامي</string>
+    <string name="update_checking">جارٍ التحقق…</string>
+    <string name="update_downloading">جارٍ التنزيل…</string>
+    <string name="update_now">حدّث الآن</string>
+    <string name="update_check_for_updates">التحقق من التحديثات</string>
+    <string name="update_version_label">الإصدار %1$s</string>
+
+    <!-- Parental controls -->
+    <string name="parental_pin_title">أدخل PIN</string>
+    <string name="parental_pin_incorrect">PIN غير صحيح</string>
 </resources>

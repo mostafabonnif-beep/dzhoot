@@ -33,9 +33,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.model.UpdateInfo
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.DiagonalGradientBackground
@@ -110,7 +112,7 @@ fun UpdateAvailableScreen(
 
             Text(
                 text = buildString {
-                    append("Version ${updateInfo.versionName}")
+                    append(stringResource(R.string.update_version_label, updateInfo.versionName))
                     if (updateInfo.fileSize.isNotEmpty()) append("  ·  ${updateInfo.fileSize}")
                     if (updateInfo.isMandatory) append("  ·  تحديث إلزامي")
                 },
