@@ -4,6 +4,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -63,7 +65,7 @@ data class PortalTile(
  * gold [FocusBorder] ring) so the portal never introduces a new cue.
  */
 @Composable
-fun HomePortalRow(
+fun HomePortalTiles(
     tiles: List<PortalTile>,
     onTileClick: (String) -> Unit,
     horizontalPadding: Dp,
@@ -71,26 +73,63 @@ fun HomePortalRow(
     modifier: Modifier = Modifier
 ) {
     if (tiles.isEmpty()) return
-    val width = if (isCompact) Dimens.PortalTileWidthMobile else Dimens.PortalTileWidthTv
-    val height = if (isCompact) Dimens.PortalTileHeightMobile else Dimens.PortalTileHeightTv
-    val iconSize = if (isCompact) Dimens.PortalIconSizeMobile else Dimens.PortalIconSizeTv
 
-    LazyRow(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(horizontal = horizontalPadding),
-        horizontalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap)
-    ) {
-        items(items = tiles, key = { it.key }) { tile ->
-            PortalTileCard(
-                tile = tile,
-                width = width,
-                height = height,
-                iconSize = iconSize,
-                onClick = { onTileClick(tile.key) }
-            )
+    if (isCompact) {
+        // Phone: one thumb-scrollable row.
+        LazyRow(
+            modifier = modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = horizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap)
+        ) {
+            items(items = tiles, key = { it.key }) { tile ->
+                PortalTileCard(
+                    tile = tile,
+                    width = Dimens.PortalTileWidthMobile,
+                    height = Dimens.PortalTileHeightMobile,
+                    iconSize = Dimens.PortalIconSizeMobile,
+                    onClick = { onTileClick(tile.key) }
+                )
+            }
+        }
+    } else {
+        // TV: a two-column portal grid — the viewer sees every destination at
+        // once, the way a set-top box home screen is read from the couch, and
+        // the tiles grow to fill the width instead of leaving dead space.
+        BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+            val columns = PORTAL_GRID_COLUMNS
+            val tileWidth = (
+                (maxWidth - horizontalPadding * 2 - Dimens.PortalTileGap * (columns - 1)) / columns
+                ).coerceAtLeast(Dimens.PortalTileWidthMobile)
+
+            Column(
+                modifier = Modifier.padding(bottom = Dimens.PortalTileGap),
+                verticalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap)
+            ) {
+                tiles.chunked(columns).forEach { rowTiles ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap),
+                        modifier = Modifier.padding(horizontal = horizontalPadding)
+                    ) {
+                        rowTiles.forEach { tile ->
+                            PortalTileCard(
+                                tile = tile,
+                                width = tileWidth,
+                                // Taller than the phone tile: with a half-screen
+                                // width the 3:2-ish portal tile reads as a poster.
+                                height = Dimens.PortalTileHeightTv,
+                                iconSize = Dimens.PortalIconSizeTv,
+                                onClick = { onTileClick(tile.key) }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
+
+/** Two tiles per row on TV — the portal grid, not a carousel. */
+private const val PORTAL_GRID_COLUMNS = 2
 
 @Composable
 private fun PortalTileCard(
