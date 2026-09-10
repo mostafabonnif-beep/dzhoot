@@ -32,6 +32,7 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import com.dzhoof.iptv.presentation.ui.components.qrCodeBitmap as makeQrBitmap
 
 /**
  * Activity for PIN-based TV pairing.
@@ -109,24 +110,12 @@ class PairingActivity : ComponentActivity() {
 
     private fun generateSignupQRCode(serverUrl: String, pin: String) {
         lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val registrationUrl = "$serverUrl/pair?pin=$pin"
-                val writer = QRCodeWriter()
-                val bitMatrix = writer.encode(registrationUrl, BarcodeFormat.QR_CODE, 512, 512)
-                val width = bitMatrix.width
-                val height = bitMatrix.height
-                val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-
-                for (x in 0 until width) {
-                    for (y in 0 until height) {
-                        bmp.setPixel(x, y, if (bitMatrix[x, y]) Color.BLACK else Color.WHITE)
-                    }
-                }
-
-                withContext(Dispatchers.Main) { qrCodeBitmap = bmp }
-            } catch (e: WriterException) {
-                Log.e(TAG, "Error generating signup QR code", e)
+            val bmp = makeQrBitmap("$serverUrl/pair?pin=$pin")
+            if (bmp == null) {
+                Log.e(TAG, "Error generating signup QR code")
+                return@launch
             }
+            withContext(Dispatchers.Main) { qrCodeBitmap = bmp }
         }
     }
 
@@ -263,22 +252,12 @@ class PairingActivity : ComponentActivity() {
 
     private fun generateChannelManagerQrCode() {
         lifecycleScope.launch(Dispatchers.IO) {
-            try {
-                val channelManagerUrl = "$serverUrl/user/channels"
-                val writer = QRCodeWriter()
-                val bitMatrix = writer.encode(channelManagerUrl, BarcodeFormat.QR_CODE, 512, 512)
-                val width = bitMatrix.width
-                val height = bitMatrix.height
-                val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-                for (x in 0 until width) {
-                    for (y in 0 until height) {
-                        bmp.setPixel(x, y, if (bitMatrix[x, y]) Color.BLACK else Color.WHITE)
-                    }
-                }
-                withContext(Dispatchers.Main) { channelManagerQrBitmap = bmp }
-            } catch (e: WriterException) {
-                Log.e(TAG, "Error generating channel manager QR code", e)
+            val bmp = makeQrBitmap("$serverUrl/user/channels")
+            if (bmp == null) {
+                Log.e(TAG, "Error generating channel manager QR code")
+                return@launch
             }
+            withContext(Dispatchers.Main) { channelManagerQrBitmap = bmp }
         }
     }
 
