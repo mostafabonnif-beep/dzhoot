@@ -217,8 +217,11 @@ fun DzhoofNavGraph(
                 },
                 onMultiviewClick = { channelId ->
                     navController.navigate(Screen.Multiview.createRoute(channelId))
-                }
-            )
+                },
+                onOpenGuide = {
+                    navController.navigate(Screen.Guide.route) { launchSingleTop = true }
+                },
+)
         }
 
         // ── Channels by Category ────────────────────────────────────────
@@ -241,8 +244,11 @@ fun DzhoofNavGraph(
                 onMultiviewClick = { channelId ->
                     navController.navigate(Screen.Multiview.createRoute(channelId))
                 },
-                initialCategory = categoryId
-            )
+                initialCategory = categoryId,
+                onOpenGuide = {
+                    navController.navigate(Screen.Guide.route) { launchSingleTop = true }
+                },
+)
         }
 
         // ── Guide (EPG program grid) ────────────────────────────────────
@@ -343,7 +349,7 @@ fun DzhoofNavGraph(
         composable(route = Screen.ManageChannels.route) {
             ManageChannelsScreen(
                 onNavigateBack = { navController.popBackStack() }
-            )
+)
         }
 
         // ── Add a different source (self-hosted / M3U / Xtream) ────────
