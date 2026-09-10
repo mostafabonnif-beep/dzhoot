@@ -24,6 +24,12 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import com.dzhoof.iptv.R
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.LiveTv
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Tv
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.CatalogPosterItem
@@ -38,11 +44,16 @@ import com.dzhoof.iptv.presentation.ui.components.HomeHero
 import com.dzhoof.iptv.presentation.ui.components.rememberHeroHeight
 import com.dzhoof.iptv.presentation.ui.components.rememberShimmerBrush
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
-import com.dzhoof.iptv.presentation.ui.theme.Void800
+import com.dzhoof.iptv.presentation.ui.theme.Atlas800
+import com.dzhoof.iptv.presentation.ui.theme.DzGold400
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen400
+import com.dzhoof.iptv.presentation.ui.theme.DzRed500
+import com.dzhoof.iptv.presentation.ui.theme.SteelBlueDark
 import kotlinx.coroutines.delay
 
 private const val HERO_SWAP_DEBOUNCE_MS = 300L
-private const val HOME_CATEGORY_ROWS_LIMIT = 10
+private const val HOME_CATEGORY_ROWS_LIMIT = 4
 
 @Composable
 fun HomeContent(
@@ -57,6 +68,8 @@ fun HomeContent(
     lastPlayedChannelId: String?,
     onChannelClick: (String) -> Unit,
     onNavigateToChannels: (String) -> Unit,
+    onNavigateToFavorites: (() -> Unit)? = null,
+    onNavigateToGuide: (() -> Unit)? = null,
     onToggleFavorite: (String) -> Unit,
     onMultiviewClick: (String) -> Unit,
     onMovieClick: (String) -> Unit = {},
@@ -150,6 +163,42 @@ fun HomeContent(
         offset
     }
 
+    // Portal — the five things a viewer actually wants, one D-pad step from
+    // landing on Home. Built ahead of the rows so the screen reads as a
+    // branded hub instead of a wall of rows.
+    val portalTiles = remember(
+        onSeeAllMovies != null,
+        onSeeAllSeries != null,
+        onNavigateToFavorites != null,
+        onNavigateToGuide != null
+    ) {
+        buildList {
+            add(PortalTile("live", "مباشر", "قنوات وبث حي", Icons.Filled.LiveTv, DzGreen400))
+            onSeeAllMovies?.let {
+                add(PortalTile("movies", "أفلام", "مكتبة الأفلام", Icons.Filled.Movie, SteelBlueDark))
+            }
+            onSeeAllSeries?.let {
+                add(PortalTile("series", "مسلسلات", "حلقات ومواسم", Icons.Filled.Tv, DzGold400))
+            }
+            onNavigateToFavorites?.let {
+                add(PortalTile("favorites", "المفضلة", "قنواتك المحفوظة", Icons.Filled.Favorite, DzRed500))
+            }
+            onNavigateToGuide?.let {
+                add(PortalTile("guide", "دليل البرامج", "جدول البث", Icons.Filled.CalendarMonth, DzGreen300))
+            }
+        }
+    }
+
+    val onPortalTileClick: (String) -> Unit = { key ->
+        when (key) {
+            "live" -> onNavigateToChannels("")
+            "movies" -> onSeeAllMovies?.invoke()
+            "series" -> onSeeAllSeries?.invoke()
+            "favorites" -> onNavigateToFavorites?.invoke()
+            "guide" -> onNavigateToGuide?.invoke()
+        }
+    }
+
     val listState = rememberLazyListState()
 
     LazyColumn(
@@ -180,6 +229,18 @@ fun HomeContent(
                         .animateItemEntrance(index = 0)
                 )
             }
+        }
+
+        item(key = "portal") {
+            HomePortalRow(
+                tiles = portalTiles,
+                onTileClick = onPortalTileClick,
+                horizontalPadding = horizontalPadding,
+                isCompact = isCompact,
+                modifier = Modifier
+                    .padding(bottom = rowGap)
+                    .animateItemEntrance(index = 1)
+            )
         }
 
         item(key = "featured") {
@@ -339,7 +400,7 @@ fun HomeSkeleton(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .fillMaxWidth()
                 .height(heroHeight)
-                .background(Void800)
+                .background(Atlas800)
         ) {
             if (shimmerBrush != null) {
                 Box(modifier = Modifier.fillMaxSize().background(shimmerBrush))
