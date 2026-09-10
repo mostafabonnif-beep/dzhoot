@@ -16,7 +16,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +46,7 @@ import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.model.SportsMatchUiModel
 import com.dzhoof.iptv.presentation.ui.components.CategoryCard
 import com.dzhoof.iptv.presentation.ui.components.ChannelCard
+import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
 import com.dzhoof.iptv.presentation.ui.components.SectionHeader
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
@@ -302,8 +302,10 @@ private fun SportsMatchCard(
 
     Card(
         onClick = onClick,
-        modifier = modifier.onFocusChanged { isFocused = it.isFocused },
-        shape = RoundedCornerShape(12.dp),
+        modifier = modifier
+            .tvFocusVisuals(focused = isFocused, shape = MaterialTheme.shapes.medium)
+            .onFocusChanged { isFocused = it.isFocused },
+        shape = MaterialTheme.shapes.medium,
         border = if (isFocused) {
             BorderStroke(2.dp, FocusBorder)
         } else {

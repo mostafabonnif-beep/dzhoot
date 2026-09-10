@@ -19,13 +19,13 @@ val subtleBorder: Color
     @Composable get() = if (LocalIsDarkTheme.current) SubtleBorderDark else SubtleBorderLight
 
 private val DarkColorScheme = darkColorScheme(
-    // Primary — DzGreen300 (bright amber, high contrast on void surfaces)
+    // Primary — DzGreen300 (bright emerald, high contrast on ink surfaces)
     primary = DzGreen300,
     onPrimary = DzGreen700,
     primaryContainer = DzGreen400,
     onPrimaryContainer = DzGreen50,
 
-    // Secondary — warm accent (DzGreen400, complementary to primary)
+    // Secondary — emerald accent (DzGreen400, supports the primary)
     secondary = DzGreen400,
     onSecondary = DzGreen50,
     secondaryContainer = DzGreen500,
@@ -70,13 +70,13 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    // Primary — DzGreen500 (deep amber, sufficient contrast on parchment)
+    // Primary — DzGreen500 (deep emerald, sufficient contrast on sand)
     primary = DzGreen500,
     onPrimary = Sand50,
     primaryContainer = DzGreen100,
     onPrimaryContainer = DzGreen700,
 
-    // Secondary — warm accent (DzGreen700, complementary to primary)
+    // Secondary — emerald accent (DzGreen700, supports the primary)
     secondary = DzGreen700,
     onSecondary = Sand50,
     secondaryContainer = DzGreen100,
