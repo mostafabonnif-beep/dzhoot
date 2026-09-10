@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.domain.repository
 
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.domain.model.CatalogCategory
 import com.dzhoof.iptv.domain.model.CatalogPage
 import com.dzhoof.iptv.domain.model.Episode
 import com.dzhoof.iptv.domain.model.Movie
@@ -11,9 +12,12 @@ import com.dzhoof.iptv.domain.model.UnifiedSearchResults
 
 interface CatalogRepository {
     suspend fun searchCatalog(query: String): Result<UnifiedSearchResults>
-    suspend fun getMovies(page: Int = 1, limit: Int = 30, search: String? = null): Result<CatalogPage<Movie>>
+    suspend fun getMovies(page: Int = 1, limit: Int = 30, search: String? = null, category: String? = null): Result<CatalogPage<Movie>>
+    /** VOD categories with counts (used by the catalog category rail). */
+    suspend fun getMovieCategories(): Result<List<CatalogCategory>>
+    suspend fun getSeriesCategories(): Result<List<CatalogCategory>>
     suspend fun getMovieById(movieId: String): Result<Movie>
-    suspend fun getSeries(page: Int = 1, limit: Int = 30, search: String? = null): Result<CatalogPage<Series>>
+    suspend fun getSeries(page: Int = 1, limit: Int = 30, search: String? = null, category: String? = null): Result<CatalogPage<Series>>
     suspend fun getSeriesById(seriesId: String): Result<Series>
     suspend fun getSeasons(seriesId: String): Result<List<Season>>
     suspend fun getEpisodes(seasonId: String): Result<List<Episode>>
