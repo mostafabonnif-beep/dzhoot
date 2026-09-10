@@ -52,27 +52,18 @@ jobs:
           set -euo pipefail
           if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
             version="${TAG_NAME#v}"
-            api_url="${API_URL_VARIABLE:-}"
+            api_url="${API_URL_VARIABLE:-https://iptv.ld-11.net/}"
+            [ -n "${API_URL_VARIABLE:-}" ] || echo "::warning title=API URL fallback::Repository variable DZHOOF_API_URL is not set; falling back to https://iptv.ld-11.net/"
           else
             version="${INPUT_VERSION}"
-            api_url="${INPUT_API_URL:-${API_URL_VARIABLE:-}}"
+            api_url="${INPUT_API_URL:-${API_URL_VARIABLE:-https://iptv.ld-11.net/}}"
           fi
           [ -n "$version" ] || { echo 'Release version is required' >&2; exit 1; }
-          case "$api_url" in https://*) ;; *) echo 'API URL must use HTTPS' >&2; exit 1 ;; esac
+          case "$api_url" in https://*) ;; *) echo "API URL must use HTTPS (got: $api_url)" >&2; exit 1 ;; esac
           printf 'VERSION=%s\nAPI_URL=%s\n' "$version" "$api_url" >> "$GITHUB_ENV"
 
-      - name: Restore Firebase configuration when supplied
-        env:
-          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
-        run: |
-          set -euo pipefail
-          if [ -n "${GOOGLE_SERVICES_JSON_BASE64:-}" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > android/app/google-services.json
-            chmod 600 android/app/google-services.json
-            grep -q '"package_name"[[:space:]]*:[[:space:]]*"com.dzhoof.iptv"' android/app/google-services.json
-          fi
-          [ -s android/app/google-services.json ] || { echo 'Missing GOOGLE_SERVICES_JSON_BASE64: production APK must include Firebase configuration.' >&2; exit 1; }
-
+      # Validate every required secret up front and report all gaps at once —
+      # failing later (as this workflow used to) hid which secrets were missing.
       - name: Validate release secrets
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -81,9 +72,38 @@ jobs:
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           set -euo pipefail
+          missing=()
           for name in ANDROID_KEYSTORE_BASE64 SIGNING_STORE_PASSWORD SIGNING_KEY_ALIAS SIGNING_KEY_PASSWORD; do
-            [ -n "${!name}" ] || { echo "Missing required release secret: $name" >&2; exit 1; }
+            [ -n "${!name:-}" ] || missing+=("$name")
           done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error title=Missing release secrets::Add these repository secrets (Settings → Secrets and variables → Actions): ${missing[*]}"
+            exit 1
+          fi
+          echo "All required signing secrets are present."
+
+      # Firebase is OPTIONAL: android/app/build.gradle.kts applies the Firebase
+      # plugins only when a google-services.json is present, so the app builds
+      # (without FCM push / Analytics / Crashlytics) when the secret is absent.
+      # Set the repository variable REQUIRE_FIREBASE=true to make it mandatory.
+      - name: Restore Firebase configuration (optional)
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+          REQUIRE_FIREBASE: ${{ vars.REQUIRE_FIREBASE }}
+        run: |
+          set -euo pipefail
+          if [ -n "${GOOGLE_SERVICES_JSON_BASE64:-}" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > android/app/google-services.json
+            chmod 600 android/app/google-services.json
+            grep -q '"package_name"[[:space:]]*:[[:space:]]*"com.dzhoof.iptv"' android/app/google-services.json \
+              || { echo 'google-services.json does not declare package com.dzhoof.iptv' >&2; exit 1; }
+            echo "Firebase configuration restored — the APK will include FCM, Analytics and Crashlytics."
+          elif [ "${REQUIRE_FIREBASE:-}" = "true" ]; then
+            echo "::error title=Firebase required::REQUIRE_FIREBASE=true but GOOGLE_SERVICES_JSON_BASE64 is not set."
+            exit 1
+          else
+            echo "::warning title=Building without Firebase::GOOGLE_SERVICES_JSON_BASE64 is not set — the APK will ship without FCM push, Analytics and Crashlytics."
+          fi
 
       - name: Restore signing keystore
         env:
