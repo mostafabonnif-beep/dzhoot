@@ -43,11 +43,13 @@ import com.dzhoof.iptv.presentation.model.PlayerUiState
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_EXIT
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.LabelToast
 import com.dzhoof.iptv.presentation.ui.theme.OnVideo
 import com.dzhoof.iptv.presentation.ui.theme.ScrimLight
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 
 // Top-anchored scrim so the top bar reads over bright video
 private val TopBarScrim = Brush.verticalGradient(
@@ -99,7 +101,7 @@ internal fun BoxScope.PlayerMobileChrome(
         ) {
             ChromeIconButton(
                 icon = Icons.Filled.Fullscreen,
-                contentDescription = "Fullscreen",
+                contentDescription = stringResource(R.string.cd_fullscreen),
                 onClick = actions.onEnterFullscreen
             )
         }
@@ -201,7 +203,7 @@ internal fun BoxScope.PlayerMobileChrome(
             ChromeIconButton(
                 icon = Icons.Filled.Bedtime,
                 contentDescription = "مؤقت النوم",
-                tint = if (uiState.sleepTimerMinutes != null) Amber else OnVideo,
+                tint = if (uiState.sleepTimerMinutes != null) DzGreen300 else OnVideo,
                 onClick = { actions.onCycleSleepTimer(nextSleepTimerStep(uiState.sleepTimerMinutes)) }
             )
             ChromeIconButton(

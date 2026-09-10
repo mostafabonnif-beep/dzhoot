@@ -40,7 +40,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 
 /**
@@ -107,7 +107,7 @@ private fun ContextMenuRow(
             .fillMaxWidth()
             .then(if (focusRequester != null) Modifier.focusRequester(focusRequester) else Modifier)
             .clip(MaterialTheme.shapes.small)
-            .background(if (focused) Amber.copy(alpha = 0.20f) else Color.Transparent)
+            .background(if (focused) DzGreen300.copy(alpha = 0.20f) else Color.Transparent)
             .onFocusChanged { focused = it.isFocused }
             .focusable()
             .onKeyEvent { e ->
@@ -138,7 +138,7 @@ private fun ContextMenuRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (focused) Amber else MaterialTheme.colorScheme.onSurface,
+            tint = if (focused) DzGreen300 else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.size(Dimens.IconMedium)
         )
         Text(
