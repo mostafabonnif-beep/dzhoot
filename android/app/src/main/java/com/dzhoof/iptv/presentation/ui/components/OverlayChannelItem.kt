@@ -36,7 +36,7 @@ import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.BackgroundDark
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.LabelBadge
@@ -77,7 +77,7 @@ internal fun OverlayChannelItem(
         if (isCurrentChannel || recentIndex != null) {
             Surface(
                 shape = BadgeShape,
-                color = if (isCurrentChannel) Amber else TextSecondary,
+                color = if (isCurrentChannel) DzGreen300 else TextSecondary,
                 modifier = Modifier.align(Alignment.TopStart)
             ) {
                 Text(
@@ -135,7 +135,7 @@ internal fun OverlayCategoryChips(
             OverlayFilterChip(
                 label = "All",
                 isSelected = selectedCategory == null,
-                selectedColor = Amber,
+                selectedColor = DzGreen300,
                 selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
                 onClick = { onCategorySelected(null) }
             )
@@ -181,13 +181,13 @@ private fun OverlayFilterChip(
             Text(
                 text = label,
                 fontWeight = if (isSelected || isFocused) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (isFocused && !isSelected) Amber else Color.Unspecified
+                color = if (isFocused && !isSelected) DzGreen300 else Color.Unspecified
             )
         },
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = selectedColor,
             selectedLabelColor = selectedLabelColor,
-            containerColor = if (isFocused) Amber.copy(alpha = 0.15f) else Color.Transparent
+            containerColor = if (isFocused) DzGreen300.copy(alpha = 0.15f) else Color.Transparent
         ),
         border = borderStroke,
         shape = ShapeSmall,

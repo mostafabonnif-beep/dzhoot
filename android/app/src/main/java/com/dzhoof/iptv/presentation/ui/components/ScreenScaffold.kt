@@ -29,7 +29,7 @@ import com.dzhoof.iptv.presentation.ui.theme.Dimens
 /**
  * Single decision point for the app-wide page-title treatment: a neutral
  * ([MaterialTheme.colorScheme.onBackground]) title with a leading amber accent
- * bar, echoing [SectionHeader]. Amber itself stays reserved for focus rings and
+ * bar, echoing [SectionHeader]. DzGreen300 itself stays reserved for focus rings and
  * active nav states; the bar carries the brand (or a category identity when a
  * screen passes its own accent).
  */
@@ -54,15 +54,7 @@ fun ScreenHeaderTitle(
 ) {
     Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         if (ScreenHeaderDefaults.showAccentBar) {
-            Box(
-                modifier = Modifier
-                    .width(Dimens.HeaderAccentBarWidth)
-                    .height(Dimens.HeaderAccentBarHeight)
-                    .background(
-                        accentColor ?: ScreenHeaderDefaults.accentColor,
-                        MaterialTheme.shapes.extraSmall
-                    )
-            )
+            BrandAccentBar(accentColor = accentColor ?: ScreenHeaderDefaults.accentColor)
             Spacer(modifier = Modifier.width(Dimens.HeaderAccentBarGap))
         }
         Text(

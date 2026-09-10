@@ -29,10 +29,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.components.ThemeAwareQrCode
 import com.dzhoof.iptv.presentation.ui.screens.FocusAwareButton
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
 import com.dzhoof.iptv.presentation.ui.theme.softShadow
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 
 @Composable
 internal fun QrSection(
@@ -65,7 +67,7 @@ internal fun QrSection(
             ) {
                 ThemeAwareQrCode(
                     bitmap = qrCodeBitmap,
-                    contentDescription = "QR Code for Pairing",
+                    contentDescription = stringResource(R.string.cd_pairing_qr),
                     size = qrSize
                 )
             }
@@ -81,7 +83,7 @@ internal fun QrSection(
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(32.dp),
-                    color = Amber,
+                    color = DzGreen300,
                     strokeWidth = 3.dp
                 )
             }
@@ -130,7 +132,7 @@ internal fun OpenBrowserSection(
             },
             enabled = pairingUrl.isNotEmpty(),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Amber,
+                containerColor = DzGreen300,
                 contentColor = MaterialTheme.colorScheme.onPrimary
             ),
             modifier = Modifier

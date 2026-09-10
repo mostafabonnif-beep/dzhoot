@@ -32,9 +32,8 @@ import com.dzhoof.iptv.presentation.ui.animation.DURATION_FAST
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.theme.DzGold400
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
-import com.dzhoof.iptv.presentation.ui.theme.Void700
-import com.dzhoof.iptv.presentation.ui.theme.Void800
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
+import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 
 /**
  * Portrait poster card (2:3) for movies/series rows. Uses the same TV focus
@@ -50,13 +49,13 @@ fun CatalogPosterCard(
     modifier: Modifier = Modifier,
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val cardShape = RoundedCornerShape(14.dp)
+    val cardShape = ShapeMedium
     val cardBorder = when {
         isFocused -> BorderStroke(2.dp, FocusBorder)
         else -> BorderStroke(1.dp, subtleBorder)
     }
     val containerColor by animateColorAsState(
-        targetValue = if (isFocused) Void700 else Void800,
+        targetValue = if (isFocused) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
         animationSpec = tween(DURATION_FAST, easing = EaseOutQuart),
         label = "posterCardContainer",
     )

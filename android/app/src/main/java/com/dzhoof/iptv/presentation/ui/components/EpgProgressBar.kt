@@ -15,7 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.domain.model.EpgProgram
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.OnVideo
 import kotlinx.coroutines.delay
@@ -72,7 +72,7 @@ fun EpgProgressBar(
                 modifier = Modifier
                     .fillMaxHeight()
                     .fillMaxWidth(fraction)
-                    .background(Amber, ProgressShape)
+                    .background(DzGreen300, ProgressShape)
             )
         }
     }

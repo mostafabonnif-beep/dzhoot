@@ -490,7 +490,7 @@ private fun FavoriteBadge(
     }
     Icon(
         imageVector = Icons.Filled.Favorite,
-        contentDescription = "Favorite",
+        contentDescription = stringResource(R.string.cd_favorite),
         tint = DzRed400,
         modifier = modifier
             .graphicsLayer { scaleX = scale.value; scaleY = scale.value }

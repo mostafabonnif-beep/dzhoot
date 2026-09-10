@@ -44,7 +44,7 @@ import com.dzhoof.iptv.presentation.model.PlayerUiState
 import com.dzhoof.iptv.presentation.ui.components.EpgProgressBar
 import com.dzhoof.iptv.presentation.ui.components.formatEpgTimeRange
 import com.dzhoof.iptv.presentation.ui.components.rememberMinuteTicker
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.EmphasisMedium
 import com.dzhoof.iptv.presentation.ui.theme.LabelToast
@@ -75,7 +75,7 @@ internal fun PortraitTabs(
             contentColor = OnVideo,
             indicator = { tabPositions ->
                 TabRowDefaults.SecondaryIndicator(
-                    color = Amber,
+                    color = DzGreen300,
                     modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab])
                 )
             }
@@ -84,14 +84,14 @@ internal fun PortraitTabs(
                 selected = selectedTab == 0,
                 onClick = { selectedTab = 0 },
                 text = { Text("الجدول", style = MaterialTheme.typography.labelMedium) },
-                selectedContentColor = Amber,
+                selectedContentColor = DzGreen300,
                 unselectedContentColor = TextSecondary
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
                 text = { Text("القنوات", style = MaterialTheme.typography.labelMedium) },
-                selectedContentColor = Amber,
+                selectedContentColor = DzGreen300,
                 unselectedContentColor = TextSecondary
             )
         }
@@ -142,7 +142,7 @@ private fun ChannelsZapTab(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(if (isCurrent) Amber.copy(alpha = 0.1f) else Color.Transparent)
+                    .background(if (isCurrent) DzGreen300.copy(alpha = 0.1f) else Color.Transparent)
                     .clickable { onZapTo(channel.id) }
                     .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2)
             ) {
@@ -169,7 +169,7 @@ private fun ChannelsZapTab(
                             text = channel.name,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                            color = if (isCurrent) Amber else OnVideo,
+                            color = if (isCurrent) DzGreen300 else OnVideo,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -218,7 +218,7 @@ private fun ScheduleTab(
                 contentAlignment = Alignment.TopCenter
             ) {
                 CircularProgressIndicator(
-                    color = Amber,
+                    color = DzGreen300,
                     strokeWidth = 2.dp,
                     modifier = Modifier.size(Dimens.IconLarge)
                 )
@@ -251,14 +251,14 @@ private fun ScheduleTab(
                 verticalArrangement = Arrangement.spacedBy(Dimens.Space1),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(if (isAiring) Amber.copy(alpha = 0.1f) else Color.Transparent)
+                    .background(if (isAiring) DzGreen300.copy(alpha = 0.1f) else Color.Transparent)
                     .padding(horizontal = Dimens.Space4, vertical = Dimens.Space2)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = formatEpgTimeRange(program),
                         style = LabelToast,
-                        color = if (isAiring) Amber else TextSecondary,
+                        color = if (isAiring) DzGreen300 else TextSecondary,
                         modifier = Modifier.width(Dimens.Space6 * 3)
                     )
                     Text(

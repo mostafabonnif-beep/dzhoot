@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.ScrimHeavy
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
@@ -135,7 +135,7 @@ internal fun PairingContent(
             ) {
                 CircularProgressIndicator(
                     modifier = Modifier.size(56.dp),
-                    color = Amber,
+                    color = DzGreen300,
                     strokeWidth = 4.dp
                 )
             }

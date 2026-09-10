@@ -34,7 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.screens.FocusAwareButton
-import com.dzhoof.iptv.presentation.ui.theme.Amber
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.SteelBlue
 
 @Composable
@@ -64,7 +64,7 @@ internal fun PairingSuccessContent(
             Text(
                 text = "تم إعداد كل شيء!",
                 style = MaterialTheme.typography.displaySmall,
-                color = Amber,
+                color = DzGreen300,
                 textAlign = TextAlign.Center
             )
 
@@ -120,7 +120,7 @@ internal fun PairingSuccessContent(
                 } else {
                     CircularProgressIndicator(
                         modifier = Modifier.size(32.dp),
-                        color = Amber,
+                        color = DzGreen300,
                         strokeWidth = 3.dp
                     )
                 }
@@ -175,7 +175,7 @@ internal fun PairingSuccessContent(
             FocusAwareButton(
                 onClick = onContinue,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Amber,
+                    containerColor = DzGreen300,
                     contentColor = MaterialTheme.colorScheme.onPrimary
                 ),
                 modifier = Modifier

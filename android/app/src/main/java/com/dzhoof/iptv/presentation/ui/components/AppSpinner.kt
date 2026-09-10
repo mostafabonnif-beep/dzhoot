@@ -18,7 +18,7 @@ enum class SpinnerSize(val diameter: Dp, val stroke: Dp) {
 
 /** The app's circular progress spinner. Color defaults to [MaterialTheme]'s
  *  primary; pass one in for on-colored surfaces (e.g. onPrimary inside a filled
- *  button, or the brand Amber over video). */
+ *  button, or the brand DzGreen300 over video). */
 @Composable
 fun AppSpinner(
     modifier: Modifier = Modifier,

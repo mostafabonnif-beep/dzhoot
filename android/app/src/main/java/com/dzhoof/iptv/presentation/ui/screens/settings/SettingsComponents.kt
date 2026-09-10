@@ -40,7 +40,6 @@ import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
-import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
 @Composable
@@ -93,7 +92,7 @@ internal fun FocusAwareButton(
         onClick = onClick,
         enabled = enabled,
         colors = colors,
-        shape = ShapeSmall,
+        shape = ShapeMedium,
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { isFocused = it.isFocused },
@@ -123,7 +122,7 @@ internal fun FocusAwareOutlinedButton(
     OutlinedButton(
         onClick = onClick,
         border = animatedBorder,
-        shape = ShapeSmall,
+        shape = ShapeMedium,
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { isFocused = it.isFocused },
@@ -197,7 +196,7 @@ internal fun SettingOption(
         modifier = Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .onFocusChanged { isFocused = it.isFocused },
-        shape = ShapeSmall,
+        shape = ShapeMedium,
         color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 else MaterialTheme.colorScheme.surface,
         border = BorderStroke(borderWidth, borderColor),
