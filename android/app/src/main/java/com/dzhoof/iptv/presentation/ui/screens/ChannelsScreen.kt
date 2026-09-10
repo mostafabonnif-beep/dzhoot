@@ -34,6 +34,12 @@ import com.dzhoof.iptv.presentation.ui.components.*
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.theme.*
 import com.dzhoof.iptv.presentation.viewmodel.ChannelsViewModel
+import androidx.compose.foundation.layout.Column
+import com.dzhoof.iptv.presentation.ui.screens.channels.LiveHintBar
+import com.dzhoof.iptv.presentation.ui.screens.channels.LiveThreePane
+
+
+
 
 @Composable
 fun ChannelsScreen(
@@ -41,6 +47,7 @@ fun ChannelsScreen(
     onChannelClick: (String) -> Unit,
     onPairDevice: () -> Unit = {},
     onMultiviewClick: (String) -> Unit = {},
+    onOpenGuide: () -> Unit = {},
     initialCategory: String? = null,
     modifier: Modifier = Modifier,
     viewModel: ChannelsViewModel = hiltViewModel()
@@ -75,7 +82,10 @@ fun ChannelsScreen(
         } else null,
         accentColor = uiState.selectedCategory?.let { categoryColor(it) },
         belowHeader = {
-            if (uiState.categories.isNotEmpty()) {
+            // On TV the categories live in the left pane of the three-pane
+            // layout, so the horizontal chips are a compact-screen affordance.
+            val compactForChips = LocalConfiguration.current.screenWidthDp < 600
+            if (compactForChips && uiState.categories.isNotEmpty()) {
                 CategoryChips(
                     categories = uiState.categories,
                     selectedCategory = uiState.selectedCategory,
@@ -91,7 +101,16 @@ fun ChannelsScreen(
             }
         }
     ) {
-        val contentState = when {
+        // The preview pane follows the focused channel; keep a valid selection
+    // when the category (and therefore the list) changes.
+    var selectedChannelId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(uiState.channels) {
+        if (uiState.channels.none { it.id == selectedChannelId }) {
+            selectedChannelId = uiState.channels.firstOrNull()?.id
+        }
+    }
+
+    val contentState = when {
             uiState.isLoading && uiState.channels.isEmpty() -> "loading"
             uiState.error != null && uiState.channels.isEmpty() -> "error"
             uiState.channels.isEmpty() -> "empty"
@@ -127,13 +146,39 @@ fun ChannelsScreen(
                         )
                     }
                 }
-                else -> ChannelsGrid(
-                    channels = uiState.channels,
-                    gridState = gridState,
-                    onChannelClick = onChannelClick,
-                    onToggleFavorite = viewModel::toggleFavorite,
-                    onMultiviewClick = onMultiviewClick
-                )
+                else -> {
+                    val isCompact = LocalConfiguration.current.screenWidthDp < 600
+                    if (isCompact) {
+                        ChannelsGrid(
+                            channels = uiState.channels,
+                            gridState = gridState,
+                            onChannelClick = onChannelClick,
+                            onToggleFavorite = viewModel::toggleFavorite,
+                            onMultiviewClick = onMultiviewClick
+                        )
+                    } else {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            LiveThreePane(
+                                categories = uiState.categories,
+                                categoryCounts = uiState.categoryCounts,
+                                selectedCategory = uiState.selectedCategory,
+                                totalCount = uiState.channels.size,
+                                channels = uiState.channels,
+                                selectedChannelId = selectedChannelId,
+                                onCategorySelected = { category -> viewModel.loadChannels(category) },
+                                onChannelFocused = { selectedChannelId = it.id },
+                                onChannelOpen = onChannelClick,
+                                onToggleFavorite = viewModel::toggleFavorite,
+                                onMultiviewClick = onMultiviewClick,
+                                onOpenGuide = onOpenGuide,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                            )
+                            LiveHintBar()
+                        }
+                    }
+                }
             }
         }
     }

@@ -11,6 +11,9 @@ enum class ErrorType {
 data class ChannelsUiState(
     val channels: List<ChannelUiModel> = emptyList(),
     val categories: List<String> = emptyList(),
+    // Channels per category — the Live screen shows the count next to each
+    // category so viewers can judge a group before opening it.
+    val categoryCounts: Map<String, Int> = emptyMap(),
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
     val isInitialLoadComplete: Boolean = false,
