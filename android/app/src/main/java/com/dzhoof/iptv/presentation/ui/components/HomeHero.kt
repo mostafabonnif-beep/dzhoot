@@ -40,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -76,7 +78,7 @@ import com.dzhoof.iptv.presentation.ui.theme.OnVideo
 import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
 import com.dzhoof.iptv.presentation.ui.theme.Void800
 import com.dzhoof.iptv.presentation.ui.theme.Void900
-import com.dzhoof.iptv.presentation.ui.theme.Void950
+import com.dzhoof.iptv.presentation.ui.theme.Atlas950
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -109,6 +111,7 @@ fun HomeHero(
     val reduceMotion = LocalPerfProfile.current.reduceMotion
     val swapSpec = if (reduceMotion) snap<Float>() else tween(DURATION_NORMAL, easing = EaseOutQuart)
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
+    val layoutDirection = LocalLayoutDirection.current
     val safeMargin = remember(screenWidthDp) { (screenWidthDp * SAFE_MARGIN_FRACTION).dp }
     // Phones stack the info block vertically; TV runs now/next beside the button.
     val isCompact = screenWidthDp < COMPACT_WIDTH_DP
@@ -123,13 +126,19 @@ fun HomeHero(
             HeroBackdrop(channel = hero, heroHeight = heroHeight, safeMargin = safeMargin)
         }
 
-        // Left-to-right scrim so text always sits on solid ground
+        // Start-to-end scrim so the text block always sits on solid ground. The
+        // text column anchors to layout-start, so the opaque end of the gradient
+        // must follow the layout direction too (RTL: text on the right).
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.horizontalGradient(
-                        colors = listOf(Void950, Void950.copy(alpha = 0.6f), Color.Transparent)
+                        colors = if (layoutDirection == LayoutDirection.Rtl) {
+                            listOf(Color.Transparent, Atlas950.copy(alpha = 0.6f), Atlas950)
+                        } else {
+                            listOf(Atlas950, Atlas950.copy(alpha = 0.6f), Color.Transparent)
+                        }
                     )
                 )
         )
@@ -140,7 +149,7 @@ fun HomeHero(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Void950.copy(alpha = 0.55f))
+                        colors = listOf(Color.Transparent, Atlas950.copy(alpha = 0.55f))
                     )
                 )
         )
@@ -426,7 +435,7 @@ private fun WatchNowButton(
     // Near-black label on the amber (focused) fill, white on the dark (resting)
     // fill — set explicitly on content so it can't be diluted by content-color
     // propagation inside the button.
-    val labelColor = if (isFocused) Void950 else OnVideo
+    val labelColor = if (isFocused) Atlas950 else OnVideo
 
     Button(
         onClick = onClick,
@@ -435,7 +444,7 @@ private fun WatchNowButton(
         colors = if (isFocused) {
             ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = Void950
+                contentColor = Atlas950
             )
         } else {
             ButtonDefaults.buttonColors(containerColor = Void800, contentColor = OnVideo)
