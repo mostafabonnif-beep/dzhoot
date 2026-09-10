@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.dzhoof.iptv.presentation.ui.components.qrCodeBitmap
 
 private const val RECENTLY_WATCHED_LIMIT = 20
 private const val FEATURED_CHANNELS_LIMIT = 5
@@ -540,24 +541,9 @@ class ChannelsViewModel @Inject constructor(
 
     private fun generateGuideQrCode() {
         viewModelScope.launch(Dispatchers.Default) {
-            try {
-                val writer = QRCodeWriter()
-                val bitMatrix = writer.encode(GUIDE_URL, BarcodeFormat.QR_CODE, 512, 512)
-                val width = bitMatrix.width
-                val height = bitMatrix.height
-                val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-                for (x in 0 until width) {
-                    for (y in 0 until height) {
-                        bmp.setPixel(
-                            x, y,
-                            if (bitMatrix[x, y]) android.graphics.Color.BLACK
-                            else android.graphics.Color.WHITE
-                        )
-                    }
-                }
+            // QR generation failed silently — empty state will show without QR
+            qrCodeBitmap(GUIDE_URL)?.let { bmp ->
                 _uiState.update { it.copy(guideQrBitmap = bmp) }
-            } catch (_: WriterException) {
-                // QR generation failed silently — empty state will show without QR
             }
         }
     }
