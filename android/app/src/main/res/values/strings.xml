@@ -162,4 +162,10 @@
     <string name="parental_lock_title">قفل أبوي</string>
     <string name="parental_pin_title">أدخل PIN</string>
     <string name="parental_pin_incorrect">PIN غير صحيح</string>
+
+    <!-- Pairing -->
+    <string name="pairing_connecting">جارٍ الاتصال بالخادم…</string>
+    <string name="pairing_timeout">انتهت مهلة الاقتران. أعد المحاولة.</string>
+    <string name="pairing_pin_expired_retry">انتهت صلاحية الرمز. أنشئ رمزًا جديدًا.</string>
+    <string name="pairing_pin_expired">انتهت صلاحية الرمز</string>
 </resources>
