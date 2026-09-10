@@ -58,6 +58,10 @@ import com.dzhoof.iptv.presentation.ui.components.ErrorState
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
 import com.dzhoof.iptv.presentation.viewmodel.CatalogTab
 import com.dzhoof.iptv.presentation.viewmodel.CatalogViewModel
+import androidx.compose.foundation.layout.fillMaxHeight
+import com.dzhoof.iptv.domain.model.CatalogCategory
+import com.dzhoof.iptv.presentation.ui.components.SelectableRow
+import com.dzhoof.iptv.presentation.ui.theme.Dimens
 
 @Composable
 fun CatalogScreen(
@@ -123,13 +127,40 @@ fun CatalogScreen(
                     isCompact = isCompact,
                 )
                 Spacer(modifier = Modifier.height(16.dp))
-                CatalogContent(
-                    state = state,
-                    onMovieClick = viewModel::selectMovie,
-                    onSeriesClick = viewModel::selectSeries,
-                    onLoadMore = viewModel::loadMore,
-                    onRetry = viewModel::refresh,
-                )
+                if (!isCompact) {
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        CatalogCategoryRail(
+                            categories = if (state.tab == CatalogTab.MOVIES) {
+                                state.movieCategories
+                            } else {
+                                state.seriesCategories
+                            },
+                            selectedCategory = state.selectedCategory,
+                            onSelect = viewModel::selectCategory,
+                            modifier = Modifier
+                                .width(Dimens.LiveCategoryPaneWidth)
+                                .fillMaxHeight(),
+                        )
+                        Spacer(modifier = Modifier.width(Dimens.Space4))
+                        Box(modifier = Modifier.weight(1f)) {
+                            CatalogContent(
+                                state = state,
+                                onMovieClick = viewModel::selectMovie,
+                                onSeriesClick = viewModel::selectSeries,
+                                onLoadMore = viewModel::loadMore,
+                                onRetry = viewModel::refresh,
+                            )
+                        }
+                    }
+                } else {
+                    CatalogContent(
+                        state = state,
+                        onMovieClick = viewModel::selectMovie,
+                        onSeriesClick = viewModel::selectSeries,
+                        onLoadMore = viewModel::loadMore,
+                        onRetry = viewModel::refresh,
+                    )
+                }
             } else {
                 SeriesDetails(
                     series = state.selectedSeries,
@@ -486,6 +517,57 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
                 episode.description?.takeIf { it.isNotBlank() }?.let {
                     Text(it, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Category rail for the catalog: every VOD category with its item count, plus
+ * "all". Keeps the poster grid focused on content while giving the viewer the
+ * jump-to-group navigation they expect on a TV box.
+ *
+ * The list order shown to the viewer is the server's ("by recently added"), so
+ * the header states it honestly instead of offering a sort control the API
+ * cannot honour yet.
+ */
+@Composable
+private fun CatalogCategoryRail(
+    categories: List<CatalogCategory>,
+    selectedCategory: String?,
+    onSelect: (String?) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Biggest groups first: on a 292-entry rail the viewer should not have to
+    // scroll past tiny categories to reach the ones people actually watch.
+    val ordered = remember(categories) { categories.sortedByDescending { it.count } }
+    val totalItems = remember(categories) { categories.sumOf { it.count } }
+    Column(modifier = modifier) {
+        Text(
+            text = "الترتيب: حسب ما أُضيف",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = Dimens.Space2),
+        )
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(Dimens.Space1),
+        ) {
+            item(key = "__all__") {
+                SelectableRow(
+                    label = "كل المحتوى  ($totalItems)",
+                    selected = selectedCategory == null,
+                    onClick = { onSelect(null) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+            items(items = ordered, key = { it.name }) { category ->
+                SelectableRow(
+                    label = "${category.name}  (${category.count})",
+                    selected = selectedCategory == category.name,
+                    onClick = { onSelect(category.name) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

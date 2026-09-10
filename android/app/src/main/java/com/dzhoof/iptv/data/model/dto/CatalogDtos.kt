@@ -153,3 +153,14 @@ data class ProgramSearchResult(
     val language: String? = null,
     val catchupAvailable: Boolean = false,
 )
+
+/** One VOD category with its item count (GET /catalog/{movies,series}/categories). */
+data class CatalogCategoryDto(
+    @SerializedName("name") val name: String = "",
+    @SerializedName("count") val count: Int = 0,
+)
+
+data class CatalogCategoriesResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("data") val data: List<CatalogCategoryDto> = emptyList(),
+)
