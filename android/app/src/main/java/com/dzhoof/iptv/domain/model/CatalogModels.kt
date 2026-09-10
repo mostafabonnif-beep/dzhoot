@@ -95,3 +95,9 @@ data class UnifiedProgramResult(
     val language: String?,
     val catchupAvailable: Boolean,
 )
+
+/** A VOD category with how many items it holds. */
+data class CatalogCategory(
+    val name: String,
+    val count: Int,
+)

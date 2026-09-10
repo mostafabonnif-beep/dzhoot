@@ -5,6 +5,7 @@ import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationResponse
 import com.google.gson.Gson
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.di.IoDispatcher
+import com.dzhoof.iptv.domain.model.CatalogCategory
 import com.dzhoof.iptv.domain.model.CatalogPage
 import com.dzhoof.iptv.domain.model.Episode
 import com.dzhoof.iptv.domain.model.Movie
@@ -82,10 +83,10 @@ class CatalogRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getMovies(page: Int, limit: Int, search: String?): Result<CatalogPage<Movie>> =
+    override suspend fun getMovies(page: Int, limit: Int, search: String?, category: String?): Result<CatalogPage<Movie>> =
         withContext(dispatcher) {
             try {
-                val response = apiService.getMovies(page, limit.coerceIn(1, 100), search)
+                val response = apiService.getMovies(page, limit.coerceIn(1, 100), category, search)
                 val body = response.body()
                 if (response.isSuccessful && body?.success == true) {
                     Result.Success(
@@ -116,6 +117,34 @@ class CatalogRepositoryImpl @Inject constructor(
             }
         }
 
+    override suspend fun getMovieCategories(): Result<List<CatalogCategory>> =
+        withContext(dispatcher) {
+            try {
+                val body = apiService.getMovieCategories().body()
+                if (body?.success == true) {
+                    Result.Success(body.data.mapNotNull { dto ->
+                        dto.name.takeIf { it.isNotBlank() }?.let { CatalogCategory(it, dto.count) }
+                    })
+                } else Result.Error(Exception("تعذر تحميل فئات الأفلام"))
+            } catch (e: Exception) {
+                Result.Error(e)
+            }
+        }
+
+    override suspend fun getSeriesCategories(): Result<List<CatalogCategory>> =
+        withContext(dispatcher) {
+            try {
+                val body = apiService.getSeriesCategories().body()
+                if (body?.success == true) {
+                    Result.Success(body.data.mapNotNull { dto ->
+                        dto.name.takeIf { it.isNotBlank() }?.let { CatalogCategory(it, dto.count) }
+                    })
+                } else Result.Error(Exception("تعذر تحميل فئات المسلسلات"))
+            } catch (e: Exception) {
+                Result.Error(e)
+            }
+        }
+
     override suspend fun getMovieById(movieId: String): Result<Movie> = withContext(dispatcher) {
         try {
             val response = apiService.getMovieById(movieId)
@@ -143,10 +172,10 @@ class CatalogRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun getSeries(page: Int, limit: Int, search: String?): Result<CatalogPage<Series>> =
+    override suspend fun getSeries(page: Int, limit: Int, search: String?, category: String?): Result<CatalogPage<Series>> =
         withContext(dispatcher) {
             try {
-                val response = apiService.getSeries(page, limit.coerceIn(1, 100), search)
+                val response = apiService.getSeries(page, limit.coerceIn(1, 100), category, search)
                 val body = response.body()
                 if (response.isSuccessful && body?.success == true) {
                     Result.Success(
