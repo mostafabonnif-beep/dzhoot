@@ -18,6 +18,8 @@ data class SubscriptionUiState(
     val isLoading: Boolean = false,
     val isRedeeming: Boolean = false,
     val subscription: SubscriptionViewDataDto? = null,
+    /** Stable id of THIS install — the "device key" shown in settings. */
+    val deviceId: String = "",
     val redeemSuccess: String? = null,
     val error: String? = null,
 )
@@ -31,6 +33,7 @@ class SubscriptionViewModel @Inject constructor(
     val uiState: StateFlow<SubscriptionUiState> = _uiState.asStateFlow()
 
     init {
+        _uiState.value = _uiState.value.copy(deviceId = repository.getDeviceId())
         refresh()
     }
 
@@ -41,6 +44,7 @@ class SubscriptionViewModel @Inject constructor(
             when (val result = repository.getSubscription()) {
                 is Result.Success -> _uiState.value = SubscriptionUiState(
                     subscription = result.data,
+                    deviceId = repository.getDeviceId(),
                     redeemSuccess = redeemSuccess,
                 )
                 is Result.Error -> _uiState.value = SubscriptionUiState(
@@ -58,6 +62,7 @@ class SubscriptionViewModel @Inject constructor(
                 is Result.Success -> _uiState.value = _uiState.value.copy(
                     isRedeeming = false,
                     subscription = result.data,
+                    deviceId = repository.getDeviceId(),
                     redeemSuccess = "تم تفعيل جهازك بنجاح. مرحبًا بك في DZ HOOF",
                 )
                 is Result.Error -> _uiState.value = _uiState.value.copy(
