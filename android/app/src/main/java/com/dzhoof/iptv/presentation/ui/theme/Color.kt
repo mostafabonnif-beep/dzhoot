@@ -173,9 +173,21 @@ val HealthOffline  = ErrorDark      // #E83838
 val HealthUnknown  = TextDimDark    // #5E7469
 
 // ── Focus and selection (TV) ─────────────────────────────────────────
+// The signature interaction cue is a GOLD ring (DzGold400): readable from
+// across the room, on-brand with the existing gold accent, and clearly
+// distinct from the emerald action colour. The glow stays emerald so the
+// focused surface still "lifts" in the brand colour.
 val FocusGlow        = Color(0x4034D399)   // 25% DzGreen300
-val FocusBorder      = DzGreen300
+val FocusBorder      = DzGold400           // gold focus ring — the app-wide cue
 val SelectionOverlay = Color(0x1AFFFFFF)
+
+// ── Premium identity layer (redesign 2026-09) ────────────────────────
+val AccentGold         = DzGold300              // highlights, "see all", premium badges
+val BrandRimGold       = Color(0x66E8C468)      // 40% gold hairline rim on artwork
+val Ink950             = Color(0xFF050B08)      // deepest backdrop behind artwork
+val ArtworkGlowEmerald = Color(0x1F10B981)      // 12% emerald glow — backdrop depth
+val ArtworkGlowGold    = Color(0x14E8C468)      //  8% gold glow — backdrop warmth
+val ArtworkStreakGold  = Color(0x2EE8C468)      // 18% gold diagonal streak
 
 // ── Guide (EPG) focus ────────────────────────────────────────────────
 val GuideRowWash        = Color(0x1F34D399)   // ~12% DzGreen300 — focused-row gradient wash
