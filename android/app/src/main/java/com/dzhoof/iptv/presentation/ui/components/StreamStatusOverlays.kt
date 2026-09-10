@@ -15,10 +15,9 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.animation.animateFadeIn
-import com.dzhoof.iptv.presentation.ui.theme.Amber
-import com.dzhoof.iptv.presentation.ui.theme.TextDim
 import com.dzhoof.iptv.presentation.ui.theme.TextPrimary
-import com.dzhoof.iptv.presentation.ui.theme.TextSecondary
+import com.dzhoof.iptv.presentation.ui.theme.OnVideo
+import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 
 @Composable
 fun RecoveringOverlay(
@@ -45,18 +44,18 @@ fun RecoveringOverlay(
         ) {
             CircularProgressIndicator(
                 modifier = Modifier.size(40.dp),
-                color = Amber,
+                color = DzGreen300,
                 strokeWidth = 3.dp
             )
             Text(
                 text = "جارٍ إعادة الاتصال… ($attempt/$maxAttempts)",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
+                color = OnVideo.copy(alpha = 0.85f)
             )
             Text(
                 text = statusMessage,
                 style = MaterialTheme.typography.bodySmall,
-                color = TextDim
+                color = OnVideo.copy(alpha = 0.6f)
             )
         }
     }
@@ -105,7 +104,7 @@ fun DeadStreamOverlay(
                 Text(
                     text = explanation,
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary,
+                    color = OnVideo.copy(alpha = 0.85f),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.widthIn(max = 480.dp)
                 )
@@ -114,14 +113,14 @@ fun DeadStreamOverlay(
                 Text(
                     text = "العودة خلال $countdown…",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
+                    color = OnVideo.copy(alpha = 0.85f)
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "اضغط أي زر للبقاء هنا",
                 style = MaterialTheme.typography.labelSmall,
-                color = TextDim
+                color = OnVideo.copy(alpha = 0.6f)
             )
         }
     }

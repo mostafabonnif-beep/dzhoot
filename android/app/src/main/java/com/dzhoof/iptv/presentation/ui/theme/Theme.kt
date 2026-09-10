@@ -14,6 +14,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 /** Composition local to expose whether DzHoofTheme is in dark mode. */
 val LocalIsDarkTheme = compositionLocalOf { true }
 
+/** Navigation-chrome background (side rail, drawers): dark Atlas900 / light Sand100. */
+val navChromeBackground: Color
+    @Composable get() = if (LocalIsDarkTheme.current) Atlas900 else Sand100
+
 /** Theme-aware subtle border color: light white on dark, dark on light. */
 val subtleBorder: Color
     @Composable get() = if (LocalIsDarkTheme.current) SubtleBorderDark else SubtleBorderLight

@@ -60,6 +60,8 @@ import com.dzhoof.iptv.presentation.ui.screens.player.prepareChannelStream
 import com.dzhoof.iptv.presentation.ui.screens.player.rememberPlayerOrientationController
 import com.dzhoof.iptv.presentation.ui.screens.player.rememberPlayerOverlayState
 import com.dzhoof.iptv.presentation.viewmodel.PlayerViewModel
+import androidx.compose.ui.res.stringResource
+import com.dzhoof.iptv.R
 
 /**
  * Full-screen video player. Stateful root: owns the ExoPlayer lifecycle,
@@ -494,7 +496,7 @@ fun PlayerScreen(
 
         if (gateActive) {
             ParentalPinDialog(
-                title = if (channelLocked) "القناة مقفلة" else "Parental lock",
+                title = if (channelLocked) "القناة مقفلة" else stringResource(R.string.parental_lock_title),
                 verify = { AppPreferences.verifyParentalPin(context, it) },
                 onSuccess = {
                     AppPreferences.setParentalUnlockedThisSession(true)

@@ -56,7 +56,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
-import com.dzhoof.iptv.presentation.ui.theme.Amber
 import com.dzhoof.iptv.presentation.ui.theme.DzRed400
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
@@ -69,8 +68,6 @@ import com.dzhoof.iptv.presentation.ui.theme.HealthUnknown
 import com.dzhoof.iptv.presentation.ui.theme.OnVideo
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 import com.dzhoof.iptv.presentation.ui.theme.EmphasisMedium
-import com.dzhoof.iptv.presentation.ui.theme.Void700
-import com.dzhoof.iptv.presentation.ui.theme.Void800
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.theme.categoryIcon
@@ -126,9 +123,10 @@ fun ChannelCard(
         isFocused -> BorderStroke(2.dp, FocusBorder)
         else -> BorderStroke(1.dp, subtleBorder)
     }
-    // Tonal elevation: container steps up one Void level when focused.
+    // Tonal elevation: container steps up one surface level when focused. Both
+    // roles are theme-aware, so light mode no longer shows dark slabs.
     val containerColor by animateColorAsState(
-        targetValue = if (isFocused) Void700 else Void800,
+        targetValue = if (isFocused) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surface,
         animationSpec = tween(DURATION_FAST, easing = EaseOutQuart),
         label = "cardContainer"
     )
@@ -254,7 +252,8 @@ private fun ChannelCardContent(
     val (targetWidthPx, targetHeightPx) = remember(density) {
         with(density) { 240.dp.roundToPx() to 140.dp.roundToPx() }
     }
-    val placeholderPainter = remember { ColorPainter(Void800) }
+    val cardPlaceholder = MaterialTheme.colorScheme.surface
+    val placeholderPainter = remember(cardPlaceholder) { ColorPainter(cardPlaceholder) }
 
     Box(modifier = Modifier.fillMaxSize()) {
 

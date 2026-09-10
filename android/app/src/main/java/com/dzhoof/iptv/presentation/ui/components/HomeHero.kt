@@ -76,13 +76,13 @@ import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.LabelBadge
 import com.dzhoof.iptv.presentation.ui.theme.OnVideo
 import com.dzhoof.iptv.presentation.ui.theme.ShapeSmall
-import com.dzhoof.iptv.presentation.ui.theme.Void800
-import com.dzhoof.iptv.presentation.ui.theme.Void900
+import com.dzhoof.iptv.presentation.ui.theme.navChromeBackground
 import com.dzhoof.iptv.presentation.ui.theme.Atlas950
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
+import com.dzhoof.iptv.presentation.ui.theme.Atlas800
 
 private const val HERO_HEIGHT_FRACTION = 0.35f
 private const val SAFE_MARGIN_FRACTION = 0.05f
@@ -120,7 +120,7 @@ fun HomeHero(
         modifier = modifier
             .fillMaxWidth()
             .height(heroHeight)
-            .background(Void900)
+            .background(navChromeBackground)
     ) {
         Crossfade(targetState = channel, animationSpec = swapSpec, label = "heroBackdrop") { hero ->
             HeroBackdrop(channel = hero, heroHeight = heroHeight, safeMargin = safeMargin)
@@ -354,7 +354,8 @@ private fun HeroBackdrop(
     val (widthPx, heightPx) = remember(density, screenWidthDp, heroHeight) {
         with(density) { screenWidthDp.dp.roundToPx() to heroHeight.roundToPx() }
     }
-    val placeholderPainter = remember { ColorPainter(Void800) }
+    val heroPlaceholder = MaterialTheme.colorScheme.surface
+    val placeholderPainter = remember(heroPlaceholder) { ColorPainter(heroPlaceholder) }
 
     var thumbnailFile by remember(channel.id, channel.thumbnailPath) { mutableStateOf<File?>(null) }
     LaunchedEffect(channel.id, channel.thumbnailPath) {
@@ -447,7 +448,7 @@ private fun WatchNowButton(
                 contentColor = Atlas950
             )
         } else {
-            ButtonDefaults.buttonColors(containerColor = Void800, contentColor = OnVideo)
+            ButtonDefaults.buttonColors(containerColor = Atlas800, contentColor = OnVideo)
         },
         contentPadding = PaddingValues(horizontal = Dimens.Space5, vertical = Dimens.Space3),
         modifier = Modifier
