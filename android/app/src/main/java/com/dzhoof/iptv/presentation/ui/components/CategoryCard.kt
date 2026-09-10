@@ -1,8 +1,6 @@
 package com.dzhoof.iptv.presentation.ui.components
 
 import android.view.KeyEvent
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -18,7 +16,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.layout.ContentScale
@@ -29,8 +26,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
-import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.theme.*
 
 /**
@@ -50,11 +45,6 @@ fun CategoryCard(
 ) {
     var isFocused by remember { mutableStateOf(false) }
     var longPressHandled by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = 1f, // no size change on focus — border is the cue
-        animationSpec = tween(durationMillis = DURATION_NORMAL, easing = EaseOutQuart),
-        label = "categoryScale"
-    )
     val catColor = categoryColor(name)
     val catIcon = categoryIcon(name)
 
@@ -64,7 +54,7 @@ fun CategoryCard(
             longPressHandled = false
         },
         modifier = modifier
-            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .tvFocusVisuals(focused = isFocused, shape = MaterialTheme.shapes.medium)
             .onFocusChanged { isFocused = it.isFocused }
             .then(
                 if (onToggleFavorite != null) {
@@ -131,7 +121,7 @@ fun CategoryCard(
                     },
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    placeholder = remember { ColorPainter(Void800) },
+                    placeholder = remember { ColorPainter(Atlas800) },
                     modifier = Modifier
                         .fillMaxSize()
                         .alpha(0.24f)

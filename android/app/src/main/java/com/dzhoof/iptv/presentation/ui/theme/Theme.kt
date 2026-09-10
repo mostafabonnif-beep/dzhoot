@@ -14,18 +14,22 @@ import androidx.compose.ui.platform.LocalConfiguration
 /** Composition local to expose whether DzHoofTheme is in dark mode. */
 val LocalIsDarkTheme = compositionLocalOf { true }
 
+/** Navigation-chrome background (side rail, drawers): dark Atlas900 / light Sand100. */
+val navChromeBackground: Color
+    @Composable get() = if (LocalIsDarkTheme.current) Atlas900 else Sand100
+
 /** Theme-aware subtle border color: light white on dark, dark on light. */
 val subtleBorder: Color
     @Composable get() = if (LocalIsDarkTheme.current) SubtleBorderDark else SubtleBorderLight
 
 private val DarkColorScheme = darkColorScheme(
-    // Primary — DzGreen300 (bright amber, high contrast on void surfaces)
+    // Primary — DzGreen300 (bright emerald, high contrast on ink surfaces)
     primary = DzGreen300,
     onPrimary = DzGreen700,
     primaryContainer = DzGreen400,
     onPrimaryContainer = DzGreen50,
 
-    // Secondary — warm accent (DzGreen400, complementary to primary)
+    // Secondary — emerald accent (DzGreen400, supports the primary)
     secondary = DzGreen400,
     onSecondary = DzGreen50,
     secondaryContainer = DzGreen500,
@@ -70,13 +74,13 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 private val LightColorScheme = lightColorScheme(
-    // Primary — DzGreen500 (deep amber, sufficient contrast on parchment)
+    // Primary — DzGreen500 (deep emerald, sufficient contrast on sand)
     primary = DzGreen500,
     onPrimary = Sand50,
     primaryContainer = DzGreen100,
     onPrimaryContainer = DzGreen700,
 
-    // Secondary — warm accent (DzGreen700, complementary to primary)
+    // Secondary — emerald accent (DzGreen700, supports the primary)
     secondary = DzGreen700,
     onSecondary = Sand50,
     secondaryContainer = DzGreen100,

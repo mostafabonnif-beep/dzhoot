@@ -44,6 +44,7 @@ import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.theme.Amber
 import com.dzhoof.iptv.presentation.ui.theme.ScrimHeavy
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
+import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 
 @Composable
 internal fun PairingContent(
@@ -286,9 +287,9 @@ private fun SecondaryLink(text: String, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick,
         shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, if (focused) Amber.copy(alpha = 0.6f) else subtleBorder),
+        border = BorderStroke(1.dp, if (focused) FocusBorder.copy(alpha = 0.6f) else subtleBorder),
         colors = ButtonDefaults.outlinedButtonColors(
-            contentColor = if (focused) Amber else MaterialTheme.colorScheme.onSurfaceVariant
+            contentColor = if (focused) FocusBorder else MaterialTheme.colorScheme.onSurfaceVariant
         ),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         modifier = Modifier

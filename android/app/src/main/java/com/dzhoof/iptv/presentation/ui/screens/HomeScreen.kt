@@ -38,6 +38,7 @@ fun HomeScreen(
     onSeriesClick: (String) -> Unit = {},
     onSeeAllMovies: (() -> Unit)? = null,
     onSeeAllSeries: (() -> Unit)? = null,
+    onNavigateToGuide: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     viewModel: ChannelsViewModel = hiltViewModel()
 ) {
@@ -114,6 +115,8 @@ fun HomeScreen(
                     onSeriesClick = onSeriesClick,
                     onSeeAllMovies = onSeeAllMovies,
                     onSeeAllSeries = onSeeAllSeries,
+                    onNavigateToFavorites = onNavigateToFavorites,
+                    onNavigateToGuide = onNavigateToGuide,
                     isDemo = isDemo
                 )
             }

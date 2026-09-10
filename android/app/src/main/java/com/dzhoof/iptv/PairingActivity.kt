@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
+import com.dzhoof.iptv.presentation.model.StatusTone
 import com.dzhoof.iptv.presentation.ui.screens.PairingScreen
 import com.dzhoof.iptv.presentation.ui.theme.DzHoofTheme
 import com.google.zxing.BarcodeFormat
@@ -49,8 +50,8 @@ class PairingActivity : ComponentActivity() {
 
     // Compose state
     private var pin by mutableStateOf("------")
-    private var statusMessage by mutableStateOf("Generating PIN...")
-    private var statusColor by mutableStateOf(androidx.compose.ui.graphics.Color.White)
+    private var statusMessage by mutableStateOf("جارٍ إنشاء رمز الاقتران…")
+    private var statusTone by mutableStateOf(StatusTone.NEUTRAL)
     private var countdownText by mutableStateOf("")
     private var isLoading by mutableStateOf(true)
     private var showRetryButton by mutableStateOf(false)
@@ -84,7 +85,7 @@ class PairingActivity : ComponentActivity() {
                 PairingScreen(
                     pin = pin,
                     statusMessage = statusMessage,
-                    statusColor = statusColor,
+                    statusTone = statusTone,
                     countdownText = countdownText,
                     isLoading = isLoading,
                     showRetryButton = showRetryButton,
@@ -141,8 +142,8 @@ class PairingActivity : ComponentActivity() {
 
         isLoading = true
         pin = "------"
-        statusMessage = "Connecting to server..."
-        statusColor = androidx.compose.ui.graphics.Color.White
+        statusMessage = getString(R.string.pairing_connecting)
+        statusTone = StatusTone.NEUTRAL
         showCountdown = false
         showRetryButton = false
 
@@ -172,7 +173,7 @@ class PairingActivity : ComponentActivity() {
                                 isLoading = false
                                 pin = currentPin ?: "------"
                                 statusMessage = "في انتظار التأكيد…"
-                                statusColor = androidx.compose.ui.graphics.Color.White
+                                statusTone = StatusTone.NEUTRAL
                                 showCountdown = true
                                 pairingUrl = "$baseUrl/pair?pin=${currentPin ?: ""}"
                                 if (isTv) {
@@ -203,7 +204,7 @@ class PairingActivity : ComponentActivity() {
             override fun run() {
                 if (!isPairing || pollAttempts >= MAX_POLL_ATTEMPTS) {
                     if (pollAttempts >= MAX_POLL_ATTEMPTS) {
-                        showError("Pairing timeout. Please try again.")
+                        showError(getString(R.string.pairing_timeout))
                     }
                     return
                 }
@@ -234,7 +235,7 @@ class PairingActivity : ComponentActivity() {
                             val username = jsonResponse.optString("username", "User")
                             onPairingSuccess(channelListCode, username)
                         } else if (status == "expired") {
-                            showError("PIN expired. Please generate a new one.")
+                            showError(getString(R.string.pairing_pin_expired_retry))
                         }
                     }
                 }
@@ -293,7 +294,7 @@ class PairingActivity : ComponentActivity() {
         runOnUiThread {
             isLoading = false
             statusMessage = message
-            statusColor = androidx.compose.ui.graphics.Color(0xFFF44336)
+            statusTone = StatusTone.ERROR
             showRetryButton = true
             showCountdown = false
             isPairing = false
@@ -313,7 +314,7 @@ class PairingActivity : ComponentActivity() {
 
                 val remaining = expiresAt - System.currentTimeMillis()
                 if (remaining <= 0) {
-                    countdownText = "PIN Expired"
+                    countdownText = getString(R.string.pairing_pin_expired)
                     showError("PIN expired. Please generate a new one.")
                     return
                 }

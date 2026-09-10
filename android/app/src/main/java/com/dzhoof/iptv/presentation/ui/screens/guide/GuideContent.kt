@@ -22,7 +22,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.model.GuideFocusedProgram
 import com.dzhoof.iptv.presentation.model.GuideUiState
 import com.dzhoof.iptv.presentation.ui.components.ScreenScaffold
@@ -128,7 +130,7 @@ private fun GuideHeaderDetail(
 
     if (focused == null) {
         Text(
-            text = "Highlight a program for details",
+            text = stringResource(R.string.guide_highlight_hint),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
@@ -149,7 +151,7 @@ private fun GuideHeaderDetail(
             if (program.isLive) {
                 Icon(
                     imageVector = Icons.Filled.FiberManualRecord,
-                    contentDescription = "Live now",
+                    contentDescription = stringResource(R.string.guide_live_now),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.height(Dimens.IconSmall)
                 )
@@ -163,8 +165,13 @@ private fun GuideHeaderDetail(
                 overflow = TextOverflow.Ellipsis
             )
         }
+        val durationMinutes = Duration.between(program.startTime, program.endTime).toMinutes().coerceAtLeast(0)
         Text(
-            text = buildTimeRange(program.startTime, program.endTime) + " · " + focused.channelName,
+            text = buildTimeRange(
+                program.startTime,
+                program.endTime,
+                stringResource(R.string.guide_duration_minutes, durationMinutes)
+            ) + " · " + focused.channelName,
             style = if (isCompact) MaterialTheme.typography.labelSmall
             else MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
@@ -174,7 +181,6 @@ private fun GuideHeaderDetail(
     }
 }
 
-private fun buildTimeRange(start: Instant, end: Instant): String {
-    val minutes = Duration.between(start, end).toMinutes().coerceAtLeast(0)
-    return "${formatSlotLabel(start)} – ${formatSlotLabel(end)}  (${minutes} min)"
+private fun buildTimeRange(start: Instant, end: Instant, minutesLabel: String): String {
+    return "${formatSlotLabel(start)} – ${formatSlotLabel(end)}  ($minutesLabel)"
 }

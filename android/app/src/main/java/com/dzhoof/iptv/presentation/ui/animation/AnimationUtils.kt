@@ -41,7 +41,7 @@ const val DURATION_TRANSITION = DURATION_NORMAL  // screen/state transitions (25
 
 // ── Focus scale factors (Android TV focus system: 1.025 / 1.05 / 1.1) ──
 const val FOCUS_SCALE_SUBTLE = 1.04f  // large surfaces (hero, wide banners)
-const val FOCUS_SCALE_CARD = 1f       // cards don't grow on focus — border + glow are the cue
+const val FOCUS_SCALE_CARD = 1.02f    // subtle lift; the gold ring + glow carry the cue
 const val FOCUS_SCALE_TILE = 1.10f    // small tiles / chips
 
 // ── Splash Animation (Lottie) ────────────────────────────────────

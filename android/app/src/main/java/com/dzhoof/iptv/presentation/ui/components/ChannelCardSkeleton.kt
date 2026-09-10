@@ -28,8 +28,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
-import com.dzhoof.iptv.presentation.ui.theme.Void700
-import com.dzhoof.iptv.presentation.ui.theme.Void800
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
 private const val MaxRowSkeletonCards = 8
@@ -82,7 +80,7 @@ fun ChannelCardSkeleton(
             .height(height),
         shape = MaterialTheme.shapes.medium,
         border = BorderStroke(1.dp, subtleBorder),
-        colors = CardDefaults.cardColors(containerColor = Void800),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
     ) {
         if (shimmerBrush != null) {
             Box(
@@ -116,7 +114,7 @@ fun ChannelRowSkeleton(
                 modifier = Modifier
                     .width(Dimens.SkeletonTitleWidth)
                     .height(Dimens.SkeletonTitleHeight)
-                    .background(Void700, MaterialTheme.shapes.extraSmall)
+                    .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.extraSmall)
             )
             Spacer(modifier = Modifier.height(Dimens.Space3))
         }
