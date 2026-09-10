@@ -46,19 +46,20 @@ import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.source.remote.playlist.StreamUrlTemplate
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.presentation.ui.components.SelectableRow
 import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
 import com.dzhoof.iptv.presentation.ui.screens.player.VideoPlayer
-import com.dzhoof.iptv.presentation.ui.theme.Amber
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import kotlinx.coroutines.launch
 import com.dzhoof.iptv.presentation.ui.theme.ShapeLarge
@@ -66,6 +67,9 @@ import com.dzhoof.iptv.presentation.ui.theme.ShapeMedium
 import com.dzhoof.iptv.presentation.viewmodel.MultiviewViewModel
 import com.dzhoof.iptv.presentation.viewmodel.MultiviewViewModel.Companion.MAX_PANES
 import kotlin.math.min
+import com.dzhoof.iptv.presentation.ui.theme.AccentGold
+import com.dzhoof.iptv.presentation.ui.theme.Ink950
+import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 
 /**
  * Sports multiview. A layout selector (2/3/4) sets how many streams show at once;
@@ -155,7 +159,7 @@ fun MultiviewScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Layout",
+                    text = stringResource(R.string.multiview_layout),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -301,7 +305,7 @@ private fun MultiviewPane(
             .background(MaterialTheme.colorScheme.surface)
             .border(
                 width = if (isFocused) 3.dp else 1.dp,
-                color = if (isFocused) Amber else MaterialTheme.colorScheme.outline,
+                color = if (isFocused) FocusBorder else MaterialTheme.colorScheme.outline,
                 shape = shape
             )
             .focusRequester(focusRequester)
@@ -340,8 +344,8 @@ private fun LayoutChip(count: Int, selected: Boolean, onClick: () -> Unit) {
             .clip(ShapeMedium)
             .background(
                 when {
-                    focused -> Amber
-                    selected -> Amber.copy(alpha = 0.25f)
+                    focused -> AccentGold
+                    selected -> AccentGold.copy(alpha = 0.25f)
                     else -> MaterialTheme.colorScheme.surface
                 }
             )
@@ -352,7 +356,7 @@ private fun LayoutChip(count: Int, selected: Boolean, onClick: () -> Unit) {
             text = "$count",
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
-            color = if (focused) Color.Black else MaterialTheme.colorScheme.onSurface
+            color = if (focused) Ink950 else MaterialTheme.colorScheme.onSurface
         )
     }
 }
@@ -379,20 +383,20 @@ private fun ChannelPickerOverlay(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.6f))
+            .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f))
             .clickable(onClick = onDismiss),
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .width(460.dp)
+                .width(Dimens.DialogMaxWidth)
                 .heightIn(max = maxPickerHeight)
                 .clip(ShapeLarge)
                 .background(MaterialTheme.colorScheme.surface)
-                .padding(16.dp)
+                .padding(Dimens.Space4)
         ) {
             Text(
-                text = "Choose channel",
+                text = stringResource(R.string.multiview_choose_channel),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(bottom = 6.dp)

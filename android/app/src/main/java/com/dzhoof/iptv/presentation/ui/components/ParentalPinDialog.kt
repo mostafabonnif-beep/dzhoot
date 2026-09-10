@@ -20,10 +20,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.dzhoof.iptv.R
 
 /**
  * Parental PIN entry dialog. [verify] runs the check; the dialog calls
@@ -32,12 +34,14 @@ import androidx.compose.ui.unit.dp
  */
 @Composable
 fun ParentalPinDialog(
-    title: String = "Enter PIN",
+    title: String? = null,
     verify: (pin: String) -> Boolean,
     onSuccess: (pin: String) -> Unit,
     onDismiss: () -> Unit,
-    errorMessage: String = "Incorrect PIN",
+    errorMessage: String? = null,
 ) {
+    val resolvedTitle = title ?: stringResource(R.string.parental_pin_title)
+    val resolvedError = errorMessage ?: stringResource(R.string.parental_pin_incorrect)
     var pin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
 
@@ -66,7 +70,7 @@ fun ParentalPinDialog(
                     tint = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = title,
+                    text = resolvedTitle,
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 8.dp)
                 )
@@ -94,7 +98,7 @@ fun ParentalPinDialog(
                 )
                 if (error) {
                     Text(
-                        text = errorMessage,
+                        text = resolvedError,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.labelMedium,
                         textAlign = TextAlign.Center,

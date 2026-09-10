@@ -8,8 +8,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.model.UpdateInfo
 import com.dzhoof.iptv.presentation.ui.components.AppSpinner
 import com.dzhoof.iptv.presentation.ui.components.Status
@@ -33,7 +35,7 @@ internal fun AboutSection(
     val busy = isChecking || isDownloading
     val canInstall = updateInfo != null && updateInfo.downloadUrl.isNotEmpty()
 
-    SettingsCard(title = "About", modifier = modifier) {
+    SettingsCard(title = stringResource(R.string.about), modifier = modifier) {
         SettingRowLayout(
             text = {
                 if (updateInfo != null) {
@@ -59,10 +61,10 @@ internal fun AboutSection(
                     }
                     Text(
                         text = when {
-                            isChecking -> "Checking..."
-                            isDownloading -> "Downloading..."
-                            canInstall -> "Update Now"
-                            else -> "Check for Updates"
+                            isChecking -> stringResource(R.string.update_checking)
+                            isDownloading -> stringResource(R.string.update_downloading)
+                            canInstall -> stringResource(R.string.update_now)
+                            else -> stringResource(R.string.update_check_for_updates)
                         },
                         fontWeight = FontWeight.Medium
                     )
@@ -84,14 +86,14 @@ private fun VersionLabel(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Version",
+            text = stringResource(R.string.version_label),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(2.dp))
         StatusText(
-            text = if (upToDate) "$appVersion  ·  Up to date" else appVersion,
+            text = if (upToDate) stringResource(R.string.version_up_to_date, appVersion) else appVersion,
             status = if (upToDate) Status.SUCCESS else Status.NEUTRAL
         )
     }
@@ -105,7 +107,7 @@ private fun UpdateAvailableLabel(
 ) {
     Column(modifier = modifier) {
         Text(
-            text = "Update available: v${updateInfo.versionName}",
+            text = stringResource(R.string.update_available_version, updateInfo.versionName),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.primary
@@ -113,9 +115,9 @@ private fun UpdateAvailableLabel(
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = buildString {
-                append("Current: $appVersion")
+                append(stringResource(R.string.update_current_version, appVersion))
                 if (updateInfo.fileSize.isNotEmpty()) append("  ·  ${updateInfo.fileSize}")
-                if (updateInfo.isMandatory) append("  ·  Mandatory")
+                if (updateInfo.isMandatory) append("  ·  " + stringResource(R.string.update_mandatory))
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant

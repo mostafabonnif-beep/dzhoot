@@ -51,6 +51,8 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
@@ -69,7 +71,7 @@ import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.animation.FOCUS_SCALE_SUBTLE
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
-import com.dzhoof.iptv.presentation.ui.theme.Void900
+import com.dzhoof.iptv.presentation.ui.theme.navChromeBackground
 
 private data class NavItem(
     val screen: Screen,
@@ -132,18 +134,27 @@ fun SideNavRail(
     val settingsHoldsRestore = selectedTopIndex < 0 && bottomNavItem.isSelectedFor(currentRoute)
     val restoreIndex = if (selectedTopIndex >= 0) selectedTopIndex else 0
 
+    val layoutDirection = LocalLayoutDirection.current
+
     Column(
         modifier = modifier
             .width(railWidth)
             .fillMaxHeight()
-            .background(Void900)
+            .background(navChromeBackground)
             .onFocusChanged { isExpanded = it.hasFocus }
             .focusRestorer { restoreFocusRequester }
             .focusProperties {
-                // DPAD_RIGHT always leaves the rail into content; left edge is a wall.
+                // The rail is the first child of the root Row, so its inner edge is
+                // the physical LEFT in LTR and the physical RIGHT in RTL. Block that
+                // inward wall (it would trap focus with no way to reach content) and
+                // let the opposite direction leave into the content area.
                 exit = { direction ->
-                    if (direction == FocusDirection.Left) FocusRequester.Cancel
-                    else FocusRequester.Default
+                    val inwardWall = if (layoutDirection == LayoutDirection.Rtl) {
+                        FocusDirection.Right
+                    } else {
+                        FocusDirection.Left
+                    }
+                    if (direction == inwardWall) FocusRequester.Cancel else FocusRequester.Default
                 }
             }
             .focusGroup()

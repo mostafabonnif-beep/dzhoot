@@ -59,6 +59,15 @@ object Dimens {
     val CategoryCardHeightTv = 104.dp
     val CategoryCardWidthMobile = 140.dp
     val CategoryCardHeightMobile = 80.dp
+
+    // ── Home portal tiles (branded entry points) ─────────────────────
+    val PortalTileWidthTv = 236.dp
+    val PortalTileHeightTv = 118.dp
+    val PortalTileWidthMobile = 168.dp
+    val PortalTileHeightMobile = 96.dp
+    val PortalTileGap = 14.dp
+    val PortalIconSizeTv = 34.dp
+    val PortalIconSizeMobile = 26.dp
     // Decorative corner icon scales with card height (home row cards are
     // 80-100dp tall, the Categories grid 130dp) instead of a fixed size.
     const val CategoryIconHeightFraction = 0.28f

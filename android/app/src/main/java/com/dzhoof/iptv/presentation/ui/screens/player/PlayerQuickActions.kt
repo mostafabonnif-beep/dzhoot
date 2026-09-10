@@ -32,7 +32,9 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.ui.animation.FOCUS_SCALE_TILE
 import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
 import com.dzhoof.iptv.presentation.ui.theme.Amber
@@ -92,13 +94,13 @@ internal fun PlayerQuickActions(
     ) {
         QuickActionButton(
             icon = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-            label = if (isFavorite) "Favorited" else "Favorite",
+            label = if (isFavorite) stringResource(R.string.player_favorite_on) else stringResource(R.string.player_favorite_off),
             tint = if (isFavorite) MaterialTheme.colorScheme.error else OnVideo,
             onClick = onToggleFavorite,
             focusRequester = firstActionFocusRequester
         )
 
-        val sleepLabel = sleepTimerMinutes?.let { "Sleep ${it}m" } ?: "Sleep off"
+        val sleepLabel = sleepTimerMinutes?.let { stringResource(R.string.player_sleep_minutes, it) } ?: stringResource(R.string.player_sleep_off)
         QuickActionButton(
             icon = Icons.Filled.Bedtime,
             label = sleepLabel,

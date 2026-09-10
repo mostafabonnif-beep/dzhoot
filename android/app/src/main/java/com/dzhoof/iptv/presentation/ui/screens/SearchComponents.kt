@@ -49,7 +49,6 @@ import com.dzhoof.iptv.presentation.ui.components.ChannelGridSkeleton
 import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
-import com.dzhoof.iptv.presentation.ui.theme.Void700
 import com.dzhoof.iptv.presentation.ui.theme.categoryColor
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
@@ -99,7 +98,7 @@ internal fun SearchResultsSkeleton(
             modifier = Modifier
                 .width(160.dp)
                 .height(16.dp)
-                .background(Void700, MaterialTheme.shapes.extraSmall)
+                .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.extraSmall)
         )
         Spacer(modifier = Modifier.height(Dimens.RowTitleGap))
         ChannelGridSkeleton(

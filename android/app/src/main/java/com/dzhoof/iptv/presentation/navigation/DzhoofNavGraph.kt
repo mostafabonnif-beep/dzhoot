@@ -132,6 +132,9 @@ fun DzhoofNavGraph(
                     navController.navigate(Screen.Catalog.createRoute("series")) {
                         launchSingleTop = true
                     }
+                },
+                onNavigateToGuide = {
+                    navController.navigate(Screen.Guide.route) { launchSingleTop = true }
                 }
             )
         }

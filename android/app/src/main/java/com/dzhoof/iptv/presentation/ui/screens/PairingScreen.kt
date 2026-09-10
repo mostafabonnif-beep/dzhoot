@@ -1,8 +1,10 @@
 package com.dzhoof.iptv.presentation.ui.screens
 
 import android.graphics.Bitmap
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import com.dzhoof.iptv.presentation.model.StatusTone
 import com.dzhoof.iptv.presentation.ui.screens.pairing.PairingContent
 import com.dzhoof.iptv.presentation.ui.screens.pairing.PairingSuccessContent
 
@@ -10,7 +12,7 @@ import com.dzhoof.iptv.presentation.ui.screens.pairing.PairingSuccessContent
 fun PairingScreen(
     pin: String,
     statusMessage: String,
-    statusColor: Color,
+    statusTone: StatusTone,
     countdownText: String,
     isLoading: Boolean,
     showRetryButton: Boolean,
@@ -39,7 +41,11 @@ fun PairingScreen(
         PairingContent(
             pin = pin,
             statusMessage = statusMessage,
-            statusColor = statusColor,
+            statusColor = when (statusTone) {
+                StatusTone.SUCCESS -> MaterialTheme.colorScheme.primary
+                StatusTone.ERROR -> MaterialTheme.colorScheme.error
+                StatusTone.NEUTRAL -> MaterialTheme.colorScheme.onSurfaceVariant
+            },
             countdownText = countdownText,
             isLoading = isLoading,
             showRetryButton = showRetryButton,
