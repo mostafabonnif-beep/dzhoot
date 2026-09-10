@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.domain.model.Episode
+import com.dzhoof.iptv.domain.model.CatalogCategory
 import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.Season
 import com.dzhoof.iptv.domain.model.Series
@@ -36,6 +37,11 @@ data class CatalogUiState(
     val error: String? = null,
     val detailsError: String? = null,
     val query: String = "",
+    /** Category rail: VOD categories with item counts for the active tab. */
+    val movieCategories: List<CatalogCategory> = emptyList(),
+    val seriesCategories: List<CatalogCategory> = emptyList(),
+    /** null = "all" — filters the loaded list and the paged requests. */
+    val selectedCategory: String? = null,
 )
 
 @HiltViewModel
@@ -47,11 +53,37 @@ class CatalogViewModel @Inject constructor(
 
     init {
         loadMovies()
+        loadCategories(CatalogTab.MOVIES)
+        loadCategories(CatalogTab.SERIES)
+    }
+
+    /** Fetches the counts shown next to each category in the rail. */
+    private fun loadCategories(tab: CatalogTab) {
+        viewModelScope.launch {
+            val result = if (tab == CatalogTab.MOVIES) repository.getMovieCategories()
+            else repository.getSeriesCategories()
+            if (result is Result.Success) {
+                _uiState.value = if (tab == CatalogTab.MOVIES) {
+                    _uiState.value.copy(movieCategories = result.data)
+                } else {
+                    _uiState.value.copy(seriesCategories = result.data)
+                }
+            }
+        }
+    }
+
+    /** Category rail selection — null means "all". */
+    fun selectCategory(category: String?) {
+        if (_uiState.value.selectedCategory == category) return
+        _uiState.value = _uiState.value.copy(selectedCategory = category, page = 1, error = null)
+        if (_uiState.value.tab == CatalogTab.MOVIES) loadMovies() else loadSeries()
     }
 
     fun selectTab(tab: CatalogTab) {
         if (_uiState.value.tab == tab) return
-        _uiState.value = _uiState.value.copy(tab = tab, page = 1, query = "", error = null)
+        _uiState.value = _uiState.value.copy(
+            tab = tab, page = 1, query = "", error = null, selectedCategory = null,
+        )
         if (tab == CatalogTab.MOVIES) loadMovies() else loadSeries()
     }
 
@@ -225,7 +257,13 @@ class CatalogViewModel @Inject constructor(
         if (append) _uiState.value = _uiState.value.copy(isLoadingMore = true, error = null)
         else _uiState.value = _uiState.value.copy(isLoading = true, page = page, error = null)
         viewModelScope.launch {
-            when (val result = repository.getMovies(page, search = _uiState.value.query.takeIf { it.isNotBlank() })) {
+            when (
+                val result = repository.getMovies(
+                    page = page,
+                    search = _uiState.value.query.takeIf { it.isNotBlank() },
+                    category = _uiState.value.selectedCategory,
+                )
+            ) {
                 is Result.Success -> {
                     val old = if (append) _uiState.value.movies else emptyList()
                     _uiState.value = _uiState.value.copy(
@@ -249,7 +287,13 @@ class CatalogViewModel @Inject constructor(
         if (append) _uiState.value = _uiState.value.copy(isLoadingMore = true, error = null)
         else _uiState.value = _uiState.value.copy(isLoading = true, page = page, error = null)
         viewModelScope.launch {
-            when (val result = repository.getSeries(page, search = _uiState.value.query.takeIf { it.isNotBlank() })) {
+            when (
+                val result = repository.getSeries(
+                    page = page,
+                    search = _uiState.value.query.takeIf { it.isNotBlank() },
+                    category = _uiState.value.selectedCategory,
+                )
+            ) {
                 is Result.Success -> {
                     val old = if (append) _uiState.value.series else emptyList()
                     _uiState.value = _uiState.value.copy(

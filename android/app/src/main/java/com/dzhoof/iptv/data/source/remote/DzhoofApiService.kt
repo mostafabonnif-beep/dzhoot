@@ -37,6 +37,7 @@ import retrofit2.http.POST
 import retrofit2.http.Headers
 import retrofit2.http.Path
 import retrofit2.http.Query
+import com.dzhoof.iptv.data.model.dto.CatalogCategoriesResponse
 
 /**
  * Retrofit API service interface for DZ HOOF IPTV backend.
@@ -86,6 +87,13 @@ interface DzhoofApiService {
         @Query("category") category: String? = null,
         @Query("search") search: String? = null,
     ): Response<MoviePageResponse>
+
+    /** VOD categories with item counts — powers the catalog category rail. */
+    @GET("api/v1/catalog/movies/categories")
+    suspend fun getMovieCategories(): Response<CatalogCategoriesResponse>
+
+    @GET("api/v1/catalog/series/categories")
+    suspend fun getSeriesCategories(): Response<CatalogCategoriesResponse>
 
     @GET("api/v1/catalog/movies/{movieId}")
     suspend fun getMovieById(@Path("movieId") movieId: String): Response<MovieDetailResponse>

@@ -2,6 +2,7 @@ package com.dzhoof.iptv.presentation.viewmodel
 
 import com.dzhoof.iptv.MainDispatcherRule
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.domain.model.CatalogCategory
 import com.dzhoof.iptv.domain.model.CatalogPage
 import com.dzhoof.iptv.domain.model.Episode
 import com.dzhoof.iptv.domain.model.Movie
@@ -101,14 +102,20 @@ class CatalogViewModelTest {
         override suspend fun searchCatalog(query: String): Result<UnifiedSearchResults> =
             Result.Success(UnifiedSearchResults())
 
-        override suspend fun getMovies(page: Int, limit: Int, search: String?): Result<CatalogPage<Movie>> =
+        override suspend fun getMovies(page: Int, limit: Int, search: String?, category: String?): Result<CatalogPage<Movie>> =
             Result.Success(moviePage.copy(page = page))
+
+        override suspend fun getMovieCategories(): Result<List<CatalogCategory>> =
+            Result.Success(emptyList())
+
+        override suspend fun getSeriesCategories(): Result<List<CatalogCategory>> =
+            Result.Success(emptyList())
 
         override suspend fun getMovieById(movieId: String): Result<Movie> =
             movies.firstOrNull { it.id == movieId }?.let { Result.Success(it) }
                 ?: Result.Error(IllegalArgumentException("Movie not found"))
 
-        override suspend fun getSeries(page: Int, limit: Int, search: String?): Result<CatalogPage<Series>> =
+        override suspend fun getSeries(page: Int, limit: Int, search: String?, category: String?): Result<CatalogPage<Series>> =
             Result.Success(CatalogPage(series, series.size, page, limit))
 
         override suspend fun getSeriesById(seriesId: String): Result<Series> =
