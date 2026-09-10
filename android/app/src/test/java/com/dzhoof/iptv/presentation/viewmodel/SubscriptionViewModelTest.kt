@@ -9,6 +9,7 @@ import com.dzhoof.iptv.data.model.dto.SubscriptionPlanDto
 import com.dzhoof.iptv.data.model.dto.SubscriptionViewDataDto
 import com.dzhoof.iptv.domain.repository.SubscriptionRepository
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,6 +27,13 @@ class SubscriptionViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     private val repository: SubscriptionRepository = mockk()
+
+    // SubscriptionViewModel reads the install's device id at construction time;
+    // a strict mock must be told about that non-suspend call up front.
+    @org.junit.Before
+    fun stubDeviceIdentity() {
+        every { repository.getDeviceId() } returns "test-device"
+    }
     private val subscription = SubscriptionViewDataDto(
         subscription = SubscriptionDto(
             id = "sub-1",
