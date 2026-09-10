@@ -24,6 +24,7 @@ import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.screens.home.HomeContent
 import com.dzhoof.iptv.presentation.ui.screens.home.HomeSkeleton
 import com.dzhoof.iptv.presentation.viewmodel.ChannelsViewModel
+import com.dzhoof.iptv.presentation.viewmodel.SubscriptionViewModel
 
 @Composable
 fun HomeScreen(
@@ -40,9 +41,11 @@ fun HomeScreen(
     onSeeAllSeries: (() -> Unit)? = null,
     onNavigateToGuide: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    viewModel: ChannelsViewModel = hiltViewModel()
+    viewModel: ChannelsViewModel = hiltViewModel(),
+    subscriptionViewModel: SubscriptionViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val subscriptionState by subscriptionViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val isDemo = remember { AppPreferences.isDemoMode(context) }
 
@@ -117,6 +120,7 @@ fun HomeScreen(
                     onSeeAllSeries = onSeeAllSeries,
                     onNavigateToFavorites = onNavigateToFavorites,
                     onNavigateToGuide = onNavigateToGuide,
+                    subscriptionExpiresAt = subscriptionState.subscription?.subscription?.expiresAt,
                     isDemo = isDemo
                 )
             }
