@@ -29,6 +29,15 @@ import com.dzhoof.iptv.presentation.ui.screens.SettingRowLayout
 import com.dzhoof.iptv.presentation.ui.screens.SettingsCard
 import com.dzhoof.iptv.presentation.util.normalizeActivationCodeInput
 import com.dzhoof.iptv.presentation.viewmodel.SubscriptionViewModel
+import android.graphics.Bitmap
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.style.TextAlign
+import com.dzhoof.iptv.BuildConfig
+import com.dzhoof.iptv.presentation.ui.components.ThemeAwareQrCode
+import com.dzhoof.iptv.presentation.ui.components.qrCodeBitmap
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Settings section for the subscription & activation system:
@@ -222,5 +231,42 @@ internal fun SubscriptionSection(
                 )
             }
         }
+
+        // Portal QR at the foot of the device card — the "scan to manage"
+        // affordance an IPTV box puts next to its identifiers. It encodes the
+        // public portal, so a phone can open the plan/devices/renewal pages
+        // without anyone typing the address off a TV screen.
+        Spacer(modifier = Modifier.height(16.dp))
+        SubscriptionPortalQr()
+    }
+}
+
+@Composable
+private fun SubscriptionPortalQr() {
+    val portalUrl = remember { BuildConfig.API_BASE_URL.trimEnd('/') }
+    var bitmap by remember(portalUrl) { mutableStateOf<Bitmap?>(null) }
+
+    // zxing walks a 512px matrix; keep it off the main thread and only once.
+    LaunchedEffect(portalUrl) {
+        bitmap = withContext(Dispatchers.Default) { qrCodeBitmap(portalUrl) }
+    }
+
+    val qr = bitmap ?: return
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        ThemeAwareQrCode(
+            bitmap = qr,
+            contentDescription = stringResource(R.string.device_portal_qr_cd),
+            size = 132.dp,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.device_portal_qr_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
