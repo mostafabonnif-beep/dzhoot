@@ -71,7 +71,7 @@ import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.animation.FOCUS_SCALE_SUBTLE
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.Elevation
-import com.dzhoof.iptv.presentation.ui.theme.Void900
+import com.dzhoof.iptv.presentation.ui.theme.navChromeBackground
 
 private data class NavItem(
     val screen: Screen,
@@ -140,7 +140,7 @@ fun SideNavRail(
         modifier = modifier
             .width(railWidth)
             .fillMaxHeight()
-            .background(Void900)
+            .background(navChromeBackground)
             .onFocusChanged { isExpanded = it.hasFocus }
             .focusRestorer { restoreFocusRequester }
             .focusProperties {

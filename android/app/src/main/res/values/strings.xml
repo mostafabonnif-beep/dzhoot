@@ -159,6 +159,7 @@
     <string name="update_version_label">الإصدار %1$s</string>
 
     <!-- Parental controls -->
+    <string name="parental_lock_title">قفل أبوي</string>
     <string name="parental_pin_title">أدخل PIN</string>
     <string name="parental_pin_incorrect">PIN غير صحيح</string>
 </resources>
