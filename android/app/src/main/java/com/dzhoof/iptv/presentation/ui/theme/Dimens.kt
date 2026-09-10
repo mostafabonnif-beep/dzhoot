@@ -137,6 +137,13 @@ object Dimens {
 
     // ── EPG Guide grid (channels × time) ─────────────────────────────
     val GuideChannelColumnWidth = 200.dp    // sticky left channel column
+
+    // ── Live screen (three-pane TV layout) ─────────────────────────────
+    val LiveCategoryPaneWidth = 260.dp      // left: categories + counts
+    val LivePreviewPaneWidth = 380.dp       // right: preview + now/next + actions
+    val LiveChannelNumberWidth = 40.dp      // row number gutter
+    val LiveChannelLogoSize = 40.dp
+    val LivePreviewArtHeight = 200.dp
     val GuideRowHeight = 70.dp              // one channel row height
     val GuideTimelineHeight = 44.dp         // top time-axis strip height
     val GuideMinuteWidth = 6.dp             // horizontal px per timeline minute

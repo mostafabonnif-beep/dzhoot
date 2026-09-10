@@ -167,6 +167,7 @@ class ChannelsViewModel @Inject constructor(
                         // category list must stay visible so the user can jump between categories.
                         val allCategories: List<String>
                         val catLogos: Map<String, List<String>>
+                        val catCounts: Map<String, Int>
                         if (category == null) {
                             allCategories = uiChannels
                                 .map { it.category }
@@ -181,10 +182,14 @@ class ChannelsViewModel @Inject constructor(
                                         .distinct()
                                         .take(4)
                                 }
+                            catCounts = uiChannels
+                                .groupBy { it.category }
+                                .mapValues { (_, channels) -> channels.size }
                         } else {
                             // Keep existing categories & logos from the previous "all" load
                             allCategories = _uiState.value.categories
                             catLogos = _uiState.value.categoryLogos
+                            catCounts = _uiState.value.categoryCounts
                         }
 
                         _uiState.update {
@@ -192,6 +197,7 @@ class ChannelsViewModel @Inject constructor(
                                 channels = uiChannels,
                                 categories = allCategories,
                                 categoryLogos = catLogos,
+                                categoryCounts = catCounts,
                                 // Only recompute For You from the full (unhidden)
                                 // catalog; a category filter shows a subset and
                                 // would skew the mix. Hidden channels were already
