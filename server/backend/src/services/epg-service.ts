@@ -48,17 +48,15 @@ const EPG_MAX_PROGRAMS_PER_SOURCE = Math.max(
   parseInt(process.env.EPG_MAX_PROGRAMS_PER_SOURCE || '50000', 10) || 50000,
 );
 
-// Auto-disable a source after this many CONSECUTIVE size-limit failures.
-// A guide that decompresses beyond EPG_MAX_DECOMPRESSED_MB will never succeed
-// without raising the cap, and re-downloading it every refresh cycle wastes
-// bandwidth, disk and memory. After the threshold the source is disabled with
-// a durable note; an operator can re-enable it from the admin UI after
-// capacity tests (see EPG_MAX_DECOMPRESSED_MB comment).
+// Auto-disable a source after this many consecutive failures when the error is
+// known to be persistent. The admin UI keeps the override visible and can
+// re-enable it after the provider is repaired or capacity is increased.
 const EPG_AUTO_DISABLE_CONSECUTIVE_FAILURES = Math.max(
   2,
   parseInt(process.env.EPG_AUTO_DISABLE_CONSECUTIVE_FAILURES || '3', 10) || 3,
 );
 const EPG_OVERSIZED_ERROR_RE = /exceeds maximum decompressed size/i;
+const EPG_PERSISTENT_HTTP_ERROR_RE = /status code 526\b/i;
 
 // Heap/RSS guard: before starting each source, if the process RESIDENT memory
 // (what the container cgroup actually counts) is above this threshold the
@@ -560,19 +558,15 @@ export class EpgService {
         },
         { upsert: true, new: true, setDefaultsOnInsert: true },
       );
-      // A guide that permanently exceeds the decompressed size limit (e.g. a
-      // country file that expands to several times the memory budget) fails on
-      // every refresh. Auto-disable it once the threshold is reached so the
-      // scheduler stops re-downloading a guide it can never process — the admin
-      // UI keeps the override visible and can re-enable it after capacity tests.
       const errText = String(error || '');
       const consecutive = updated?.consecutiveFailures ?? 0;
-      if (consecutive >= EPG_AUTO_DISABLE_CONSECUTIVE_FAILURES && EPG_OVERSIZED_ERROR_RE.test(errText)) {
-        await this.setSourceDisabled(
-          safeUrl,
-          true,
-          `Auto-disabled after ${consecutive} consecutive size-limit failures (guide exceeds the maximum decompressed EPG size; re-enable only after capacity tests)`,
-        );
+      const oversized = EPG_OVERSIZED_ERROR_RE.test(errText);
+      const persistentHttp = EPG_PERSISTENT_HTTP_ERROR_RE.test(errText);
+      if (consecutive >= EPG_AUTO_DISABLE_CONSECUTIVE_FAILURES && (oversized || persistentHttp)) {
+        const note = persistentHttp
+          ? `Auto-disabled after ${consecutive} consecutive HTTP 526 failures from the provider`
+          : `Auto-disabled after ${consecutive} consecutive size-limit failures (guide exceeds the maximum decompressed EPG size)`;
+        await this.setSourceDisabled(safeUrl, true, note);
       }
     } catch (err) {
       console.warn('[epg-service] Failed to record source result:', err);
