@@ -92,12 +92,10 @@ function mockPrograms(programs: Array<Record<string, unknown>>) {
       return start >= gte && start < lt;
     });
     const chain = {
-      collation: () => ({
-        sort: () => ({
-          select: () => ({
-            limit: () => ({
-              lean: async () => inWindow,
-            }),
+      sort: () => ({
+        select: () => ({
+          limit: () => ({
+            lean: async () => inWindow,
           }),
         }),
       }),
