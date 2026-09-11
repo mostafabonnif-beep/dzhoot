@@ -68,3 +68,7 @@ For server changes, run the relevant build, typecheck, lint, and tests. For Andr
 - Use clear Conventional Commit messages such as `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, and `build:`.
 - Keep pull requests small and document behavior, tests, configuration changes, and external licenses.
 - GitHub Releases should contain built APKs; do not commit build outputs to the repository.
+
+## Operations for AI agents
+
+Before building, testing, releasing, or touching production, read `docs/AI_AGENT_OPERATIONS_AR.md` — it holds the verified commands, the release flow, and the human-approval guardrails. This file (`AGENTS.md`) sets the coding rules; that file sets the operations.
