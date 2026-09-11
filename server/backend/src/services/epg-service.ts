@@ -298,51 +298,62 @@ export class EpgService {
 
       console.log(`[epg-service] Discovered ${sources.length} EPG sources to fetch (concurrency=${EPG_FETCH_CONCURRENCY}, heap=${heapUsedMb()}MB)`);
 
-      // 2. Fetch with bounded concurrency + per-source timeout + heap guard.
-      //    A failing or oversized source is recorded and skipped — it never
-      //    aborts the remaining sources (audit-remediation-v1).
-      const batchStats = await runBoundedBatch(
-        sources,
-        EPG_FETCH_CONCURRENCY,
-        async (source) => {
-          // Reclaim memory from the PREVIOUS source before evaluating the guard.
-          // V8 defers GC while RSS sits below --max-old-space-size, so without an
-          // explicit collection the freed XML/parse trees from prior sources kept
-          // RSS above EPG_HEAP_GUARD_MB and every subsequent source was skipped
-          // (production: 49/52 sources failed with "RSS exceeds EPG_HEAP_GUARD_MB").
-          const currentRss = await waitForMemoryHeadroom();
-          if (currentRss > EPG_HEAP_GUARD_MB) {
-            throw new Error(`Skipped: RSS ${currentRss}MB exceeds EPG_HEAP_GUARD_MB (${EPG_HEAP_GUARD_MB}MB)`);
-          }
-          const beforeHeap = heapUsedMb();
-          try {
-            const programs = await this.fetchAndParseXmltv(source.url, source.coveredChannelIds);
-            const count = programs.length > 0 ? await this.upsertPrograms(programs) : 0;
-            // Persist per-source health so the admin UI can show durable
-            // ok/failed state (and operators can disable chronic failures).
-            await this.recordSourceResult(source.url, true);
-            return count;
-          } catch (err: any) {
-            await this.recordSourceResult(source.url, false, err?.message || String(err));
-            throw err;
-          } finally {
-            console.log(
-              `[epg-service] Source ${source.source}: heap ${beforeHeap}MB -> ${heapUsedMb()}MB (rss ${rssMb()}MB, ${Math.round((Date.now() - startTime) / 1000)}s elapsed)`,
-            );
-          }
-        },
-        {
-          timeoutMs: EPG_SOURCE_TIMEOUT_MS,
-          label: (source: any) => source.source || String(source.url || ''),
-          onError: (label, err: any) => {
-            this.lastRefreshErrorCount += 1;
-            if (this.lastRefreshErrorSources.length < 10) {
-              this.lastRefreshErrorSources.push(label);
+      const deferredSources: EpgSourceInfo[] = [];
+      const runSourceBatch = (batchSources: EpgSourceInfo[], deferMemoryFailures: boolean) =>
+        runBoundedBatch(
+          batchSources,
+          EPG_FETCH_CONCURRENCY,
+          async (source) => {
+            const currentRss = await waitForMemoryHeadroom();
+            if (currentRss > EPG_HEAP_GUARD_MB) {
+              if (deferMemoryFailures) {
+                deferredSources.push(source);
+                return 0;
+              }
+              throw new Error(`Skipped: RSS ${currentRss}MB exceeds EPG_HEAP_GUARD_MB (${EPG_HEAP_GUARD_MB}MB)`);
             }
-            console.warn(`[epg-service] Failed to fetch ${label}: ${err.message}`);
+            const beforeHeap = heapUsedMb();
+            try {
+              const programs = await this.fetchAndParseXmltv(source.url, source.coveredChannelIds);
+              const count = programs.length > 0 ? await this.upsertPrograms(programs) : 0;
+              await this.recordSourceResult(source.url, true);
+              return count;
+            } catch (err: any) {
+              await this.recordSourceResult(source.url, false, err?.message || String(err));
+              throw err;
+            } finally {
+              console.log(
+                `[epg-service] Source ${source.source}: heap ${beforeHeap}MB -> ${heapUsedMb()}MB (rss ${rssMb()}MB, ${Math.round((Date.now() - startTime) / 1000)}s elapsed)`,
+              );
+            }
           },
-        },
-      );
+          {
+            timeoutMs: EPG_SOURCE_TIMEOUT_MS,
+            label: (source: any) => source.source || String(source.url || ''),
+            onError: (label, err: any) => {
+              this.lastRefreshErrorCount += 1;
+              if (this.lastRefreshErrorSources.length < 10) {
+                this.lastRefreshErrorSources.push(label);
+              }
+              console.warn(`[epg-service] Failed to fetch ${label}: ${err.message}`);
+            },
+          },
+        );
+
+      let batchStats = await runSourceBatch(sources, true);
+      if (deferredSources.length > 0) {
+        console.warn(`[epg-service] Retrying ${deferredSources.length} source(s) deferred by the RSS guard`);
+        await reclaimMemory();
+        const retryStats = await runSourceBatch([...new Set(deferredSources)], false);
+        batchStats = {
+          ...batchStats,
+          processedCount: batchStats.processedCount + retryStats.processedCount,
+          failedCount: batchStats.failedCount + retryStats.failedCount,
+          errorSources: [...batchStats.errorSources, ...retryStats.errorSources].slice(0, 10),
+          maxConcurrencyObserved: Math.max(batchStats.maxConcurrencyObserved, retryStats.maxConcurrencyObserved),
+          durationMs: Date.now() - startTime,
+        };
+      }
 
       const durationMs = Date.now() - startTime;
       this.lastRefreshDurationMs = durationMs;
