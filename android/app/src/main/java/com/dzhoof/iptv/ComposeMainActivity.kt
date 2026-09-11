@@ -84,6 +84,7 @@ import com.dzhoof.iptv.presentation.ui.animation.DURATION_ENTRANCE
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
 import com.dzhoof.iptv.presentation.ui.detectPerfProfile
 import com.dzhoof.iptv.presentation.ui.components.OverlayToast
+import com.dzhoof.iptv.presentation.ui.components.PremiumTvTopBar
 import com.dzhoof.iptv.presentation.ui.components.SideNavRail
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
@@ -320,14 +321,23 @@ private fun DzhoofAppShell(
 ) {
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStackEntry?.destination?.route
+    val currentCatalogTab = currentBackStackEntry?.arguments?.getString("tab")
 
     val showNav = currentRoute in Screen.sidebarRoutes
     val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     val context = LocalContext.current
     val isMobile = remember { isMobileDevice(context) }
+    val usePremiumTvChrome = !isPortrait && !isMobile
 
     val onNavigate: (Screen) -> Unit = { screen ->
         navController.navigate(screen.defaultRoute()) {
+            popUpTo(Screen.Home.route) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+    val onNavigateRoute: (String) -> Unit = { route ->
+        navController.navigate(route) {
             popUpTo(Screen.Home.route) { saveState = true }
             launchSingleTop = true
             restoreState = true
@@ -345,8 +355,15 @@ private fun DzhoofAppShell(
                     if (isPortrait) WindowInsets.statusBars else WindowInsets.safeDrawing
                 )
         ) {
+            if (usePremiumTvChrome && showNav) {
+                PremiumTvTopBar(
+                    currentRoute = currentRoute,
+                    currentCatalogTab = currentCatalogTab,
+                    onRouteSelected = onNavigateRoute,
+                )
+            }
             Row(modifier = Modifier.weight(1f)) {
-                if (!isPortrait && showNav) {
+                if (!isPortrait && showNav && !usePremiumTvChrome) {
                     SideNavRail(
                         currentRoute = currentRoute,
                         onScreenSelected = onNavigate,

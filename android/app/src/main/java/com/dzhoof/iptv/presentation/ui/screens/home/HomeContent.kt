@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tv
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
@@ -47,6 +48,7 @@ import com.dzhoof.iptv.presentation.ui.components.rememberShimmerBrush
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.Atlas800
 import com.dzhoof.iptv.presentation.ui.theme.DzGold400
+import com.dzhoof.iptv.presentation.ui.theme.DzGold500
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen400
 import com.dzhoof.iptv.presentation.ui.theme.DzRed500
@@ -77,6 +79,7 @@ fun HomeContent(
     lastPlayedChannelId: String?,
     onChannelClick: (String) -> Unit,
     onNavigateToChannels: (String) -> Unit,
+    onNavigateToSettings: (() -> Unit)? = null,
     onNavigateToFavorites: (() -> Unit)? = null,
     onNavigateToGuide: (() -> Unit)? = null,
     onToggleFavorite: (String) -> Unit,
@@ -182,7 +185,8 @@ fun HomeContent(
         onSeeAllMovies != null,
         onSeeAllSeries != null,
         onNavigateToFavorites != null,
-        onNavigateToGuide != null
+        onNavigateToGuide != null,
+        onNavigateToSettings != null
     ) {
         buildList {
             add(PortalTile("live", "مباشر", "قنوات وبث حي", Icons.Filled.LiveTv, DzGreen400))
@@ -198,6 +202,9 @@ fun HomeContent(
             onNavigateToGuide?.let {
                 add(PortalTile("guide", "دليل البرامج", "جدول البث", Icons.Filled.CalendarMonth, DzGreen300))
             }
+            onNavigateToSettings?.let {
+                add(PortalTile("settings", "الإعدادات", "تخصيص التطبيق", Icons.Filled.Settings, DzGold500))
+            }
         }
     }
 
@@ -208,6 +215,7 @@ fun HomeContent(
             "series" -> onSeeAllSeries?.invoke()
             "favorites" -> onNavigateToFavorites?.invoke()
             "guide" -> onNavigateToGuide?.invoke()
+            "settings" -> onNavigateToSettings?.invoke()
         }
     }
 
