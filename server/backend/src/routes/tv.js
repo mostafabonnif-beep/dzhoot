@@ -1561,7 +1561,9 @@ router.get('/epg/:code/matches-today', async (req, res) => {
           { category: { $regex: SPORTS_CATEGORY_REGEX_SOURCE, $options: 'i' } },
         ],
       })
-        .collation({ locale: 'en', strength: 2 })
+        // Keep the collection's simple collation so MongoDB can use the
+        // { channelEpgId, startTime } index. Case-insensitive matching is
+        // already handled by the regex and the final sports filter.
         .sort({ startTime: 1 })
         .select('channelEpgId title description category startTime endTime language icon')
         .limit(scanLimit)

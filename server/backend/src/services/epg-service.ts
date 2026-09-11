@@ -67,6 +67,8 @@ const EPG_OVERSIZED_ERROR_RE = /exceeds maximum decompressed size/i;
 // parsing also allocates large external/string buffers that heapUsed misses
 // yet still count against the container memory limit.
 const EPG_HEAP_GUARD_MB = Math.max(128, parseInt(process.env.EPG_HEAP_GUARD_MB || '768', 10) || 768);
+const EPG_MEMORY_RECLAIM_ATTEMPTS = 4;
+const EPG_MEMORY_RECLAIM_DELAY_MS = 250;
 
 // Optional country allowlist for the iptv-epg.org auto-discovery
 // (e.g. "dz,sa,ae" to only fetch those guides). Empty = all discovered countries.
@@ -136,8 +138,17 @@ async function reclaimMemory(): Promise<void> {
       // never let GC break the refresh loop
     }
   }
-  // Yield so pending finalizers/GC callbacks run before the next allocation.
   await new Promise((resolve) => setImmediate(resolve));
+}
+
+async function waitForMemoryHeadroom(): Promise<number> {
+  let currentRss = rssMb();
+  for (let attempt = 0; attempt < EPG_MEMORY_RECLAIM_ATTEMPTS && currentRss > EPG_HEAP_GUARD_MB; attempt += 1) {
+    await reclaimMemory();
+    await new Promise((resolve) => setTimeout(resolve, EPG_MEMORY_RECLAIM_DELAY_MS));
+    currentRss = rssMb();
+  }
+  return currentRss;
 }
 
 interface EpgSourceInfo {
@@ -301,9 +312,9 @@ export class EpgService {
           // explicit collection the freed XML/parse trees from prior sources kept
           // RSS above EPG_HEAP_GUARD_MB and every subsequent source was skipped
           // (production: 49/52 sources failed with "RSS exceeds EPG_HEAP_GUARD_MB").
-          await reclaimMemory();
-          if (rssMb() > EPG_HEAP_GUARD_MB) {
-            throw new Error(`Skipped: RSS ${rssMb()}MB exceeds EPG_HEAP_GUARD_MB (${EPG_HEAP_GUARD_MB}MB)`);
+          const currentRss = await waitForMemoryHeadroom();
+          if (currentRss > EPG_HEAP_GUARD_MB) {
+            throw new Error(`Skipped: RSS ${currentRss}MB exceeds EPG_HEAP_GUARD_MB (${EPG_HEAP_GUARD_MB}MB)`);
           }
           const beforeHeap = heapUsedMb();
           try {
