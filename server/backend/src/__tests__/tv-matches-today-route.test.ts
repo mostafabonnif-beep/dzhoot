@@ -102,7 +102,7 @@ function mockPrograms(programs: Array<Record<string, unknown>>) {
     };
     return chain;
   });
-  (EpgProgram.distinct as jest.Mock).mockResolvedValue(['beinsports1.tr']);
+  (EpgProgram.distinct as jest.Mock).mockResolvedValue(['beINSports1.tr']);
 }
 
 /** Same UTC-day window arithmetic the route uses — keeps expectations honest. */
@@ -125,7 +125,7 @@ describe('GET /epg/:code/matches-today', () => {
 
     const nowMs = Date.now();
     const fixture = (startMs: number, endMs: number) => ({
-      channelEpgId: 'beinsports1.tr',
+      channelEpgId: 'beINSports1.tr',
       startTime: new Date(startMs).toISOString(),
       endTime: new Date(endMs).toISOString(),
       description: '',
@@ -147,7 +147,9 @@ describe('GET /epg/:code/matches-today', () => {
 
     const res = await request(buildApp()).get('/api/v1/tv/epg/AAA111/matches-today');
     expect(res.status).toBe(200);
-    expect(res.body.success).toBe(true);
+    expect(res.body.success).toBe(true);    expect(EpgProgram.find).toHaveBeenCalledWith(
+      expect.objectContaining({ channelEpgId: { $in: ['beINSports1.tr'] } }),
+    );
 
     // Recompute the expected list with the same rules the route applies.
     const window = utcDayWindow(Date.now());
