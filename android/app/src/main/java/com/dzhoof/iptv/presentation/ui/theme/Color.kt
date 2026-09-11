@@ -49,9 +49,9 @@ val DzRed500 = Color(0xFFD21034)     // flag red — hearts, alerts, LIVE
 val DzRed600 = Color(0xFFA50E2A)     // pressed red
 
 // ── DzGold — لمسة فاخرة (نجمة وهلال، تمييزات) ────────────────────────
-val DzGold300 = Color(0xFFF0D68A)
-val DzGold400 = Color(0xFFE8C468)
-val DzGold500 = Color(0xFFC9A44B)
+val DzGold300 = Color(0xFFF4D58A)
+val DzGold400 = Color(0xFFE7BD62)
+val DzGold500 = Color(0xFFB8873E)
 
 // ── Backward-compatible aliases (deprecated — replaced by DzGreen) ───
 @Deprecated("Replaced by DzGreen300", ReplaceWith("DzGreen300"))
@@ -74,12 +74,12 @@ val AmberLight = DzGreen100
 val AmberDark  = DzGreen500
 
 // ── Atlas — dark mode surfaces (أخضر داكن عميق) ──────────────────────
-val Atlas950 = Color(0xFF070D0A)    // app background
-val Atlas900 = Color(0xFF0C1512)    // sidebar / navigation drawer
-val Atlas800 = Color(0xFF111D17)    // card background
-val Atlas700 = Color(0xFF16241D)    // elevated / focused card
-val Atlas600 = Color(0xFF1D2E25)    // overlay, modal surface
-val Atlas500 = Color(0xFF243A30)    // tooltip, highest elevation
+val Atlas950 = Color(0xFF050505)    // app background
+val Atlas900 = Color(0xFF0D0C0A)    // sidebar / navigation drawer
+val Atlas800 = Color(0xFF16130F)    // card background
+val Atlas700 = Color(0xFF211A12)    // elevated / focused card
+val Atlas600 = Color(0xFF312416)    // overlay, modal surface
+val Atlas500 = Color(0xFF432F1B)    // tooltip, highest elevation
 
 // ── Backward-compatible aliases (deprecated — replaced by Atlas) ─────
 @Deprecated("Replaced by Atlas950", ReplaceWith("Atlas950"))
@@ -177,7 +177,7 @@ val HealthUnknown  = TextDimDark    // #5E7469
 // across the room, on-brand with the existing gold accent, and clearly
 // distinct from the emerald action colour. The glow stays emerald so the
 // focused surface still "lifts" in the brand colour.
-val FocusGlow        = Color(0x4034D399)   // 25% DzGreen300
+val FocusGlow        = Color(0x40E7BD62)   // 25% DzGold400
 val FocusBorder      = DzGold400           // gold focus ring — the app-wide cue
 val SelectionOverlay = Color(0x1AFFFFFF)
 
@@ -186,8 +186,8 @@ val AccentGold         = DzGold300              // highlights, "see all", premiu
 val BrandRimGold       = Color(0x66E8C468)      // 40% gold hairline rim on artwork
 val Ink950             = Color(0xFF050B08)      // deepest backdrop behind artwork
 val ArtworkGlowEmerald = Color(0x1F10B981)      // 12% emerald glow — backdrop depth
-val ArtworkGlowGold    = Color(0x14E8C468)      //  8% gold glow — backdrop warmth
-val ArtworkStreakGold  = Color(0x2EE8C468)      // 18% gold diagonal streak
+val ArtworkGlowGold    = Color(0x1CE7BD62)      // 11% gold glow — backdrop warmth
+val ArtworkStreakGold  = Color(0x3DE7BD62)      // 24% gold diagonal streak
 
 // ── Guide (EPG) focus ────────────────────────────────────────────────
 val GuideRowWash        = Color(0x1F34D399)   // ~12% DzGreen300 — focused-row gradient wash

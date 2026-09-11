@@ -112,6 +112,7 @@ fun HomeScreen(
                     lastPlayedChannelId = uiState.lastPlayedChannelId,
                     onChannelClick = openChannel,
                     onNavigateToChannels = onNavigateToChannels,
+                    onNavigateToSettings = onNavigateToSettings,
                     onToggleFavorite = viewModel::toggleFavorite,
                     onMultiviewClick = onMultiviewClick,
                     onMovieClick = onMovieClick,
