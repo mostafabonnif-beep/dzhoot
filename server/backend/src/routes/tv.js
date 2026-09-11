@@ -468,11 +468,9 @@ async function loadEpgChannelIds(user) {
     await epgCache.set('known-ids', knownEpgIds, 600);
   }
   // EPG channel ids in guides and provider-issued tvgIds disagree on casing
-  // (beINSPORTS1.tr vs beINSports1.tr). Matching is case-insensitive everywhere
-  // else (coverage query, app cache keys), so normalize here too: the known set
-  // and the info map are keyed lowercased, while epgIds keep the original casing
-  // and are matched case-insensitively by the program query (collation).
-  const knownSet = new Set(knownEpgIds.map((id) => String(id).toLowerCase()));
+  // (beINSPORTS1.tr vs beINSports1.tr). Use the casing stored in the guide for
+  // the indexed query, while keeping the client-facing map case-insensitive.
+  const knownEpgIdByKey = new Map(knownEpgIds.map((id) => [String(id).toLowerCase(), id]));
 
   const epgIds = [];
   const channelInfoMap = new Map();
@@ -487,7 +485,8 @@ async function loadEpgChannelIds(user) {
           name: ch.channelName,
           icon: ch.tvgLogo || ch.channelImg || '',
         });
-        if (knownSet.has(key)) epgIds.push(id);
+        const knownEpgId = knownEpgIdByKey.get(key);
+        if (knownEpgId !== undefined) epgIds.push(knownEpgId);
       }
     }
   }
