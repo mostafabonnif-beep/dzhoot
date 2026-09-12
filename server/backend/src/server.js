@@ -8,6 +8,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const { randomUUID } = require('crypto');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const { redactSensitiveText } = require('./services/audit-log');
 const { observeHttpRequest, isAuthorizedMetricsRequest, renderMetrics, registry } = require('./services/metrics');
@@ -142,21 +143,19 @@ if (process.env.NODE_ENV === 'production') {
 // through addresses to dodge the limiter.
 const TRUST_CF_CONNECTING_IP = process.env.TRUST_CF_CONNECTING_IP === 'true';
 
-function normalizeIp(ip) {
-  if (!ip) return ip;
-  const v = ip.startsWith('::ffff:') ? ip.slice(7) : ip; // unwrap IPv4-mapped IPv6
-  if (v.includes(':')) {
-    return v.split(':').slice(0, 4).join(':') + '::/64'; // key on the /64 network
-  }
-  return v;
-}
-
-function clientIp(req) {
+function rawClientIp(req) {
   if (TRUST_CF_CONNECTING_IP) {
     const cf = req.headers['cf-connecting-ip'];
-    if (cf) return normalizeIp(String(cf).split(',')[0].trim());
+    if (cf) return String(cf).split(',')[0].trim();
   }
-  return normalizeIp(req.ip);
+  return req.ip;
+}
+
+// Use express-rate-limit's canonical IPv6 normalizer. Besides avoiding the
+// ERR_ERL_KEY_GEN_IPV6 validation warning, this correctly handles compressed,
+// mapped, and unusual IPv6 forms while grouping one client's /64 allocation.
+function clientIp(req) {
+  return ipKeyGenerator(rawClientIp(req), 64);
 }
 
 // Middleware
@@ -325,7 +324,7 @@ const apiLimiter = rateLimit({
   // Key by user identity + IP when authenticated, otherwise by IP alone
   keyGenerator: (req) => {
     const identity = resolveRateLimitIdentity(req);
-    return identity ? identity.key : clientIp(req);
+    return identity ? identity.key : ipKeyGenerator(rawClientIp(req), 64);
   },
   // Skip rate limiting entirely for authenticated admin sessions (cached)
   skip: async (req) => {
@@ -381,7 +380,7 @@ const emailAccountLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const email = (req.body && req.body.email) || '';
-    return `email-action:${email.toLowerCase().trim()}:${clientIp(req)}`;
+    return `email-action:${email.toLowerCase().trim()}:${ipKeyGenerator(rawClientIp(req), 64)}`;
   },
 });
 app.use('/api/v1/auth/forgot-password', emailActionLimiter, emailAccountLimiter);
@@ -449,7 +448,7 @@ const activationRedeemLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `activation-redeem:${clientIp(req)}`,
+  keyGenerator: (req) => `activation-redeem:${ipKeyGenerator(rawClientIp(req), 64)}`,
   message: { success: false, error: 'Too many activation attempts, please try again later', code: 'RATE_LIMITED' },
 });
 app.use('/api/v1/activation/redeem', activationRedeemLimiter);
