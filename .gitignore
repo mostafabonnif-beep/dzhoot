@@ -3,7 +3,7 @@
 .env.*
 !.env.example
 
-# Private credentials and signing material — keep only documented examples in Git
+# Private credentials and signing material - keep only documented examples in Git
 local.properties
 *.jks
 *.keystore
@@ -15,12 +15,16 @@ local.properties
 id_rsa
 id_ed25519
 /dzhoof-admin-key
+/creds.env
 
 # Dependencies and build outputs
 node_modules/
+**/node_modules/
 .gradle/
+**/.gradle/
 build/
 */build/
+**/build/
 server/frontend/.next/
 server/backend/.next/
 server/backend/dist/
@@ -41,17 +45,11 @@ coverage/
 # Firebase configuration for private app projects
 **/google-services.json
 
-# Local dependency and build folders
-**/node_modules/
-**/.gradle/
-**/build/
-
-# Upstream home-relay files — require explicit owner confirmation (audit item)
+# Upstream home-relay files - require explicit owner confirmation (audit item)
 /relay.py
 /upstream-relay-manage.sh
 
-# Local agent workspace files — NEVER commit (contain secrets)
-/creds.env
+# Local agent workspace files - NEVER commit (contain secrets)
 /neo-relay/
 /scripts/ssh-run.py
 /scripts/dzhoot-fix.js
@@ -59,27 +57,6 @@ coverage/
 /scripts/dzhoot-failover-data.js
 /scripts/dzhoot-activate.js
 /scripts/dzhoot-drill-alldown.js
-__pycache__/
-<<<<<<< HEAD
-# Local agent helper scripts
-/scripts/dzhoot-fix.js
-/scripts/dzhoot-verify.js
-/scripts/dzhoot-failover-data.js
-/scripts/dzhoot-activate.js
-/scripts/dzhoot-drill-alldown.js
-=======
->>>>>>> 2103af9 (chore: ignore local analysis helper scripts)
-/scripts/dzhoot-coverage.js
-/scripts/dzhoot-mibox-sample.js
-/scripts/dzhoot-orphans.js
-/scripts/dzhoot-sources.js
-<<<<<<< HEAD
-/creds.env
-/neo-relay/
-/scripts/ssh-run.py
-__pycache__/
-=======
->>>>>>> 2103af9 (chore: ignore local analysis helper scripts)
 /scripts/dzhoot-backup-channels.sh
 /scripts/dzhoot-cleanup.js
 /scripts/dzhoot-finalcheck.js
@@ -90,5 +67,6 @@ __pycache__/
 /scripts/dzhoot-coverage.js
 /scripts/dzhoot-fillmaps.js
 /scripts/dzhoot-live-token.js
-/scripts/dzhoof-diagnose.js
 /scripts/dzhoot-stabilize.js
+/scripts/dzhoof-diagnose.js
+__pycache__/
