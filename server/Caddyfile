@@ -1,26 +1,12 @@
-{
-    # Caddy's admin API (default localhost:2019) is not used by this stack;
-    # disabling it shrinks the local attack surface.
-    admin off
-}
-
 # MIRROR_DOMAIN (optional, env): a second public hostname served by the same
 # stack (ISP-block resilience). Empty by default — the header stays "{$DOMAIN}".
-# The literal space below is the site-address separator, so both a bare host and
-# the historical comma-prefixed value work (Caddy accepts spaces and commas):
-#   MIRROR_DOMAIN=mirror.example.com    ->  "{$DOMAIN} mirror.example.com"
-#   MIRROR_DOMAIN=, mirror.example.com  ->  "{$DOMAIN} , mirror.example.com"
-# NOTE: keep that space — without it a comma-free value would be concatenated
-# into one bogus hostname and break TLS/ACME.
-{$DOMAIN} {$MIRROR_DOMAIN} {
+# When set, use a LEADING COMMA (docker compose trims whitespace in env values):
+#   MIRROR_DOMAIN=, mirror.example.com   ->  "{$DOMAIN}, mirror.example.com".
+{$DOMAIN}{$MIRROR_DOMAIN} {
     encode gzip zstd
     tls {$ACME_EMAIL}
 
-    # File access log. NOTE: a fail2ban jail for this log (`dzhoof-http`) is NOT
-    # shipped in this repo — only scripts/security/secure-ssh-setup.sh defines
-    # the sshd jail. The operator must create /etc/fail2ban/jail.d/dzhoof-http.local
-    # on the host (e.g. 6x 401/403 in 60s -> 1h ban) for this to be watched.
-    # TODO: ship the jail definition under scripts/security/.
+    # File access log → watched by fail2ban (dzhoof-http jail: 401 floods).
     log {
         output file /data/access.log {
             roll_size 50MiB
