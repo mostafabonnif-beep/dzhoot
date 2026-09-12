@@ -290,15 +290,16 @@ function setCachedAdminSession(sessionId, isAdmin, expiresAt) {
   });
 }
 
-// Resolve a per-user rate-limit key from session or JWT, falling back to IP.
-// Keys are always anchored to the client IP so that an attacker cannot bypass
-// the rate limit by cycling fake session IDs or JWTs.
+// Resolve a per-user rate-limit key from a *verified* credential, otherwise
+// return null so the caller keys on the client IP alone (keyGenerator below).
+// The X-Session-ID header is client-supplied and is NOT validated against the
+// Session store on this hot path, so it must never contribute to the key: an
+// attacker could otherwise rotate the header to mint an unlimited number of
+// fresh buckets and bypass apiLimiter. Only the JWT branch is cryptographically
+// verified, so only it may scope the key. Session-authenticated callers are
+// keyed by IP; admin sessions remain exempt via the validated `skip` check on
+// apiLimiter below.
 function resolveRateLimitIdentity(req) {
-  const ip = clientIp(req);
-  // Session-based auth (frontend dashboard)
-  const sessionId = req.headers['x-session-id'];
-  if (sessionId) return { key: `sess:${sessionId}:${ip}`, sessionId };
-
   // JWT auth (TV app / API clients)
   const auth = req.headers.authorization || '';
   const [, token] = auth.split(' ');
@@ -307,7 +308,7 @@ function resolveRateLimitIdentity(req) {
       const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET, {
         algorithms: ['HS256'],
       });
-      if (payload.sub) return { key: `jwt:${payload.sub}:${ip}` };
+      if (payload.sub) return { key: `jwt:${payload.sub}:${clientIp(req)}` };
     } catch {
       // Invalid/expired token — fall through to IP-based limiting
     }
@@ -436,17 +437,19 @@ const pairingStatusLimiter = rateLimit({
 });
 app.use('/api/v1/tv/pairing/status', pairingStatusLimiter);
 
-// Strict activation-code redemption limiter: 5 attempts per 10 minutes per user/IP.
-// This protects hashed codes from online guessing without changing redemption semantics.
+// Strict activation-code redemption limiter: 5 attempts per 10 minutes per IP.
+// The user identity is not resolved yet at this point (resolveUser runs inside
+// the activation router), so req.user?.id was always undefined; and the
+// client-supplied X-Session-ID header must not be trusted for identity, since
+// keying on it let an attacker mint fresh buckets by rotating that header. Key
+// on the deterministic client IP instead. The authenticated per-account budget
+// (REDEEM_MAX_ATTEMPTS) is still enforced inside routes/activation.js.
 const activationRedeemLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => {
-    const userId = req.user?.id || req.headers['x-session-id'] || 'anonymous';
-    return `activation-redeem:${userId}:${clientIp(req)}`;
-  },
+  keyGenerator: (req) => `activation-redeem:${clientIp(req)}`,
   message: { success: false, error: 'Too many activation attempts, please try again later', code: 'RATE_LIMITED' },
 });
 app.use('/api/v1/activation/redeem', activationRedeemLimiter);

@@ -3,6 +3,8 @@ const router = express.Router();
 const axios = require('axios');
 const AppVersion = require('../models/AppVersion');
 const { CacheService } = require('../services/cache');
+// Shared demo-code guard (same strength rules + live-credential collision check).
+const { resolvePublicDemoCode } = require('./config');
 
 // GitHub APK update routes
 
@@ -317,11 +319,12 @@ router.get('/apk', async (req, res) => {
   }
 });
 
-router.get('/demo-code', (req, res) => {
-  // Only expose a code from the dedicated demo env var. Never fall back to a real
-  // Admin/super-admin account's channelListCode — that is a live credential and
-  // must not be handed out unauthenticated.
-  const code = process.env.DEMO_CHANNEL_LIST_CODE;
+router.get('/demo-code', async (req, res) => {
+  // Only expose a code from the dedicated demo env var, and only after the
+  // strength/placeholder guard and the live-credential collision check pass.
+  // Never fall back to a real Admin/super-admin account's channelListCode —
+  // that is a live credential and must not be handed out unauthenticated.
+  const code = await resolvePublicDemoCode(process.env.DEMO_CHANNEL_LIST_CODE);
   if (!code) {
     return res.status(404).json({ success: false, error: 'Demo code not configured' });
   }

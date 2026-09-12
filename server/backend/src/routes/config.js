@@ -1,12 +1,63 @@
 const express = require('express');
 const router = express.Router();
+const User = require('../models/User');
+
+// Shared guard for public demo/TV codes. Mirrors the DEMO_TV_CODE validation in
+// server.js (same minimum length and placeholder patterns) so both entry points
+// apply identical strength rules instead of drifting apart.
+const DEMO_CODE_MIN_LENGTH = 16;
+const DEMO_CODE_PLACEHOLDER_PREFIX = /^(demo|change[-_]?me|test|default)/i;
+const DEMO_CODE_PLACEHOLDER_SUBSTRINGS = ['example.com', 'your-', 'changeme', 'change-me', 'change_me'];
+
+function isSafePublicDemoCode(rawCode) {
+  const code = String(rawCode || '').trim();
+  if (!code) return false;
+  if (code.length < DEMO_CODE_MIN_LENGTH) return false;
+  if (DEMO_CODE_PLACEHOLDER_PREFIX.test(code)) return false;
+  const lower = code.toLowerCase();
+  if (DEMO_CODE_PLACEHOLDER_SUBSTRINGS.some((needle) => lower.includes(needle))) return false;
+  return true;
+}
+
+/**
+ * Returns a demo code that is safe to serve from an unauthenticated endpoint, or
+ * '' when none may be served. Beyond the format/placeholder guard it refuses any
+ * value that equals a real User.channelListCode (a live credential) — a
+ * placeholder-looking env var must never hand out a real account's code.
+ * The collision check is fail-closed: if it cannot run, the code is not served.
+ */
+async function resolvePublicDemoCode(rawCode) {
+  const code = String(rawCode || '').trim();
+  if (!isSafePublicDemoCode(code)) return '';
+  try {
+    const collision = await User.exists({ channelListCode: code.toUpperCase() });
+    if (collision) {
+      console.error(
+        '[demo-code] refusing to serve a public demo code that matches a real user channelListCode',
+      );
+      return '';
+    }
+  } catch (error) {
+    console.error(
+      '[demo-code] credential-collision check failed; refusing to serve the demo code:',
+      error?.message || error,
+    );
+    return '';
+  }
+  return code;
+}
+
 
 // Get public configuration defaults
 router.get('/defaults', async (req, res) => {
   try {
-    // Only expose a code from an explicit, dedicated demo/public env var.
-    // Never fall back to a real Admin account's channelListCode (a live credential).
-    const defaultTvCode = process.env.DEFAULT_TV_CODE || process.env.DEMO_CHANNEL_LIST_CODE || '';
+    // Only expose a code from an explicit, dedicated demo/public env var, and
+    // only after the strength/placeholder guard and the live-credential
+    // collision check pass. Never fall back to a real Admin account's
+    // channelListCode.
+    const configuredDemoCode =
+      process.env.DEFAULT_TV_CODE || process.env.DEMO_CHANNEL_LIST_CODE || '';
+    const defaultTvCode = await resolvePublicDemoCode(configuredDemoCode);
 
     const {
       mailConfigured,
@@ -75,3 +126,5 @@ router.get('/info', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.isSafePublicDemoCode = isSafePublicDemoCode;
+module.exports.resolvePublicDemoCode = resolvePublicDemoCode;

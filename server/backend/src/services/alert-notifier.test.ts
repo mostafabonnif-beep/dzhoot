@@ -4,6 +4,14 @@ import {
 } from './alert-notifier';
 import User from '../models/User';
 
+// The alert webhook now goes through the shared SSRF guard (the URL is
+// admin-writable). Tests use non-resolvable .test hostnames, so stub the guard
+// to report them as safe — the same pattern used by __tests__/xtream-sync.test.ts.
+jest.mock('../utils/ssrf-guard', () => ({
+  validateUrlForSSRF: jest.fn(async () => ({ safe: true, resolvedAddresses: ['198.51.100.10'] })),
+  createPinnedLookup: jest.fn(() => undefined),
+}));
+
 describe('operational alert notifier', () => {
   const originalWebhook = process.env.ALERT_WEBHOOK_URL;
   const originalCooldown = process.env.ALERT_WEBHOOK_COOLDOWN_MS;
