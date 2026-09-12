@@ -1,3 +1,9 @@
+{
+    # The admin API is not used by this container. Disable it so a future
+    # networking or port-publishing mistake cannot expose configuration control.
+    admin off
+}
+
 # MIRROR_DOMAIN (optional, env): a second public hostname served by the same
 # stack (ISP-block resilience). Empty by default — the header stays "{$DOMAIN}".
 # When set, use a LEADING COMMA (docker compose trims whitespace in env values):
