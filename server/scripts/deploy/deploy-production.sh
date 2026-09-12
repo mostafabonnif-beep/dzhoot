@@ -29,14 +29,22 @@ say() { printf '\033[1;34m[deploy]\033[0m %s\n' "$*"; }
 step() { printf '\033[1;36m[deploy] %s\033[0m\n' "$*"; }
 die() { printf '\033[1;31m[deploy][ABORT]\033[0m %s\n' "$*"; exit 1; }
 
+# redact <text>: mask credentials embedded in URIs (mongodb://user:pass@host,
+# redis://:pass@host, ...) so dry-run output can never leak the DB password to
+# the terminal or logs. Only the userinfo password is replaced.
+redact() {
+  printf '%s' "$1" | sed -E 's#([[:alnum:]][[:alnum:]+.-]*://[^:/@[:space:]]*:)[^@[:space:]]*@#\1***@#g'
+}
+
 # run <step-label> <command...>: executes the command ONLY in --apply mode;
-# in dry-run mode it prints what would run. This keeps dry-run truly read-only.
+# in dry-run mode it prints what would run (credentials redacted). This keeps
+# dry-run truly read-only and safe to paste into a ticket/chat.
 run() {
   local label="$1"; shift
   if [ "$APPLY" -eq 1 ]; then
     "$@"
   else
-    say "[dry-run] $label: $*"
+    say "[dry-run] $label: $(redact "$*")"
   fi
 }
 
@@ -96,6 +104,13 @@ run "tag frontend current" docker tag "dzhoof-frontend:${BUILD_TAG}" "dzhoof-fro
 
 step "3b/7  Point compose at :current (old refs recorded above for rollback)"
 if [ "$APPLY" -eq 1 ]; then
+  # Back up the env file (0600) before the in-place sed rewrites, so a bad edit
+  # can be recovered. Timestamped per deploy; only when the file exists.
+  if [ -f "$ENV_FILE" ]; then
+    ENV_BACKUP="${ENV_FILE}.bak-${STAMP}"
+    install -m 600 "$ENV_FILE" "$ENV_BACKUP"
+    say "ENV_FILE backup: $ENV_BACKUP"
+  fi
   sed -i "s|^DOCKER_IMAGE=.*|DOCKER_IMAGE=dzhoof-api:current|" "$ENV_FILE"
   sed -i "s|^DOCKER_FRONTEND_IMAGE=.*|DOCKER_FRONTEND_IMAGE=dzhoof-frontend:current|" "$ENV_FILE"
   say "ENV_FILE updated to dzhoof-api:current / dzhoof-frontend:current"

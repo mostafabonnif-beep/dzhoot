@@ -41,12 +41,18 @@ die() {
   # otherwise skip the rollback and leave production on a broken release
   # (seen 2026-08-30: API crash-looped with 'find requires authentication'
   # because the swapped-in repo compose dropped the mongo auth URI).
-  rollback
+  # Pass the real status explicitly: inside rollback() the first command is a
+  # printf, so `$?` would read 0 and rollback would exit 0 (success).
+  rollback 1
   exit 1
 }
 
+# rollback [status]
+#   Called by the ERR trap with no arguments ($? still holds the failing
+#   command's status), or explicitly by die() with the real status. It only
+#   exits on the trap path; on the die() path it returns so die() can exit 1.
 rollback() {
-  code=$?
+  code="${1:-$?}"
   if [ "$SWAPPED" -eq 1 ]; then
     say "deployment failed (exit ${code}); restoring source and running images"
     if [ -n "$API_IMAGE_ID" ]; then docker tag "$API_IMAGE_ID" dzhoof-api:current || true; fi
@@ -61,7 +67,12 @@ rollback() {
       docker compose -f docker-compose.production.yml --env-file "$ENV_FILE" up -d --no-deps api frontend scheduler || true
     fi
   fi
-  exit "$code"
+  # Only the ERR-trap path exits here; die() owns the exit status (1) when it
+  # calls rollback explicitly, so a failed deploy can never report success.
+  if [ "$#" -eq 0 ]; then
+    exit "$code"
+  fi
+  return 0
 }
 trap rollback ERR
 
