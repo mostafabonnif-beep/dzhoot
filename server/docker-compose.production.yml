@@ -171,8 +171,18 @@ services:
     image: mongo:8.0.29
     container_name: dzhoof-mongodb
     restart: unless-stopped
-    # Authentication required — credentials provisioned at first boot
-    # (MONGO_INITDB_* in .env) and consumed through MONGODB_URI.
+    # Authentication is REQUIRED: mongod runs with --auth, so a FRESH volume must
+    # be provisioned with a root user at first boot — otherwise no users exist
+    # and the API cannot connect. Values come from .env.production (documented in
+    # .env.production.example) and the API consumes them through MONGODB_URI
+    # (authSource=admin). On an already-initialised volume these are inert: the
+    # official image only creates users when /data/db is empty, so the currently
+    # running production stack (which also sets these via its operator override
+    # in /etc/dzhoot/) is unaffected.
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE}
     command: ["mongod", "--auth"]
     deploy:
       resources:

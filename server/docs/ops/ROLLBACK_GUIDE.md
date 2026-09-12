@@ -19,8 +19,13 @@
 # 1) سجّل الإصدار الحالي قبل أي شيء
 docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}'
 
-# 2) (كوارث فقط) استرجاع قاعدة البيانات من أحدث نسخة موثقة
-docker exec -i dzhoof-mongodb mongorestore --uri=mongodb://127.0.0.1:27017/dzhoof-iptv \
+# 2) (كوارث فقط) استرجاع قاعدة البيانات من أحدث نسخة موثقة.
+#    قاعدة الإنتاج تعمل بمصادقة (mongod --auth) مع authSource=admin، لذا تمرير
+#    بيانات الدخول إلزامي وإلا فشلت الاستعادة. تُقرأ كلمة المرور وقت التنفيذ من
+#    ملف 0600 على الخادم (/etc/dzhoot/mongo-admin-password) ولا تُدخل يدويًا في
+#    سطر الأوامر — نفس نهج scripts/backup/restore-drill-docker.sh.
+docker exec -i dzhoof-mongodb mongorestore \
+  --uri="mongodb://dzhoof-admin:$(tr -d '\r\n' < /etc/dzhoot/mongo-admin-password)@127.0.0.1:27017/dzhoof-iptv?authSource=admin" \
   --gzip --archive < /var/backups/dzhoot/mongodb/<STAMP>/dzhoof-iptv.archive.gz
 
 # 3) التراجع عن الصور — أعِد تسمية الصور العاملة القديمة

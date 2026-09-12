@@ -1,24 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 
+    <!--
         Network security configuration for DZ HOOF IPTV.
-        Enforces HTTPS-only connections for all network traffic.
-        
-        Requirements: TR-012 (Network Security - HTTPS only)
+
+        Managed DZ HOOF API traffic is HTTPS-only: app/build.gradle.kts rejects a
+        non-HTTPS DZHOOF_API_URL at build time.
+
+        Cleartext HTTP is deliberately still permitted in release builds because
+        bring-your-own IPTV sources (M3U/Xtream panels) and direct-playback upstream
+        redirects commonly resolve to http://host:80, and those hosts are arbitrary
+        and cannot be enumerated in a domain-config.
+
+        There is NO certificate pinning: the managed server uses Let's Encrypt with
+        a ~90-day leaf, so pinning was deliberately removed (see PinnedHttpClient.kt
+        and NetworkModule.kt). Standard system-CA TLS validation applies to HTTPS.
+
+        Requirements: TR-012 (Network Security)
     -->
-    
+
     <!-- Base configuration for all domains.
-         Cleartext is permitted because bring-your-own IPTV sources (M3U/Xtream panels)
-         very commonly serve over http://. The managed DZ HOOF server is still
-         reached over HTTPS with certificate pinning (enforced in OkHttp), so this does
-         not weaken the managed path. -->
+         Cleartext is permitted because BYO IPTV sources (M3U/Xtream) and direct
+         upstream playback redirects frequently land on http://host:80 and cannot be
+         enumerated up front. The managed DZ HOOF API is still reached over HTTPS
+         (enforced at build time); no certificate pinning is used. -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <!-- Trust system certificate authorities -->
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-    
+
     <!-- Debug configuration (only active in debug builds) -->
     <debug-overrides>
         <trust-anchors>

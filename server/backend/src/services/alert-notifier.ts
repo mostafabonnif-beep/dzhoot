@@ -1,4 +1,5 @@
 import { redactSensitiveText } from './audit-log';
+import { validateUrlForSSRF } from '../utils/ssrf-guard';
 
 const DEFAULT_COOLDOWN_MS = 15 * 60 * 1000;
 const lastSentAt = new Map<string, number>();
@@ -134,34 +135,45 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
       console.error('[alert] ALERT_WEBHOOK_URL is invalid — skipping webhook channel');
       webhookUrl = '';
     } else {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      try {
-        const response = await fetch(parsed, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            ...payload,
-            message: safeMessage,
-            details: payload.details
-              ? Object.fromEntries(
-                  Object.entries(payload.details).map(([key, value]) => [
-                    key,
-                    typeof value === 'string' ? redactSensitiveText(value) : value,
-                  ]),
-                )
-              : undefined,
-            sentAt: new Date(now).toISOString(),
-            service: 'dzhoot-backend',
-          }),
-          signal: controller.signal,
-        });
-        if (response.ok) delivered = true;
-        else console.error(`[alert] webhook returned HTTP ${response.status}`);
-      } catch (error: any) {
-        console.error(`[alert] webhook delivery failed: ${redactSensitiveText(error?.message || error)}`);
-      } finally {
-        clearTimeout(timeout);
+      // The webhook URL is admin-writable (AppSetting) and therefore untrusted:
+      // refuse loopback/link-local/private targets before any outbound request,
+      // using the same SSRF guard as every other outbound fetch in this repo.
+      const ssrfCheck = await validateUrlForSSRF(parsed.toString());
+      if (!ssrfCheck.safe) {
+        console.error(
+          `[alert] ALERT_WEBHOOK_URL rejected by SSRF guard: ${ssrfCheck.reason || 'unsafe URL'}`,
+        );
+        webhookUrl = '';
+      } else {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+        try {
+          const response = await fetch(parsed, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              ...payload,
+              message: safeMessage,
+              details: payload.details
+                ? Object.fromEntries(
+                    Object.entries(payload.details).map(([key, value]) => [
+                      key,
+                      typeof value === 'string' ? redactSensitiveText(value) : value,
+                    ]),
+                  )
+                : undefined,
+              sentAt: new Date(now).toISOString(),
+              service: 'dzhoot-backend',
+            }),
+            signal: controller.signal,
+          });
+          if (response.ok) delivered = true;
+          else console.error(`[alert] webhook returned HTTP ${response.status}`);
+        } catch (error: any) {
+          console.error(`[alert] webhook delivery failed: ${redactSensitiveText(error?.message || error)}`);
+        } finally {
+          clearTimeout(timeout);
+        }
       }
     }
   }

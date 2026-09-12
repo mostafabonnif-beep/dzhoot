@@ -246,7 +246,7 @@ class ChannelThumbnailExtractor @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "HLS manifest fetch error for $url: ${e.message}")
+            Log.w(TAG, "HLS manifest fetch error for ${redactUrl(url)}: ${e.message}")
             null
         }
     }
