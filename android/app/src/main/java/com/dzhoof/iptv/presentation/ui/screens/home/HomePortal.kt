@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,10 +34,14 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
+import com.dzhoof.iptv.presentation.ui.theme.Atlas900
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
+import com.dzhoof.iptv.presentation.ui.theme.DzGold300
+import com.dzhoof.iptv.presentation.ui.theme.DzGold500
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
@@ -46,7 +51,7 @@ import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
  * @param key stable id used by the click handler to route the navigation.
  * @param label Arabic tile title.
  * @param subtitle short supporting line (kept to one line by design).
- * @param icon large glyph shown at the tile's end.
+ * @param icon large glyph shown at the tile's center.
  * @param accent per-tile wash colour (brand palette only).
  */
 data class PortalTile(
@@ -58,11 +63,11 @@ data class PortalTile(
 )
 
 /**
- * The home "portal": a single row of large, branded tiles that give the
- * screen an immediate, couch-readable identity — the five things a viewer
- * actually wants (live, movies, series, favourites, guide) instead of a wall
- * of rows. Tiles reuse the app-wide focus language ([tvFocusVisuals] + the
- * gold [FocusBorder] ring) so the portal never introduces a new cue.
+ * The home "portal", styled after the NEO 4K launcher: a single large
+ * hero tile for live TV on the left, a compact 2-column grid of the
+ * remaining destinations beside it, all in the same gold-on-black brand
+ * wash. Every destination is visible in one glance and reachable within
+ * a few D-pad presses.
  */
 @Composable
 fun HomePortalTiles(
@@ -92,34 +97,45 @@ fun HomePortalTiles(
             }
         }
     } else {
-        // TV: a two-column portal grid — the viewer sees every destination at
-        // once, the way a set-top box home screen is read from the couch, and
-        // the tiles grow to fill the width instead of leaving dead space.
+        // TV: NEO 4K hero layout — the first tile (live TV) spans the full
+        // portal height on the left, the remaining tiles sit in a two-column
+        // grid on the right with identical widths so the row closes flush.
         BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-            val columns = PORTAL_GRID_COLUMNS
-            val tileWidth = (
-                (maxWidth - horizontalPadding * 2 - Dimens.PortalTileGap * (columns - 1)) / columns
-                ).coerceAtLeast(Dimens.PortalTileWidthMobile)
+            val innerWidth = maxWidth - horizontalPadding * 2
+            val heroWidth = ((innerWidth - Dimens.PortalTileGap * 2) / 3f)
+                .coerceAtLeast(Dimens.PortalTileWidthMobile)
+            val smallHeight = Dimens.PortalTileHeightTv
+            val heroHeight = smallHeight * 2 + Dimens.PortalTileGap
 
-            Column(
-                modifier = Modifier.padding(bottom = Dimens.PortalTileGap),
-                verticalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap),
+                modifier = Modifier
+                    .padding(horizontal = horizontalPadding)
+                    .padding(bottom = Dimens.PortalTileGap)
             ) {
-                tiles.chunked(columns).forEach { rowTiles ->
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap),
-                        modifier = Modifier.padding(horizontal = horizontalPadding)
-                    ) {
-                        rowTiles.forEach { tile ->
-                            PortalTileCard(
-                                tile = tile,
-                                width = tileWidth,
-                                // Taller than the phone tile: with a half-screen
-                                // width the 3:2-ish portal tile reads as a poster.
-                                height = Dimens.PortalTileHeightTv,
-                                iconSize = Dimens.PortalIconSizeTv,
-                                onClick = { onTileClick(tile.key) }
-                            )
+                PortalTileCard(
+                    tile = tiles.first(),
+                    width = heroWidth,
+                    height = heroHeight,
+                    iconSize = Dimens.PortalIconSizeTv * 1.6f,
+                    isHero = true,
+                    onClick = { onTileClick(tiles.first().key) }
+                )
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap)
+                ) {
+                    tiles.drop(1).chunked(PORTAL_GRID_COLUMNS).forEach { rowTiles ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap)) {
+                            rowTiles.forEach { tile ->
+                                PortalTileCard(
+                                    tile = tile,
+                                    width = heroWidth,
+                                    height = smallHeight,
+                                    iconSize = Dimens.PortalIconSizeTv,
+                                    onClick = { onTileClick(tile.key) }
+                                )
+                            }
                         }
                     }
                 }
@@ -128,7 +144,7 @@ fun HomePortalTiles(
     }
 }
 
-/** Two tiles per row on TV — the portal grid, not a carousel. */
+/** Two tiles per row beside the NEO hero tile. */
 private const val PORTAL_GRID_COLUMNS = 2
 
 @Composable
@@ -137,7 +153,8 @@ private fun PortalTileCard(
     width: Dp,
     height: Dp,
     iconSize: Dp,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    isHero: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -150,18 +167,19 @@ private fun PortalTileCard(
             .onFocusChanged { isFocused = it.isFocused },
         shape = MaterialTheme.shapes.large,
         border = if (isFocused) BorderStroke(2.dp, FocusBorder) else BorderStroke(1.dp, subtleBorder),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = Atlas900)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Accent wash — gives every tile a distinct but on-brand identity.
+            // Gold wash — the NEO 4K launcher reads as one uniform gold-on-black
+            // surface, so every tile shares the same brand gradient.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        Brush.linearGradient(
+                        Brush.verticalGradient(
                             colors = listOf(
-                                tile.accent.copy(alpha = 0.55f),
-                                tile.accent.copy(alpha = 0.10f)
+                                DzGold500.copy(alpha = if (isHero) 0.34f else 0.26f),
+                                DzGold500.copy(alpha = 0.06f)
                             )
                         )
                     )
@@ -170,33 +188,27 @@ private fun PortalTileCard(
             Icon(
                 imageVector = tile.icon,
                 contentDescription = null,
-                tint = Color.White.copy(alpha = 0.95f),
+                tint = if (isFocused) DzGold300 else DzGold300.copy(alpha = 0.92f),
                 modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = Dimens.Space4)
+                    .align(Alignment.Center)
+                    .offset(y = (-height * 0.10f))
                     .size(iconSize)
             )
 
             Column(
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(Dimens.Space4)
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = Dimens.Space3, start = Dimens.Space2, end = Dimens.Space2),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
                     text = tile.label,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = if (isHero) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
+                    textAlign = TextAlign.Center,
                     maxLines = 1
                 )
-                tile.subtitle?.let { subtitle ->
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White.copy(alpha = 0.78f),
-                        maxLines = 1
-                    )
-                }
             }
         }
     }
