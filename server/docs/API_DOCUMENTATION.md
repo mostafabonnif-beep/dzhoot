@@ -1770,7 +1770,68 @@ Mutable: `releaseNotes`, `isActive`, `isMandatory`, `minCompatibleVersion`,
 let a device install bytes that no longer match the reviewed release — publish a new
 `versionCode` instead. Attempting it returns `400`.
 
-### 7. Provenance migration
+### 7. Admin: Diagnostics
+
+**GET** `/admin/diagnostics` — Admin session required. One ordered list of checks with
+the evidence behind each verdict, so an operator can tell "the app cannot update" from
+"the API is down" without reading logs. Never cached (`Cache-Control: no-store`).
+
+It reports booleans, counts, latencies and host names only — never a token, a connection
+string or a credential, including in failure messages (which carry the error *name*, since
+a driver message can embed the URI).
+
+```json
+{
+  "generatedAt": "2026-09-13T23:40:11.204Z",
+  "overall": "pass",
+  "server": {
+    "version": "1.4.2",
+    "commit": "d34db33f…",
+    "builtAt": "2026-09-13T10:00:00Z",
+    "environment": "production",
+    "uptimeSeconds": 18422,
+    "nodeVersion": "v20.11.0"
+  },
+  "release": {
+    "versionName": "1.4.2",
+    "versionCode": 10402,
+    "releaseChannel": "stable",
+    "distribution": "external_apk",
+    "sha256Preview": "f0494df3f964…",
+    "downloadUrlHost": "github.com",
+    "publishedAt": "2026-09-13T09:58:02.114Z"
+  },
+  "checks": [
+    { "id": "build_identity", "title": "هوية البناء", "status": "pass",
+      "detail": "الإصدار 1.4.2 مبني من d34db33f." },
+    { "id": "release_download_url", "title": "رابط التحميل", "status": "pass",
+      "detail": "github.com — HTTPS ومضيفه مسموح." }
+  ]
+}
+```
+
+Each check is `pass`, `warn` or `fail`, and `overall` is the worst verdict present.
+`warn` marks something that degrades the system or is expected on a non-production host
+(Redis down, scheduler disabled, missing `RELEASE_COMMIT`); `fail` marks something that
+breaks updates or storage right now. The checks are:
+
+| id | fails when |
+|---|---|
+| `build_identity` | `APP_VERSION` is unset/`0.0.0` (warns when `RELEASE_COMMIT` is missing) |
+| `environment` | never — warns when `NODE_ENV` is not `production` |
+| `mongodb` | the connection is down or the ping fails |
+| `redis` | never — warns when Redis is absent, since the app runs without it |
+| `release_published` | no active `AppVersion` exists (every device sees "no update") |
+| `release_artifact_complete` | the newest active row lacks `sha256`, `apkFileName`, a positive `apkFileSize` or `downloadUrl` |
+| `release_download_url` | the URL is not HTTPS, or its host is outside the allowlist — the update route discards such a URL, silently disabling updates |
+| `release_version_code` | warns when `versionCode` disagrees with the `major*10000+minor*100+patch` derivation of `versionName`, which clients reject |
+| `update_allowlist` | never — warns when neither `APP_UPDATE_ALLOWED_HOSTS` nor `PUBLIC_BASE_URL` is set |
+| `scheduler` | a task's last run failed (warns when the scheduler is disabled) |
+
+The release checks inspect exactly the row the update route serves — the newest `isActive`
+`AppVersion` by `versionCode` — so the page reports what a device would actually receive.
+
+### 8. Provenance migration
 
 Rows created before the provenance fields existed are backfilled by
 `server/backend/src/scripts/migrations/0016-app-version-provenance.ts`:
