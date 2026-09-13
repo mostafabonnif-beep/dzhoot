@@ -8,6 +8,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const { randomUUID } = require('crypto');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const { redactSensitiveText } = require('./services/audit-log');
 const { observeHttpRequest, isAuthorizedMetricsRequest, renderMetrics, registry } = require('./services/metrics');
@@ -143,12 +144,9 @@ if (process.env.NODE_ENV === 'production') {
 const TRUST_CF_CONNECTING_IP = process.env.TRUST_CF_CONNECTING_IP === 'true';
 
 function normalizeIp(ip) {
-  if (!ip) return ip;
-  const v = ip.startsWith('::ffff:') ? ip.slice(7) : ip; // unwrap IPv4-mapped IPv6
-  if (v.includes(':')) {
-    return v.split(':').slice(0, 4).join(':') + '::/64'; // key on the /64 network
-  }
-  return v;
+  if (!ip) return 'unknown';
+  const v = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+  return ipKeyGenerator(v, 64);
 }
 
 function clientIp(req) {
@@ -157,6 +155,10 @@ function clientIp(req) {
     if (cf) return normalizeIp(String(cf).split(',')[0].trim());
   }
   return normalizeIp(req.ip);
+}
+
+function rateLimitIp(req) {
+  return ipKeyGenerator(clientIp(req), 64);
 }
 
 // Middleware
@@ -356,7 +358,7 @@ const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
 });
 app.use('/api/v1/auth/login', authLimiter);
 app.use('/api/v1/auth/register', authLimiter);
@@ -371,7 +373,7 @@ const emailActionLimiter = rateLimit({
   max: 3,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
 });
 // Per-account limit: key by email in request body (prevents abuse of a single account)
 const emailAccountLimiter = rateLimit({
@@ -381,7 +383,7 @@ const emailAccountLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const email = (req.body && req.body.email) || '';
-    return `email-action:${email.toLowerCase().trim()}:${clientIp(req)}`;
+    return `email-action:${email.toLowerCase().trim()}:${rateLimitIp(req)}`;
   },
 });
 app.use('/api/v1/auth/forgot-password', emailActionLimiter, emailAccountLimiter);
@@ -393,7 +395,7 @@ const oauthLimiter = rateLimit({
   max: 15,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
 });
 app.use('/api/v1/oauth/google/start', oauthLimiter);
 app.use('/api/v1/oauth/github/start', oauthLimiter);
@@ -406,7 +408,7 @@ const tvCodeReadLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
   message: { success: false, error: 'Too many TV code requests, please slow down' },
 });
 app.use('/api/v1/tv/playlist', tvCodeReadLimiter);
@@ -418,7 +420,7 @@ const pairingLimiter = rateLimit({
   max: 10, // 10 attempts per 5 minutes per IP
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
   message: { success: false, error: 'Too many pairing attempts, please try again later' },
 });
 app.use('/api/v1/tv/pairing/confirm', pairingLimiter);
@@ -432,7 +434,7 @@ const pairingStatusLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
   message: { success: false, error: 'Too many status requests, please slow down' },
 });
 app.use('/api/v1/tv/pairing/status', pairingStatusLimiter);
@@ -449,7 +451,7 @@ const activationRedeemLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `activation-redeem:${clientIp(req)}`,
+  keyGenerator: (req) => `activation-redeem:${rateLimitIp(req)}`,
   message: { success: false, error: 'Too many activation attempts, please try again later', code: 'RATE_LIMITED' },
 });
 app.use('/api/v1/activation/redeem', activationRedeemLimiter);
@@ -461,7 +463,7 @@ const paymentCheckoutLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
   message: { success: false, error: 'Too many checkout attempts, please try again later', code: 'RATE_LIMITED' },
 });
 app.use('/api/v1/payments/chargily/checkout', paymentCheckoutLimiter);
