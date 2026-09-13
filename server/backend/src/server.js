@@ -612,9 +612,35 @@ async function collectHealthDetails() {
   return details;
 }
 
+// Non-sensitive build identity, shared by /health and /health/version so the two
+// endpoints can never report a different version or commit.
+function buildVersionMetadata() {
+  return {
+    version: process.env.APP_VERSION || '0.0.0',
+    commit: process.env.RELEASE_COMMIT || null,
+    builtAt: process.env.RELEASE_BUILT_AT || null,
+  };
+}
+
 // Liveness never depends on MongoDB or Redis and is suitable for process probes.
 app.get('/health/live', (req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime(), requestId: req.requestId });
+});
+
+// Version metadata only: no status probing, no connection strings, no internal
+// hostnames, no secrets. Mirrors the build identity in /health so a deploy can be
+// matched against the Git tag / Docker image / GitHub Release.
+app.get('/health/version', (req, res) => {
+  const build = buildVersionMetadata();
+  res.status(200).json({
+    status: 'ok',
+    service: 'dzhoof-api',
+    version: build.version,
+    commit: build.commit,
+    builtAt: build.builtAt,
+    environment: process.env.NODE_ENV || 'development',
+    requestId: req.requestId,
+  });
 });
 
 // Readiness requires MongoDB; Redis is optional for this application.
@@ -634,12 +660,13 @@ app.get('/health/ready', (req, res) => {
 // enough to confirm the service is alive and which build is running.
 app.get('/health', async (req, res) => {
   const healthy = mongoose.connection.readyState === 1;
+  const build = buildVersionMetadata();
   const response = {
     status: healthy ? 'ok' : 'degraded',
-    version: process.env.APP_VERSION || '0.0.0',
+    version: build.version,
     release: {
-      commit: process.env.RELEASE_COMMIT || null,
-      builtAt: process.env.RELEASE_BUILT_AT || null,
+      commit: build.commit,
+      builtAt: build.builtAt,
     },
     requestId: req.requestId,
   };
