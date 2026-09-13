@@ -507,6 +507,7 @@ app.use('/api/v1/streams', require('./routes/streams'));
 app.use('/api/v1/home', require('./routes/home'));
 app.use('/api/v1/discover', require('./routes/discover'));
 app.use('/api/v1/shop', require('./routes/public-shop'));
+app.use('/api/v1/ads', require('./routes/ads'));
 app.use('/api/v1/payments', require('./routes/payments'));
 app.use('/api/v1/admin/notifications', require('./routes/admin-notifications'));
 app.use('/api/v1/admin/app-settings', require('./routes/admin-app-settings'));

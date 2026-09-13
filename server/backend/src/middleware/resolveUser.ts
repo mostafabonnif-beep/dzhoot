@@ -9,7 +9,16 @@ import cookieAuth = require('../utils/cookie-auth');
 
 type ResolvedAuthUser = Pick<
   IUserDocument,
-  'username' | 'email' | 'role' | 'channels' | 'channelListCode' | 'isActive' | 'emailVerified' | 'allCatalog'
+  | 'username'
+  | 'email'
+  | 'role'
+  | 'channels'
+  | 'channelListCode'
+  | 'isActive'
+  | 'emailVerified'
+  | 'allCatalog'
+  | 'accessGroups'
+  | 'freeAccess'
 > & { _id: Types.ObjectId };
 
 type PopulatedSession = HydratedDocument<ISessionDocument> & {
@@ -53,7 +62,7 @@ async function resolveUser(req: Request, res: Response, next: NextFunction) {
         isActive: true,
         codeRevokedAt: null,
       }).select(
-        'username email role channels channelListCode isActive emailVerified allCatalog',
+        'username email role channels channelListCode isActive emailVerified allCatalog accessGroups freeAccess',
       )) as ResolvedAuthUser | null;
     }
 
@@ -75,6 +84,8 @@ async function resolveUser(req: Request, res: Response, next: NextFunction) {
       emailVerified: user.emailVerified,
       allCatalog: user.allCatalog === true,
       channels: user.channels || [],
+      accessGroups: user.accessGroups || [],
+      freeAccess: user.freeAccess === true,
     };
     req.userId = String(user._id);
 
@@ -92,8 +103,64 @@ async function optionalAuth(req: Request, res: Response, next: NextFunction) {
   // Session via header (API clients) or httpOnly cookie (web browsers).
   const sessionId = cookieAuth.getSessionId(req);
   const auth = req.headers.authorization || '';
+  const tvCode = String(req.headers['x-tv-code'] || '').trim();
   req.user = undefined;
   req.userId = undefined;
+
+  // TV-code clients (customer web player, Android TV) — optional and never a
+  // hard failure: an unknown code simply stays anonymous. Needed by endpoints
+  // that must tell a free code from a paying one (e.g. the ads decision).
+  if (!sessionId && !auth.startsWith('Bearer ') && tvCode) {
+    try {
+      const demoTvCode = String(process.env.DEMO_TV_CODE || '').trim();
+      if (demoTvCode && tvCode.toUpperCase() === demoTvCode.toUpperCase()) {
+        req.user = {
+          id: 'demo',
+          username: 'demo',
+          email: '',
+          role: 'Demo',
+          channels: [],
+          channelListCode: demoTvCode.toUpperCase(),
+          isActive: true,
+          emailVerified: true,
+          allCatalog: false,
+          demo: true,
+          freeAccess: true,
+          accessGroups: [],
+        };
+        return next();
+      }
+      const user = (await User.findOne({
+        channelListCode: tvCode.toUpperCase(),
+        isActive: true,
+        codeRevokedAt: null,
+      })
+        .select(
+          'username email role channels channelListCode isActive emailVerified allCatalog accessGroups freeAccess',
+        )
+        .lean()) as ResolvedAuthUser | null;
+      if (user) {
+        req.user = {
+          id: String(user._id),
+          username: user.username,
+          email: user.email,
+          role: user.role,
+          channels: user.channels || [],
+          channelListCode: user.channelListCode,
+          isActive: user.isActive,
+          emailVerified: user.emailVerified ?? false,
+          allCatalog: user.allCatalog === true,
+          accessGroups: user.accessGroups || [],
+          freeAccess: user.freeAccess === true,
+        };
+        req.userId = String(user._id);
+      }
+    } catch {
+      // Fall through anonymously — a stale code must never break a public page.
+    }
+    return next();
+  }
+
   if (!sessionId && !auth.startsWith('Bearer ')) return next();
 
   try {

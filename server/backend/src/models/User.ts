@@ -74,6 +74,20 @@ const userSchema = new Schema<IUserDocument>(
       type: Boolean,
       default: false,
     },
+    /**
+     * Channel groups this code may watch. Empty = no group restriction.
+     * Paid codes get this from the plan on redemption; the shared free code is
+     * scoped by the operator (`free_access` setting) or set per user here.
+     */
+    accessGroups: {
+      type: [String],
+      default: [],
+    },
+    /** Marks the shared ad-supported free-tier account. */
+    freeAccess: {
+      type: Boolean,
+      default: false,
+    },
     lastLogin: {
       type: Date,
     },
@@ -238,14 +252,19 @@ userSchema.methods.generateUserPlaylist = async function (
 
   let channels;
   const dedup = this.role !== 'Admin' ? await publicCatalogDedupQuery() : {};
+  // Freemium group scope: a code limited to a set of channel groups gets an M3U
+  // containing only those groups (the JSON playlist applies the same rule).
+  const { groupScopeClause } = require('../services/channel-scope');
+  const scopeClause = await groupScopeClause(this);
+  const scopeAnd = scopeClause ? [scopeClause] : [];
   if (this.role === 'Admin' || this.allCatalog === true) {
     // Admin and trial users with allCatalog receive the shared catalog only.
     channels = await ChannelModel.find({
-      $and: [{ ownerId: null, isActive: { $ne: false } }, publicCatalogPresentationQuery(), publicCatalogHideQuery(), xtreamVisibilityGuard, dedup],
+      $and: [{ ownerId: null, isActive: { $ne: false } }, publicCatalogPresentationQuery(), publicCatalogHideQuery(), xtreamVisibilityGuard, dedup, ...scopeAnd],
     }).sort({ channelGroup: 1, order: 1 });
   } else {
     channels = await ChannelModel.find({
-      $and: [{ _id: { $in: this.channels } }, xtreamVisibilityGuard, dedup],
+      $and: [{ _id: { $in: this.channels } }, xtreamVisibilityGuard, dedup, ...scopeAnd],
     }).sort({ channelGroup: 1, order: 1 });
   }
   // Apply the operator's ordering (region priority → category priority →

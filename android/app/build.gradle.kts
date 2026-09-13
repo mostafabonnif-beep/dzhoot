@@ -68,6 +68,22 @@ android {
         // google-services.json is intentionally supplied only by CI/release.
         buildConfigField("String", "API_BASE_URL", "\"$configuredApiUrl\"")
         buildConfigField("Boolean", "FIREBASE_ENABLED", googleServicesAvailable.toString())
+        // AdMob: the APPLICATION_ID must live in the manifest at build time, so
+        // the operator's app id ships as a gradle-property default (same pattern
+        // as dzhoofApiUrl) and can be overridden per build:
+        //   ./gradlew ... -PadmobAppId=ca-app-pub-XXXX~YYYY
+        // Unit ids are supplied by the server (ads.android.*) at runtime; the
+        // banner default below is only a fallback for a fresh install.
+        val configuredAdmobAppId = providers.gradleProperty("admobAppId")
+            .orElse(providers.environmentVariable("ADMOB_APP_ID"))
+            .orNull?.trim()?.takeIf { it.isNotBlank() }
+            ?: "ca-app-pub-9770740237819457~2425516571"
+        val configuredBannerUnit = providers.gradleProperty("admobBannerUnitId")
+            .orElse(providers.environmentVariable("ADMOB_BANNER_UNIT_ID"))
+            .orNull?.trim()?.takeIf { it.isNotBlank() }
+            ?: "ca-app-pub-9770740237819457/1112434909"
+        manifestPlaceholders["admobAppId"] = configuredAdmobAppId
+        buildConfigField("String", "ADMOB_BANNER_UNIT_ID", "\"$configuredBannerUnit\"")
         manifestPlaceholders["sentryDsn"] = System.getenv("SENTRY_DSN") ?: ""
         manifestPlaceholders["sentryEnvironment"] = "debug"
     }
@@ -217,6 +233,9 @@ dependencies {
     // Retrofit & OkHttp
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
+
+    // AdMob (free-tier ads; runtime-gated, no-op without Play services)
+    implementation(libs.play.services.ads)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging.interceptor)
 

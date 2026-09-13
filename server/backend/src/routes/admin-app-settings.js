@@ -5,6 +5,9 @@ const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx } = require('../services/audit-log');
 const { sendOperationalAlert } = require('../services/alert-notifier');
 const { sendEmail } = require('../services/email');
+const { normalizeAdsConfig, validateAdsConfig } = require('../services/ads-policy');
+const { normalizeGroupList, clearScopeCache } = require('../services/channel-scope');
+const { clearAdsCache } = require('../services/ads-policy');
 
 // Admin-only runtime settings (key/value): /api/v1/admin/app-settings
 router.use(requireAuth);
@@ -21,6 +24,9 @@ const KNOWN_KEYS = new Set([
   'brevo_user',
   'brevo_password',
   'mail_from',
+  // Freemium
+  'ads',
+  'free_access',
 ]);
 
 function normalizeHttpUrl(value) {
@@ -42,6 +48,14 @@ function isValidEmail(value) {
 }
 
 function validateSettingValue(key, value) {
+  if (key === 'ads') {
+    const errors = validateAdsConfig(value);
+    return errors.length ? errors.join(' — ') : null;
+  }
+  if (key === 'free_access') {
+    if (value !== null && typeof value !== 'object') return 'free_access must be an object';
+    return null;
+  }
   if (key === 'alert_webhook_url') {
     const raw = String(value || '').trim();
     if (raw && !normalizeHttpUrl(raw)) return 'Invalid webhook URL';
@@ -53,6 +67,15 @@ function validateSettingValue(key, value) {
 }
 
 function sanitize(key, value) {
+  if (key === 'ads') return normalizeAdsConfig(value);
+  if (key === 'free_access') {
+    const raw = value && typeof value === 'object' ? value : {};
+    return {
+      enabled: raw.enabled === true,
+      channelGroups: normalizeGroupList(raw.channelGroups),
+      showAds: raw.showAds !== false,
+    };
+  }
   if (key === 'subscription_required') return !!value;
   if (key === 'code_expiry_days') {
     const n = Number(value);
@@ -131,6 +154,13 @@ router.put('/', async (req, res) => {
     if ('alert_telegram_bot_token' in saved) {
       saved.alert_telegram_configured = Boolean(String(saved.alert_telegram_bot_token || '').trim());
       delete saved.alert_telegram_bot_token;
+    }
+
+    // Freemium settings are cached briefly on the hot paths — drop both caches
+    // so the operator's change takes effect on the next request.
+    if ('ads' in saved || 'free_access' in saved) {
+      clearAdsCache();
+      clearScopeCache();
     }
 
     audit({ ...reqCtx(req), action: 'APP_SETTINGS_UPDATE', resource: 'AppSetting', changes: { after: saved } });

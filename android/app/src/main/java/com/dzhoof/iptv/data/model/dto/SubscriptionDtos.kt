@@ -28,6 +28,30 @@ data class SubscriptionPlanDto(
     @SerializedName("maxDevices") val maxDevices: Int? = null,
 )
 
+/**
+ * Ad configuration for this account (freemium).
+ *
+ * `show` is the server's decision — paying subscribers always receive false, so
+ * the client never requests an ad for them. Android unit ids come from the
+ * admin panel; `interstitialEveryMinutes` / `frequencyCapPerSession` bound how
+ * often a free viewer is interrupted.
+ */
+data class AdsConfigDto(
+    @SerializedName("show") val show: Boolean = false,
+    @SerializedName("enabled") val enabled: Boolean = false,
+    @SerializedName("android") val android: AdsAndroidConfigDto? = null,
+    @SerializedName("interstitialEveryMinutes") val interstitialEveryMinutes: Int = 0,
+    @SerializedName("frequencyCapPerSession") val frequencyCapPerSession: Int = 0,
+)
+
+/** AdMob identifiers (public by design — they ship inside every client). */
+data class AdsAndroidConfigDto(
+    @SerializedName("appId") val appId: String? = null,
+    @SerializedName("bannerUnitId") val bannerUnitId: String? = null,
+    @SerializedName("interstitialUnitId") val interstitialUnitId: String? = null,
+    @SerializedName("rewardedUnitId") val rewardedUnitId: String? = null,
+)
+
 /** Subscription summary returned by redeem + subscription endpoints. */
 data class SubscriptionDto(
     @SerializedName("_id") val id: String? = null,
@@ -96,6 +120,16 @@ data class SubscriptionViewDataDto(
     @SerializedName("devicesUsed") val devicesUsed: Int = 0,
     @SerializedName("maxDevices") val maxDevices: Int = 0,
     @SerializedName("devices") val devices: List<DeviceDto> = emptyList(),
+
+    /** "free" / "paid" / "admin" — the server's tier decision. */
+    @SerializedName("tier") val tier: String? = null,
+    @SerializedName("ads") val ads: AdsConfigDto? = null,
+)
+
+/** Response of GET /api/v1/ads/me */
+data class AdsDecisionResponse(
+    @SerializedName("success") val success: Boolean = false,
+    @SerializedName("data") val data: AdsConfigDto? = null,
 )
 
 /** Response of GET /api/v1/me/devices */

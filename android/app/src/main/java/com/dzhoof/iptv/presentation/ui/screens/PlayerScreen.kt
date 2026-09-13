@@ -34,6 +34,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.ui.PlayerView
 import com.dzhoof.iptv.ComposeMainActivity
 import com.dzhoof.iptv.data.AppPreferences
+import com.dzhoof.iptv.data.ads.AdsAvailability
+import com.dzhoof.iptv.presentation.ui.ads.rememberAdsManager
 import com.dzhoof.iptv.presentation.ui.components.ChannelOverlay
 import com.dzhoof.iptv.presentation.ui.components.ParentalPinDialog
 import com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager
@@ -181,9 +183,19 @@ fun PlayerScreen(
         }
     }
 
+    // Free-tier interstitial gate. Uses the singleton manager (which only allows
+    // ads when the server said `ads.show` for this account) and always falls
+    // through to playback — an ad can never block watching.
+    val adsManager = rememberAdsManager()
+    val playerContext = LocalContext.current
+
     LaunchedEffect(channelId, parentalLocked) {
         // Do not load the channel while the parental PIN gate is up.
-        if (!parentalLocked) viewModel.loadChannel(channelId)
+        if (!parentalLocked) {
+            adsManager.maybeShowInterstitial(AdsAvailability.findActivity(playerContext)) {
+                viewModel.loadChannel(channelId)
+            }
+        }
     }
 
     // Set up media item when channel loads. Keyed on the stream identity (id +

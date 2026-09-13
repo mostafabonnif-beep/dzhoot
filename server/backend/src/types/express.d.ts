@@ -16,6 +16,10 @@ declare global {
         emailVerified: boolean;
         allCatalog?: boolean;
         demo?: boolean;
+        /** Freemium: channel groups this code may watch ([] = everything). */
+        accessGroups?: string[];
+        /** Freemium: the shared ad-supported free-tier account. */
+        freeAccess?: boolean;
       };
       sessionId?: string;
       jwt?: {

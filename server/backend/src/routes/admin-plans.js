@@ -7,6 +7,7 @@ const Subscription = require('../models/Subscription');
 const { requireAuth, requireAdmin } = require('./auth');
 const { escapeRegex } = require('../utils/escapeRegex');
 const { audit, reqCtx } = require('../services/audit-log');
+const { normalizeGroupList, listCatalogGroups } = require('../services/channel-scope');
 
 // Admin-only plan management: /api/v1/admin/plans
 router.use(requireAuth);
@@ -29,6 +30,26 @@ function normalizeContentTypes(input) {
   }
   return values;
 }
+
+// Freemium: which channel groups a plan unlocks. Empty = every group.
+// Accepts an array (or comma-separated string); returns null when the shape is
+// wrong so callers can answer 400 instead of silently storing junk.
+function normalizeChannelGroups(input) {
+  if (input === undefined) return undefined;
+  if (!Array.isArray(input) && typeof input !== 'string') return null;
+  return normalizeGroupList(input);
+}
+
+// GET /catalog-groups — distinct groups in the shared catalog (admin picker)
+router.get('/catalog-groups', async (req, res) => {
+  try {
+    const groups = await listCatalogGroups();
+    return res.json({ success: true, data: groups, total: groups.length });
+  } catch (err) {
+    console.error('[admin-plans] catalog groups error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
 
 // GET / — list plans with code/subscription counts
 router.get('/', async (req, res) => {
@@ -68,11 +89,15 @@ router.get('/', async (req, res) => {
 // POST / — create a plan
 router.post('/', async (req, res) => {
   try {
-    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features, contentTypes } =
+    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features, contentTypes, channelGroups } =
       req.body || {};
     const normalizedContentTypes = normalizeContentTypes(contentTypes);
     if (normalizedContentTypes === null) {
       return res.status(400).json({ success: false, error: 'contentTypes must contain only Live and/or VOD' });
+    }
+    const normalizedChannelGroups = normalizeChannelGroups(channelGroups);
+    if (normalizedChannelGroups === null) {
+      return res.status(400).json({ success: false, error: 'channelGroups must be an array of group names' });
     }
 
     if (!name || typeof name !== 'string') {
@@ -101,6 +126,7 @@ router.post('/', async (req, res) => {
       currency: currency || 'DZD',
       allowCustomDuration: allowCustomDuration === true,
       contentTypes: normalizedContentTypes || ['Live', 'VOD'],
+      channelGroups: normalizedChannelGroups || [],
       status: status === 'Inactive' ? 'Inactive' : 'Active',
       features: features || {},
     });
@@ -123,11 +149,15 @@ router.patch('/:id', async (req, res) => {
     if (!plan) return res.status(404).json({ success: false, error: 'Plan not found' });
 
     const before = plan.toObject();
-    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features, contentTypes } =
+    const { name, description, durationDays, maxDevices, maxConcurrentStreams, price, currency, status, allowCustomDuration, features, contentTypes, channelGroups } =
       req.body || {};
     const normalizedContentTypes = normalizeContentTypes(contentTypes);
     if (normalizedContentTypes === null) {
       return res.status(400).json({ success: false, error: 'contentTypes must contain only Live and/or VOD' });
+    }
+    const normalizedChannelGroups = normalizeChannelGroups(channelGroups);
+    if (normalizedChannelGroups === null) {
+      return res.status(400).json({ success: false, error: 'channelGroups must be an array of group names' });
     }
 
     if (name !== undefined) plan.name = String(name).trim();
@@ -157,6 +187,7 @@ router.patch('/:id', async (req, res) => {
     if (currency !== undefined) plan.currency = String(currency).toUpperCase();
     if (allowCustomDuration !== undefined) plan.allowCustomDuration = allowCustomDuration === true;
     if (normalizedContentTypes !== undefined) plan.contentTypes = normalizedContentTypes;
+    if (normalizedChannelGroups !== undefined) plan.channelGroups = normalizedChannelGroups;
     if (status !== undefined) plan.status = status === 'Inactive' ? 'Inactive' : 'Active';
     if (features !== undefined) plan.features = features;
 

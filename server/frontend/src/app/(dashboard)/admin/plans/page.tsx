@@ -21,6 +21,8 @@ interface PlanData {
   status: 'Active' | 'Inactive';
   allowCustomDuration?: boolean;
   contentTypes?: string[];
+  /** Freemium: channel groups this plan unlocks. Empty = every group. */
+  channelGroups?: string[];
   codeCount?: number;
   usedCodeCount?: number;
   activeSubs?: number;
@@ -30,6 +32,8 @@ interface PlanData {
 interface PlanForm {
   live: boolean;
   vod: boolean;
+  /** Empty = the plan unlocks every channel group. */
+  channelGroups: string[];
   name: string;
   description: string;
   durationDays: string;
@@ -44,6 +48,7 @@ interface PlanForm {
 const emptyForm: PlanForm = {
   live: true,
   vod: true,
+  channelGroups: [],
   name: '',
   description: '',
   durationDays: '30',
@@ -74,6 +79,9 @@ export default function PlansPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const [formOpen, setFormOpen] = useState(false);
+  // Distinct groups in the catalog, for the per-plan freemium picker.
+  const [catalogGroups, setCatalogGroups] = useState<string[]>([]);
+  const [groupFilter, setGroupFilter] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<PlanForm>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -107,6 +115,28 @@ export default function PlansPage() {
     fetchPlans();
   }, [fetchPlans]);
 
+  // Load the group list once — it is the vocabulary the free/paid scopes use.
+  useEffect(() => {
+    api
+      .get('/admin/plans/catalog-groups')
+      .then((res) =>
+        setCatalogGroups(
+          Array.isArray(res.data?.data)
+            ? res.data.data.filter((g: unknown): g is string => typeof g === 'string' && g.trim() !== '')
+            : [],
+        ),
+      )
+      .catch(() => setCatalogGroups([]));
+  }, []);
+
+  // Always keep the plan's own groups visible even if the catalog changed since.
+  const visibleCatalogGroups = useMemo(() => {
+    const merged = new Set([...catalogGroups, ...form.channelGroups]);
+    const list = [...merged].sort((a, b) => a.localeCompare(b));
+    const q = groupFilter.trim().toLowerCase();
+    return q ? list.filter((g) => g.toLowerCase().includes(q)) : list;
+  }, [catalogGroups, form.channelGroups, groupFilter]);
+
   function openCreate() {
     setEditingId(null);
     setForm(emptyForm);
@@ -128,6 +158,7 @@ export default function PlansPage() {
       allowCustomDuration: Boolean(plan.allowCustomDuration),
       live: planContentTypes(plan).includes('Live'),
       vod: planContentTypes(plan).includes('VOD'),
+      channelGroups: Array.isArray(plan.channelGroups) ? plan.channelGroups : [],
     });
     setFormError('');
     setFormOpen(true);
@@ -177,6 +208,7 @@ export default function PlansPage() {
           ...(form.live ? ['Live'] : []),
           ...(form.vod ? ['VOD'] : []),
         ],
+        channelGroups: form.channelGroups,
       };
       if (editingId) {
         await api.patch(`/admin/plans/${editingId}`, payload);
@@ -250,6 +282,12 @@ export default function PlansPage() {
           <div className="font-medium truncate">{p.name}</div>
           {p.description && (
             <div className="text-xs text-muted-foreground truncate">{p.description}</div>
+          )}
+          {Array.isArray(p.channelGroups) && p.channelGroups.length > 0 && (
+            <span className="mt-1 inline-flex rounded-full bg-emerald-500/10 text-emerald-600 px-2 py-0.5 text-[11px] font-medium">
+              {p.channelGroups.length}{' '}
+              {locale === 'ar' ? 'مجموعة محددة' : locale === 'fr' ? 'groupes' : 'groups'}
+            </span>
           )}
         </div>
       ),
@@ -612,6 +650,52 @@ export default function PlansPage() {
                 <span>{locale === 'ar' ? 'أفلام ومسلسلات (VOD)' : locale === 'fr' ? 'Films & séries (VOD)' : 'Movies & series (VOD)'}</span>
               </label>
             </div>
+          </div>
+          <div className="space-y-2 border-t border-border pt-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                مجموعات القنوات المشمولة
+              </label>
+              <span className="text-xs text-muted-foreground">
+                {form.channelGroups.length === 0
+                  ? 'كل المجموعات (بلا تحديد)'
+                  : `${form.channelGroups.length} مجموعة محددة`}
+              </span>
+            </div>
+            <input
+              className={inputClass}
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              placeholder="ابحث في المجموعات..."
+            />
+            <div className="max-h-44 overflow-y-auto border border-border bg-background p-2">
+              {visibleCatalogGroups.length === 0 ? (
+                <p className="text-xs text-muted-foreground">لا توجد مجموعات في الكتالوج بعد.</p>
+              ) : (
+                visibleCatalogGroups.map((group) => (
+                  <label key={group} className="flex items-center gap-2 py-1 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4"
+                      checked={form.channelGroups.includes(group)}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          channelGroups: e.target.checked
+                            ? [...form.channelGroups, group]
+                            : form.channelGroups.filter((g) => g !== group),
+                        })
+                      }
+                    />
+                    <span className="truncate">{group}</span>
+                  </label>
+                ))
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              بلا تحديد = الباقة تفتح كل القنوات. عند التحديد تظهر للمشترك هذه المجموعات فقط
+              (يُطبَّق على التطبيق والويب والمشغل مباشرة بعد تفعيل الكود).
+            </p>
           </div>
           <div className="flex items-center gap-3 pt-2">
             <button

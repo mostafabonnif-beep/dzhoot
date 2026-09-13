@@ -3,6 +3,7 @@ package com.dzhoof.iptv.data.repository
 import android.content.Context
 import android.provider.Settings
 import com.dzhoof.iptv.BuildConfig
+import com.dzhoof.iptv.data.ads.AdsManager
 import com.google.firebase.messaging.FirebaseMessaging
 import com.dzhoof.iptv.DzHoofFirebaseMessagingService
 import com.dzhoof.iptv.data.model.Result
@@ -34,6 +35,7 @@ import javax.inject.Singleton
 class SubscriptionRepositoryImpl @Inject constructor(
     private val apiService: DzhoofApiService,
     private val appContext: Context,
+    private val adsManager: AdsManager,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
 ) : SubscriptionRepository {
 
@@ -173,6 +175,9 @@ class SubscriptionRepositoryImpl @Inject constructor(
                     val body: SubscriptionViewResponse? = response.body()
                     val data = body?.data
                     if (body?.success == true && data != null) {
+                        // Keep the ads manager in sync with the account's tier:
+                        // redeeming a paid code flips ads off immediately.
+                        adsManager.updateConfig(data.ads)
                         Result.success(data)
                     } else {
                         Result.error(IOException(body?.error ?: "تعذر تحميل الاشتراك"))
