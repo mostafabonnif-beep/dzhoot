@@ -79,6 +79,7 @@ class DzhoofApplication : Application(), Configuration.Provider {
 
         WorkManagerInitializer.scheduleChannelSync(this)
         WorkManagerInitializer.scheduleEpgSync(this)
+        WorkManagerInitializer.scheduleUpdateCheck(this)
     }
 
     companion object {
