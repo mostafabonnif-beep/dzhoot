@@ -1700,6 +1700,90 @@ Version history is managed via GitHub Releases, so this returns an empty list wi
 
 ---
 
+### 6. Admin: Manage Release Metadata
+
+The `AppVersion` collection is the optional, operator-managed release source that
+`GET /app/version` merges with GitHub Releases. These are the only write routes for it
+and every write is written to the audit log. All three require an Admin session.
+
+**GET** `/admin/app-versions`
+
+Lists up to 100 records, newest `versionCode` first.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "…",
+      "versionName": "1.4.2",
+      "versionCode": 10402,
+      "apkFileName": "dzhoof-tv-v1.4.2-official.apk",
+      "apkFileSize": 26840396,
+      "downloadUrl": "https://github.com/…/dzhoof-tv-v1.4.2-official.apk",
+      "releaseNotes": "تحسين الثبات",
+      "isActive": true,
+      "isMandatory": false,
+      "minCompatibleVersion": 10300,
+      "releasedAt": "2026-09-13T17:17:44.000Z",
+      "sha256": "f0494df3…",
+      "releaseChannel": "stable",
+      "distribution": "external_apk",
+      "platforms": ["android-tv"]
+    }
+  ]
+}
+```
+
+**POST** `/admin/app-versions` — publish a release record (audit: `APP_VERSION_PUBLISH`).
+
+| Field | Required | Rules |
+|---|---|---|
+| `versionName` | yes | unique; non-empty |
+| `versionCode` | yes | unique positive integer (`major*10000+minor*100+patch`) |
+| `apkFileName` | yes | non-empty |
+| `apkFileSize` | yes | positive number |
+| `downloadUrl` | yes | must be a valid **https** URL |
+| `releaseNotes` | no | string, default `""` |
+| `sha256` | no | 64 lowercase hex, or `null` |
+| `releaseChannel` | no | `stable` (default) \| `beta` |
+| `distribution` | no | `external_apk` (default) \| `play` \| `managed_device` |
+| `platforms` | no | array of `android` \| `android-tv` \| `android-mobile` \| `fire-tv`; empty/absent = all |
+| `isActive` / `isMandatory` | no | booleans, default `true` / `false` |
+| `minCompatibleVersion` | no | integer, default `1` |
+| `releasedAt` | no | ISO date, defaults to now |
+
+`400` with `details: [{ path, message }]` on a schema violation; `409` when the
+`versionCode` or `versionName` already exists.
+
+**PATCH** `/admin/app-versions/:id` — update metadata (audit: `APP_VERSION_UPDATE`,
+with `changes.before` / `changes.after`).
+
+Mutable: `releaseNotes`, `isActive`, `isMandatory`, `minCompatibleVersion`,
+`releaseChannel`, `distribution`, `platforms`, `releasedAt`.
+
+**Immutable:** `versionName`, `versionCode`, `apkFileName`, `apkFileSize`,
+`downloadUrl`, `sha256`. Re-pointing a URL or checksum at the same `versionCode` would
+let a device install bytes that no longer match the reviewed release — publish a new
+`versionCode` instead. Attempting it returns `400`.
+
+### 7. Provenance migration
+
+Rows created before the provenance fields existed are backfilled by
+`server/backend/src/scripts/migrations/0016-app-version-provenance.ts`:
+
+```bash
+cd server/backend
+npx tsx src/scripts/migrations/0016-app-version-provenance.ts            # dry run
+npx tsx src/scripts/migrations/0016-app-version-provenance.ts --commit   # apply
+# or: npm run migrate:app-version-provenance
+```
+
+It only touches rows missing `releaseChannel` or `distribution`, is idempotent, and
+never overwrites an explicit non-default value.
+
+---
+
 ## Config Endpoints
 
 ### 1. Get Default Configuration
