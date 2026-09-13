@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Release provenance manifest: every `vX.Y.Z` release now attaches `dzhoof-tv-vX.Y.Z-official.release.json` containing versionName, versionCode, channel, distribution, size, SHA-256, **signing certificate SHA-256 fingerprint**, min/target SDK, commit and build timestamp — see `docs/RELEASE_PROVENANCE.md`. The release job fails closed when the APK has no verifiable signature, when the checksum or fingerprint cannot be read, or when the APK's versionCode disagrees with the documented `major*10000+minor*100+patch` derivation, so a build can never publish without them.
 - Pre-install verification of a downloaded update, all fail-closed: SHA-256 checksum, package name, expected versionCode, downgrade protection, plus the existing signature comparison. Failures map to stable `UpdateErrorCode` values that mirror the server's error taxonomy.
 - APK download URL allowlist: HTTPS only, no credentials in the URL, no IP literals (so loopback/private ranges and DNS-rebinding hosts are unreachable), GitHub release hosts plus the configured API host.
 - The update check now sends `currentVersionCode`, `channel` and `platform` (`android-tv` on TV/leanback devices, otherwise `android`) and reads `sha256`, `versionCode`, `sizeBytes` and `minimumSupportedVersionCode` from the API response.
