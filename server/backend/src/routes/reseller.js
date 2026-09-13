@@ -437,7 +437,7 @@ router.post('/codes/generate', async (req, res) => {
     }
     if (!parseId(planId)) return res.status(400).json({ success: false, error: 'planId is required' });
 
-    // Optional customer details captured at generation time (MIBOX-style).
+    // Optional customer details captured at generation time (backup tier B-style).
     const customerName =
       body.customerName !== undefined && body.customerName !== null && String(body.customerName).trim() !== ''
         ? String(body.customerName).trim().slice(0, 100)

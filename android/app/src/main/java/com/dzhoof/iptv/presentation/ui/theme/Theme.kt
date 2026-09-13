@@ -23,10 +23,11 @@ val subtleBorder: Color
     @Composable get() = if (LocalIsDarkTheme.current) SubtleBorderDark else SubtleBorderLight
 
 private val DarkColorScheme = darkColorScheme(
-    // Primary — emerald for actions and selected states; gold remains the TV focus cue.
-    primary = DzGreen300,
-    onPrimary = Ink950,
-    primaryContainer = DzGreen500,
+    // Primary — GOLD drives every action/selection (portal identity); emerald is
+    // reserved for live + health semantics (see LiveAccent in Color.kt).
+    primary = ActionPrimary,
+    onPrimary = ActionOnPrimary,
+    primaryContainer = ActionPrimaryDeep,
     onPrimaryContainer = TextPrimaryDark,
 
     // Secondary — gold for premium highlights and secondary actions.
@@ -70,7 +71,7 @@ private val DarkColorScheme = darkColorScheme(
     scrim = Atlas950,
 
     // Surface tint follows the action color rather than the focus accent.
-    surfaceTint = DzGreen300
+    surfaceTint = ActionPrimary
 )
 
 private val LightColorScheme = lightColorScheme(

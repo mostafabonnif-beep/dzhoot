@@ -20,7 +20,7 @@ export interface IChannelFailoverMapDocument extends Document {
   backupChannelName: string;
   /** stream_id of the channel on the backup source (player_api get_live_streams). */
   backupStreamId: string;
-  /** Failover tier: lower number = tried first (e.g. NEO 4K=10, MIBOX=20). */
+  /** Failover tier: lower number = tried first (e.g. backup tier A=10, backup tier B=20). */
   priority: number;
   /** How the mapping was created. */
   matchedBy: 'name' | 'manual';

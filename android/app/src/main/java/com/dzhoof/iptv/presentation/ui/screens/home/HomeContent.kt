@@ -46,11 +46,11 @@ import com.dzhoof.iptv.presentation.ui.components.HomeHero
 import com.dzhoof.iptv.presentation.ui.components.rememberHeroHeight
 import com.dzhoof.iptv.presentation.ui.components.rememberShimmerBrush
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
+import com.dzhoof.iptv.presentation.ui.theme.ActionPrimary
 import com.dzhoof.iptv.presentation.ui.theme.Atlas800
 import com.dzhoof.iptv.presentation.ui.theme.DzGold400
 import com.dzhoof.iptv.presentation.ui.theme.DzGold500
 import com.dzhoof.iptv.presentation.ui.theme.DzGreen300
-import com.dzhoof.iptv.presentation.ui.theme.DzGreen400
 import com.dzhoof.iptv.presentation.ui.theme.DzRed500
 import com.dzhoof.iptv.presentation.ui.theme.SteelBlueDark
 import kotlinx.coroutines.delay
@@ -189,7 +189,7 @@ fun HomeContent(
         onNavigateToSettings != null
     ) {
         buildList {
-            add(PortalTile("live", "مباشر", "قنوات وبث حي", Icons.Filled.LiveTv, DzGreen400))
+            add(PortalTile("live", "مباشر", "قنوات وبث حي", Icons.Filled.LiveTv, ActionPrimary))
             onSeeAllMovies?.let {
                 add(PortalTile("movies", "أفلام", "مكتبة الأفلام", Icons.Filled.Movie, SteelBlueDark))
             }
@@ -235,22 +235,6 @@ fun HomeContent(
                 )
             }
         }
-        item(key = "hero") {
-            heroChannel?.let { hero ->
-                HomeHero(
-                    channel = hero,
-                    onWatchNow = onChannelClick,
-                    watchNowFocusRequester = watchNowFocusRequester,
-                    modifier = Modifier
-                        .padding(bottom = rowGap)
-                        // requiredHeight overrides HomeHero's internal .height() so
-                        // the phone hero shrinks; TV/landscape is left untouched.
-                        .then(if (isCompact) Modifier.requiredHeight(compactHeroHeight) else Modifier)
-                        .animateItemEntrance(index = 0)
-                )
-            }
-        }
-
         item(key = "portal") {
             HomePortalTiles(
                 tiles = portalTiles,
@@ -259,7 +243,7 @@ fun HomeContent(
                 isCompact = isCompact,
                 modifier = Modifier
                     .padding(bottom = rowGap)
-                    .animateItemEntrance(index = 1)
+                    .animateItemEntrance(index = 0)
             )
         }
 
@@ -287,6 +271,22 @@ fun HomeContent(
                 if (!isCompact) {
                     PortalQrCode(showHint = false)
                 }
+            }
+        }
+
+        item(key = "hero") {
+            heroChannel?.let { hero ->
+                HomeHero(
+                    channel = hero,
+                    onWatchNow = onChannelClick,
+                    watchNowFocusRequester = watchNowFocusRequester,
+                    modifier = Modifier
+                        .padding(bottom = rowGap)
+                        // requiredHeight overrides HomeHero's internal .height() so
+                        // the phone hero shrinks; TV/landscape is left untouched.
+                        .then(if (isCompact) Modifier.requiredHeight(compactHeroHeight) else Modifier)
+                        .animateItemEntrance(index = 1)
+                )
             }
         }
 

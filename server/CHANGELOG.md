@@ -31,8 +31,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 - Watchdog direct-playback probe no longer treats **TS transport streams** as HLS manifests:
   `.ts` URLs are light-probed (stream response, 1 KB cap, destroy immediately; HTTP 200-399 =
   alive) instead of failing with `maxContentLength size of 524288 exceeded` every cycle, which
-  wrongly persisted `verificationStatus=degraded` on healthy TS-format sources (e.g. Business
-  Cloud NEO) and blocked scheduled catalog sync.
+  wrongly persisted `verificationStatus=degraded` on healthy TS-format sources (e.g. primary
+  source) and blocked scheduled catalog sync.
 
 ### Fixed (catalog access)
 

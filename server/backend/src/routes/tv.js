@@ -1195,7 +1195,7 @@ router.get('/playback/:token', async (req, res) => {
     };
 
     // Mid-stream failover context: when the proxied upstream connection dies,
-    // the proxy re-resolves a backup target (NEO 4K / MIBOX) and keeps the
+    // the proxy re-resolves a backup target (backup tier A / backup tier B) and keeps the
     // client session alive instead of dropping the stream.
     const failoverCtx = payload.channelId
       ? { channelId: payload.channelId, primarySourceId: payload.primarySourceId }
