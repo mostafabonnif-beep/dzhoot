@@ -73,13 +73,13 @@ val AmberLight = DzGreen100
 @Deprecated("Replaced by DzGreen500", ReplaceWith("DzGreen500"))
 val AmberDark  = DzGreen500
 
-// ── Atlas — dark mode surfaces (أخضر داكن عميق) ──────────────────────
-val Atlas950 = Color(0xFF050505)    // app background
-val Atlas900 = Color(0xFF0D0C0A)    // sidebar / navigation drawer
-val Atlas800 = Color(0xFF16130F)    // card background
-val Atlas700 = Color(0xFF211A12)    // elevated / focused card
-val Atlas600 = Color(0xFF312416)    // overlay, modal surface
-val Atlas500 = Color(0xFF432F1B)    // tooltip, highest elevation
+// ── Atlas — dark mode surfaces (محايدة وعميقة) ──────────────────────
+val Atlas950 = Color(0xFF070A09)    // app background
+val Atlas900 = Color(0xFF0C1110)    // navigation chrome
+val Atlas800 = Color(0xFF121917)    // card background
+val Atlas700 = Color(0xFF19231F)    // elevated surface
+val Atlas600 = Color(0xFF24332D)    // overlay and modal surface
+val Atlas500 = Color(0xFF30423A)    // highest elevation surface
 
 // ── Backward-compatible aliases (deprecated — replaced by Atlas) ─────
 @Deprecated("Replaced by Atlas950", ReplaceWith("Atlas950"))
@@ -125,10 +125,10 @@ val Parchment500 = Sand500
 val Parchment700 = Sand700
 
 // ── Text — dark mode ─────────────────────────────────────────────────
-val TextPrimaryDark   = Color(0xFFF2EDE3)
-val TextSecondaryDark = Color(0xFFA5B8AE)
-val TextDimDark       = Color(0xFF5E7469)
-val TextDisabledDark  = Color(0xFF2E3A33)
+val TextPrimaryDark   = Color(0xFFF5F7F6)
+val TextSecondaryDark = Color(0xFFA9B8B1)
+val TextDimDark       = Color(0xFF6B7D75)
+val TextDisabledDark  = Color(0xFF34413B)
 
 // ── Text — light mode ────────────────────────────────────────────────
 val TextPrimaryLight   = Color(0xFF14201A)
@@ -181,13 +181,13 @@ val FocusGlow        = Color(0x40E7BD62)   // 25% DzGold400
 val FocusBorder      = DzGold400           // gold focus ring — the app-wide cue
 val SelectionOverlay = Color(0x1AFFFFFF)
 
-// ── Premium identity layer (redesign 2026-09) ────────────────────────
-val AccentGold         = DzGold300              // highlights, "see all", premium badges
+// ── Premium identity layer ───────────────────────────────────────────
+val AccentGold         = DzGold300              // highlights and premium badges
 val BrandRimGold       = Color(0x66E8C468)      // 40% gold hairline rim on artwork
 val Ink950             = Color(0xFF050B08)      // deepest backdrop behind artwork
-val ArtworkGlowEmerald = Color(0x1F10B981)      // 12% emerald glow — backdrop depth
-val ArtworkGlowGold    = Color(0x1CE7BD62)      // 11% gold glow — backdrop warmth
-val ArtworkStreakGold  = Color(0x3DE7BD62)      // 24% gold diagonal streak
+val ArtworkGlowEmerald = Color(0x1A10B981)      // 10% emerald glow — backdrop depth
+val ArtworkGlowGold    = Color(0x0DE7BD62)      // 5% gold glow — restrained warmth
+val ArtworkStreakGold  = Color(0x00E7BD62)      // retained for source compatibility
 
 // ── Guide (EPG) focus ────────────────────────────────────────────────
 val GuideRowWash        = Color(0x1F34D399)   // ~12% DzGreen300 — focused-row gradient wash

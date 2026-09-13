@@ -6,10 +6,10 @@ import androidx.compose.ui.unit.dp
 
 // ── Corner token scale — modern rounded (الهوية الجزائرية) ────────────
 val ShapeSmall  = RoundedCornerShape(8.dp)     // chips, badges, small buttons
-val ShapeMedium = RoundedCornerShape(14.dp)    // cards, panels
-val ShapeBadge  = RoundedCornerShape(16.dp)    // QR frames, image tiles, badges
-val ShapeLarge  = RoundedCornerShape(20.dp)    // toasts, dialogs
-val ShapePill   = RoundedCornerShape(32.dp)    // fully-rounded action pills / hero chips
+val ShapeMedium = RoundedCornerShape(12.dp)    // cards, panels
+val ShapeBadge  = RoundedCornerShape(14.dp)    // QR frames, image tiles, badges
+val ShapeLarge  = RoundedCornerShape(18.dp)    // toasts, dialogs
+val ShapePill   = RoundedCornerShape(28.dp)    // fully-rounded action pills / hero chips
 
 // ── Material 3 shape mapping ─────────────────────────────────────────
 val DzHoofShapes = Shapes(

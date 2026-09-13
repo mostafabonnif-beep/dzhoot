@@ -36,106 +36,122 @@ fun ErrorState(
         else -> Icons.Default.Warning
     }
 
-    // Contextual headline so the state reads as a clear problem, not just a raw
-    // message dump. The message itself carries the detail below it.
     val title = when (errorType) {
         ErrorType.AUTH_REQUIRED -> "الجهاز غير مربوط"
         ErrorType.NETWORK_ERROR -> "تعذر الوصول إلى الخادم"
-        else -> "حدث خطأ غير متوقع"
+        else -> "تعذر تحميل المحتوى"
+    }
+    val displayMessage = when {
+        message.isBlank() -> "حاول مرة أخرى بعد لحظات."
+        message.contains("unable to load", ignoreCase = true) ->
+            "تعذر تحميل المحتوى الآن. تحقق من الاتصال وحاول مرة أخرى."
+        message.contains("timeout", ignoreCase = true) ||
+            message.contains("failed to connect", ignoreCase = true) ->
+            "تعذر الاتصال بالخادم. تحقق من اتصال الإنترنت وحاول مرة أخرى."
+        else -> message
     }
 
     Box(
         modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(Dimens.Space3),
-            modifier = Modifier
-                .padding(Dimens.ScreenPaddingHorizontalTv)
-                .animateFadeIn()
+        Surface(
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+            tonalElevation = 2.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+            modifier = Modifier.padding(Dimens.ScreenPaddingHorizontalMobile)
         ) {
-            // Error-tinted medallion.
-            Box(
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(Dimens.Space3),
                 modifier = Modifier
-                    .size(Dimens.StateMedallionSize)
-                    .clip(MaterialTheme.shapes.large)
-                    .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
+                    .widthIn(max = Dimens.ErrorCardMaxWidth)
+                    .padding(
+                        horizontal = Dimens.ErrorCardPaddingHorizontal,
+                        vertical = Dimens.ErrorCardPaddingVertical
+                    )
+                    .animateFadeIn()
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(Dimens.IconLarge)
+                Box(
+                    modifier = Modifier
+                        .size(Dimens.StateMedallionSize)
+                        .clip(MaterialTheme.shapes.large)
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(Dimens.IconLarge)
+                    )
+                }
+
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    textAlign = TextAlign.Center
                 )
-            }
+                Text(
+                    text = displayMessage,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(modifier = Modifier.height(Dimens.Space1))
 
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-            Spacer(modifier = Modifier.height(Dimens.Space1))
+                if (errorType == ErrorType.AUTH_REQUIRED && onPairDevice != null) {
+                    var pairFocused by remember { mutableStateOf(false) }
+                    Button(
+                        onClick = onPairDevice,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier
+                            .tvFocusVisuals(
+                                focused = pairFocused,
+                                shape = MaterialTheme.shapes.medium,
+                                focusedScale = FOCUS_SCALE_TILE
+                            )
+                            .onFocusChanged { pairFocused = it.isFocused }
+                    ) {
+                        Text(
+                            text = "الربط الآن",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(Dimens.Space1))
+                }
 
-            if (errorType == ErrorType.AUTH_REQUIRED && onPairDevice != null) {
-                var pairFocused by remember { mutableStateOf(false) }
-                Button(
-                    onClick = onPairDevice,
+                var retryFocused by remember { mutableStateOf(false) }
+                val retryBorder = if (retryFocused) {
+                    BorderStroke(2.dp, FocusBorder)
+                } else {
+                    BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                }
+                OutlinedButton(
+                    onClick = onRetry,
+                    border = retryBorder,
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier
                         .tvFocusVisuals(
-                            focused = pairFocused,
+                            focused = retryFocused,
                             shape = MaterialTheme.shapes.medium,
-                            focusedScale = FOCUS_SCALE_TILE
+                            focusedScale = FOCUS_SCALE_TILE,
+                            restingElevation = 0.dp,
+                            focusedElevation = 0.dp
                         )
-                        .onFocusChanged { pairFocused = it.isFocused }
+                        .onFocusChanged { retryFocused = it.isFocused }
                 ) {
                     Text(
-                        text = "الربط الآن",
+                        text = "إعادة المحاولة",
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
-                Spacer(modifier = Modifier.height(Dimens.Space1))
-            }
-
-            var retryFocused by remember { mutableStateOf(false) }
-            val retryBorder = if (retryFocused) {
-                BorderStroke(2.dp, FocusBorder)
-            } else {
-                BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
-            }
-            OutlinedButton(
-                onClick = onRetry,
-                border = retryBorder,
-                shape = MaterialTheme.shapes.medium,
-                modifier = Modifier
-                    // Outlined = transparent fill: elevation shadows show through
-                    // as a dark box. Border ring + scale carry the focus cue.
-                    .tvFocusVisuals(
-                        focused = retryFocused,
-                        shape = MaterialTheme.shapes.medium,
-                        focusedScale = FOCUS_SCALE_TILE,
-                        restingElevation = 0.dp,
-                        focusedElevation = 0.dp
-                    )
-                    .onFocusChanged { retryFocused = it.isFocused }
-            ) {
-                Text(
-                    text = "إعادة المحاولة",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary
-                )
             }
         }
     }
