@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.presentation.model.UpdateInfo
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.update.AppUpdater
+import com.dzhoof.iptv.update.UpdateManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,6 +38,7 @@ data class AppUpdateUiState(
 @HiltViewModel
 class AppUpdateViewModel @Inject constructor(
     private val appUpdater: AppUpdater,
+    private val updateManager: UpdateManager,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -45,13 +47,22 @@ class AppUpdateViewModel @Inject constructor(
 
     private var checked = false
 
-    /** Checks once per process. Safe to call repeatedly. */
+    /**
+     * Checks once per process. Safe to call repeatedly.
+     *
+     * Routed through [UpdateManager] so the launch check honours the foreground cooldown
+     * and records its result; a cooldown-skipped check simply shows no prompt.
+     */
     fun checkForUpdate() {
         if (checked) return
         checked = true
         viewModelScope.launch {
-            val result = withContext(ioDispatcher) { appUpdater.check() }
-            if (result != null) _uiState.update { it.copy(updateInfo = result) }
+            val outcome = withContext(ioDispatcher) {
+                updateManager.check(UpdateManager.Trigger.APP_LAUNCH)
+            }
+            if (outcome is UpdateManager.Outcome.Available) {
+                _uiState.update { it.copy(updateInfo = outcome.update) }
+            }
         }
     }
 

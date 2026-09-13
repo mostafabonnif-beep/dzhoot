@@ -58,10 +58,36 @@ class AppUpdater @Inject constructor(
         downloadReceiver = null
     }
 
-    /** Blocking network check — call from a background dispatcher. */
-    fun check(): UpdateInfo? = checkFromServer() ?: checkFromGitHub()
+    /** Outcome of a single update check, including *why* nothing was offered. */
+    sealed interface CheckResult {
+        data class Found(val update: UpdateInfo) : CheckResult
+        data object UpToDate : CheckResult
+        data class Failed(val code: UpdateErrorCode) : CheckResult
+    }
 
-    private fun checkFromServer(): UpdateInfo? {
+    /** Blocking network check — call from a background dispatcher. */
+    fun check(): UpdateInfo? = (checkDetailed() as? CheckResult.Found)?.update
+
+    /**
+     * Same check as [check], but distinguishes "the provider could not be reached" from
+     * "there is no update", so callers can record a real reason instead of guessing.
+     * Server first (it already merges the GitHub release), GitHub only as a fallback.
+     */
+    fun checkDetailed(): CheckResult {
+        val server = checkFromServer()
+        if (server is CheckResult.Found) return server
+
+        val github = checkFromGitHub()
+        if (github is CheckResult.Found) return github
+
+        if (server is CheckResult.UpToDate) return CheckResult.UpToDate
+        if (github is CheckResult.UpToDate) return CheckResult.UpToDate
+        return CheckResult.Failed(
+            (server as? CheckResult.Failed)?.code ?: UpdateErrorCode.UPDATE_CHECK_NETWORK
+        )
+    }
+
+    private fun checkFromServer(): CheckResult {
         return try {
             val baseUrl = AppPreferences.getServerUrl(context)
             val tvCode = AppPreferences.getTvCode(context)
@@ -71,11 +97,14 @@ class AppUpdater @Inject constructor(
                 mapOf("Accept" to "application/json", "X-Session-ID" to tvCode)
             )
             response.use { resp ->
-                if (!resp.isSuccessful) return null
+                if (!resp.isSuccessful) {
+                    return CheckResult.Failed(UpdateErrorCode.UPDATE_CHECK_NETWORK)
+                }
                 val json = org.json.JSONObject(resp.body?.string() ?: "{}")
                 if (json.optBoolean("success", false) && json.optBoolean("updateAvailable", false)) {
-                    val latest = json.optJSONObject("latestVersion") ?: return null
-                    UpdateInfo(
+                    val latest = json.optJSONObject("latestVersion")
+                        ?: return CheckResult.Failed(UpdateErrorCode.UPDATE_METADATA_INVALID)
+                    val update = UpdateInfo(
                         versionName = latest.optString("versionName", ""),
                         releaseNotes = latest.optString("releaseNotes", "").takeIf { it != "null" } ?: "",
                         fileSize = formatFileSize(latest.optLong("apkFileSize", 0)),
@@ -87,10 +116,11 @@ class AppUpdater @Inject constructor(
                         minimumSupportedVersionCode =
                             latest.optInt("minimumSupportedVersionCode", 0).takeIf { it > 0 }
                     )
-                } else null
+                    CheckResult.Found(update)
+                } else CheckResult.UpToDate
             }
         } catch (_: Exception) {
-            null // fall through to GitHub check
+            CheckResult.Failed(UpdateErrorCode.UPDATE_CHECK_NETWORK)
         }
     }
 
@@ -105,14 +135,17 @@ class AppUpdater @Inject constructor(
     private fun isSha256(value: String): Boolean =
         value.length == 64 && value.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
 
-    private fun checkFromGitHub(): UpdateInfo? {
+    private fun checkFromGitHub(): CheckResult {
+
         return try {
             val response = PinnedHttpClient.get(
                 GITHUB_RELEASES_API,
                 mapOf("Accept" to "application/vnd.github+json")
             )
             response.use { resp ->
-                if (!resp.isSuccessful) return null
+                if (!resp.isSuccessful) {
+                    return CheckResult.Failed(UpdateErrorCode.UPDATE_CHECK_NETWORK)
+                }
                 val json = org.json.JSONObject(resp.body?.string() ?: "{}")
                 val latestVersion = json.optString("tag_name", "").removePrefix("v")
                 val currentVersionName = getAppVersionName()
@@ -132,17 +165,18 @@ class AppUpdater @Inject constructor(
                             }
                         }
                     }
-                    UpdateInfo(
+                    val update = UpdateInfo(
                         versionName = latestVersion,
                         releaseNotes = json.optString("body", "").takeIf { it != "null" }?.take(500) ?: "",
                         fileSize = formatFileSize(fileSize),
                         downloadUrl = downloadUrl,
                         isMandatory = false
                     )
-                } else null
+                    CheckResult.Found(update)
+                } else CheckResult.UpToDate
             }
         } catch (_: Exception) {
-            null
+            CheckResult.Failed(UpdateErrorCode.UPDATE_CHECK_NETWORK)
         }
     }
 
