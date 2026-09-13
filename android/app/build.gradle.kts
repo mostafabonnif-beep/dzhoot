@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.compose.compiler)
     id("kotlin-parcelize")
     alias(libs.plugins.hilt)
     id("io.sentry.android.gradle")
@@ -169,10 +170,9 @@ android {
     buildFeatures {
         compose = true
     }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    // Kotlin 2.x: the Compose compiler version now comes from the
+    // org.jetbrains.kotlin.plugin.compose plugin (see [plugins]), so the legacy
+    // composeOptions.kotlinCompilerExtensionVersion pin is gone.
 }
 
 dependencies {
