@@ -488,6 +488,8 @@ app.use('/api/v1/favorites', require('./routes/favorites'));
 // App update routes (GitHub-based APK delivery)
 app.use('/api/v1/app', require('./routes/app-update'));
 app.use('/api/v1/admin', require('./routes/admin'));
+// App release metadata (provenance, channel, distribution) — admin only.
+app.use('/api/v1/admin/app-versions', require('./routes/admin-app-versions'));
 // Subscription & activation (commercial backbone)
 app.use('/api/v1/admin/plans', require('./routes/admin-plans'));
 app.use('/api/v1/admin/activation-codes', require('./routes/admin-activation-codes'));

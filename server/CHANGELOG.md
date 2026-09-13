@@ -10,6 +10,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (app release provenance + admin publish path)
+
+- `AppVersion` now stores `sha256`, `releaseChannel` (`stable`/`beta`), `distribution`
+  (`external_apk`/`play`/`managed_device`) and an optional `platforms` scope, with enum
+  validation shared with the API schema. Legacy rows default to `stable` /
+  `external_apk` at read time and are made explicit by migration **0016**
+  (`npm run migrate:app-version-provenance`, dry-run by default, idempotent).
+- New admin-only routes `GET|POST /api/v1/admin/app-versions` and
+  `PATCH /api/v1/admin/app-versions/:id` — the first writer for release metadata
+  (publishing previously had no code path at all). Every write is audited
+  (`APP_VERSION_PUBLISH` / `APP_VERSION_UPDATE`).
+- Artifact identity (`versionCode`, `versionName`, `apkFileName`, `apkFileSize`,
+  `downloadUrl`, `sha256`) is immutable after publication: re-pointing a URL or
+  checksum at the same `versionCode` would let devices install bytes that no longer
+  match the reviewed release. Operators publish a new `versionCode` instead.
+- `createAppVersionSchema` now requires an https `downloadUrl`, validates the checksum
+  shape, and accepts `releaseChannel`, `distribution`, `platforms` and `releasedAt`.
+
 ### Changed (app update API — `/api/v1/app/version`)
 
 - `GET /api/v1/app/version` now accepts the documented `currentVersionCode` parameter alongside the
