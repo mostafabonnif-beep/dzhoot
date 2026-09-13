@@ -10,6 +10,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Changed (app update API — `/api/v1/app/version`)
+
+- `GET /api/v1/app/version` now accepts the documented `currentVersionCode` parameter alongside the
+  legacy `currentVersion` alias, plus `channel` (`stable`/`beta`, default `stable`) and `platform`
+  (`android`/`android-tv`/`android-mobile`/`fire-tv`), validated by a shared Zod schema.
+- `latestVersion` now exposes `minimumSupportedVersionCode`, `releaseChannel`, `distribution`,
+  `sha256`, `sizeBytes`, `releaseNotesList` and `publishedAt`; the top level exposes `mandatory` and
+  `currentVersionCode`. The legacy keys (`releaseNotes`, `apkFileSize`, `isMandatory`,
+  `currentVersion`, …) are unchanged so already-shipped clients keep working.
+- `sha256` is read from the release's published `<apk>.sha256` asset (validated HTTPS allowlist +
+  SSRF guard on every redirect hop).
+- `downloadUrl` is fail-closed: a non-HTTPS URL, or one whose host is not allowlisted, is returned as
+  `null`. Extend the allowlist with `APP_UPDATE_ALLOWED_HOSTS`.
+- Added a dedicated, configurable rate limit (`APP_UPDATE_RATE_LIMIT_MAX`, default 1000/15min) and a
+  real route test suite (previously the `.js` test file was not matched by Jest, so the endpoint had
+  no running tests).
+
 ### Added (source resilience — mirror domains)
 
 - `XtreamSource.mirrorServerUrls` (validated http(s) array; admin API create/patch + exposed

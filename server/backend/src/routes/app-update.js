@@ -1,8 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const rateLimit = require('express-rate-limit');
 const AppVersion = require('../models/AppVersion');
 const { CacheService } = require('../services/cache');
+const { appVersionQuerySchema } = require('@dzhoof/shared');
+const { validateUrlForSSRF } = require('../utils/ssrf-guard');
 // Shared demo-code guard (same strength rules + live-credential collision check).
 const { resolvePublicDemoCode } = require('./config');
 
@@ -69,6 +72,162 @@ function publicDownloadUrl(req, value) {
   return isStaleLocalDownloadUrl(req, value) ? getCanonicalDownloadUrl(req) : value;
 }
 
+// ---------------------------------------------------------------------------
+// Update-check contract helpers
+// ---------------------------------------------------------------------------
+
+// Dedicated, configurable limiter for update checks. Default matches the global
+// /api/ budget (1000/15min) on purpose: large fleets behind one NAT IP all poll at
+// boot, and a stricter default would throttle legitimate devices. Lower
+// APP_UPDATE_RATE_LIMIT_MAX to tighten it.
+const UPDATE_CHECK_RATE_LIMIT_MAX = Number.parseInt(process.env.APP_UPDATE_RATE_LIMIT_MAX || '1000', 10);
+const updateCheckLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:
+    Number.isFinite(UPDATE_CHECK_RATE_LIMIT_MAX) && UPDATE_CHECK_RATE_LIMIT_MAX > 0
+      ? UPDATE_CHECK_RATE_LIMIT_MAX
+      : 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many update checks, try again later' },
+});
+
+// Hosts an APK / checksum may be published on. GitHub is the default source; the
+// operator's own PUBLIC_BASE_URL host and an explicit allowlist are added so a
+// self-hosted mirror keeps working. Anything else is dropped from the response
+// (fail-closed) so a poisoned DB row can never point a device at an untrusted host.
+const DEFAULT_DOWNLOAD_HOSTS = [
+  'github.com',
+  'objects.githubusercontent.com',
+  'github-releases.githubusercontent.com',
+];
+
+function allowedDownloadHosts(req) {
+  const hosts = new Set(DEFAULT_DOWNLOAD_HOSTS);
+  const configuredBaseUrl = String(process.env.PUBLIC_BASE_URL || '').trim();
+  if (configuredBaseUrl) {
+    try {
+      hosts.add(new URL(configuredBaseUrl).hostname.toLowerCase());
+    } catch {
+      /* ignore malformed base URL */
+    }
+  }
+  // The canonical fallback URL is built from the request host (see
+  // getCanonicalDownloadUrl), so the API's own hostname must be allowed too —
+  // otherwise a stale /downloads/ row would be rewritten to a URL we then drop.
+  const requestHostname = String(req?.get?.('host') || '')
+    .split(':')[0]
+    .trim()
+    .toLowerCase();
+  if (requestHostname && !/[\r\n]/.test(requestHostname)) hosts.add(requestHostname);
+  for (const entry of String(process.env.APP_UPDATE_ALLOWED_HOSTS || '').split(',')) {
+    const host = entry.trim().toLowerCase();
+    if (host) hosts.add(host);
+  }
+  return hosts;
+}
+
+function isAllowedDownloadUrl(value, req) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    if (!hostname) return false;
+    const hosts = allowedDownloadHosts(req);
+    return [...hosts].some((allowed) => hostname === allowed || hostname.endsWith(`.${allowed}`));
+  } catch {
+    return false;
+  }
+}
+
+function normalizeSha256(value) {
+  const match = String(value || '').match(/[a-fA-F0-9]{64}/);
+  return match ? match[0].toLowerCase() : null;
+}
+
+function normalizeChannel(value) {
+  return value === 'beta' ? 'beta' : 'stable';
+}
+
+function normalizePlatform(value) {
+  return value === 'fire-tv' ? 'android-tv' : value;
+}
+
+const RELEASE_NOTES_MAX_ITEMS = 20;
+const RELEASE_NOTES_MAX_LINE = 500;
+
+/** Release notes as a bounded list of non-empty lines (contract) plus the raw string (legacy). */
+function splitReleaseNotes(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => String(item).trim().slice(0, RELEASE_NOTES_MAX_LINE))
+      .filter(Boolean)
+      .slice(0, RELEASE_NOTES_MAX_ITEMS);
+  }
+  return String(value || '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*•\s]+/, '').trim())
+    .filter(Boolean)
+    .slice(0, RELEASE_NOTES_MAX_ITEMS)
+    .map((line) => line.slice(0, RELEASE_NOTES_MAX_LINE));
+}
+
+function toIsoString(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function matchesChannel(latest, channel) {
+  if (!channel) return true;
+  return latest.releaseChannel === normalizeChannel(channel);
+}
+
+function matchesPlatform(latest, platform) {
+  if (!platform) return true;
+  if (!Array.isArray(latest.platforms) || latest.platforms.length === 0) return true;
+  return latest.platforms.includes(normalizePlatform(platform));
+}
+
+/** Highest versionCode among the candidates that match the requested channel/platform. */
+function pickLatestVersion(candidates, { channel = null, platform = null } = {}) {
+  const matching = (candidates || [])
+    .filter((candidate) => candidate && matchesChannel(candidate, channel) && matchesPlatform(candidate, platform))
+    .sort((left, right) => right.versionCode - left.versionCode);
+  return matching[0] || null;
+}
+
+function toPublicLatestVersion(latest, req) {
+  const minimumSupportedVersionCode = Math.max(1, Number(latest.minCompatibleVersion) || 1);
+  const sizeBytes = Number(latest.apkFileSize) || 0;
+  const publishedAt = toIsoString(latest.releasedAt);
+  return {
+    // Contract fields
+    versionName: latest.versionName,
+    versionCode: latest.versionCode,
+    minimumSupportedVersionCode,
+    releaseChannel: latest.releaseChannel,
+    distribution: latest.distribution,
+    // Fail-closed: an off-allowlist or non-HTTPS URL is never handed to a device.
+    downloadUrl: isAllowedDownloadUrl(latest.downloadUrl, req) ? latest.downloadUrl : null,
+    sha256: latest.sha256 || null,
+    sizeBytes,
+    releaseNotesList: splitReleaseNotes(latest.releaseNotes),
+    publishedAt,
+    // Legacy fields kept for clients shipped before the contract change.
+    // AppUpdater in the field reads latestVersion.releaseNotes as a string and
+    // latestVersion.apkFileSize as a number, so both names/types are preserved.
+    releaseNotes: latest.releaseNotes || '',
+    apkFileName: latest.apkFileName || null,
+    apkFileSize: sizeBytes,
+    isMandatory: !!latest.isMandatory,
+    minCompatibleVersion: minimumSupportedVersionCode,
+    releasedAt: publishedAt,
+    source: latest.source,
+  };
+}
+
 // Cache GitHub release lookups in Redis (short TTL). Under load (every device
 // polling /version at boot) a live api.github.com call per request exhausts the
 // API rate limit and the app-update endpoints degrade to HTTP 429 — seen in the
@@ -100,6 +259,67 @@ function pickApkAsset(release) {
   return release.assets.find((a) => a.name && a.name.endsWith('.apk') && a.name.includes(GITHUB_APK_PATTERN)) || null;
 }
 
+/** The release pipeline publishes `<apk>.sha256` next to the APK (see android-release.yml). */
+function pickSha256Asset(release, apkAsset) {
+  if (!release || !Array.isArray(release.assets) || !apkAsset) return null;
+  return release.assets.find((a) => a && a.name === `${apkAsset.name}.sha256` && a.browser_download_url) || null;
+}
+
+const sha256Cache = new CacheService('ghsha:', 600); // 10 minutes, same window as the release cache
+
+/**
+ * Downloads one small text asset, following redirects manually so *every hop* is
+ * checked against the HTTPS allowlist and the SSRF guard before it is requested.
+ */
+async function fetchTextFollowingValidatedRedirects(url, { maxRedirects = 3, timeout = 8000, maxBytes = 4096 } = {}) {
+  let current = url;
+  for (let hop = 0; hop <= maxRedirects; hop += 1) {
+    if (!isAllowedDownloadUrl(current)) return null;
+    const ssrf = await validateUrlForSSRF(current);
+    if (!ssrf.safe) return null;
+
+    let response;
+    try {
+      response = await axios.get(current, {
+        headers: { Accept: 'text/plain', 'User-Agent': 'DZ-HOOF-Server' },
+        timeout,
+        maxContentLength: maxBytes,
+        maxBodyLength: maxBytes,
+        responseType: 'text',
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400,
+      });
+    } catch {
+      return null;
+    }
+
+    const location = response?.headers?.location;
+    if (response.status >= 300 && response.status < 400 && location) {
+      try {
+        current = new URL(location, current).toString();
+      } catch {
+        return null;
+      }
+      continue;
+    }
+    return typeof response.data === 'string' ? response.data : String(response.data ?? '');
+  }
+  return null;
+}
+
+/** SHA-256 for a GitHub release, read from its published `.sha256` asset. Best-effort. */
+async function fetchReleaseSha256(candidate) {
+  if (!candidate || !candidate.sha256AssetUrl) return null;
+  const cacheKey = `v${candidate.versionCode}`;
+  const cached = await sha256Cache.get(cacheKey);
+  if (typeof cached === 'string' && cached) return cached;
+
+  const text = await fetchTextFollowingValidatedRedirects(candidate.sha256AssetUrl);
+  const sha256 = normalizeSha256(text);
+  if (sha256) await sha256Cache.set(cacheKey, sha256);
+  return sha256;
+}
+
 function mapDbVersion(req, version) {
   if (!version) return null;
   return {
@@ -107,11 +327,18 @@ function mapDbVersion(req, version) {
     versionCode: Number(version.versionCode) || 0,
     releaseNotes: version.releaseNotes || '',
     apkFileName: version.apkFileName,
-    apkFileSize: version.apkFileSize,
+    apkFileSize: Number(version.apkFileSize) || 0,
     downloadUrl: publicDownloadUrl(req, version.downloadUrl),
     isMandatory: version.isMandatory || false,
     minCompatibleVersion: Number(version.minCompatibleVersion) || 1,
     releasedAt: version.releasedAt,
+    releaseChannel: normalizeChannel(version.releaseChannel),
+    distribution: version.distribution === 'play' || version.distribution === 'managed_device'
+      ? version.distribution
+      : 'external_apk',
+    sha256: normalizeSha256(version.sha256),
+    // Optional per-version platform scope; absent means "all platforms".
+    platforms: Array.isArray(version.platforms) ? version.platforms : null,
     source: 'db',
   };
 }
@@ -124,67 +351,101 @@ function mapGitHubVersion(release, apkAsset) {
     versionCode: versionNameToCode(versionName),
     releaseNotes: release.body || '',
     apkFileName: apkAsset.name,
-    apkFileSize: apkAsset.size,
+    apkFileSize: Number(apkAsset.size) || 0,
     downloadUrl: apkAsset.browser_download_url,
     isMandatory: false,
     minCompatibleVersion: 1,
     releasedAt: release.published_at,
+    releaseChannel: 'stable',
+    distribution: 'external_apk',
+    sha256: null,
+    sha256AssetUrl: pickSha256Asset(release, apkAsset)?.browser_download_url || null,
+    platforms: null,
     source: 'github',
   };
 }
 
-async function getLatestPublishedVersion(req) {
-  const dbLatest = mapDbVersion(req, await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean());
-  let githubLatest = null;
+/**
+ * Every published candidate from the active sources. GitHub failure is swallowed
+ * only when a DB candidate exists, so a total provider outage still surfaces 500.
+ */
+async function getVersionCandidates(req) {
+  const candidates = [];
+  const dbLatest = mapDbVersion(
+    req,
+    await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean(),
+  );
+  if (dbLatest) candidates.push(dbLatest);
+
   try {
     const release = await fetchLatestRelease();
-    githubLatest = mapGitHubVersion(release, pickApkAsset(release));
+    const githubLatest = mapGitHubVersion(release, pickApkAsset(release));
+    if (githubLatest) candidates.push(githubLatest);
   } catch (error) {
-    if (!dbLatest) throw error;
+    if (candidates.length === 0) throw error;
   }
-  if (!dbLatest) return githubLatest;
-  if (!githubLatest) return dbLatest;
-  return githubLatest.versionCode > dbLatest.versionCode ? githubLatest : dbLatest;
+  return candidates;
 }
 
-router.get('/version', async (req, res) => {
+async function getLatestPublishedVersion(req) {
+  return pickLatestVersion(await getVersionCandidates(req));
+}
+
+router.get('/version', updateCheckLimiter, async (req, res) => {
   try {
-    const { currentVersion } = req.query;
-
-    if (!currentVersion) {
+    const parsedQuery = appVersionQuerySchema.safeParse(req.query);
+    if (!parsedQuery.success) {
+      // Keep the historic error strings: shipped clients only branch on the HTTP
+      // status, but external integrations match these messages.
+      const suppliedVersion =
+        req.query.currentVersionCode !== undefined || req.query.currentVersion !== undefined;
       return res.status(400).json({
         success: false,
-        error: 'Current version is required',
+        error: suppliedVersion ? 'Invalid version code' : 'Current version is required',
       });
     }
 
-    const currentVersionCode = parseInt(currentVersion, 10);
+    const { channel, platform } = parsedQuery.data;
+    const currentVersionCode =
+      parsedQuery.data.currentVersionCode !== undefined
+        ? parsedQuery.data.currentVersionCode
+        : parsedQuery.data.currentVersion;
 
-    if (isNaN(currentVersionCode)) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid version code',
-      });
-    }
+    const latest = pickLatestVersion(await getVersionCandidates(req), { channel, platform });
 
-    const latest = await getLatestPublishedVersion(req);
     if (!latest) {
       return res.json({
         success: true,
         updateAvailable: false,
+        mandatory: false,
+        latestVersion: null,
         message: 'No APK asset found in the active release sources',
       });
     }
 
+    const minimumSupportedVersionCode = Math.max(1, Number(latest.minCompatibleVersion) || 1);
+    const updateAvailable = latest.versionCode > currentVersionCode;
+    const mandatory = !!latest.isMandatory || currentVersionCode < minimumSupportedVersionCode;
+
+    // Only pay for the checksum lookup when the device can actually act on it.
+    if (updateAvailable && !latest.sha256) {
+      latest.sha256 = await fetchReleaseSha256(latest);
+    }
+
+    const publicLatest = toPublicLatestVersion(latest, req);
+
     return res.json({
       success: true,
-      updateAvailable: latest.versionCode > currentVersionCode,
-      latestVersion: latest,
+      updateAvailable,
+      mandatory,
+      currentVersionCode,
+      latestVersion: publicLatest,
+      // Legacy top-level fields kept for shipped clients (AppUpdater reads isMandatory).
       currentVersion: currentVersionCode,
-      isMandatory: latest.isMandatory || currentVersionCode < latest.minCompatibleVersion,
-      releaseNotes: latest.releaseNotes,
-      downloadUrl: latest.downloadUrl,
-      minCompatibleVersion: latest.minCompatibleVersion,
+      isMandatory: mandatory,
+      releaseNotes: publicLatest.releaseNotes,
+      downloadUrl: publicLatest.downloadUrl,
+      minCompatibleVersion: publicLatest.minCompatibleVersion,
       source: latest.source,
     });
   } catch (error) {
@@ -336,7 +597,6 @@ router.get('/demo-code', async (req, res) => {
 // session, so this endpoint is intentionally public; it is rate-limited per IP
 // and every field is trimmed/sized so the payload can never be abused.
 // ---------------------------------------------------------------------------
-const rateLimit = require('express-rate-limit');
 const CrashReport = require('../models/CrashReport');
 
 const crashReportLimiter = rateLimit({
@@ -401,4 +661,11 @@ module.exports._private = {
   getCanonicalDownloadUrl,
   isStaleLocalDownloadUrl,
   publicDownloadUrl,
+  normalizeSha256,
+  normalizeChannel,
+  normalizePlatform,
+  splitReleaseNotes,
+  isAllowedDownloadUrl,
+  pickLatestVersion,
+  toPublicLatestVersion,
 };

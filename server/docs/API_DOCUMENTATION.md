@@ -1555,13 +1555,19 @@ Web dashboard confirms the pairing by submitting the PIN.
 
 ### 1. Check for Updates
 
-**GET** `/app/version?currentVersion=100`
+**GET** `/app/version?currentVersionCode=10300&channel=stable&platform=android-tv`
 
 **Auth:** Not required
 
 **Query Parameters:**
 
-- `currentVersion` (required): Current app version code
+- `currentVersionCode` (required unless the legacy alias is used): numeric Android version code
+  (`major * 10000 + minor * 100 + patch`). Must be a non-negative integer.
+- `currentVersion` (optional): legacy alias for `currentVersionCode`, kept for already-shipped clients.
+- `channel` (optional, default `stable`): `stable` | `beta`. A version whose record predates the
+  channel field is treated as `stable`.
+- `platform` (optional, default `android`): `android` | `android-tv` | `android-mobile` | `fire-tv`
+  (`fire-tv` is normalised to `android-tv`). Only filters versions that declare a platform scope.
 
 **Response (200 OK):**
 
@@ -1569,16 +1575,50 @@ Web dashboard confirms the pairing by submitting the PIN.
 {
   "success": true,
   "updateAvailable": true,
-  "latestVersion": "v1.5",
-  "currentVersion": 100,
+  "mandatory": false,
+  "currentVersionCode": 10300,
+  "latestVersion": {
+    "versionName": "1.4.2",
+    "versionCode": 10402,
+    "minimumSupportedVersionCode": 10300,
+    "releaseChannel": "stable",
+    "distribution": "external_apk",
+    "downloadUrl": "https://github.com/mostafabonnif-beep/dzhoot/releases/download/v1.4.2/dzhoof-tv-v1.4.2-official.apk",
+    "sha256": "f0494df3f964b5f16ccb50be945e98cc25fa95a8fa187189c399a81a1b481e85",
+    "sizeBytes": 26840396,
+    "releaseNotesList": ["تحسين الثبات", "إصلاح مشكلة التشغيل"],
+    "publishedAt": "2026-09-13T17:17:44.000Z",
+    "releaseNotes": "تحسين الثبات\nإصلاح مشكلة التشغيل",
+    "apkFileName": "dzhoof-tv-v1.4.2-official.apk",
+    "apkFileSize": 26840396,
+    "isMandatory": false,
+    "minCompatibleVersion": 10300,
+    "releasedAt": "2026-09-13T17:17:44.000Z",
+    "source": "github"
+  },
+  "currentVersion": 10300,
   "isMandatory": false,
-  "releaseNotes": "Bug fixes and improvements",
-  "downloadUrl": "https://github.com/akshaynikhare/FireVisionIPTV/releases/download/v1.5/app-release.apk",
-  "minCompatibleVersion": 1
+  "releaseNotes": "تحسين الثبات\nإصلاح مشكلة التشغيل",
+  "downloadUrl": "https://github.com/mostafabonnif-beep/dzhoot/releases/download/v1.4.2/dzhoof-tv-v1.4.2-official.apk",
+  "minCompatibleVersion": 10300,
+  "source": "github"
 }
 ```
 
-App version data is sourced from the GitHub Releases API (not a local DB collection).
+Notes:
+
+- `mandatory` (and the legacy `isMandatory`) is true when the release is flagged mandatory or the
+  device is below `minimumSupportedVersionCode`.
+- `sha256` is read from the release's published `<apk>.sha256` asset; it is `null` when unavailable.
+- `downloadUrl` is `null` when the source URL is not HTTPS or its host is not on the allowlist
+  (GitHub hosts, `PUBLIC_BASE_URL` host, the request host, plus `APP_UPDATE_ALLOWED_HOSTS`).
+- `releaseNotesList` is the structured list; `releaseNotes` keeps the legacy string form for
+  clients shipped before this contract.
+- Version records are read from the `AppVersion` collection and the GitHub Releases API; the higher
+  `versionCode` wins. The endpoint is rate-limited per IP
+  (`APP_UPDATE_RATE_LIMIT_MAX`, default 1000 requests / 15 minutes).
+- `400` is returned when the version code is missing or not a non-negative integer; `500` when every
+  release source is unavailable.
 
 ---
 
