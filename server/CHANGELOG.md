@@ -10,6 +10,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (release verification)
+
+- `src/scripts/verify-release-provenance.ts` (`npm run verify:release-provenance`) —
+  compares a release manifest against what `GET /api/v1/app/version` actually serves
+  (versionName, versionCode, sha256, sizeBytes, releaseChannel, distribution and the APK
+  file name in the served `downloadUrl`). Fails closed: an unverifiable manifest is
+  rejected before any network call, an API that serves no release is an error, and any
+  disagreement exits non-zero so it can gate a publish or a deploy. Read-only, no admin
+  session, no database access. Falls back to the legacy `currentVersion` parameter so it
+  works against a pre-contract deployment. See `docs/VERIFY_RELEASE_PROVENANCE.md`.
+
 ### Added (admin diagnostics)
 
 - `GET /api/v1/admin/diagnostics` — one ordered list of checks with the evidence behind
