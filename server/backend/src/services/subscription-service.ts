@@ -5,6 +5,7 @@ import ActivationCode from '../models/ActivationCode';
 import ActivationRedemption from '../models/ActivationRedemption';
 import Subscription from '../models/Subscription';
 import Device from '../models/Device';
+import User from '../models/User';
 import Reseller from '../models/Reseller';
 import CreditTransaction from '../models/CreditTransaction';
 import { getRedisClient, isRedisReady } from './redis';
@@ -217,6 +218,14 @@ export async function redeemCode(
     code.activatedAt = now;
     code.activatedBy = new mongoose.Types.ObjectId(userId);
     await code.save();
+
+    // Freemium: a plan may unlock only some channel groups. Copy the scope onto
+    // the user so the playlist, playback, channel and category paths all agree
+    // without re-reading the plan. Legacy plans (field absent) leave the user's
+    // scope untouched; an empty array means "everything" and clears it.
+    if (Array.isArray(plan.channelGroups)) {
+      await User.updateOne({ _id: userId }, { $set: { accessGroups: plan.channelGroups } }).exec();
+    }
 
     await recordRedemption(code, userId, deviceInfo?.deviceId, subscription._id, ip, 'SUCCESS');
 

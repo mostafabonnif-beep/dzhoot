@@ -250,7 +250,7 @@ export interface FailoverContext {
 }
 
 /** Resolve a backup target for the channel via the failover maps (priority
- *  cascade: NEO 4K then MIBOX). Returns null when nothing is available. */
+ *  cascade: backup tier A then backup tier B). Returns null when nothing is available. */
 async function resolveFailoverTarget(ctx: FailoverContext) {
   const Channel = require('../models/Channel').default || require('../models/Channel');
   const { getFailoverTarget } = require('./source-failover-service');
@@ -553,7 +553,7 @@ export async function proxyUpstreamStream(
       // ── Raw stream (MPEG-TS / progressive) — with MID-STREAM FAILOVER ──────
       // The playing session must survive upstream death: when the upstream
       // connection errors mid-stream, resolve the failover target (priority
-      // cascade NEO 4K → MIBOX) and keep pumping into the SAME client
+      // cascade backup tier A → backup tier B) and keep pumping into the SAME client
       // response. The TS player tolerates the short gap; the stream never
       // hard-stops for the customer.
       let currentUrl = fetchedUrl;

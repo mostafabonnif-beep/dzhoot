@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.kapt)
+    alias(libs.plugins.compose.compiler)
     id("kotlin-parcelize")
     alias(libs.plugins.hilt)
     id("io.sentry.android.gradle")
@@ -68,6 +69,22 @@ android {
         // google-services.json is intentionally supplied only by CI/release.
         buildConfigField("String", "API_BASE_URL", "\"$configuredApiUrl\"")
         buildConfigField("Boolean", "FIREBASE_ENABLED", googleServicesAvailable.toString())
+        // AdMob: the APPLICATION_ID must live in the manifest at build time, so
+        // the operator's app id ships as a gradle-property default (same pattern
+        // as dzhoofApiUrl) and can be overridden per build:
+        //   ./gradlew ... -PadmobAppId=ca-app-pub-XXXX~YYYY
+        // Unit ids are supplied by the server (ads.android.*) at runtime; the
+        // banner default below is only a fallback for a fresh install.
+        val configuredAdmobAppId = providers.gradleProperty("admobAppId")
+            .orElse(providers.environmentVariable("ADMOB_APP_ID"))
+            .orNull?.trim()?.takeIf { it.isNotBlank() }
+            ?: "ca-app-pub-9770740237819457~2425516571"
+        val configuredBannerUnit = providers.gradleProperty("admobBannerUnitId")
+            .orElse(providers.environmentVariable("ADMOB_BANNER_UNIT_ID"))
+            .orNull?.trim()?.takeIf { it.isNotBlank() }
+            ?: "ca-app-pub-9770740237819457/1112434909"
+        manifestPlaceholders["admobAppId"] = configuredAdmobAppId
+        buildConfigField("String", "ADMOB_BANNER_UNIT_ID", "\"$configuredBannerUnit\"")
         manifestPlaceholders["sentryDsn"] = System.getenv("SENTRY_DSN") ?: ""
         manifestPlaceholders["sentryEnvironment"] = "debug"
     }
@@ -153,10 +170,9 @@ android {
     buildFeatures {
         compose = true
     }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    // Kotlin 2.x: the Compose compiler version now comes from the
+    // org.jetbrains.kotlin.plugin.compose plugin (see [plugins]), so the legacy
+    // composeOptions.kotlinCompilerExtensionVersion pin is gone.
 }
 
 dependencies {
@@ -217,6 +233,9 @@ dependencies {
     // Retrofit & OkHttp
     implementation(libs.retrofit)
     implementation(libs.retrofit.converter.gson)
+
+    // AdMob (free-tier ads; runtime-gated, no-op without Play services)
+    implementation(libs.play.services.ads)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging.interceptor)
 
@@ -325,4 +344,18 @@ tasks.register<JacocoReport>("jacocoTestReport") {
     executionData.setFrom(fileTree(layout.buildDirectory.get()) {
         include("jacoco/testDebugUnitTest.exec")
     })
+}
+
+// ── R8 release-path gate ─────────────────────────────────────────────────────
+// CI's android job runs `lintStagingDebug testStagingDebugUnitTest` and
+// `assembleStagingDebug` — none of which are minified, so R8 only ever ran when
+// a release tag was pushed. A missing -dontwarn rule therefore broke the
+// official release with no CI signal (2026-09-13: "Missing classes detected
+// while running R8" from the AdMob SDK, release v1.3.0 failed).
+//
+// Hook the release minification onto the verification task CI already runs, so
+// the release path is covered. If a dedicated CI step is added later, remove
+// this wiring.
+tasks.matching { it.name == "lintStagingDebug" }.configureEach {
+    dependsOn("minifyOfficialReleaseWithR8")
 }

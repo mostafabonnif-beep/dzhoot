@@ -86,14 +86,10 @@ async function verifiedXtreamChannelQuery(baseQuery, options = {}) {
 // payloads, not a browse limit. Override via TV_CHANNELS_MAX if the catalog grows.
 const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 20000;
 
-// ── Demo mode (وضع الديمو) ──────────────────────────────────────────
-// The app's "Browse demo channels" flow fetches /api/v1/app/demo-code,
-// then syncs channels with that code. Demo users get a curated subset of
-// the catalog — by default the Algerian group — not the full catalog.
-const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA الجزائر')
-  .split(',')
-  .map((g) => g.trim())
-  .filter(Boolean);
+// ── Demo / free tier (وضع الديمو والمجاني) ──────────────────────────
+// The app's "Browse demo channels" flow fetches /api/v1/app/demo-code, then
+// syncs channels with that code. Demo/free users get only the groups the
+// operator allows (services/channel-scope is the single source of truth).
 const DEMO_CHANNELS_MAX = Number(process.env.DEMO_CHANNELS_MAX) || 50;
 const isDemoRequest = (req) => req.user?.demo === true;
 
@@ -273,14 +269,20 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     // served from the shared cache (tokens are user-bound and expire). Only the
     // URL-free slim payload is cached for web/session consumers.
     const isTvClient = Boolean(req.user?.channelListCode);
+    // Freemium group scope: a code limited to some groups only ever sees those.
+    const { groupScopeClause } = require('../services/channel-scope');
+    const scopeClause = await groupScopeClause(req.user);
+    const isScoped = Boolean(scopeClause);
 
     // Demo mode: curated catalog only (e.g. Algerian channels) — never the
     // full catalog, and always tokenized like any TV client.
     if (isDemoRequest(req)) {
+      const { groupScopeClause } = require('../services/channel-scope');
+      const demoScope = (await groupScopeClause(req.user)) || {};
       const demoQuery = await verifiedXtreamChannelQuery(
         {
           isActive: { $ne: false },
-          channelGroup: { $in: DEMO_CHANNEL_GROUPS },
+          ...demoScope,
         },
         { dedup: true },
       );
@@ -304,8 +306,8 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     const wantsPagination =
       req.query.page !== undefined || req.query.pageSize !== undefined || searchQ !== '';
 
-    // The full-catalog cache is only valid for unpaginated requests.
-    if (!wantsPagination && catalogView && !isTvClient) {
+    // The full-catalog cache is only valid for unscoped, unpaginated requests.
+    if (!wantsPagination && catalogView && !isTvClient && !isScoped) {
       const cached = await channelCache.get('catalog:list:presentation-v2');
       if (cached) return res.json(cached);
     }
@@ -315,12 +317,13 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       const baseQuery = catalogView
         ? { ownerId: null }
         : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
+      Object.assign(baseQuery, scopeClause || {});
       // Country/category are derived at presentation time, not stored as a trusted
       // source field. Sort the bounded result set before slicing so pagination stays
       // globally consistent with /grouped rather than following raw supplier labels.
       let orderedChannels;
       let directSourceIds;
-      if (catalogView && !searchQ) {
+      if (catalogView && !searchQ && !isScoped) {
         // Fast path: the shared allCatalog catalog is identical for every page —
         // serve all pages from the cached ordered array instead of refetching and
         // re-sorting the full ~16k catalog on every request.
@@ -362,6 +365,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     const baseQuery = catalogView
       ? { ownerId: null }
       : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
+    Object.assign(baseQuery, scopeClause || {});
     const query = await verifiedXtreamChannelQuery(baseQuery, { dedup: req.user.role !== 'Admin' });
 
     const channels = await Channel.find(query)
@@ -382,7 +386,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       data,
     };
 
-    if (catalogView && !isTvClient) await channelCache.set('catalog:list:presentation-v2', payload);
+    if (catalogView && !isTvClient && !isScoped) await channelCache.set('catalog:list:presentation-v2', payload);
 
     res.json(payload);
   } catch (error) {
@@ -398,8 +402,11 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
 router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
   try {
     const catalogView = req.user.role === 'Admin' || req.user.allCatalog === true;
+    const { groupScopeClause } = require('../services/channel-scope');
+    const scopeClause = await groupScopeClause(req.user);
+    const isScoped = Boolean(scopeClause);
 
-    if (catalogView) {
+    if (catalogView && !isScoped) {
       const cached = await channelCache.get('catalog:grouped:presentation-v1');
       if (cached) return res.json(cached);
     }
@@ -408,6 +415,7 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
     const baseQuery = catalogView
       ? { ownerId: null }
       : { _id: { $in: (req.user.channels || []).filter(Boolean) }, isActive: { $ne: false } };
+    Object.assign(baseQuery, scopeClause || {});
     const query = await verifiedXtreamChannelQuery(baseQuery, { dedup: req.user.role !== 'Admin' });
 
     const channels = await Channel.find(query)
@@ -516,6 +524,8 @@ router.get('/search', requireTvOrSessionAuth, async (req, res) => {
       // Admin/demo/allCatalog search the shared catalog only, never users' private channels.
       searchFilter.ownerId = null;
     }
+    // Freemium scope: never surface a channel the code may not watch.
+    Object.assign(searchFilter, (await require('../services/channel-scope').groupScopeClause(req.user)) || {});
 
     const channels = await Channel.find({
       $and: [
@@ -659,13 +669,15 @@ router.get('/:id', requireTvOrSessionAuth, async (req, res) => {
         return res.status(404).json({ success: false, error: 'Channel not found' });
       }
     }
-    if (isDemoRequest(req)) {
-      const inDemo = await Channel.exists({
+    // Freemium scope: demo/free and group-limited codes only see their groups.
+    const scopeClause = await require('../services/channel-scope').groupScopeClause(req.user);
+    if (scopeClause) {
+      const inScope = await Channel.exists({
         _id: req.params.id,
         isActive: { $ne: false },
-        channelGroup: { $in: DEMO_CHANNEL_GROUPS },
+        ...scopeClause,
       });
-      if (!inDemo) {
+      if (!inScope) {
         return res.status(404).json({ success: false, error: 'Channel not found' });
       }
     }
@@ -839,13 +851,15 @@ router.get('/:id/with-fallbacks', requireAuth, async (req, res) => {
         return res.status(404).json({ success: false, error: 'Channel not found' });
       }
     }
-    if (isDemoRequest(req)) {
-      const inDemo = await Channel.exists({
+    // Freemium scope: demo/free and group-limited codes only see their groups.
+    const scopeClause = await require('../services/channel-scope').groupScopeClause(req.user);
+    if (scopeClause) {
+      const inScope = await Channel.exists({
         _id: req.params.id,
         isActive: { $ne: false },
-        channelGroup: { $in: DEMO_CHANNEL_GROUPS },
+        ...scopeClause,
       });
-      if (!inDemo) {
+      if (!inScope) {
         return res.status(404).json({ success: false, error: 'Channel not found' });
       }
     }

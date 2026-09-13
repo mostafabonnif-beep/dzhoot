@@ -28,6 +28,8 @@ private const val PARENTAL_PIN_LOCK_UNTIL_KEY = "parental_pin_lock_until"
 private const val PARENTAL_PIN_MAX_ATTEMPTS = 5
 private const val PARENTAL_PIN_LOCK_MS = 30_000L
     private const val PARENTAL_LOCK_ENABLED_KEY = "parental_lock_enabled"
+    private const val UPDATE_LAST_CHECK_AT_KEY = "update_last_check_at"
+    private const val UPDATE_LAST_RESULT_KEY = "update_last_result"
     val DEFAULT_SERVER_URL: String
         get() = BuildConfig.API_BASE_URL.trimEnd('/')
 
@@ -219,6 +221,26 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
     }
 
     /** True when a usable channel source exists (paired code OR a BYO playlist). */
+    // ─── App update check state (non-sensitive) ────────────────────────
+
+    /** Epoch millis of the last completed update check, or 0 when never checked. */
+    fun getUpdateLastCheckAt(context: Context): Long =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getLong(UPDATE_LAST_CHECK_AT_KEY, 0L)
+
+    /** Non-sensitive outcome label of the last check (e.g. "available", "up_to_date"). */
+    fun getUpdateLastResult(context: Context): String =
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(UPDATE_LAST_RESULT_KEY, "") ?: ""
+
+    fun setUpdateLastCheckState(context: Context, checkedAt: Long, resultCode: String) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putLong(UPDATE_LAST_CHECK_AT_KEY, checkedAt)
+            .putString(UPDATE_LAST_RESULT_KEY, resultCode)
+            .apply()
+    }
+
     fun hasAnySource(context: Context): Boolean {
         return when (getPlaylistSourceType(context)) {
             SOURCE_M3U -> getM3uUrl(context).isNotBlank()

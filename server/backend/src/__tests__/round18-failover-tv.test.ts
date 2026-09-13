@@ -275,7 +275,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('primary down + mirror configured → token stream rewritten to the mirror domain (source: mirror)', async () => {
     const primary = await XtreamSource.create({
-      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Primary Source', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'degraded', directPlayback: true,
       mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
     });
@@ -303,7 +303,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('primary down + mirror but healthy → no rewrite (primary stays)', async () => {
     const primary = await XtreamSource.create({
-      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Primary Source', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'verified', directPlayback: true,
       mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
     });
@@ -328,7 +328,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('mirror never applies to catch-up even when the primary is down', async () => {
     const primary = await XtreamSource.create({
-      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Primary Source', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'blocked', directPlayback: true,
       mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
     });
@@ -346,7 +346,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('VOD movie token stream is rewritten to the mirror domain when the primary is down', async () => {
     const src = await XtreamSource.create({
-      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Primary Source', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'degraded', directPlayback: true,
       mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
     });
@@ -365,7 +365,7 @@ describe('Round 18 — TV playback-token auto-failover (backup source)', () => {
 
   it('VOD movie token keeps the primary URL when the source is healthy', async () => {
     const src = await XtreamSource.create({
-      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
+      name: 'Primary Source', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'e', passwordEncrypted: 'e',
       status: 'Active', verificationStatus: 'verified', directPlayback: true,
       mirrorServerUrls: ['http://tv.business-cloud-neo.com'],
     });

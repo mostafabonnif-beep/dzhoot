@@ -74,6 +74,10 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
       channelListCode: user.channelListCode,
       isActive: user.isActive,
       emailVerified: user.emailVerified,
+      // Freemium scope must survive every auth path, otherwise a group-limited
+      // code would fall back to "unrestricted" on session-authenticated routes.
+      accessGroups: (user as { accessGroups?: string[] }).accessGroups || [],
+      freeAccess: (user as { freeAccess?: boolean }).freeAccess === true,
     };
 
     req.sessionId = sessionId;
