@@ -10,6 +10,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (health)
+
+- `GET /health/version` — non-sensitive build metadata (`service`, `version`, `commit`,
+  `builtAt`, `environment`, `requestId`). The endpoint existed in the operations brief but
+  returned 404. No status probes, connection strings, internal hostnames or secrets.
+- `/health` and `/health/version` now build their version/commit/builtAt from one shared
+  helper, so a deploy can never report two different versions.
+
 ### Added (app release provenance + admin publish path)
 
 - `AppVersion` now stores `sha256`, `releaseChannel` (`stable`/`beta`), `distribution`

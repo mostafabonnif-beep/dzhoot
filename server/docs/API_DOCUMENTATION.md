@@ -1875,6 +1875,57 @@ Legacy raw proxy endpoint. It returns `410 Gone` by default because upstream URL
 
 ---
 
+## Health & Version Endpoints
+
+Unauthenticated, and mounted outside `/api/*` so they are never rate limited.
+
+### 1. Liveness
+
+**GET** `/health/live` — always-process probe; never touches MongoDB or Redis.
+
+```json
+{ "status": "ok", "uptime": 4420.98, "requestId": "…" }
+```
+
+### 2. Readiness
+
+**GET** `/health/ready` — `200` when MongoDB is connected, `503` otherwise. Redis is
+optional for this application, so a Redis outage does not fail readiness.
+
+```json
+{ "status": "ok", "mongodb": "connected", "redis": "connected", "requestId": "…" }
+```
+
+### 3. Version metadata
+
+**GET** `/health/version` — non-sensitive build identity, so a running container can be
+matched against the Git tag, Docker image tag and GitHub Release. Deliberately contains no
+status probing, connection strings, internal hostnames or secrets.
+
+```json
+{
+  "status": "ok",
+  "service": "dzhoof-api",
+  "version": "1.0.1",
+  "commit": "59ad81fe028f89f7b8114f22a942d3f2b4fd602b",
+  "builtAt": "2026-09-13T19:50:45Z",
+  "environment": "production",
+  "requestId": "…"
+}
+```
+
+### 4. Health summary
+
+**GET** `/health` — minimal public payload (`status`, `version`, `release.commit`,
+`release.builtAt`). The operational details (sources, EPG, scheduler, alerting, MongoDB,
+Redis, uptime) are only returned with `?details=true`, for internal monitoring.
+
+`version`, `commit` and `builtAt` come from the same source in `/health` and
+`/health/version`, so the two can never disagree. `/internal/metrics` (Prometheus) is
+separate and token-gated.
+
+---
+
 ## Rate Limiting
 
 Rate limiting protects the API from abuse. Limits are tracked per authenticated user (not per IP) when a valid session or JWT is present, preventing multiple devices on the same network from sharing a single rate-limit bucket.
