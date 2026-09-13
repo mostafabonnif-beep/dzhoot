@@ -1618,7 +1618,10 @@ Notes:
   `versionCode` wins. The endpoint is rate-limited per IP
   (`APP_UPDATE_RATE_LIMIT_MAX`, default 1000 requests / 15 minutes).
 - `400` is returned when the version code is missing or not a non-negative integer; `500` when every
-  release source is unavailable.
+  release source is unavailable. Both carry `errorCode`, `userMessageKey` and `retryable` from the
+  central taxonomy (see [`ERROR_TAXONOMY.md`](./ERROR_TAXONOMY.md)) alongside the legacy `error`
+  string, so a client can branch on the code instead of parsing text —
+  `UPDATE_METADATA_INVALID` and `UPDATE_CHECK_NETWORK` respectively.
 
 ---
 

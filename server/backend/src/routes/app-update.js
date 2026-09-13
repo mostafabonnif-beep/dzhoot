@@ -4,7 +4,7 @@ const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 const AppVersion = require('../models/AppVersion');
 const { CacheService } = require('../services/cache');
-const { appVersionQuerySchema } = require('@dzhoof/shared');
+const { appVersionQuerySchema, buildErrorReport } = require('@dzhoof/shared');
 const { validateUrlForSSRF } = require('../utils/ssrf-guard');
 // Shared demo-code guard (same strength rules + live-credential collision check).
 const { resolvePublicDemoCode } = require('./config');
@@ -152,6 +152,23 @@ function normalizeChannel(value) {
 
 function normalizePlatform(value) {
   return value === 'fire-tv' ? 'android-tv' : value;
+}
+
+/**
+ * Error body built from the central taxonomy (see @dzhoof/shared/errors), so a client
+ * branches on `errorCode`/`retryable` instead of parsing `error` text. The legacy
+ * `error` string is preserved verbatim for already-shipped clients.
+ */
+function errorBody(code, req, extra = {}) {
+  const report = buildErrorReport(code, { correlationId: req?.requestId });
+  return {
+    success: false,
+    errorCode: report.errorCode,
+    userMessageKey: report.userMessageKey,
+    retryable: report.retryable,
+    requestId: report.correlationId,
+    ...extra,
+  };
 }
 
 const RELEASE_NOTES_MAX_ITEMS = 20;
@@ -399,10 +416,11 @@ router.get('/version', updateCheckLimiter, async (req, res) => {
       // status, but external integrations match these messages.
       const suppliedVersion =
         req.query.currentVersionCode !== undefined || req.query.currentVersion !== undefined;
-      return res.status(400).json({
-        success: false,
-        error: suppliedVersion ? 'Invalid version code' : 'Current version is required',
-      });
+      return res.status(400).json(
+        errorBody('UPDATE_METADATA_INVALID', req, {
+          error: suppliedVersion ? 'Invalid version code' : 'Current version is required',
+        }),
+      );
     }
 
     const { channel, platform } = parsedQuery.data;
@@ -450,10 +468,9 @@ router.get('/version', updateCheckLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Error checking version via GitHub:', error.message || error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to check version from GitHub',
-    });
+    return res.status(500).json(
+      errorBody('UPDATE_CHECK_NETWORK', req, { error: 'Failed to check version from GitHub' }),
+    );
   }
 });
 
