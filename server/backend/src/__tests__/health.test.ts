@@ -37,6 +37,37 @@ describe('health endpoints', () => {
     expect(response.body).not.toHaveProperty('uptime');
   });
 
+  it('GET /health/version returns non-sensitive build metadata', async () => {
+    const response = await request(app).get('/health/version');
+
+    expect(response.status).toBe(200);
+    expect(response.body.status).toBe('ok');
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        status: 'ok',
+        service: 'dzhoof-api',
+        version: expect.any(String),
+        environment: expect.any(String),
+        requestId: expect.any(String),
+      }),
+    );
+    expect(response.body).toHaveProperty('commit');
+    expect(response.body).toHaveProperty('builtAt');
+    // Operational data and infrastructure details must never appear here.
+    for (const leaked of ['mongodb', 'redis', 'uptime', 'details', 'connectionString', 'host']) {
+      expect(response.body).not.toHaveProperty(leaked);
+    }
+  });
+
+  it('GET /health/version agrees with the version reported by /health', async () => {
+    const version = await request(app).get('/health/version');
+    const health = await request(app).get('/health');
+
+    expect(version.body.version).toBe(health.body.version);
+    expect(version.body.commit).toBe(health.body.release.commit);
+    expect(version.body.builtAt).toBe(health.body.release.builtAt);
+  });
+
   it('GET /health?details=true includes operational details', async () => {
     const response = await request(app).get('/health?details=true');
 
