@@ -55,10 +55,9 @@ data class PortalTile(
 )
 
 /**
- * The home "portal", styled after the NEO 4K launcher: a single large
- * hero tile for live TV on the left, a compact 2-column grid of the
- * remaining destinations beside it, all in the same gold-on-black brand
- * wash. Every destination is visible in one glance and reachable within
+ * The home "portal" launcher: a single large hero tile for live TV on
+ * one side, a compact 2-column grid of the remaining destinations beside
+ * it, all in the same gold-on-black brand wash. Every destination is visible in one glance and reachable within
  * a few D-pad presses.
  */
 @Composable
@@ -90,7 +89,7 @@ fun HomePortalTiles(
             }
         }
     } else {
-        // TV: NEO 4K hero layout — the first tile (live TV) spans the full
+        // TV: hero layout — the first tile (live TV) spans the full
         // portal height on the left, the remaining tiles sit in a two-column
         // grid on the right with identical widths so the row closes flush.
         BoxWithConstraints(modifier = modifier.fillMaxWidth()) {

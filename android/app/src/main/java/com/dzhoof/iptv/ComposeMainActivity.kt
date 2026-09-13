@@ -308,8 +308,8 @@ class ComposeMainActivity : ComponentActivity() {
 /**
  * App shell composable that combines the navigation chrome with the NavHost.
  *
- * In landscape (TV/tablet): left rail sidebar with SideNavRail.
- * In portrait (phone): bottom navigation bar.
+ * In landscape (phone/tablet/TV): the shared top bar (PremiumTvTopBar).
+ * Portrait is not reachable while the landscape lock is in place.
  *
  * Navigation chrome is only visible on top-level screens (Home, Channels, Search,
  * Favorites, Settings). It is hidden during Pairing and Player screens.
@@ -327,7 +327,9 @@ private fun DzhoofAppShell(
     val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     val context = LocalContext.current
     val isMobile = remember { isMobileDevice(context) }
-    val usePremiumTvChrome = !isPortrait && !isMobile
+    // Landscape-first: every landscape layout (phone, tablet, TV) uses the same
+    // top bar, so the side rail and the bottom bar are no longer needed.
+    val usePremiumTvChrome = !isPortrait
 
     val onNavigate: (Screen) -> Unit = { screen ->
         navController.navigate(screen.defaultRoute()) {

@@ -189,6 +189,14 @@ val ArtworkGlowEmerald = Color(0x1A10B981)      // 10% emerald glow — backdrop
 val ArtworkGlowGold    = Color(0x0DE7BD62)      // 5% gold glow — restrained warmth
 val ArtworkStreakGold  = Color(0x00E7BD62)      // retained for source compatibility
 
+// ── Action gold (الاتجاه D — البوابة الذهبية) ─────────────────────────
+// The action colour is gold; emerald is retained for live/health semantics only.
+// Existing DzGreen*/DzGold* tokens are untouched, so call sites keep compiling.
+val ActionPrimary     = DzGold400   // buttons, selected nav, active chips
+val ActionOnPrimary   = Ink950      // content drawn on a gold fill
+val ActionPrimaryDeep = DzGold500   // pressed state / container
+val LiveAccent        = DzGreen400  // live streams and healthy status stay emerald
+
 // ── Guide (EPG) focus ────────────────────────────────────────────────
 val GuideRowWash        = Color(0x1F34D399)   // ~12% DzGreen300 — focused-row gradient wash
 val GuideCellFocusStart = Color(0x5934D399)   // ~35% DzGreen300 — focused cell gradient start
