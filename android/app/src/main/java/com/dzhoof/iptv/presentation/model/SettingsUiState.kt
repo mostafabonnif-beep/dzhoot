@@ -63,5 +63,13 @@ data class UpdateInfo(
     val releaseNotes: String,
     val fileSize: String,
     val downloadUrl: String,
-    val isMandatory: Boolean
+    val isMandatory: Boolean,
+    /** Published versionCode of the offered build, when the server provides it. */
+    val versionCode: Int? = null,
+    /** Published SHA-256 (64 hex chars) of the APK, when the server provides it. */
+    val sha256: String? = null,
+    /** Exact APK size in bytes when known — used to detect a truncated download. */
+    val sizeBytes: Long? = null,
+    /** Below this versionCode the update is mandatory; null when the server omits it. */
+    val minimumSupportedVersionCode: Int? = null
 )

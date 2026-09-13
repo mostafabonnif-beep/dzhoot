@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Pre-install verification of a downloaded update, all fail-closed: SHA-256 checksum, package name, expected versionCode, downgrade protection, plus the existing signature comparison. Failures map to stable `UpdateErrorCode` values that mirror the server's error taxonomy.
+- APK download URL allowlist: HTTPS only, no credentials in the URL, no IP literals (so loopback/private ranges and DNS-rebinding hosts are unreachable), GitHub release hosts plus the configured API host.
+- The update check now sends `currentVersionCode`, `channel` and `platform` (`android-tv` on TV/leanback devices, otherwise `android`) and reads `sha256`, `versionCode`, `sizeBytes` and `minimumSupportedVersionCode` from the API response.
+- `AppUpdater.DownloadState.Failed` now carries the non-sensitive error `code` alongside the Arabic message so telemetry and diagnostics can report the reason without parsing text.
+
+### Changed
+- Update failure messages now come from the shared error taxonomy (same wording for the same failure everywhere) instead of ad-hoc strings at each call site.
+
 ## [1.2.0] - 2026-09-09
 
 ### Added
