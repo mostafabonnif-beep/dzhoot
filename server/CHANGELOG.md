@@ -10,6 +10,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (admin diagnostics)
+
+- `GET /api/v1/admin/diagnostics` — one ordered list of checks with the evidence behind
+  each verdict (build identity, environment, MongoDB with latency, Redis, and the release
+  pipeline: published release, artifact completeness, HTTPS + allowlisted download host,
+  versionCode derivation, update host allowlist, scheduler health), plus the newest active
+  release and the server's build identity. `overall` is the worst verdict. It reports
+  booleans, counts, latencies and host names only — never a token or connection string.
+- `/admin/diagnostics` renders it (trilingual, RTL) with a colored status per check.
+
 ### Added (health)
 
 - `GET /health/version` — non-sensitive build metadata (`service`, `version`, `commit`,
