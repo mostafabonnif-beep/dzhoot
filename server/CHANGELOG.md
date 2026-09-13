@@ -10,6 +10,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (error taxonomy)
+
+- Central, searchable error-code registry in `@dzhoof/shared`
+  (`packages/shared/src/errors/error-codes.ts`) with the 22 codes from the operations
+  brief, each carrying `userMessageKey`, `developerMessage`, `retryable`, `severity`,
+  `feature` and `remediation`.
+- `buildErrorReport(code, { correlationId, httpStatus, durationMs, details })` builds the
+  safe, non-sensitive report shape shared by telemetry and diagnostics. `details` is flat
+  and primitive-only, so a credential object cannot be attached by accident.
+- `GET /api/v1/app/version` error responses now include `errorCode`, `userMessageKey` and
+  `retryable` (`UPDATE_METADATA_INVALID` for a bad request, `UPDATE_CHECK_NETWORK` for a
+  provider failure) next to the unchanged legacy `error` string, so shipped clients keep
+  working and new clients stop parsing message text.
+- New reference: `server/docs/ERROR_TAXONOMY.md` (generated from the registry).
+
 ### Added (app release provenance + admin publish path)
 
 - `AppVersion` now stores `sha256`, `releaseChannel` (`stable`/`beta`), `distribution`

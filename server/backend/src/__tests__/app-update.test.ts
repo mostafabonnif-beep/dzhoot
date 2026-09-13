@@ -204,7 +204,15 @@ describe('GET /api/v1/app/version contract', () => {
     const response = await request(buildApp()).get('/api/v1/app/version');
 
     expect(response.status).toBe(400);
-    expect(response.body).toEqual({ success: false, error: 'Current version is required' });
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        success: false,
+        error: 'Current version is required',
+        errorCode: 'UPDATE_METADATA_INVALID',
+        userMessageKey: 'errors.update.update_metadata_invalid',
+        retryable: false,
+      }),
+    );
   });
 
   it('rejects a non-numeric or fractional version code', async () => {
@@ -424,7 +432,14 @@ describe('GET /api/v1/app/version GitHub source', () => {
     const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
 
     expect(response.status).toBe(500);
-    expect(response.body.success).toBe(false);
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        success: false,
+        errorCode: 'UPDATE_CHECK_NETWORK',
+        userMessageKey: 'errors.update.update_check_network',
+        retryable: true,
+      }),
+    );
   });
 });
 
