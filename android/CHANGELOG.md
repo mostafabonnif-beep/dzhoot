@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Distribution-path detection: the app now knows and reports internally which of the three update paths applies to this install — `play` (installed from Google Play), `managed_device` (proven device owner / affiliated profile owner) or `external_apk` (everything else). The managed path is only chosen when the device policy state proves it; silent install is never inferred, and Play takes precedence because Play's policy governs store installs.
 - Pre-install verification of a downloaded update, all fail-closed: SHA-256 checksum, package name, expected versionCode, downgrade protection, plus the existing signature comparison. Failures map to stable `UpdateErrorCode` values that mirror the server's error taxonomy.
 - APK download URL allowlist: HTTPS only, no credentials in the URL, no IP literals (so loopback/private ranges and DNS-rebinding hosts are unreachable), GitHub release hosts plus the configured API host.
 - The update check now sends `currentVersionCode`, `channel` and `platform` (`android-tv` on TV/leanback devices, otherwise `android`) and reads `sha256`, `versionCode`, `sizeBytes` and `minimumSupportedVersionCode` from the API response.

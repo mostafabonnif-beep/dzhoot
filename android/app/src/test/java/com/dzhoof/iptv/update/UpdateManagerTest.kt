@@ -63,6 +63,8 @@ class UpdateManagerTest {
         }
     }
 
+    private val externalApk = UpdateDistributionProvider { UpdateDistribution.EXTERNAL_APK }
+
     private val update = UpdateInfo(
         versionName = "1.4.2",
         releaseNotes = "",
@@ -73,10 +75,21 @@ class UpdateManagerTest {
     )
 
     @Test
+    fun `reports which distribution path is active`() = runTest {
+        val manager = UpdateManager(
+            FakeRepository(UpdateRepository.Result.UpToDate),
+            FakeStore(),
+            UpdateDistributionProvider { UpdateDistribution.PLAY },
+        )
+        assertEquals(UpdateDistribution.PLAY, manager.distribution)
+        assertEquals("play", manager.distribution.wireName)
+    }
+
+    @Test
     fun `an available update is returned and recorded`() = runTest {
         val repository = FakeRepository(UpdateRepository.Result.Found(update))
         val store = FakeStore()
-        val manager = UpdateManager(repository, store)
+        val manager = UpdateManager(repository, store, externalApk)
 
         val outcome = manager.check(UpdateManager.Trigger.APP_LAUNCH, nowMillis = 5_000L)
 
@@ -88,7 +101,7 @@ class UpdateManagerTest {
     fun `the foreground cooldown skips a check that is not due`() = runTest {
         val repository = FakeRepository(UpdateRepository.Result.UpToDate)
         val store = FakeStore(lastCheckAt = 1_000L)
-        val manager = UpdateManager(repository, store)
+        val manager = UpdateManager(repository, store, externalApk)
 
         val outcome = manager.check(
             UpdateManager.Trigger.APP_LAUNCH,
@@ -104,7 +117,7 @@ class UpdateManagerTest {
     fun `the periodic trigger uses the 6 to 24 hour cadence`() = runTest {
         val repository = FakeRepository(UpdateRepository.Result.UpToDate)
         val store = FakeStore(lastCheckAt = 1_000L)
-        val manager = UpdateManager(repository, store)
+        val manager = UpdateManager(repository, store, externalApk)
 
         // Just past the foreground cooldown, but far from the background interval.
         val tooSoon = manager.check(
@@ -125,7 +138,7 @@ class UpdateManagerTest {
     fun `a manual check ignores the cooldown`() = runTest {
         val repository = FakeRepository(UpdateRepository.Result.UpToDate)
         val store = FakeStore(lastCheckAt = 9_000L)
-        val manager = UpdateManager(repository, store)
+        val manager = UpdateManager(repository, store, externalApk)
 
         val outcome = manager.check(UpdateManager.Trigger.MANUAL, nowMillis = 9_001L)
 
@@ -139,7 +152,7 @@ class UpdateManagerTest {
             UpdateRepository.Result.Failed(UpdateErrorCode.UPDATE_CHECK_NETWORK),
         )
         val store = FakeStore()
-        val manager = UpdateManager(repository, store)
+        val manager = UpdateManager(repository, store, externalApk)
 
         val outcome = manager.check(UpdateManager.Trigger.PERIODIC, nowMillis = 7_000L)
 

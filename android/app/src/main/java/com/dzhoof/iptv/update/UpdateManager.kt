@@ -1,5 +1,6 @@
 package com.dzhoof.iptv.update
 
+import android.util.Log
 import com.dzhoof.iptv.presentation.model.UpdateInfo
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,7 +16,15 @@ import javax.inject.Singleton
 class UpdateManager @Inject constructor(
     private val repository: UpdateRepository,
     private val checkStore: UpdateCheckStore,
+    private val distributionProvider: UpdateDistributionProvider,
 ) {
+
+    /**
+     * Which of the three distribution paths this install uses (`play` / `external_apk` /
+     * `managed_device`). Non-sensitive, and the only device fact the pipeline reports.
+     */
+    val distribution: UpdateDistribution
+        get() = distributionProvider.current()
 
     /** Why a check is being attempted — each trigger has its own cadence. */
     enum class Trigger {
@@ -44,6 +53,8 @@ class UpdateManager @Inject constructor(
      * dead provider cannot be retried in a tight loop.
      */
     suspend fun check(trigger: Trigger, nowMillis: Long = System.currentTimeMillis()): Outcome {
+        Log.i(TAG, "check trigger=$trigger distribution=${distribution.wireName}")
+
         if (trigger != Trigger.MANUAL) {
             val cooldown = when (trigger) {
                 Trigger.PERIODIC -> UpdateSchedulePolicy.periodicCooldownMillis()
@@ -64,6 +75,10 @@ class UpdateManager @Inject constructor(
             checkStore.recordCheck(nowMillis, resultCode(outcome))
         }
         return outcome
+    }
+
+    private companion object {
+        const val TAG = "UpdateManager"
     }
 
     /** Non-sensitive label persisted for diagnostics. */
