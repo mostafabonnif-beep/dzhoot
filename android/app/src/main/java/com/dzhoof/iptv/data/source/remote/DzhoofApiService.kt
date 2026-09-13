@@ -1,5 +1,6 @@
 package com.dzhoof.iptv.data.source.remote
 
+import com.dzhoof.iptv.data.model.dto.AdsDecisionResponse
 import com.dzhoof.iptv.data.model.dto.CategoriesResponse
 import com.dzhoof.iptv.data.model.dto.ChannelDto
 import com.dzhoof.iptv.data.model.dto.ChannelsResponse
@@ -153,6 +154,13 @@ interface DzhoofApiService {
     @POST("api/v1/activation/client-redeem")
     suspend fun clientRedeem(@Body request: ClientRedeemRequest): Response<ClientRedeemResponse>
     
+    /**
+     * Fetches the server's ad decision for this account (freemium). Paying
+     * subscribers receive `show = false`, so no ad traffic is ever made for them.
+     */
+    @GET("api/v1/ads/me")
+    suspend fun getAdsDecision(): Response<AdsDecisionResponse>
+
     /**
      * Fetches the current subscription, plan and registered devices.
      */

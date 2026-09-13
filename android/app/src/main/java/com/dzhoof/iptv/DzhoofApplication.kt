@@ -4,7 +4,13 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.dzhoof.iptv.crash.CrashReporter
+import com.dzhoof.iptv.data.ads.AdsManager
+import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.worker.WorkManagerInitializer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import dagger.hilt.android.HiltAndroidApp
 import io.sentry.SentryEvent
@@ -16,6 +22,12 @@ import javax.inject.Inject
 class DzhoofApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
+
+    @Inject lateinit var adsManager: AdsManager
+    @Inject lateinit var apiService: DzhoofApiService
+
+    // Process-lifetime scope for fire-and-forget startup work.
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     // On-demand WorkManager init wired with Hilt's worker factory so @HiltWorker
     // workers (channel + EPG sync) can be instantiated.
@@ -50,6 +62,18 @@ class DzhoofApplication : Application(), Configuration.Provider {
             options.beforeSend = SentryOptions.BeforeSendCallback { event, _ ->
                 val exType = event.exceptions?.firstOrNull()?.type ?: ""
                 if (exType == "SentryHttpClientException") null else event
+            }
+        }
+
+        // Freemium ads: ask the server whether THIS account is ad-supported and
+        // warm the SDK only then. Any failure (offline, no activation, paid plan)
+        // simply leaves ads off — it can never block the app.
+        appScope.launch {
+            runCatching {
+                val decision = apiService.getAdsDecision()
+                if (decision.isSuccessful) {
+                    adsManager.updateConfig(decision.body()?.data)
+                }
             }
         }
 

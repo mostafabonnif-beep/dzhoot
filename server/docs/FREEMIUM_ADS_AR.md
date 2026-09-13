@@ -136,14 +136,35 @@ ADSENSE_CLIENT_ID=ca-pub-9770740237819457
 | `ads.txt` | ✅ على `/ads.txt` |
 | AdMob (أندرويد) | ⏳ يحتاج appId + وحدات |
 
+## 5.10 أندرويد (AdMob) — مُنفَّذ ومُتحقَّق
+
+| العنصر | الملف | ملاحظة |
+|---|---|---|
+| تبعية SDK | `android/gradle/libs.versions.toml` + `app/build.gradle.kts` | `play-services-ads:23.6.0` (متوافق مع compileSdk 34/AGP 8.7) |
+| معرّف التطبيق | `AndroidManifest.xml` (`${admobAppId}`) | افتراضي في Gradle: `-PadmobAppId=…` للتجاوز |
+| قرار الإعلان | `data/ads/AdsManager.kt` | يستقبل `ads.show` من `/api/v1/ads/me` + `/me/subscription` |
+| منطق التكرار | `data/ads/AdFrequencyPolicy.kt` | نقي وقابل للاختبار: الفجوة الزمنية + سقف الجلسة، و0 = تعطيل |
+| توافق الأجهزة | `data/ads/AdsAvailability.kt` | لا Play services (Fire TV) = لا إعلان، بلا انهيار |
+| Banner | `ui/components/BannerAdSlot.kt` | **الهاتف فقط** (Android TV لا يدعم البانر) |
+| Interstitial | `PlayerScreen.kt` | قبل بدء التشغيل للمجاني فقط، ومع fallback مضمون |
+
+**التحقق:** على مضيف البناء (الـVPS، Android SDK 34/JDK 17):
+`./gradlew :app:compileOfficialReleaseKotlin :app:testStagingDebugUnitTest` →
+**BUILD SUCCESSFUL**، 66 ملف نتائج / **527 اختباراً، 0 فشل** (منها 5 لسياسة التكرار).
+
+**عقبتان حُلّتا أثناء البناء:** تعارض `AD_SERVICES_CONFIG` بين AdMob وFirebase Analytics
+(`tools:replace`)، واستيراد `AdsDecisionResponse` في `DzhoofApiService`.
+
+**ناقص لأندرويد:** وحدة **Interstitial** في AdMob (الوحدة الحالية مفترضة Banner) —
+بدونها لا يظهر إعلان بيني على التلفزيون. و**UMP/consent** لمستخدمي EEA مستقبلاً.
+
 ## 6. الحالة
 
 - ✅ Backend (النموذج + الفرض + الإعدادات + API)
 - ✅ لوحة التحكم (مجموعات الباقة + قسم الربح)
 - ✅ الويب (صفحة `/watch`: شريط ترقية + وحدة AdSense للمجاني فقط)
-- ⏳ أندرويد (AdMob): الواجهة الخلفية جاهزة (`/me/subscription` ترجع `ads`)،
-  ويتبقى ربط SDK وعرض Banner/Interstitial للمجاني فقط — يحتاج بناء وتحقّق على
-  مضيف فيه Android SDK (لا يتوفر في بيئة الوكيل الحالية).
+- ✅ أندرويد (AdMob): SDK + Banner (هاتف) + Interstitial (قبل التشغيل) للمجاني
+  فقط، مع no-op آمن على Fire TV — مُتحقَّق بالبناء والاختبارات على الـVPS.
 
 ## 7. ملاحظات قانونية/تجارية
 
