@@ -9,6 +9,7 @@ import com.dzhoof.iptv.data.model.dto.MatchesTodayResponse
 import com.dzhoof.iptv.data.model.dto.FavoritesRequest
 import com.dzhoof.iptv.data.model.dto.FavoritesResponse
 import com.dzhoof.iptv.data.model.dto.HealthSyncRequest
+import com.dzhoof.iptv.data.model.dto.HealthVersionDto
 import com.dzhoof.iptv.data.model.dto.StreamPlayReport
 import com.dzhoof.iptv.data.model.dto.StreamStatusReport
 import com.dzhoof.iptv.data.model.dto.SubscriptionViewResponse
@@ -239,4 +240,14 @@ interface DzhoofApiService {
 
     @GET("api/v1/app/demo-code")
     suspend fun getDemoCode(): Response<Map<String, String>>
+
+    /**
+     * Non-sensitive backend build identity for the diagnostics screen.
+     *
+     * Resolves against the existing base URL (root-relative, like the other
+     * health probes) — no new client, no auth. Failure is handled by the caller
+     * as "غير متاح".
+     */
+    @GET("health/version")
+    suspend fun getHealthVersion(): Response<HealthVersionDto>
 }

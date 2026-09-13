@@ -28,6 +28,7 @@ sealed class Screen(val route: String) {
     object Search : Screen("search")
     object Favorites : Screen("favorites")
     object Settings : Screen("settings")
+    object Diagnostics : Screen("diagnostics")
     object AddSource : Screen("add_source")
     object ManageChannels : Screen("manage_channels")
     object VodPlayer : Screen("vod_player/{contentType}/{contentId}?title={title}") {
