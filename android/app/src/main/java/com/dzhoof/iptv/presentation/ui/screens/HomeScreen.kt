@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -18,6 +19,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_NORMAL
 import com.dzhoof.iptv.presentation.ui.animation.EaseOutQuart
+import com.dzhoof.iptv.presentation.ui.components.BannerAdSlot
 import com.dzhoof.iptv.presentation.ui.components.EmptyPlaylistState
 import com.dzhoof.iptv.presentation.ui.components.ErrorState
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
@@ -126,5 +128,12 @@ fun HomeScreen(
                 )
             }
         }
+
+        // Free-tier banner (phones only — Android TV has no banner format and
+        // the server decides whether this account is ad-supported at all).
+        BannerAdSlot(
+            ads = subscriptionState.subscription?.ads,
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
     }
 }

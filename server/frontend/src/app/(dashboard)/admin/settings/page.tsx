@@ -5,6 +5,7 @@ import { Loader2, Copy, Check, Trash2, ShieldCheck, ShieldOff, Download, Upload,
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useLocale } from '@/components/locale-provider';
+import FreemiumSettings from '@/components/admin/freemium-settings';
 import ConfirmDialog from '@/components/ui/confirm-dialog';
 
 interface ServerInfo {
@@ -1032,6 +1033,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Freemium: free tier scope + AdSense/AdMob */}
+      <FreemiumSettings />
 
       <ConfirmDialog
         open={importConfirmOpen}

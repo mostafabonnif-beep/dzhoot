@@ -308,8 +308,8 @@ class ComposeMainActivity : ComponentActivity() {
 /**
  * App shell composable that combines the navigation chrome with the NavHost.
  *
- * In landscape (TV/tablet): left rail sidebar with SideNavRail.
- * In portrait (phone): bottom navigation bar.
+ * In landscape (phone/tablet/TV): the shared top bar (PremiumTvTopBar).
+ * Portrait is not reachable while the landscape lock is in place.
  *
  * Navigation chrome is only visible on top-level screens (Home, Channels, Search,
  * Favorites, Settings). It is hidden during Pairing and Player screens.
@@ -327,7 +327,9 @@ private fun DzhoofAppShell(
     val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     val context = LocalContext.current
     val isMobile = remember { isMobileDevice(context) }
-    val usePremiumTvChrome = !isPortrait && !isMobile
+    // Landscape-first: every landscape layout (phone, tablet, TV) uses the same
+    // top bar, so the side rail and the bottom bar are no longer needed.
+    val usePremiumTvChrome = !isPortrait
 
     val onNavigate: (Screen) -> Unit = { screen ->
         navController.navigate(screen.defaultRoute()) {
@@ -438,26 +440,27 @@ private fun BottomNavBar(
 ) {
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val isPhone = screenWidthDp < 600
-    val barHeight = if (isPhone) 74.dp else 64.dp
-    val iconSize = if (isPhone) 24.dp else 22.dp
+    val barHeight = if (isPhone) 70.dp else 64.dp
+    val iconSize = if (isPhone) 23.dp else 22.dp
     val labelSize = if (isPhone) 11.sp else 10.sp
     val accent = MaterialTheme.colorScheme.primary
     val items = if (isPhone) phoneBottomNavItems else tvBottomNavItems
+    val barShape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)
 
-    // شريط سفلي عائم حديث — حاوية دائرية مرتفعة مع مؤشر "حبة" للأيقونة النشطة
     Surface(
-        shape = RoundedCornerShape(26.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
-        tonalElevation = 0.dp,
-        shadowElevation = 16.dp,
+        shape = barShape,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+        tonalElevation = 2.dp,
+        shadowElevation = 0.dp,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
         modifier = modifier
-            .fillMaxWidth(0.95f)
+            .fillMaxWidth()
             .height(barHeight)
-            .padding(horizontal = 10.dp, vertical = 7.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
@@ -469,13 +472,13 @@ private fun BottomNavBar(
                     verticalArrangement = Arrangement.Center,
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(18.dp))
+                        .clip(MaterialTheme.shapes.medium)
                         .background(
-                            if (isSelected) accent.copy(alpha = 0.16f)
+                            if (isSelected) accent.copy(alpha = 0.14f)
                             else Color.Transparent
                         )
                         .clickable { onScreenSelected(screen) }
-                        .padding(horizontal = 2.dp, vertical = 5.dp)
+                        .padding(horizontal = 2.dp, vertical = 4.dp)
                 ) {
                     Icon(
                         imageVector = icon,

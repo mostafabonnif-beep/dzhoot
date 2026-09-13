@@ -1,8 +1,8 @@
 // DZ HOOF backfill: ChannelFailoverMap rows A(primary, http://) -> B(https twin)
 // for channels present on BOTH sources of the same panel (name/tvgId match).
 // Run AFTER the https-backup code is deployed. Idempotent (upserts).
-var A = ObjectId("6a84dce7f6a082630f39a9c3"); // Business Cloud NEO (catalog primary, http)
-var B = ObjectId("6a958d8114e50c61a1fa8a61"); // neo 4k backup (https CDN twin)
+var A = ObjectId("6a84dce7f6a082630f39a9c3"); // primary source (catalog primary, http)
+var B = ObjectId("6a958d8114e50c61a1fa8a61"); // backup tier A (https CDN twin)
 var d = db.getSiblingDB("dzhoof-iptv");
 function norm(s) {
   return String(s || "")

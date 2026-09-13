@@ -23,23 +23,24 @@ val subtleBorder: Color
     @Composable get() = if (LocalIsDarkTheme.current) SubtleBorderDark else SubtleBorderLight
 
 private val DarkColorScheme = darkColorScheme(
-    // Primary — warm gold for the 10-foot TV focus language.
-    primary = DzGold300,
-    onPrimary = Ink950,
-    primaryContainer = DzGold500,
+    // Primary — GOLD drives every action/selection (portal identity); emerald is
+    // reserved for live + health semantics (see LiveAccent in Color.kt).
+    primary = ActionPrimary,
+    onPrimary = ActionOnPrimary,
+    primaryContainer = ActionPrimaryDeep,
     onPrimaryContainer = TextPrimaryDark,
 
-    // Secondary — emerald remains available for health/online states.
-    secondary = DzGreen400,
-    onSecondary = DzGreen50,
-    secondaryContainer = DzGreen500,
-    onSecondaryContainer = DzGreen50,
+    // Secondary — gold for premium highlights and secondary actions.
+    secondary = DzGold300,
+    onSecondary = Ink950,
+    secondaryContainer = DzGold500,
+    onSecondaryContainer = TextPrimaryDark,
 
-    // Tertiary — gold supports secondary actions without competing with live red.
-    tertiary = DzGold400,
-    onTertiary = Ink950,
-    tertiaryContainer = DzGold500,
-    onTertiaryContainer = TextPrimaryDark,
+    // Tertiary — muted emerald supports health/online states.
+    tertiary = DzGreen400,
+    onTertiary = DzGreen50,
+    tertiaryContainer = DzGreen700,
+    onTertiaryContainer = DzGreen50,
 
     // Background — Atlas950
     background = Atlas950,
@@ -69,8 +70,8 @@ private val DarkColorScheme = darkColorScheme(
     // Scrim
     scrim = Atlas950,
 
-    // Surface tint
-    surfaceTint = DzGold300
+    // Surface tint follows the action color rather than the focus accent.
+    surfaceTint = ActionPrimary
 )
 
 private val LightColorScheme = lightColorScheme(

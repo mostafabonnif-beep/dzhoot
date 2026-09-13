@@ -1,0 +1,273 @@
+const express = require('express');
+const mongoose = require('mongoose');
+const AppVersion = require('../models/AppVersion');
+const { requireAuth, requireAdmin } = require('./auth');
+const { isRedisReady, getRedisClient } = require('../services/redis');
+const { isAllowedDownloadUrl, versionNameToCode } = require('./app-update')._private;
+
+// Admin diagnostics: /api/v1/admin/diagnostics
+//
+// A single, ordered list of checks with the evidence behind each verdict, so an
+// operator can tell "the app can't update" from "the API is down" without reading
+// logs. It reports booleans, counts, latencies and host names only: never a token,
+// a connection string or a credential — including in failure messages, which carry
+// the error name rather than its text (a driver message can embed the URI).
+//
+// Memory of the release rules it verifies:
+//   - the update API serves the newest active AppVersion by versionCode
+//     (routes/app-update.js), so diagnostics inspects exactly that row;
+//   - a download URL is discarded unless it is HTTPS on an allowlisted host
+//     (fail-closed), so a bad host silently disables updates;
+//   - clients reject an artifact whose versionCode disagrees with its versionName.
+//
+// routes/admin.js already authenticates everything under /api/v1/admin/*, so only
+// authenticate here when the request arrives unauthenticated (keeps the router safe
+// on its own without a second session lookup); the admin role is always enforced.
+const router = express.Router();
+
+router.use((req, res, next) => (req.user ? next() : requireAuth(req, res, next)));
+router.use(requireAdmin);
+
+const PASS = 'pass';
+const WARN = 'warn';
+const FAIL = 'fail';
+
+function check(id, title, status, detail) {
+  return { id, title, status, detail };
+}
+
+/** Run a probe, keeping how long it took even when it throws. */
+async function timed(fn) {
+  const startedAt = Date.now();
+  try {
+    return { ok: true, value: await fn(), latencyMs: Date.now() - startedAt };
+  } catch (error) {
+    return { ok: false, errorName: (error && error.name) || 'Error', latencyMs: Date.now() - startedAt };
+  }
+}
+
+function hostOf(url) {
+  try {
+    return new URL(String(url)).host;
+  } catch {
+    return null;
+  }
+}
+
+function preview(value) {
+  const text = String(value || '');
+  if (text.length <= 16) return text || null;
+  return `${text.slice(0, 12)}…`;
+}
+
+const NON_PRODUCTION = new Set(['production']);
+
+async function mongodbCheck() {
+  const connected = mongoose.connection.readyState === 1;
+  if (!connected) {
+    return check('mongodb', 'قاعدة البيانات (MongoDB)', FAIL, 'الاتصال غير قائم — لن تعمل معظم الوظائف.');
+  }
+  const ping = await timed(() => mongoose.connection.db.admin().ping());
+  if (!ping.ok) {
+    return check('mongodb', 'قاعدة البيانات (MongoDB)', FAIL, `فشل اختبار الاستجابة (${ping.errorName}).`);
+  }
+  return check('mongodb', 'قاعدة البيانات (MongoDB)', PASS, `متصل — زمن الاستجابة ${ping.latencyMs} م.ث.`);
+}
+
+async function redisCheck() {
+  if (!isRedisReady()) {
+    return check('redis', 'Redis (اختياري)', WARN, 'غير متصل — التطبيق يعمل بدونه لكن الكاش وحدود المعدل ستعمل بالذاكرة المحلية.');
+  }
+  const client = getRedisClient();
+  const ping = await timed(() => client.ping());
+  if (!ping.ok) {
+    return check('redis', 'Redis (اختياري)', WARN, `متصل لكن لا يستجيب (${ping.errorName}).`);
+  }
+  return check('redis', 'Redis (اختياري)', PASS, `متصل — زمن الاستجابة ${ping.latencyMs} م.ث.`);
+}
+
+function buildIdentityCheck(build) {
+  if (!build.version || build.version === '0.0.0') {
+    return check('build_identity', 'هوية البناء', FAIL, 'APP_VERSION غير معرّف — لا يمكن مطابقة ما يعمل الآن مع أي إصدار في Git.');
+  }
+  if (!build.commit) {
+    return check('build_identity', 'هوية البناء', WARN, `الإصدار ${build.version} بلا RELEASE_COMMIT — يتعذّر تتبّع البناء إلى commit.`);
+  }
+  return check('build_identity', 'هوية البناء', PASS, `الإصدار ${build.version} مبني من ${String(build.commit).slice(0, 8)}.`);
+}
+
+async function releaseChecks() {
+  const latest = await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean();
+  if (!latest) {
+    return {
+      latest: null,
+      checks: [check('release_published', 'إصدار منشور', FAIL, 'لا يوجد أي إصدار مُفعَّل — كل الأجهزة ستحصل على «لا يوجد تحديث».')],
+    };
+  }
+
+  const checks = [];
+  const label = `${latest.versionName} (${latest.versionCode})`;
+  checks.push(check('release_published', 'إصدار منشور', PASS, `أحدث إصدار مُفعَّل: ${label} — قناة ${latest.releaseChannel || 'stable'}.`));
+
+  const missing = [];
+  if (!latest.sha256) missing.push('sha256');
+  if (!latest.apkFileName) missing.push('اسم الملف');
+  if (!(Number(latest.apkFileSize) > 0)) missing.push('حجم الملف');
+  if (!latest.downloadUrl) missing.push('رابط التحميل');
+  checks.push(
+    missing.length
+      ? check('release_artifact_complete', 'اكتمال بيانات الـartifact', FAIL, `ينقص: ${missing.join('، ')} — الأجهزة ترفض التثبيت بلا تحقق كامل.`)
+      : check('release_artifact_complete', 'اكتمال بيانات الـartifact', PASS, `sha256 ${preview(latest.sha256)}، الحجم ${Number(latest.apkFileSize)} بايت، الملف ${latest.apkFileName}.`)
+  );
+
+  const url = String(latest.downloadUrl || '');
+  const isHttps = url.startsWith('https://');
+  let hostAllowed = false;
+  try {
+    hostAllowed = isAllowedDownloadUrl(url, { protocol: 'https', headers: {}, get: () => '' });
+  } catch {
+    hostAllowed = false;
+  }
+  if (!url) {
+    checks.push(check('release_download_url', 'رابط التحميل', FAIL, 'لا يوجد رابط تحميل — التحديث مستحيل.'));
+  } else if (!isHttps) {
+    checks.push(check('release_download_url', 'رابط التحميل', FAIL, 'الرابط ليس HTTPS — سيُستبعد، والتحديث سيتعطّل.'));
+  } else if (!hostAllowed) {
+    checks.push(
+      check('release_download_url', 'رابط التحميل', FAIL, `مضيف الرابط (${hostOf(url) || 'غير معروف'}) خارج القائمة المسموحة — أضفه إلى APP_UPDATE_ALLOWED_HOSTS.`)
+    );
+  } else {
+    checks.push(check('release_download_url', 'رابط التحميل', PASS, `${hostOf(url)} — HTTPS ومضيفه مسموح.`));
+  }
+
+  const derived = versionNameToCode(latest.versionName);
+  checks.push(
+    Number(derived) > 0 && Number(latest.versionCode) === Number(derived)
+      ? check('release_version_code', 'تطابق versionCode', PASS, `${latest.versionCode} مطابق للاشتقاق من ${latest.versionName}.`)
+      : check(
+          'release_version_code',
+          'تطابق versionCode',
+          WARN,
+          `versionCode=${latest.versionCode} لا يطابق الاشتقاق ${derived} من ${latest.versionName} — الأجهزة ترفض هذا الـartifact.`
+        )
+  );
+
+  const configured = String(process.env.APP_UPDATE_ALLOWED_HOSTS || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const publicBase = String(process.env.PUBLIC_BASE_URL || '').trim();
+  checks.push(
+    configured.length || publicBase
+      ? check('update_allowlist', 'قائمة مضيفي التحديث', PASS, `${configured.length} مضيف مُعرَّف صراحة${publicBase ? ' + PUBLIC_BASE_URL' : ''}.`)
+      : check('update_allowlist', 'قائمة مضيفي التحديث', WARN, 'APP_UPDATE_ALLOWED_HOSTS و PUBLIC_BASE_URL غير معرَّفين — يعتمد التحقق على مضيفات GitHub ومضيف الطلب فقط.')
+  );
+
+  return {
+    latest,
+    checks,
+  };
+}
+
+async function schedulerCheck() {
+  if (process.env.DISABLE_SCHEDULER === 'true') {
+    return check('scheduler', 'المجدول', WARN, 'المجدول معطَّل في هذه العملية (DISABLE_SCHEDULER=true).');
+  }
+  const probe = await timed(async () => {
+    const { schedulerService } = require('../services/scheduler-service');
+    return schedulerService.getTasksWithStatus();
+  });
+  if (!probe.ok) {
+    return check('scheduler', 'المجدول', WARN, `تعذّر قراءة حالة المهام (${probe.errorName}).`);
+  }
+  const tasks = probe.value || [];
+  const failed = tasks.filter((task) => task.lastRun && task.lastRun.status === 'failed');
+  if (failed.length) {
+    return check('scheduler', 'المجدول', FAIL, `${failed.length} من ${tasks.length} مهمة فشل تشغيلها الأخير (${failed.map((task) => task.displayName || task.name).join('، ')}).`);
+  }
+  return check('scheduler', 'المجدول', PASS, `${tasks.length} مهمة، ولا فشل في آخر تشغيل.`);
+}
+
+function summarize(checks) {
+  if (checks.some((entry) => entry.status === FAIL)) return FAIL;
+  if (checks.some((entry) => entry.status === WARN)) return WARN;
+  return PASS;
+}
+
+function environmentCheck() {
+  const env = process.env.NODE_ENV || 'development';
+  return NON_PRODUCTION.has(env)
+    ? check('environment', 'بيئة التشغيل', PASS, `الإنتاج (${env}).`)
+    : check('environment', 'بيئة التشغيل', WARN, `البيئة الحالية ${env} — ليست إنتاجًا.`);
+}
+
+/**
+ * GET /api/v1/admin/diagnostics
+ * Admin only. Never cached: it is a point-in-time probe.
+ */
+router.get('/', async (req, res) => {
+  try {
+    const build = {
+      version: process.env.APP_VERSION || '0.0.0',
+      commit: process.env.RELEASE_COMMIT || null,
+      builtAt: process.env.RELEASE_BUILT_AT || null,
+    };
+
+    const [mongoResult, redisResult, releaseResult, schedulerResult] = await Promise.all([
+      mongodbCheck(),
+      redisCheck(),
+      releaseChecks(),
+      schedulerCheck(),
+    ]);
+
+    const checks = [
+      buildIdentityCheck(build),
+      environmentCheck(),
+      mongoResult,
+      redisResult,
+      ...releaseResult.checks,
+      schedulerResult,
+    ];
+
+    const latest = releaseResult.latest;
+    res.set('Cache-Control', 'no-store');
+    res.status(200).json({
+      generatedAt: new Date().toISOString(),
+      overall: summarize(checks),
+      server: {
+        version: build.version,
+        commit: build.commit,
+        builtAt: build.builtAt,
+        environment: process.env.NODE_ENV || 'development',
+        uptimeSeconds: Math.round(process.uptime()),
+        nodeVersion: process.version,
+      },
+      release: latest
+        ? {
+            versionName: latest.versionName || null,
+            versionCode: latest.versionCode ?? null,
+            releaseChannel: latest.releaseChannel || null,
+            distribution: latest.distribution || null,
+            sha256Preview: preview(latest.sha256),
+            downloadUrlHost: hostOf(latest.downloadUrl),
+            publishedAt: latest.releasedAt || latest.createdAt || null,
+          }
+        : {
+            versionName: null,
+            versionCode: null,
+            releaseChannel: null,
+            distribution: null,
+            sha256Preview: null,
+            downloadUrlHost: null,
+            publishedAt: null,
+          },
+      checks,
+    });
+  } catch (error) {
+    console.error(JSON.stringify({ level: 'error', requestId: req.requestId, message: 'diagnostics failed', name: error && error.name }));
+    res.status(500).json({ error: { message: 'Internal Server Error', status: 500, requestId: req.requestId } });
+  }
+});
+
+module.exports = router;
+module.exports._private = { summarize, preview, hostOf, PASS, WARN, FAIL };

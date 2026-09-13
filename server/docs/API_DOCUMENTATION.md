@@ -1555,13 +1555,19 @@ Web dashboard confirms the pairing by submitting the PIN.
 
 ### 1. Check for Updates
 
-**GET** `/app/version?currentVersion=100`
+**GET** `/app/version?currentVersionCode=10300&channel=stable&platform=android-tv`
 
 **Auth:** Not required
 
 **Query Parameters:**
 
-- `currentVersion` (required): Current app version code
+- `currentVersionCode` (required unless the legacy alias is used): numeric Android version code
+  (`major * 10000 + minor * 100 + patch`). Must be a non-negative integer.
+- `currentVersion` (optional): legacy alias for `currentVersionCode`, kept for already-shipped clients.
+- `channel` (optional, default `stable`): `stable` | `beta`. A version whose record predates the
+  channel field is treated as `stable`.
+- `platform` (optional, default `android`): `android` | `android-tv` | `android-mobile` | `fire-tv`
+  (`fire-tv` is normalised to `android-tv`). Only filters versions that declare a platform scope.
 
 **Response (200 OK):**
 
@@ -1569,16 +1575,53 @@ Web dashboard confirms the pairing by submitting the PIN.
 {
   "success": true,
   "updateAvailable": true,
-  "latestVersion": "v1.5",
-  "currentVersion": 100,
+  "mandatory": false,
+  "currentVersionCode": 10300,
+  "latestVersion": {
+    "versionName": "1.4.2",
+    "versionCode": 10402,
+    "minimumSupportedVersionCode": 10300,
+    "releaseChannel": "stable",
+    "distribution": "external_apk",
+    "downloadUrl": "https://github.com/mostafabonnif-beep/dzhoot/releases/download/v1.4.2/dzhoof-tv-v1.4.2-official.apk",
+    "sha256": "f0494df3f964b5f16ccb50be945e98cc25fa95a8fa187189c399a81a1b481e85",
+    "sizeBytes": 26840396,
+    "releaseNotesList": ["تحسين الثبات", "إصلاح مشكلة التشغيل"],
+    "publishedAt": "2026-09-13T17:17:44.000Z",
+    "releaseNotes": "تحسين الثبات\nإصلاح مشكلة التشغيل",
+    "apkFileName": "dzhoof-tv-v1.4.2-official.apk",
+    "apkFileSize": 26840396,
+    "isMandatory": false,
+    "minCompatibleVersion": 10300,
+    "releasedAt": "2026-09-13T17:17:44.000Z",
+    "source": "github"
+  },
+  "currentVersion": 10300,
   "isMandatory": false,
-  "releaseNotes": "Bug fixes and improvements",
-  "downloadUrl": "https://github.com/akshaynikhare/FireVisionIPTV/releases/download/v1.5/app-release.apk",
-  "minCompatibleVersion": 1
+  "releaseNotes": "تحسين الثبات\nإصلاح مشكلة التشغيل",
+  "downloadUrl": "https://github.com/mostafabonnif-beep/dzhoot/releases/download/v1.4.2/dzhoof-tv-v1.4.2-official.apk",
+  "minCompatibleVersion": 10300,
+  "source": "github"
 }
 ```
 
-App version data is sourced from the GitHub Releases API (not a local DB collection).
+Notes:
+
+- `mandatory` (and the legacy `isMandatory`) is true when the release is flagged mandatory or the
+  device is below `minimumSupportedVersionCode`.
+- `sha256` is read from the release's published `<apk>.sha256` asset; it is `null` when unavailable.
+- `downloadUrl` is `null` when the source URL is not HTTPS or its host is not on the allowlist
+  (GitHub hosts, `PUBLIC_BASE_URL` host, the request host, plus `APP_UPDATE_ALLOWED_HOSTS`).
+- `releaseNotesList` is the structured list; `releaseNotes` keeps the legacy string form for
+  clients shipped before this contract.
+- Version records are read from the `AppVersion` collection and the GitHub Releases API; the higher
+  `versionCode` wins. The endpoint is rate-limited per IP
+  (`APP_UPDATE_RATE_LIMIT_MAX`, default 1000 requests / 15 minutes).
+- `400` is returned when the version code is missing or not a non-negative integer; `500` when every
+  release source is unavailable. Both carry `errorCode`, `userMessageKey` and `retryable` from the
+  central taxonomy (see [`ERROR_TAXONOMY.md`](./ERROR_TAXONOMY.md)) alongside the legacy `error`
+  string, so a client can branch on the code instead of parsing text —
+  `UPDATE_METADATA_INVALID` and `UPDATE_CHECK_NETWORK` respectively.
 
 ---
 
@@ -1657,6 +1700,151 @@ Version history is managed via GitHub Releases, so this returns an empty list wi
 ```
 
 **Note:** `GET /app/download` and `GET /app/apk` both 302-redirect to the latest APK on GitHub. `GET /app/demo-code` returns the configured `DEMO_CHANNEL_LIST_CODE` (404 if unset).
+
+---
+
+### 6. Admin: Manage Release Metadata
+
+The `AppVersion` collection is the optional, operator-managed release source that
+`GET /app/version` merges with GitHub Releases. These are the only write routes for it
+and every write is written to the audit log. All three require an Admin session.
+
+**GET** `/admin/app-versions`
+
+Lists up to 100 records, newest `versionCode` first.
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "_id": "…",
+      "versionName": "1.4.2",
+      "versionCode": 10402,
+      "apkFileName": "dzhoof-tv-v1.4.2-official.apk",
+      "apkFileSize": 26840396,
+      "downloadUrl": "https://github.com/…/dzhoof-tv-v1.4.2-official.apk",
+      "releaseNotes": "تحسين الثبات",
+      "isActive": true,
+      "isMandatory": false,
+      "minCompatibleVersion": 10300,
+      "releasedAt": "2026-09-13T17:17:44.000Z",
+      "sha256": "f0494df3…",
+      "releaseChannel": "stable",
+      "distribution": "external_apk",
+      "platforms": ["android-tv"]
+    }
+  ]
+}
+```
+
+**POST** `/admin/app-versions` — publish a release record (audit: `APP_VERSION_PUBLISH`).
+
+| Field | Required | Rules |
+|---|---|---|
+| `versionName` | yes | unique; non-empty |
+| `versionCode` | yes | unique positive integer (`major*10000+minor*100+patch`) |
+| `apkFileName` | yes | non-empty |
+| `apkFileSize` | yes | positive number |
+| `downloadUrl` | yes | must be a valid **https** URL |
+| `releaseNotes` | no | string, default `""` |
+| `sha256` | no | 64 lowercase hex, or `null` |
+| `releaseChannel` | no | `stable` (default) \| `beta` |
+| `distribution` | no | `external_apk` (default) \| `play` \| `managed_device` |
+| `platforms` | no | array of `android` \| `android-tv` \| `android-mobile` \| `fire-tv`; empty/absent = all |
+| `isActive` / `isMandatory` | no | booleans, default `true` / `false` |
+| `minCompatibleVersion` | no | integer, default `1` |
+| `releasedAt` | no | ISO date, defaults to now |
+
+`400` with `details: [{ path, message }]` on a schema violation; `409` when the
+`versionCode` or `versionName` already exists.
+
+**PATCH** `/admin/app-versions/:id` — update metadata (audit: `APP_VERSION_UPDATE`,
+with `changes.before` / `changes.after`).
+
+Mutable: `releaseNotes`, `isActive`, `isMandatory`, `minCompatibleVersion`,
+`releaseChannel`, `distribution`, `platforms`, `releasedAt`.
+
+**Immutable:** `versionName`, `versionCode`, `apkFileName`, `apkFileSize`,
+`downloadUrl`, `sha256`. Re-pointing a URL or checksum at the same `versionCode` would
+let a device install bytes that no longer match the reviewed release — publish a new
+`versionCode` instead. Attempting it returns `400`.
+
+### 7. Admin: Diagnostics
+
+**GET** `/admin/diagnostics` — Admin session required. One ordered list of checks with
+the evidence behind each verdict, so an operator can tell "the app cannot update" from
+"the API is down" without reading logs. Never cached (`Cache-Control: no-store`).
+
+It reports booleans, counts, latencies and host names only — never a token, a connection
+string or a credential, including in failure messages (which carry the error *name*, since
+a driver message can embed the URI).
+
+```json
+{
+  "generatedAt": "2026-09-13T23:40:11.204Z",
+  "overall": "pass",
+  "server": {
+    "version": "1.4.2",
+    "commit": "d34db33f…",
+    "builtAt": "2026-09-13T10:00:00Z",
+    "environment": "production",
+    "uptimeSeconds": 18422,
+    "nodeVersion": "v20.11.0"
+  },
+  "release": {
+    "versionName": "1.4.2",
+    "versionCode": 10402,
+    "releaseChannel": "stable",
+    "distribution": "external_apk",
+    "sha256Preview": "f0494df3f964…",
+    "downloadUrlHost": "github.com",
+    "publishedAt": "2026-09-13T09:58:02.114Z"
+  },
+  "checks": [
+    { "id": "build_identity", "title": "هوية البناء", "status": "pass",
+      "detail": "الإصدار 1.4.2 مبني من d34db33f." },
+    { "id": "release_download_url", "title": "رابط التحميل", "status": "pass",
+      "detail": "github.com — HTTPS ومضيفه مسموح." }
+  ]
+}
+```
+
+Each check is `pass`, `warn` or `fail`, and `overall` is the worst verdict present.
+`warn` marks something that degrades the system or is expected on a non-production host
+(Redis down, scheduler disabled, missing `RELEASE_COMMIT`); `fail` marks something that
+breaks updates or storage right now. The checks are:
+
+| id | fails when |
+|---|---|
+| `build_identity` | `APP_VERSION` is unset/`0.0.0` (warns when `RELEASE_COMMIT` is missing) |
+| `environment` | never — warns when `NODE_ENV` is not `production` |
+| `mongodb` | the connection is down or the ping fails |
+| `redis` | never — warns when Redis is absent, since the app runs without it |
+| `release_published` | no active `AppVersion` exists (every device sees "no update") |
+| `release_artifact_complete` | the newest active row lacks `sha256`, `apkFileName`, a positive `apkFileSize` or `downloadUrl` |
+| `release_download_url` | the URL is not HTTPS, or its host is outside the allowlist — the update route discards such a URL, silently disabling updates |
+| `release_version_code` | warns when `versionCode` disagrees with the `major*10000+minor*100+patch` derivation of `versionName`, which clients reject |
+| `update_allowlist` | never — warns when neither `APP_UPDATE_ALLOWED_HOSTS` nor `PUBLIC_BASE_URL` is set |
+| `scheduler` | a task's last run failed (warns when the scheduler is disabled) |
+
+The release checks inspect exactly the row the update route serves — the newest `isActive`
+`AppVersion` by `versionCode` — so the page reports what a device would actually receive.
+
+### 8. Provenance migration
+
+Rows created before the provenance fields existed are backfilled by
+`server/backend/src/scripts/migrations/0016-app-version-provenance.ts`:
+
+```bash
+cd server/backend
+npx tsx src/scripts/migrations/0016-app-version-provenance.ts            # dry run
+npx tsx src/scripts/migrations/0016-app-version-provenance.ts --commit   # apply
+# or: npm run migrate:app-version-provenance
+```
+
+It only touches rows missing `releaseChannel` or `distribution`, is idempotent, and
+never overwrites an explicit non-default value.
 
 ---
 
@@ -1748,6 +1936,57 @@ Legacy raw proxy endpoint. It returns `410 Gone` by default because upstream URL
 **Auth Required:** Yes
 
 **Compatibility:** Set `ALLOW_LEGACY_RAW_PROXY=true` only for a controlled migration of an old client, then disable it again.
+
+---
+
+## Health & Version Endpoints
+
+Unauthenticated, and mounted outside `/api/*` so they are never rate limited.
+
+### 1. Liveness
+
+**GET** `/health/live` — always-process probe; never touches MongoDB or Redis.
+
+```json
+{ "status": "ok", "uptime": 4420.98, "requestId": "…" }
+```
+
+### 2. Readiness
+
+**GET** `/health/ready` — `200` when MongoDB is connected, `503` otherwise. Redis is
+optional for this application, so a Redis outage does not fail readiness.
+
+```json
+{ "status": "ok", "mongodb": "connected", "redis": "connected", "requestId": "…" }
+```
+
+### 3. Version metadata
+
+**GET** `/health/version` — non-sensitive build identity, so a running container can be
+matched against the Git tag, Docker image tag and GitHub Release. Deliberately contains no
+status probing, connection strings, internal hostnames or secrets.
+
+```json
+{
+  "status": "ok",
+  "service": "dzhoof-api",
+  "version": "1.0.1",
+  "commit": "59ad81fe028f89f7b8114f22a942d3f2b4fd602b",
+  "builtAt": "2026-09-13T19:50:45Z",
+  "environment": "production",
+  "requestId": "…"
+}
+```
+
+### 4. Health summary
+
+**GET** `/health` — minimal public payload (`status`, `version`, `release.commit`,
+`release.builtAt`). The operational details (sources, EPG, scheduler, alerting, MongoDB,
+Redis, uptime) are only returned with `?details=true`, for internal monitoring.
+
+`version`, `commit` and `builtAt` come from the same source in `/health` and
+`/health/version`, so the two can never disagree. `/internal/metrics` (Prometheus) is
+separate and token-gated.
 
 ---
 

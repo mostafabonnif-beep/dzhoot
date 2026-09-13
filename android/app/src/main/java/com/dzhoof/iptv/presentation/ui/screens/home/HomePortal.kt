@@ -38,21 +38,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
-import com.dzhoof.iptv.presentation.ui.theme.Atlas900
 import com.dzhoof.iptv.presentation.ui.theme.Dimens
-import com.dzhoof.iptv.presentation.ui.theme.DzGold300
-import com.dzhoof.iptv.presentation.ui.theme.DzGold500
 import com.dzhoof.iptv.presentation.ui.theme.FocusBorder
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
 /**
- * One branded entry point on the home portal.
- *
- * @param key stable id used by the click handler to route the navigation.
- * @param label Arabic tile title.
- * @param subtitle short supporting line (kept to one line by design).
- * @param icon large glyph shown at the tile's center.
- * @param accent per-tile wash colour (brand palette only).
+ * Branded destinations on the home screen. Phone layouts use compact action
+ * cards; TV layouts keep a larger D-pad-friendly grid.
  */
 data class PortalTile(
     val key: String,
@@ -63,10 +55,9 @@ data class PortalTile(
 )
 
 /**
- * The home "portal", styled after the NEO 4K launcher: a single large
- * hero tile for live TV on the left, a compact 2-column grid of the
- * remaining destinations beside it, all in the same gold-on-black brand
- * wash. Every destination is visible in one glance and reachable within
+ * The home "portal" launcher: a single large hero tile for live TV on
+ * one side, a compact 2-column grid of the remaining destinations beside
+ * it, all in the same gold-on-black brand wash. Every destination is visible in one glance and reachable within
  * a few D-pad presses.
  */
 @Composable
@@ -92,12 +83,13 @@ fun HomePortalTiles(
                     width = Dimens.PortalTileWidthMobile,
                     height = Dimens.PortalTileHeightMobile,
                     iconSize = Dimens.PortalIconSizeMobile,
+                    compact = true,
                     onClick = { onTileClick(tile.key) }
                 )
             }
         }
     } else {
-        // TV: NEO 4K hero layout — the first tile (live TV) spans the full
+        // TV: hero layout — the first tile (live TV) spans the full
         // portal height on the left, the remaining tiles sit in a two-column
         // grid on the right with identical widths so the row closes flush.
         BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
@@ -154,7 +146,8 @@ private fun PortalTileCard(
     height: Dp,
     iconSize: Dp,
     onClick: () -> Unit,
-    isHero: Boolean = false
+    isHero: Boolean = false,
+    compact: Boolean = false
 ) {
     var isFocused by remember { mutableStateOf(false) }
 
@@ -163,52 +156,91 @@ private fun PortalTileCard(
         modifier = Modifier
             .width(width)
             .height(height)
-            .tvFocusVisuals(focused = isFocused, shape = MaterialTheme.shapes.large)
+            .tvFocusVisuals(focused = isFocused, shape = MaterialTheme.shapes.medium)
             .onFocusChanged { isFocused = it.isFocused },
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.medium,
         border = if (isFocused) BorderStroke(2.dp, FocusBorder) else BorderStroke(1.dp, subtleBorder),
-        colors = CardDefaults.cardColors(containerColor = Atlas900)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            // Gold wash — the NEO 4K launcher reads as one uniform gold-on-black
-            // surface, so every tile shares the same brand gradient.
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                DzGold500.copy(alpha = if (isHero) 0.34f else 0.26f),
-                                DzGold500.copy(alpha = 0.06f)
+                                tile.accent.copy(alpha = if (isHero) 0.18f else 0.10f),
+                                Color.Transparent
                             )
                         )
                     )
             )
 
-            Icon(
-                imageVector = tile.icon,
-                contentDescription = null,
-                tint = if (isFocused) DzGold300 else DzGold300.copy(alpha = 0.92f),
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .offset(y = (-height * 0.10f))
-                    .size(iconSize)
-            )
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = Dimens.Space3, start = Dimens.Space2, end = Dimens.Space2),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = tile.label,
-                    style = if (isHero) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
+            if (compact) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(Dimens.Space2),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(Dimens.Space2)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(Dimens.PortalIconSizeMobile)
+                            .background(tile.accent.copy(alpha = 0.14f), MaterialTheme.shapes.small),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = tile.icon,
+                            contentDescription = null,
+                            tint = tile.accent,
+                            modifier = Modifier.size(iconSize)
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(Dimens.Space1)) {
+                        Text(
+                            text = tile.label,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1
+                        )
+                        tile.subtitle?.let { subtitle ->
+                            Text(
+                                text = subtitle,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            } else {
+                Icon(
+                    imageVector = tile.icon,
+                    contentDescription = null,
+                    tint = tile.accent,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .offset(y = (-height * 0.10f))
+                        .size(iconSize)
                 )
+
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = Dimens.Space3, start = Dimens.Space2, end = Dimens.Space2),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = tile.label,
+                        style = if (isHero) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
             }
         }
     }

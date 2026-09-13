@@ -33,3 +33,5 @@ render.experimental.xml
 *.hprof
 
 .claude/
+# Kotlin compiler session artifacts (Gradle/Kotlin 2.x)
+.kotlin/

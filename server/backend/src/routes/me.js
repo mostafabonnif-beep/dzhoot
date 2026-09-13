@@ -11,7 +11,23 @@ router.use(resolveUser);
 router.get('/subscription', async (req, res) => {
   try {
     const data = await getUserSubscription(req.user.id);
-    return res.json({ success: true, data });
+    // Freemium: the client learns from the server whether to render ads and
+    // which channel groups the account is limited to ([] = everything).
+    const { adsPolicyForUser } = require('../services/ads-policy');
+    const { allowedGroupsForUser, isFreeTierUser } = require('../services/channel-scope');
+    const [adsPolicy, groups] = await Promise.all([
+      adsPolicyForUser(req.user),
+      allowedGroupsForUser(req.user),
+    ]);
+    return res.json({
+      success: true,
+      data: {
+        ...data,
+        tier: isFreeTierUser(req.user) ? 'free' : req.user.role === 'Admin' ? 'admin' : 'paid',
+        accessGroups: groups || [],
+        ads: { show: adsPolicy.showAds, ...adsPolicy.config },
+      },
+    });
   } catch (err) {
     console.error('[me] subscription error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });

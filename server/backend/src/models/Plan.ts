@@ -15,6 +15,12 @@ export interface IPlanDocument extends Document {
   allowCustomDuration?: boolean;
   /** Which content families this plan unlocks. Empty/missing = both (legacy). */
   contentTypes?: PlanContentType[];
+  /**
+   * Channel groups unlocked by this plan. Empty/missing = every group.
+   * Copied onto `User.accessGroups` when a code is redeemed, and enforced by
+   * the playlist / playback-token / stream-authorize paths.
+   */
+  channelGroups?: string[];
   status: 'Active' | 'Inactive';
   features?: Record<string, unknown>;
   createdAt: Date;
@@ -72,6 +78,10 @@ const planSchema = new Schema<IPlanDocument>(
       type: [String],
       enum: PLAN_CONTENT_TYPES,
       default: PLAN_CONTENT_TYPES,
+    },
+    channelGroups: {
+      type: [String],
+      default: [],
     },
     status: {
       type: String,

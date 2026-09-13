@@ -45,12 +45,7 @@ const { isSourceDown, getFailoverTarget, getHttpsBackupStreamUrl } = require('..
 const { rewriteStreamUrlBase } = require('../services/xtream-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
 
-// Curated groups exposed to demo users — mirrors channels.js so the demo
-// browsing endpoint and the playback-token endpoint agree on the same subset.
-const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA الجزائر')
-  .split(',')
-  .map((g) => g.trim())
-  .filter(Boolean);
+// Demo/free-tier group scoping moved to services/channel-scope (single source of truth).
 const WEB_PLAYBACK_COOKIE = '__Host-dzhoof-playback';
 const WEB_PLAYBACK_CLIENT = 'web';
 
@@ -567,17 +562,22 @@ router.get('/playlist/:code/json', async (req, res) => {
     if (!(await ensurePlaybackSubscription(user, res))) return;
 
     const Channel = require('../models/Channel');
+    // Freemium scope: a plan/free code limited to a set of channel groups sees
+    // only those groups in its playlist (unrestricted codes get no clause).
+    const { groupScopeClause, allowedGroupsForUser, isFreeTierUser } = require('../services/channel-scope');
+    const scopeClause = (await groupScopeClause(user)) || {};
     let channels;
 
     if (user.role === 'Admin' || user.allCatalog === true) {
       // Admin/demo and trial users with allCatalog get the shared catalog only.
-      channels = await Channel.find({ ownerId: null }).sort({ channelGroup: 1, order: 1 });
+      channels = await Channel.find({ ownerId: null, ...scopeClause }).sort({ channelGroup: 1, order: 1 });
     } else {
       // Regular users get only their assigned active channels
       const channelIds = (user.channels || []).filter(Boolean);
       channels = await Channel.find({
         _id: { $in: channelIds },
         isActive: { $ne: false },
+        ...scopeClause,
       }).sort({ channelGroup: 1, order: 1 });
     }
 
@@ -591,11 +591,19 @@ router.get('/playlist/:code/json', async (req, res) => {
     );
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Pragma', 'no-cache');
+    // Freemium payload: the client asks for ads only when the server says so
+    // (free tier, and only while the operator keeps ads enabled).
+    const { adsPolicyForUser } = require('../services/ads-policy');
+    const adsPolicy = await adsPolicyForUser(user);
+    const groups = await allowedGroupsForUser(user);
     res.json({
       success: true,
       user: {
         username: user.username,
       },
+      tier: isFreeTierUser(user) ? 'free' : user.role === 'Admin' ? 'admin' : 'paid',
+      accessGroups: groups || [],
+      ads: { show: adsPolicy.showAds, ...adsPolicy.config },
       count: tokenizedChannels.length,
       channels: tokenizedChannels,
     });
@@ -738,16 +746,17 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       });
     }
 
-    // Demo access is a curated subset of the catalog — restrict the lookup to
-    // the same groups the browsing endpoint exposes (channels.js DEMO_CHANNEL_GROUPS).
-    const channelQuery = { channelId: channelRef, isActive: { $ne: false } };
-    if (isDemo) channelQuery.channelGroup = { $in: DEMO_CHANNEL_GROUPS };
+    // Freemium scope: a plan/free code limited to a set of channel groups can
+    // only resolve playback inside them (demo code included — the scope helper
+    // carries the same legacy groups the browsing endpoints expose).
+    const { groupScopeClause } = require('../services/channel-scope');
+    const scopeClause = (await groupScopeClause(user)) || {};
+    const channelQuery = { channelId: channelRef, isActive: { $ne: false }, ...scopeClause };
     let channel = await Channel.findOne(channelQuery).lean();
     // Clients historically send the Mongo _id (e.g. older app builds) — resolve
     // it defensively so a stale client can't brick playback with a 404.
     if (!channel && isValidObjectId(channelRef)) {
-      const demoIdQuery = { _id: channelRef, isActive: { $ne: false } };
-      if (isDemo) demoIdQuery.channelGroup = { $in: DEMO_CHANNEL_GROUPS };
+      const demoIdQuery = { _id: channelRef, isActive: { $ne: false }, ...scopeClause };
       channel = await Channel.findOne(demoIdQuery).lean();
     }
     if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
@@ -1186,7 +1195,7 @@ router.get('/playback/:token', async (req, res) => {
     };
 
     // Mid-stream failover context: when the proxied upstream connection dies,
-    // the proxy re-resolves a backup target (NEO 4K / MIBOX) and keeps the
+    // the proxy re-resolves a backup target (backup tier A / backup tier B) and keeps the
     // client session alive instead of dropping the stream.
     const failoverCtx = payload.channelId
       ? { channelId: payload.channelId, primarySourceId: payload.primarySourceId }

@@ -38,10 +38,7 @@ function parseId(id) {
 // play anything — playback failed the subscription gate (CastError on the
 // 'demo' id) and then the ownership check. Short-circuit demo here and scope
 // LIVE playback to the curated set.
-const DEMO_CHANNEL_GROUPS = (process.env.DEMO_CHANNEL_GROUPS || 'AR| ALGERIA الجزائر')
-  .split(',')
-  .map((g) => g.trim())
-  .filter(Boolean);
+// Demo/free-tier LIVE scoping lives in services/channel-scope.
 const isDemoRequest = (req) => req.user?.demo === true;
 
 // POST /authorize — { contentType: 'LIVE'|'MOVIE'|'EPISODE', contentId }
@@ -99,9 +96,12 @@ router.post('/authorize', async (req, res) => {
     }
 
     if (contentType === 'LIVE') {
-      // Demo: restrict to the curated groups the browsing endpoint exposes.
+      // Freemium scope: a plan/free code limited to a set of channel groups can
+      // only play inside them. Unrestricted callers (admin, full codes) get no
+      // clause, so a channel outside the plan is simply not found — no leak.
+      const { groupScopeClause } = require('../services/channel-scope');
       const liveQuery = { _id: id, isActive: { $ne: false } };
-      if (isDemo) liveQuery.channelGroup = { $in: DEMO_CHANNEL_GROUPS };
+      Object.assign(liveQuery, (await groupScopeClause(req.user)) || {});
       content = await Channel.findOne(liveQuery).lean();
       if (content) {
         const canAccessCatalog = isAdmin || req.user?.allCatalog === true || isDemo;

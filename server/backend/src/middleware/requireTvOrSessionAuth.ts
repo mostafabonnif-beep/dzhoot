@@ -8,7 +8,16 @@ import cookieAuth = require('../utils/cookie-auth');
 
 type MinimalAuthUser = Pick<
   IUserDocument,
-  'username' | 'email' | 'role' | 'channels' | 'channelListCode' | 'isActive' | 'emailVerified' | 'allCatalog'
+  | 'username'
+  | 'email'
+  | 'role'
+  | 'channels'
+  | 'channelListCode'
+  | 'isActive'
+  | 'emailVerified'
+  | 'allCatalog'
+  | 'accessGroups'
+  | 'freeAccess'
 > & { _id: Types.ObjectId };
 
 type PopulatedSession = HydratedDocument<ISessionDocument> & {
@@ -45,6 +54,8 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
           emailVerified: true,
           allCatalog: false,
           demo: true,
+          freeAccess: true,
+          accessGroups: [],
         };
         return next();
       }
@@ -54,7 +65,7 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
         isActive: true,
         codeRevokedAt: null,
       }).select(
-        'username email role channels channelListCode isActive emailVerified allCatalog',
+        'username email role channels channelListCode isActive emailVerified allCatalog accessGroups freeAccess',
       )) as MinimalAuthUser | null;
 
       if (user) {
@@ -68,6 +79,8 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
           isActive: user.isActive,
           emailVerified: user.emailVerified ?? false,
           allCatalog: user.allCatalog === true,
+          accessGroups: user.accessGroups || [],
+          freeAccess: user.freeAccess === true,
         };
         return next();
       }
@@ -89,7 +102,7 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
 
     const session = (await Session.findOne({ sessionId }).populate(
       'userId',
-      'username email role channels channelListCode isActive emailVerified allCatalog',
+      'username email role channels channelListCode isActive emailVerified allCatalog accessGroups freeAccess',
     )) as PopulatedSession | null;
 
     if (!session) {
@@ -128,6 +141,8 @@ const requireTvOrSessionAuth = async (req: Request, res: Response, next: NextFun
       isActive: user.isActive,
       emailVerified: user.emailVerified,
       allCatalog: user.allCatalog === true,
+      accessGroups: user.accessGroups || [],
+      freeAccess: user.freeAccess === true,
     };
     req.sessionId = sessionId;
 

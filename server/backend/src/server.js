@@ -8,6 +8,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const { randomUUID } = require('crypto');
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const { redactSensitiveText } = require('./services/audit-log');
 const { observeHttpRequest, isAuthorizedMetricsRequest, renderMetrics, registry } = require('./services/metrics');
@@ -143,12 +144,9 @@ if (process.env.NODE_ENV === 'production') {
 const TRUST_CF_CONNECTING_IP = process.env.TRUST_CF_CONNECTING_IP === 'true';
 
 function normalizeIp(ip) {
-  if (!ip) return ip;
-  const v = ip.startsWith('::ffff:') ? ip.slice(7) : ip; // unwrap IPv4-mapped IPv6
-  if (v.includes(':')) {
-    return v.split(':').slice(0, 4).join(':') + '::/64'; // key on the /64 network
-  }
-  return v;
+  if (!ip) return 'unknown';
+  const v = ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+  return ipKeyGenerator(v, 64);
 }
 
 function clientIp(req) {
@@ -157,6 +155,10 @@ function clientIp(req) {
     if (cf) return normalizeIp(String(cf).split(',')[0].trim());
   }
   return normalizeIp(req.ip);
+}
+
+function rateLimitIp(req) {
+  return ipKeyGenerator(clientIp(req), 64);
 }
 
 // Middleware
@@ -356,7 +358,7 @@ const authLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
 });
 app.use('/api/v1/auth/login', authLimiter);
 app.use('/api/v1/auth/register', authLimiter);
@@ -371,7 +373,7 @@ const emailActionLimiter = rateLimit({
   max: 3,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
 });
 // Per-account limit: key by email in request body (prevents abuse of a single account)
 const emailAccountLimiter = rateLimit({
@@ -381,7 +383,7 @@ const emailAccountLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => {
     const email = (req.body && req.body.email) || '';
-    return `email-action:${email.toLowerCase().trim()}:${clientIp(req)}`;
+    return `email-action:${email.toLowerCase().trim()}:${rateLimitIp(req)}`;
   },
 });
 app.use('/api/v1/auth/forgot-password', emailActionLimiter, emailAccountLimiter);
@@ -393,7 +395,7 @@ const oauthLimiter = rateLimit({
   max: 15,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
 });
 app.use('/api/v1/oauth/google/start', oauthLimiter);
 app.use('/api/v1/oauth/github/start', oauthLimiter);
@@ -406,7 +408,7 @@ const tvCodeReadLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
   message: { success: false, error: 'Too many TV code requests, please slow down' },
 });
 app.use('/api/v1/tv/playlist', tvCodeReadLimiter);
@@ -418,7 +420,7 @@ const pairingLimiter = rateLimit({
   max: 10, // 10 attempts per 5 minutes per IP
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
   message: { success: false, error: 'Too many pairing attempts, please try again later' },
 });
 app.use('/api/v1/tv/pairing/confirm', pairingLimiter);
@@ -432,7 +434,7 @@ const pairingStatusLimiter = rateLimit({
   max: 120,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
   message: { success: false, error: 'Too many status requests, please slow down' },
 });
 app.use('/api/v1/tv/pairing/status', pairingStatusLimiter);
@@ -449,7 +451,7 @@ const activationRedeemLimiter = rateLimit({
   max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => `activation-redeem:${clientIp(req)}`,
+  keyGenerator: (req) => `activation-redeem:${rateLimitIp(req)}`,
   message: { success: false, error: 'Too many activation attempts, please try again later', code: 'RATE_LIMITED' },
 });
 app.use('/api/v1/activation/redeem', activationRedeemLimiter);
@@ -461,7 +463,7 @@ const paymentCheckoutLimiter = rateLimit({
   max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: clientIp,
+  keyGenerator: rateLimitIp,
   message: { success: false, error: 'Too many checkout attempts, please try again later', code: 'RATE_LIMITED' },
 });
 app.use('/api/v1/payments/chargily/checkout', paymentCheckoutLimiter);
@@ -486,6 +488,9 @@ app.use('/api/v1/favorites', require('./routes/favorites'));
 // App update routes (GitHub-based APK delivery)
 app.use('/api/v1/app', require('./routes/app-update'));
 app.use('/api/v1/admin', require('./routes/admin'));
+// App release metadata (provenance, channel, distribution) — admin only.
+app.use('/api/v1/admin/app-versions', require('./routes/admin-app-versions'));
+app.use('/api/v1/admin/diagnostics', require('./routes/admin-diagnostics'));
 // Subscription & activation (commercial backbone)
 app.use('/api/v1/admin/plans', require('./routes/admin-plans'));
 app.use('/api/v1/admin/activation-codes', require('./routes/admin-activation-codes'));
@@ -507,6 +512,7 @@ app.use('/api/v1/streams', require('./routes/streams'));
 app.use('/api/v1/home', require('./routes/home'));
 app.use('/api/v1/discover', require('./routes/discover'));
 app.use('/api/v1/shop', require('./routes/public-shop'));
+app.use('/api/v1/ads', require('./routes/ads'));
 app.use('/api/v1/payments', require('./routes/payments'));
 app.use('/api/v1/admin/notifications', require('./routes/admin-notifications'));
 app.use('/api/v1/admin/app-settings', require('./routes/admin-app-settings'));
@@ -607,9 +613,35 @@ async function collectHealthDetails() {
   return details;
 }
 
+// Non-sensitive build identity, shared by /health and /health/version so the two
+// endpoints can never report a different version or commit.
+function buildVersionMetadata() {
+  return {
+    version: process.env.APP_VERSION || '0.0.0',
+    commit: process.env.RELEASE_COMMIT || null,
+    builtAt: process.env.RELEASE_BUILT_AT || null,
+  };
+}
+
 // Liveness never depends on MongoDB or Redis and is suitable for process probes.
 app.get('/health/live', (req, res) => {
   res.status(200).json({ status: 'ok', uptime: process.uptime(), requestId: req.requestId });
+});
+
+// Version metadata only: no status probing, no connection strings, no internal
+// hostnames, no secrets. Mirrors the build identity in /health so a deploy can be
+// matched against the Git tag / Docker image / GitHub Release.
+app.get('/health/version', (req, res) => {
+  const build = buildVersionMetadata();
+  res.status(200).json({
+    status: 'ok',
+    service: 'dzhoof-api',
+    version: build.version,
+    commit: build.commit,
+    builtAt: build.builtAt,
+    environment: process.env.NODE_ENV || 'development',
+    requestId: req.requestId,
+  });
 });
 
 // Readiness requires MongoDB; Redis is optional for this application.
@@ -629,12 +661,13 @@ app.get('/health/ready', (req, res) => {
 // enough to confirm the service is alive and which build is running.
 app.get('/health', async (req, res) => {
   const healthy = mongoose.connection.readyState === 1;
+  const build = buildVersionMetadata();
   const response = {
     status: healthy ? 'ok' : 'degraded',
-    version: process.env.APP_VERSION || '0.0.0',
+    version: build.version,
     release: {
-      commit: process.env.RELEASE_COMMIT || null,
-      builtAt: process.env.RELEASE_BUILT_AT || null,
+      commit: build.commit,
+      builtAt: build.builtAt,
     },
     requestId: req.requestId,
   };
