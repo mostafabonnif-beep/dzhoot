@@ -10,6 +10,7 @@
 - `AppUpdater.DownloadState.Failed` now carries the non-sensitive error `code` alongside the Arabic message so telemetry and diagnostics can report the reason without parsing text.
 
 ### Changed
+- A Google Play installation is no longer offered the app's own sideload path: `UpdateManager` reports `DelegatedToStore` and leaves updating to Play (which governs store installs anyway). The Play In-App Updates flow itself is wired separately, so this is the correct outcome in both cases.
 - Update failure messages now come from the shared error taxonomy (same wording for the same failure everywhere) instead of ad-hoc strings at each call site.
 
 ## [1.2.0] - 2026-09-09
