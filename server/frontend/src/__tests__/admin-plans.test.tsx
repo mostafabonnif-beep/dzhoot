@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import PlansPage from '../app/(dashboard)/admin/plans/page';
 import api from '@/lib/api';
 
@@ -32,14 +32,11 @@ jest.mock('@/hooks/use-toast', () => ({
 
 const mockedGet = api.get as jest.Mock;
 
-describe('Admin plans page', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    mockedGet.mockResolvedValue({
-      data: {
-        data: [
-          {
-            _id: 'p1',
+const PLANS_RESPONSE = {
+  data: {
+    data: [
+      {
+        _id: 'p1',
             name: 'شهرية',
             durationDays: 30,
             maxDevices: 2,
@@ -67,7 +64,20 @@ describe('Admin plans page', () => {
         ],
         totalCount: 2,
       },
-    });
+};
+
+describe('Admin plans page', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // The page loads the plans list and the catalog group vocabulary (freemium
+    // picker) — route each URL to its own payload.
+    mockedGet.mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).includes('catalog-groups')
+          ? { data: { data: ['AR| ALGERIA الجزائر', 'SPORT'] } }
+          : PLANS_RESPONSE,
+      ),
+    );
   });
 
   it('renders plan summary cards and rows from the API', async () => {
@@ -85,9 +95,26 @@ describe('Admin plans page', () => {
   });
 
   it('shows the empty state when there are no plans', async () => {
-    mockedGet.mockResolvedValueOnce({ data: { data: [], totalCount: 0 } });
+    mockedGet.mockImplementation((url: string) =>
+      Promise.resolve(
+        String(url).includes('catalog-groups')
+          ? { data: { data: [] } }
+          : { data: { data: [], totalCount: 0 } },
+      ),
+    );
     render(<PlansPage />);
 
     await waitFor(() => expect(screen.getByText('لا توجد بيانات')).toBeInTheDocument());
+  });
+
+  it('offers the catalog channel groups in the plan form (freemium scope)', async () => {
+    render(<PlansPage />);
+    await screen.findByText('شهرية');
+
+    fireEvent.click(screen.getByText('باقة جديدة'));
+
+    expect(await screen.findByText('مجموعات القنوات المشمولة')).toBeInTheDocument();
+    expect(await screen.findByText('AR| ALGERIA الجزائر')).toBeInTheDocument();
+    expect(screen.getByText('كل المجموعات (بلا تحديد)')).toBeInTheDocument();
   });
 });

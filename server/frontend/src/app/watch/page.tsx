@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Tv, Search, Loader2, KeyRound, LogOut, Star } from 'lucide-react';
 import api from '@/lib/api';
 import StreamPlayer from '@/components/stream-player';
+import AdsenseSlot from '@/components/ads/adsense-slot';
 
 interface WatchChannel {
   channelId: string;
@@ -14,6 +15,13 @@ interface WatchChannel {
   channelGroup?: string | null;
   channelUrl?: string;
   order?: number;
+}
+
+// Server-side freemium decision: ads are requested only when the backend says
+// so (free codes), and paying codes never mount an ad unit.
+interface AdsDecision {
+  show: boolean;
+  web?: { clientId?: string; slotBelowPlayer?: string; slotSidebar?: string };
 }
 
 interface TodayMatch {
@@ -42,6 +50,7 @@ export default function WatchPage() {
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [matches, setMatches] = useState<TodayMatch[]>([]);
+  const [ads, setAds] = useState<AdsDecision | null>(null);
 
   // "مباريات اليوم" — polled once per code entry; cached server-side per day.
   useEffect(() => {
@@ -109,6 +118,11 @@ export default function WatchPage() {
     if (!finalCode) return;
     window.localStorage.setItem('watch_tv_code', finalCode);
     setCode(finalCode);
+    // Ask the server whether this code is ad-supported (never assume client-side).
+    api
+      .get('/ads/me')
+      .then((res) => setAds(res.data?.data ?? null))
+      .catch(() => setAds(null));
     setLoading(true);
     setError('');
     setChannels([]);
@@ -168,6 +182,7 @@ export default function WatchPage() {
     setChannels([]);
     setSelected(null);
     setCodeInput('');
+    setAds(null);
   }
 
   return (
@@ -369,6 +384,28 @@ export default function WatchPage() {
               )}
             </div>
           )}
+        </section>
+      )}
+
+      {code && ads?.show && (
+        <section className="mx-auto max-w-6xl px-4 pb-4" aria-label="إعلانات">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-2 text-sm">
+            <span className="text-muted-foreground">
+              أنت على الباقة المجانية — الإعلانات تختفي تماماً عند تفعيل كود مدفوع.
+            </span>
+            <Link
+              href="/buy"
+              className="shrink-0 rounded-full bg-primary px-4 py-1.5 font-bold text-primary-foreground"
+            >
+              اشترك الآن
+            </Link>
+          </div>
+          <AdsenseSlot
+            clientId={ads.web?.clientId || ''}
+            slot={ads.web?.slotBelowPlayer || ''}
+            className="min-h-[90px] w-full"
+            label="إعلان"
+          />
         </section>
       )}
 

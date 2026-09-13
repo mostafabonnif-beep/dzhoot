@@ -1,0 +1,3 @@
+# AdSense: authorized sellers for this domain.
+# The publisher id is the account id; keep in sync with ADSENSE_CLIENT_ID.
+google.com, pub-9770740237819457, DIRECT, f08c47fec0942fa0

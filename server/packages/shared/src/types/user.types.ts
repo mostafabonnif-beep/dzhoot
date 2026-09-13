@@ -13,6 +13,10 @@ export interface IUser {
   channels: Types.ObjectId[];
   // Serve the whole shared catalog (capped) instead of the channels[] selection.
   allCatalog?: boolean;
+  // Channel groups this code may watch. Empty = no group restriction.
+  accessGroups?: string[];
+  // Marks the shared ad-supported free-tier account.
+  freeAccess?: boolean;
   lastLogin?: Date;
   metadata?: {
     deviceName?: string;
