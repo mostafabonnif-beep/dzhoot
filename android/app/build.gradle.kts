@@ -345,3 +345,17 @@ tasks.register<JacocoReport>("jacocoTestReport") {
         include("jacoco/testDebugUnitTest.exec")
     })
 }
+
+// ── R8 release-path gate ─────────────────────────────────────────────────────
+// CI's android job runs `lintStagingDebug testStagingDebugUnitTest` and
+// `assembleStagingDebug` — none of which are minified, so R8 only ever ran when
+// a release tag was pushed. A missing -dontwarn rule therefore broke the
+// official release with no CI signal (2026-09-13: "Missing classes detected
+// while running R8" from the AdMob SDK, release v1.3.0 failed).
+//
+// Hook the release minification onto the verification task CI already runs, so
+// the release path is covered. If a dedicated CI step is added later, remove
+// this wiring.
+tasks.matching { it.name == "lintStagingDebug" }.configureEach {
+    dependsOn("minifyOfficialReleaseWithR8")
+}
