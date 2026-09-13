@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const { normalizeGroupList } = require('../services/channel-scope');
 const Channel = require('../models/Channel');
 const AuditLog = require('../models/AuditLog');
 const Subscription = require('../models/Subscription');
@@ -424,7 +425,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid user ID format' });
     }
 
-    const { username, email, password, role, isActive, allCatalog } = req.body;
+    const { username, email, password, role, isActive, allCatalog, accessGroups, freeAccess } = req.body;
 
     // Check if user is accessing their own profile or is admin
     const isAdmin = req.user.role === 'Admin';
@@ -473,12 +474,21 @@ router.put('/:id', requireAuth, async (req, res) => {
       user.password = password; // Will be hashed by pre-save hook
     }
 
-    // Only admin can change role, isActive and allCatalog
+    // Only admin can change role, isActive, allCatalog and the freemium scope
     const previousRole = user.role;
     if (isAdmin) {
       if (role !== undefined) user.role = role;
       if (isActive !== undefined) user.isActive = isActive;
       if (allCatalog !== undefined) user.allCatalog = allCatalog === true;
+      // Freemium: the channel groups this code may watch ([] = everything) and
+      // whether it is the ad-supported free-tier account.
+      if (accessGroups !== undefined) {
+        if (!Array.isArray(accessGroups) && typeof accessGroups !== 'string') {
+          return res.status(400).json({ success: false, error: 'accessGroups must be an array of group names' });
+        }
+        user.accessGroups = normalizeGroupList(accessGroups);
+      }
+      if (freeAccess !== undefined) user.freeAccess = freeAccess === true;
     }
 
     await user.save();

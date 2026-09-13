@@ -110,7 +110,7 @@ class CatalogRepositoryImpl @Inject constructor(
                         ),
                     )
                 } else {
-                    Result.Error(Exception(body?.error ?: response.message().ifBlank { "Unable to load movies" }))
+                    Result.Error(Exception(body?.error ?: response.message().ifBlank { "تعذر تحميل الأفلام" }))
                 }
             } catch (error: Exception) {
                 Result.Error(error)
@@ -201,7 +201,7 @@ class CatalogRepositoryImpl @Inject constructor(
                         ),
                     )
                 } else {
-                    Result.Error(Exception(body?.error ?: response.message().ifBlank { "Unable to load series" }))
+                    Result.Error(Exception(body?.error ?: response.message().ifBlank { "تعذر تحميل المسلسلات" }))
                 }
             } catch (error: Exception) {
                 Result.Error(error)
@@ -230,7 +230,7 @@ class CatalogRepositoryImpl @Inject constructor(
                     )
                 )
             } else {
-                Result.Error(Exception(body?.error ?: response.message().ifBlank { "Unable to load series details" }))
+                Result.Error(Exception(body?.error ?: response.message().ifBlank { "تعذر تحميل تفاصيل المسلسل" }))
             }
         } catch (error: Exception) {
             Result.Error(error)
@@ -246,7 +246,7 @@ class CatalogRepositoryImpl @Inject constructor(
                     Season(season.id, season.seriesId, season.seasonNumber, season.name, season.cover)
                 })
             } else {
-                Result.Error(Exception(body?.error ?: response.message().ifBlank { "Unable to load seasons" }))
+                Result.Error(Exception(body?.error ?: response.message().ifBlank { "تعذر تحميل المواسم" }))
             }
         } catch (error: Exception) {
             Result.Error(error)
@@ -271,7 +271,7 @@ class CatalogRepositoryImpl @Inject constructor(
                     )
                 })
             } else {
-                Result.Error(Exception(body?.error ?: response.message().ifBlank { "Unable to load episodes" }))
+                Result.Error(Exception(body?.error ?: response.message().ifBlank { "تعذر تحميل الحلقات" }))
             }
         } catch (error: Exception) {
             Result.Error(error)

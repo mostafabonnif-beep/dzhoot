@@ -23,7 +23,7 @@
 - النتيجة المؤكدة: **458/458 اختبارًا ناجحًا** في متغير `testOfficialReleaseUnitTest` (0 فشل/خطأ).
 
 ### 4) التقرير التنافسي (عربي)
-- `docs/COMPETITIVE_REPORT_v1.1.0_AR.md`: مقارنة بـ Neo4K Pro وIBO Player Pro وTiviMate وIPTV Smarters Pro وXCIPTV وOTT Navigator وSTB Emu وGSE Smart IPTV + مصفوفة ميزات 28 بندًا + خارطة طريق أفضل 10 ميزات.
+- `docs/COMPETITIVE_REPORT_v1.1.0_AR.md`: مقارنة بـ منافس تجاري (خدمة محتوى) وIBO Player Pro وTiviMate وIPTV Smarters Pro وXCIPTV وOTT Navigator وSTB Emu وGSE Smart IPTV + مصفوفة ميزات 28 بندًا + خارطة طريق أفضل 10 ميزات.
 
 ## التحقق من البناء
 - بيئة البناء: VPS (JDK 17 + Android SDK 34 + keystore الإنتاج) — نفس خط إنتاج v1.0.50.

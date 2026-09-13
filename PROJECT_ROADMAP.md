@@ -360,6 +360,20 @@ DZ HOOF لا يوفر قنوات أو أفلامًا أو اشتراكات جا�
 
 - [x] اختبارات أداة الـ PIN (صحة، hash، تحقق).
 
+### المرحلة 5.8 — Freemium والإعلانات (2026-09-13)
+
+الهدف: الربح من الجهتين — بيع الأكواد، وإعلانات على الطبقة المجانية فقط.
+
+- [x] `Plan.channelGroups[]` و`User.accessGroups[]` + فرضها في playlist/playback-token/streams/channels/categories/M3U (`services/channel-scope.js` كمصدر وحيد).
+- [x] نسخ نطاق الباقة إلى المستخدم عند التفعيل (`redeemCode`) — الباقة الفارغة = كل القنوات، وبلا حقل = توافق خلفي.
+- [x] طبقة مجانية رسمية عبر إعداد `free_access` (المجموعات + `showAds`) بدل متغير البيئة الثابت.
+- [x] `services/ads-policy.js` + إعداد `ads` (AdSense/AdMob) مع تحقق صيغة المعرّفات، و`GET /api/v1/ads/config` و`/api/v1/ads/me`.
+- [x] إضافة `ads.show` و`tier` و`accessGroups` إلى `/tv/playlist/:code/json` و`/api/v1/me/subscription`.
+- [x] لوحة التحكم: منتقي مجموعات القنوات لكل باقة + قسم "الربح: الطبقة المجانية والإعلانات".
+- [x] الويب: وحدة AdSense في `/watch` وشريط ترقية — تظهر للمجاني فقط.
+- [x] توثيق `server/docs/FREEMIUM_ADS_AR.md` + اختبارات (32 اختباراً جديداً: نطاق المجموعات، سياسة الإعلانات، نشر الباقة).
+- [ ] أندرويد: ربط AdMob وعرض Banner/Interstitial للمجاني فقط (يحتاج بناء وتحقّق على مضيف فيه Android SDK).
+
 ### جولة التحسين المحلي قبل VPS — 2026-08-15
 
 - [x] تعريب Quick Pick بالكامل: المصادر، الدول، اللغات، التنقل، ورسائل الوصول.

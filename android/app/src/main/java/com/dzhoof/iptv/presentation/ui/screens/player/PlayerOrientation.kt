@@ -13,9 +13,8 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.delay
 
-// After exiting fullscreen we force PORTRAIT, then release to UNSPECIFIED once
-// the rotation settles so physical rotation (and the system auto-rotate toggle)
-// works again.
+// After exiting fullscreen we release the forced orientation once the rotation
+// settles, so physical rotation (and the system auto-rotate toggle) works again.
 private const val ORIENTATION_RELEASE_DELAY_MS = 2000L
 
 /** Actuator for the mobile player's fullscreen toggle. Layout reads LocalConfiguration. */
@@ -26,7 +25,9 @@ internal class PlayerOrientationController(private val activity: Activity?) {
     }
 
     fun exitFullscreen() {
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        // The app is landscape-first (manifest: sensorLandscape), so leaving
+        // fullscreen releases any forced orientation instead of forcing portrait.
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
 }
 

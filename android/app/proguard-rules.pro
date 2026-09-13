@@ -103,3 +103,16 @@
 
 # Attributes required by reflection/service lookup at runtime.
 -keepattributes *Annotation*, InnerClasses, EnclosingMethod, Signature
+
+# ===== AdMob / Google Ads (play-services-ads) =====
+# The ads SDK references classes that are not on the Android classpath (it is
+# compiled against a full JDK/desktop target). Without these -dontwarn rules R8
+# fails the release build outright with:
+#   "Missing classes detected while running R8"
+# (observed on :app:minifyOfficialReleaseWithR8 after the freemium/ads change).
+-dontwarn com.google.android.gms.ads.**
+-dontwarn com.google.android.gms.internal.ads.**
+-dontwarn com.google.common.**
+-dontwarn sun.misc.**
+-dontwarn javax.naming.**
+-dontwarn android.media.LoudnessCodecController**

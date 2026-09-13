@@ -9,10 +9,10 @@
 |---|---|
 | سجل hls-remux مليان فشل ffmpeg | `Server returned 4XX Client Error` على `tv.business-cloud-neo.com/live/...` |
 | المزوّد يحجب الـ datacenter على مسار /live | **كل** UAs من الـ VPS ترجع **HTTP 456** (كود حجب معروف؛ الـ API نفسه مسموح والـ watchdog ناجح) |
-| قنوات المصدر الرئيسي http:// فقط | «Business Cloud NEO» Inactive لكن customerVisible+directPlayback: **16,701 قناة** |
+| قنوات المصدر الرئيسي http:// فقط | «المصدر الأساسي» Inactive لكن customerVisible+directPlayback: **16,701 قناة** |
 | المتصفح يمنع وسائط http على https | mixed content → مشغّل الويب يضطر لمسار الخادم → يصدّمه الـ 456 → **القناة تقف** |
 | النطاقان على نفس سيرفر المزوّد | `tv.business-cloud-neo.com` و`cf.business-cloud-neo.ru` → `194.120.144.8` |
-| يوجد مصدر توأم https | «neo 4k (احتياطي)» Active: **7,677 قناة** على CDN https (`cf...ru`) |
+| يوجد مصدر توأم https | «المصدر الاحتياطي A (احتياطي)» Active: **7,677 قناة** على CDN https (`cf...ru`) |
 
 ## 2) الإصلاح (PR #209 → `9a80643d` منشور)
 

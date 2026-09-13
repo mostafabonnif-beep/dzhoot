@@ -63,14 +63,14 @@ object Dimens {
     // ── Home portal tiles (branded entry points) ─────────────────────
     val PortalTileWidthTv = 236.dp
     val PortalTileHeightTv = 118.dp
-    val PortalTileWidthMobile = 168.dp
-    val PortalTileHeightMobile = 96.dp
-    val PortalTileGap = 14.dp
+    val PortalTileWidthMobile = 148.dp
+    val PortalTileHeightMobile = 72.dp
+    val PortalTileGap = 10.dp
     val PortalIconSizeTv = 34.dp
 
     /** Side of the subscriber-portal QR (settings device card / home footer). */
     val PortalQrSize = 108.dp
-    val PortalIconSizeMobile = 26.dp
+    val PortalIconSizeMobile = 24.dp
     // Decorative corner icon scales with card height (home row cards are
     // 80-100dp tall, the Categories grid 130dp) instead of a fixed size.
     const val CategoryIconHeightFraction = 0.28f
@@ -133,8 +133,11 @@ object Dimens {
     val TracksPanelMaxWidth = 420.dp        // audio/subtitle panel cap (fills 92% on phones)
 
     // ── Empty / error / loading states ───────────────────────────────
-    val StateMedallionSize = 72.dp          // tinted icon medallion for empty/error states
+    val StateMedallionSize = 56.dp          // tinted icon medallion for empty/error states
     val StateTopPadding = 80.dp             // top inset for centered prompt/no-results columns
+    val ErrorCardMaxWidth = 380.dp
+    val ErrorCardPaddingHorizontal = 24.dp
+    val ErrorCardPaddingVertical = 26.dp
     val SkeletonTitleWidth = 140.dp         // placeholder section-title bar width
     val SkeletonTitleHeight = 20.dp         // placeholder section-title bar height
 

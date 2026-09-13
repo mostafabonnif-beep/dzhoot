@@ -52,7 +52,7 @@ describe('operational alert notifier', () => {
     await expect(sendOperationalAlert({
       event: 'xtream-source-down',
       severity: 'critical',
-      message: 'مصدر Business Cloud NEO متوقف',
+      message: 'المصدر الأساسي متوقف',
     })).resolves.toBe(true);
 
     expect(emailMock).toHaveBeenCalledWith(expect.objectContaining({

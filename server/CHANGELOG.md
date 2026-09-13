@@ -10,6 +10,75 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (admin diagnostics)
+
+- `GET /api/v1/admin/diagnostics` — one ordered list of checks with the evidence behind
+  each verdict (build identity, environment, MongoDB with latency, Redis, and the release
+  pipeline: published release, artifact completeness, HTTPS + allowlisted download host,
+  versionCode derivation, update host allowlist, scheduler health), plus the newest active
+  release and the server's build identity. `overall` is the worst verdict. It reports
+  booleans, counts, latencies and host names only — never a token or connection string.
+- `/admin/diagnostics` renders it (trilingual, RTL) with a colored status per check.
+
+### Added (health)
+
+- `GET /health/version` — non-sensitive build metadata (`service`, `version`, `commit`,
+  `builtAt`, `environment`, `requestId`). The endpoint existed in the operations brief but
+  returned 404. No status probes, connection strings, internal hostnames or secrets.
+- `/health` and `/health/version` now build their version/commit/builtAt from one shared
+  helper, so a deploy can never report two different versions.
+
+### Added (error taxonomy)
+
+- Central, searchable error-code registry in `@dzhoof/shared`
+  (`packages/shared/src/errors/error-codes.ts`) with the 22 codes from the operations
+  brief, each carrying `userMessageKey`, `developerMessage`, `retryable`, `severity`,
+  `feature` and `remediation`.
+- `buildErrorReport(code, { correlationId, httpStatus, durationMs, details })` builds the
+  safe, non-sensitive report shape shared by telemetry and diagnostics. `details` is flat
+  and primitive-only, so a credential object cannot be attached by accident.
+- `GET /api/v1/app/version` error responses now include `errorCode`, `userMessageKey` and
+  `retryable` (`UPDATE_METADATA_INVALID` for a bad request, `UPDATE_CHECK_NETWORK` for a
+  provider failure) next to the unchanged legacy `error` string, so shipped clients keep
+  working and new clients stop parsing message text.
+- New reference: `server/docs/ERROR_TAXONOMY.md` (generated from the registry).
+
+
+### Added (app release provenance + admin publish path)
+
+- `AppVersion` now stores `sha256`, `releaseChannel` (`stable`/`beta`), `distribution`
+  (`external_apk`/`play`/`managed_device`) and an optional `platforms` scope, with enum
+  validation shared with the API schema. Legacy rows default to `stable` /
+  `external_apk` at read time and are made explicit by migration **0016**
+  (`npm run migrate:app-version-provenance`, dry-run by default, idempotent).
+- New admin-only routes `GET|POST /api/v1/admin/app-versions` and
+  `PATCH /api/v1/admin/app-versions/:id` — the first writer for release metadata
+  (publishing previously had no code path at all). Every write is audited
+  (`APP_VERSION_PUBLISH` / `APP_VERSION_UPDATE`).
+- Artifact identity (`versionCode`, `versionName`, `apkFileName`, `apkFileSize`,
+  `downloadUrl`, `sha256`) is immutable after publication: re-pointing a URL or
+  checksum at the same `versionCode` would let devices install bytes that no longer
+  match the reviewed release. Operators publish a new `versionCode` instead.
+- `createAppVersionSchema` now requires an https `downloadUrl`, validates the checksum
+  shape, and accepts `releaseChannel`, `distribution`, `platforms` and `releasedAt`.
+
+### Changed (app update API — `/api/v1/app/version`)
+
+- `GET /api/v1/app/version` now accepts the documented `currentVersionCode` parameter alongside the
+  legacy `currentVersion` alias, plus `channel` (`stable`/`beta`, default `stable`) and `platform`
+  (`android`/`android-tv`/`android-mobile`/`fire-tv`), validated by a shared Zod schema.
+- `latestVersion` now exposes `minimumSupportedVersionCode`, `releaseChannel`, `distribution`,
+  `sha256`, `sizeBytes`, `releaseNotesList` and `publishedAt`; the top level exposes `mandatory` and
+  `currentVersionCode`. The legacy keys (`releaseNotes`, `apkFileSize`, `isMandatory`,
+  `currentVersion`, …) are unchanged so already-shipped clients keep working.
+- `sha256` is read from the release's published `<apk>.sha256` asset (validated HTTPS allowlist +
+  SSRF guard on every redirect hop).
+- `downloadUrl` is fail-closed: a non-HTTPS URL, or one whose host is not allowlisted, is returned as
+  `null`. Extend the allowlist with `APP_UPDATE_ALLOWED_HOSTS`.
+- Added a dedicated, configurable rate limit (`APP_UPDATE_RATE_LIMIT_MAX`, default 1000/15min) and a
+  real route test suite (previously the `.js` test file was not matched by Jest, so the endpoint had
+  no running tests).
+
 ### Added (source resilience — mirror domains)
 
 - `XtreamSource.mirrorServerUrls` (validated http(s) array; admin API create/patch + exposed
@@ -31,8 +100,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 - Watchdog direct-playback probe no longer treats **TS transport streams** as HLS manifests:
   `.ts` URLs are light-probed (stream response, 1 KB cap, destroy immediately; HTTP 200-399 =
   alive) instead of failing with `maxContentLength size of 524288 exceeded` every cycle, which
-  wrongly persisted `verificationStatus=degraded` on healthy TS-format sources (e.g. Business
-  Cloud NEO) and blocked scheduled catalog sync.
+  wrongly persisted `verificationStatus=degraded` on healthy TS-format sources (e.g. primary
+  source) and blocked scheduled catalog sync.
 
 ### Fixed (catalog access)
 
