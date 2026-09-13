@@ -75,13 +75,21 @@ function withDb(doc: unknown) {
   dbFindOne.mockReturnValue({ sort: () => ({ lean: async () => doc }) });
 }
 
+function isGithubApiUrl(url: unknown): boolean {
+  try {
+    return new URL(String(url)).hostname === 'api.github.com';
+  } catch {
+    return false;
+  }
+}
+
 function githubDown() {
   axiosGet.mockRejectedValue(new Error('github unavailable'));
 }
 
 function githubUp(release: unknown = githubRelease(), sha256Body = `${SHA256}  apk\n`) {
   axiosGet.mockImplementation(async (url: unknown) => {
-    if (String(url).startsWith('https://api.github.com')) {
+    if (isGithubApiUrl(url)) {
       return { status: 200, headers: {}, data: release };
     }
     return { status: 200, headers: {}, data: sha256Body };
@@ -375,7 +383,7 @@ describe('GET /api/v1/app/version GitHub source', () => {
 
   it('refuses a checksum redirect to an untrusted host', async () => {
     axiosGet.mockImplementation(async (url: unknown) => {
-      if (String(url).startsWith('https://api.github.com')) {
+      if (isGithubApiUrl(url)) {
         return { status: 200, headers: {}, data: githubRelease() };
       }
       return {
