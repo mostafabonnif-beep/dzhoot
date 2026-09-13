@@ -325,7 +325,7 @@ export async function getFailoverTarget(
   if (primarySourceId) mapFilter.backupSourceId = { $ne: primarySourceId };
 
   // Multi-tier cascade: a channel can map to several backup sources, each with
-  // a priority (lower = tried first, e.g. NEO 4K=10 then MIBOX=20). Iterate in
+  // a priority (lower = tried first, e.g. backup tier A=10 then backup tier B=20). Iterate in
   // priority order and return the first backup that is eligible AND healthy —
   // if the top tier is down we fall through to the next instead of giving up.
   const maps = await ChannelFailoverMap.aggregate([
@@ -451,7 +451,7 @@ async function probeSource(source: any): Promise<{ health: SourceHealth; error: 
  * segment against the ORIGINAL URL always fails even though playback works
  * fine for customers.
  *
- * TS transport streams (the Business Cloud NEO case): a .ts live URL never
+ * TS transport streams (the primary-source case): a .ts live URL never
  * ends — an HTTP 200-399 response IS the liveness signal. Probe it like
  * stream-prober does for non-HLS (stream response, tiny 1 KB cap, destroy
  * immediately) instead of the 512 KB HLS-manifest read, which always fails

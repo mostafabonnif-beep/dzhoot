@@ -271,13 +271,13 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
   });
 
   it('watchdog keeps a TS-format direct-playback source verified via its .ts streams', async () => {
-    // Business Cloud NEO case: the panel serves TS transport streams and its
+    // primary-source case: the panel serves TS transport streams and its
     // API is not customer-relevant for direct playback. A healthy .ts response
     // (HTTP 200) must keep the source verified — the old HLS-only probe read a
     // 512 KB cap on the unbounded TS stream and wrongly marked it degraded.
     (testXtreamConnection as jest.Mock).mockRejectedValue(new Error('API unreachable'));
     const tsSource = await XtreamSource.create({
-      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
+      name: 'Primary Source', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
       status: 'Active', verificationStatus: 'verified', directPlayback: true, playbackFormat: 'ts',
     });
     await Channel.create({
@@ -297,7 +297,7 @@ describe('Round 18 — failover service (backup source auto-failover)', () => {
     const { get: axiosGet } = require('axios');
     (axiosGet as jest.Mock).mockRejectedValueOnce(new Error('HTTP 403'));
     const tsSource = await XtreamSource.create({
-      name: 'Business Cloud NEO', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
+      name: 'Primary Source', serverUrl: 'https://cf.business-cloud-neo.ru', usernameEncrypted: 'x', passwordEncrypted: 'y',
       status: 'Active', verificationStatus: 'verified', directPlayback: true, playbackFormat: 'ts',
     });
     await Channel.create({
