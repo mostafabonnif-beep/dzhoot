@@ -1,11 +1,13 @@
 package com.dzhoof.iptv.update
 
 import android.app.DownloadManager
+import android.app.UiModeManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -33,13 +35,18 @@ import kotlin.math.pow
  */
 @Singleton
 class AppUpdater @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val apkFileInspector: ApkFileInspector,
 ) {
     /** Terminal outcomes of a download+install, delivered on the main thread. */
     sealed interface DownloadState {
         data object Started : DownloadState
         data object InstallLaunched : DownloadState
-        data class Failed(val message: String) : DownloadState
+        data class Failed(
+            val message: String,
+            /** Non-sensitive taxonomy code for logs/telemetry; null for legacy paths. */
+            val code: UpdateErrorCode? = null
+        ) : DownloadState
     }
 
     private var downloadId: Long = -1
@@ -59,7 +66,8 @@ class AppUpdater @Inject constructor(
             val baseUrl = AppPreferences.getServerUrl(context)
             val tvCode = AppPreferences.getTvCode(context)
             val response = PinnedHttpClient.get(
-                "$baseUrl/api/v1/app/version?currentVersion=${getVersionCode()}",
+                "$baseUrl/api/v1/app/version?currentVersionCode=${getVersionCode()}" +
+                    "&channel=stable&platform=${platformParam()}",
                 mapOf("Accept" to "application/json", "X-Session-ID" to tvCode)
             )
             response.use { resp ->
@@ -72,7 +80,12 @@ class AppUpdater @Inject constructor(
                         releaseNotes = latest.optString("releaseNotes", "").takeIf { it != "null" } ?: "",
                         fileSize = formatFileSize(latest.optLong("apkFileSize", 0)),
                         downloadUrl = latest.optString("downloadUrl", ""),
-                        isMandatory = json.optBoolean("isMandatory", false)
+                        isMandatory = json.optBoolean("mandatory", json.optBoolean("isMandatory", false)),
+                        versionCode = latest.optInt("versionCode", 0).takeIf { it > 0 },
+                        sha256 = latest.optString("sha256", "").takeIf { isSha256(it) },
+                        sizeBytes = latest.optLong("sizeBytes", 0).takeIf { it > 0 },
+                        minimumSupportedVersionCode =
+                            latest.optInt("minimumSupportedVersionCode", 0).takeIf { it > 0 }
                     )
                 } else null
             }
@@ -80,6 +93,17 @@ class AppUpdater @Inject constructor(
             null // fall through to GitHub check
         }
     }
+
+    /** `platform` the update API expects: TV/leanback devices get TV-tuned releases. */
+    private fun platformParam(): String {
+        val uiMode = (context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager)?.currentModeType
+        val isTv = context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) ||
+            uiMode == Configuration.UI_MODE_TYPE_TELEVISION
+        return if (isTv) "android-tv" else "android"
+    }
+
+    private fun isSha256(value: String): Boolean =
+        value.length == 64 && value.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
 
     private fun checkFromGitHub(): UpdateInfo? {
         return try {
@@ -127,8 +151,15 @@ class AppUpdater @Inject constructor(
      * system installer. [onState] is invoked on the main thread with the outcome.
      */
     fun downloadAndInstall(updateInfo: UpdateInfo, onState: (DownloadState) -> Unit) {
-        if (updateInfo.downloadUrl.isEmpty()) {
-            onState(DownloadState.Failed("لا يتوفر رابط للتنزيل"))
+        val allowedHosts = ApkUrlPolicy.allowedHosts(AppPreferences.getServerUrl(context))
+        if (!ApkUrlPolicy.isAllowed(updateInfo.downloadUrl, allowedHosts)) {
+            // Fail closed before a single byte is requested: an off-allowlist or non-HTTPS
+            // URL means the release metadata cannot be trusted.
+            Log.e(TAG, "Refusing to download the update from a non-allowlisted URL")
+            onState(DownloadState.Failed(
+                UpdateErrorCode.UPDATE_METADATA_INVALID.userMessage,
+                UpdateErrorCode.UPDATE_METADATA_INVALID
+            ))
             return
         }
         try {
@@ -164,15 +195,17 @@ class AppUpdater @Inject constructor(
                                 // Archive signature parsing can be slow for a large APK. Keep it
                                 // off the broadcast receiver's main-thread path to avoid ANRs.
                                 Thread {
-                                    val state = installUpdate()
+                                    val state = installUpdate(updateInfo)
                                     mainHandler.post { onState(state) }
                                 }.start()
                             } else {
                                 val reason = cursor.getString(
                                     cursor.getColumnIndex(DownloadManager.COLUMN_REASON)
                                 )
+                                Log.e(TAG, "Download failed, reason=$reason")
                                 onState(DownloadState.Failed(
-                                    if (reason.isNullOrBlank()) "فشل تنزيل التحديث" else "فشل تنزيل التحديث (رمز $reason)"
+                                    UpdateErrorCode.UPDATE_DOWNLOAD_FAILED.userMessage,
+                                    UpdateErrorCode.UPDATE_DOWNLOAD_FAILED
                                 ))
                             }
                             // A singleton updater can be used by either the startup screen or
@@ -204,19 +237,49 @@ class AppUpdater @Inject constructor(
             Log.e(TAG, "Error downloading update", e)
             unregisterDownloadReceiver()
             downloadId = -1
-            onState(DownloadState.Failed("تعذر بدء التنزيل"))
+            onState(DownloadState.Failed(
+                UpdateErrorCode.UPDATE_DOWNLOAD_FAILED.userMessage,
+                UpdateErrorCode.UPDATE_DOWNLOAD_FAILED
+            ))
         }
     }
 
-    private fun installUpdate(): DownloadState {
+    private fun installUpdate(updateInfo: UpdateInfo): DownloadState {
         return try {
             val file = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), APK_FILENAME)
-            if (!file.exists()) return DownloadState.Failed("تعذر الوصول إلى ملف التحديث")
+            if (!file.exists()) {
+                return DownloadState.Failed(
+                    UpdateErrorCode.UPDATE_DOWNLOAD_FAILED.userMessage,
+                    UpdateErrorCode.UPDATE_DOWNLOAD_FAILED
+                )
+            }
 
-            if (!verifyApkSignature(file)) {
-                Log.e(TAG, "APK signature verification failed — refusing to install")
+            // Everything the verifier needs, observed on the actual downloaded bytes.
+            val verification = UpdateVerifier.verify(
+                expected = ExpectedArtifact(
+                    packageName = context.packageName,
+                    versionCode = updateInfo.versionCode,
+                    sha256 = updateInfo.sha256,
+                    sizeBytes = updateInfo.sizeBytes
+                ),
+                observed = ObservedArtifact(
+                    downloadUrl = updateInfo.downloadUrl,
+                    sizeBytes = file.length(),
+                    sha256 = apkFileInspector.sha256Of(file),
+                    archivePackageName = apkFileInspector.archivePackageName(file),
+                    archiveVersionCode = apkFileInspector.archiveVersionCode(file),
+                    signatureMatches = apkFileInspector.signatureMatches(file)
+                ),
+                installedVersionCode = apkFileInspector.installedVersionCode(),
+                allowedHosts = ApkUrlPolicy.allowedHosts(AppPreferences.getServerUrl(context))
+            )
+
+            if (verification is UpdateVerificationResult.Blocked) {
+                // Fail closed and leave no trace of the rejected artifact. The detail is
+                // for logs only; the user sees the code's Arabic message.
+                Log.e(TAG, "Update blocked (${verification.code}): ${verification.detail}")
                 file.delete()
-                return DownloadState.Failed("تعذر التحقق من التحديث — لا تتطابق التوقيعات")
+                return DownloadState.Failed(verification.code.userMessage, verification.code)
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
@@ -227,7 +290,10 @@ class AppUpdater @Inject constructor(
                     Uri.parse("package:${context.packageName}")
                 ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(settingsIntent)
-                return DownloadState.Failed("اسمح للتطبيق بتثبيت التحديثات من هذا المصدر، ثم أعد المحاولة")
+                return DownloadState.Failed(
+                    UpdateErrorCode.UPDATE_USER_ACTION_REQUIRED.userMessage,
+                    UpdateErrorCode.UPDATE_USER_ACTION_REQUIRED
+                )
             }
 
             val apkUri = FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
@@ -241,39 +307,10 @@ class AppUpdater @Inject constructor(
             DownloadState.InstallLaunched
         } catch (e: Exception) {
             Log.e(TAG, "Error installing update", e)
-            DownloadState.Failed("تعذر تثبيت التحديث")
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun verifyApkSignature(apkFile: File): Boolean {
-        return try {
-            val currentSigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                context.packageManager.getPackageInfo(
-                    context.packageName, PackageManager.GET_SIGNING_CERTIFICATES
-                ).signingInfo?.apkContentsSigners
-            } else {
-                context.packageManager.getPackageInfo(
-                    context.packageName, PackageManager.GET_SIGNATURES
-                ).signatures
-            }
-            val apkSigs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                context.packageManager.getPackageArchiveInfo(
-                    apkFile.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES
-                )?.signingInfo?.apkContentsSigners
-            } else {
-                context.packageManager.getPackageArchiveInfo(
-                    apkFile.absolutePath, PackageManager.GET_SIGNATURES
-                )?.signatures
-            }
-            if (currentSigs.isNullOrEmpty() || apkSigs.isNullOrEmpty()) {
-                Log.e(TAG, "Could not retrieve signatures for verification")
-                return false
-            }
-            currentSigs[0].toByteArray().contentEquals(apkSigs[0].toByteArray())
-        } catch (e: Exception) {
-            Log.e(TAG, "Signature verification error", e)
-            false
+            DownloadState.Failed(
+                UpdateErrorCode.UPDATE_INSTALL_FAILED.userMessage,
+                UpdateErrorCode.UPDATE_INSTALL_FAILED
+            )
         }
     }
 
