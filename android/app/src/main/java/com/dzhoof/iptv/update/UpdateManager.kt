@@ -41,6 +41,13 @@ class UpdateManager @Inject constructor(
     sealed interface Outcome {
         /** The trigger's cooldown has not elapsed; nothing was requested. */
         data object Skipped : Outcome
+
+        /**
+         * This install is managed by Google Play, so the app must not offer its own
+         * download/install path. Play In-App Updates owns the flow for such installs and
+         * Play updates them anyway; sideloading over a store install would be wrong.
+         */
+        data object DelegatedToStore : Outcome
         data object UpToDate : Outcome
         data class Available(val update: UpdateInfo) : Outcome
         data class Failed(val code: UpdateErrorCode) : Outcome
@@ -54,6 +61,11 @@ class UpdateManager @Inject constructor(
      */
     suspend fun check(trigger: Trigger, nowMillis: Long = System.currentTimeMillis()): Outcome {
         Log.i(TAG, "check trigger=$trigger distribution=${distribution.wireName}")
+
+        // A Play-managed install is never offered the verified sideload path. The Play
+        // In-App Updates flow is wired separately (it needs an Activity and a Play build);
+        // until then Play owns the update, which is the correct outcome either way.
+        if (distribution == UpdateDistribution.PLAY) return Outcome.DelegatedToStore
 
         if (trigger != Trigger.MANUAL) {
             val cooldown = when (trigger) {
@@ -86,6 +98,7 @@ class UpdateManager @Inject constructor(
         is Outcome.Available -> "available"
         Outcome.UpToDate -> "up_to_date"
         is Outcome.Skipped -> "skipped"
+        is Outcome.DelegatedToStore -> "delegated_to_store"
         is Outcome.Failed -> outcome.code.name
     }
 }
