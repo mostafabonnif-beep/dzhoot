@@ -27,6 +27,7 @@
     "migrate:tvgid-backfill": "tsx src/scripts/migrations/0011-tvgid-backfill.ts",
     "migrate:user-channellistcode": "tsx src/scripts/migrations/0014-user-channellistcode-backfill.ts",
     "migrate:app-version-provenance": "tsx src/scripts/migrations/0016-app-version-provenance.ts",
+    "verify:release-provenance": "tsx src/scripts/verify-release-provenance.ts",
     "audit:catalog-presentation": "tsx src/scripts/catalog-presentation-audit.ts"
   },
   "dependencies": {
