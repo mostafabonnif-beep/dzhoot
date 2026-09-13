@@ -18,4 +18,10 @@ abstract class UpdateModule {
     @Binds
     @Singleton
     abstract fun bindUpdateCheckStore(impl: AppPreferencesUpdateCheckStore): UpdateCheckStore
+
+    @Binds
+    @Singleton
+    abstract fun bindUpdateDistributionProvider(
+        impl: DeviceUpdateEnvironment,
+    ): UpdateDistributionProvider
 }
