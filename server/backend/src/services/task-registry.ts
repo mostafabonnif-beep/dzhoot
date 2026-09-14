@@ -91,11 +91,11 @@ async function expiryAlertHandler(): Promise<TaskResult> {
       name: 'subscription-expiry-alert',
       status: result.ok ? 'completed' : 'failed',
       durationMs: Date.now() - start,
-      result: { sent: result.sent },
+      result: { sent: result.sent, inApp: result.inApp || 0 },
       error: result.error || undefined,
     },
   ];
-  return { summary: { ok: result.ok, sent: result.sent }, subtasks };
+  return { summary: { ok: result.ok, sent: result.sent, inApp: result.inApp || 0 }, subtasks };
 }
 
 /** Daily: expire UNUSED reseller codes past their window and return credit. */

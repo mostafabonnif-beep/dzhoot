@@ -6,6 +6,13 @@ export interface INotificationDocument extends Document {
   imageUrl?: string;
   deepLink?: string;
   audience: 'ALL' | 'ACTIVE';
+  /**
+   * When set, the notification is addressed to ONE user (in-app inbox) instead
+   * of being broadcast to everyone. Expiry reminders use this: the email channel
+   * cannot reach app-created customers (their address is @clients.dzhoof.invalid),
+   * so the reminder has to land in the app itself.
+   */
+  targetUserId?: mongoose.Types.ObjectId | null;
   status: 'DRAFT' | 'SCHEDULED' | 'SENT' | 'FAILED';
   /** Honest delivery outcome: { configured, attempted, sent, failed, skipped }. */
   deliveryStats?: Record<string, unknown> | null;
@@ -23,6 +30,7 @@ const notificationSchema = new Schema<INotificationDocument>(
     imageUrl: { type: String, default: '' },
     deepLink: { type: String, default: '' },
     audience: { type: String, enum: ['ALL', 'ACTIVE'], default: 'ALL', index: true },
+    targetUserId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     status: { type: String, enum: ['DRAFT', 'SCHEDULED', 'SENT', 'FAILED'], default: 'DRAFT', index: true },
     scheduledAt: { type: Date, default: null },
     sentAt: { type: Date, default: null },
