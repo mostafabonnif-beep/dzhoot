@@ -49,6 +49,12 @@ data class DiagnosticsFacts(
     val serverEnvironment: String? = null,
     /** Whether the backend identity call succeeded at all. */
     val serverAvailable: Boolean = false,
+    /**
+     * `X-Request-ID` of the most recent managed API call (the server's echo when it sent
+     * one). A random UUID that labels one request — never user data — so support can look up
+     * the exact server log line. Null when no managed call has been made yet.
+     */
+    val lastRequestId: String? = null,
 )
 
 /** One label/value row inside a section. */
@@ -91,6 +97,8 @@ object DiagnosticsReport {
     private val BUILT_AT_PATTERN = Regex("[0-9T:.+\\-Zz]{1,40}")
     private val ANDROID_RELEASE_PATTERN = Regex("[A-Za-z0-9._]{1,16}")
     private val SHA256_PATTERN = Regex("[0-9a-f]{64}")
+    private val REQUEST_ID_PATTERN =
+        Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}")
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -164,6 +172,11 @@ object DiagnosticsReport {
             DiagnosticsLine(
                 "البيئة",
                 safeText(facts.serverEnvironment, ENVIRONMENT_PATTERN) ?: NOT_AVAILABLE
+            ),
+            // The request id support should quote: it matches the server's `rid=` entry.
+            DiagnosticsLine(
+                "معرّف آخر طلب",
+                safeText(facts.lastRequestId, REQUEST_ID_PATTERN) ?: NOT_AVAILABLE
             ),
         )
     )
