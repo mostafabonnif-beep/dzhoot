@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 import request from 'supertest';
 
 process.env.METRICS_BEARER_TOKEN = 'metrics-test-token';
