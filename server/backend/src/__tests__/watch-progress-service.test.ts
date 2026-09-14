@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import WatchProgress from '../models/WatchProgress';
 import {
   upsertProgress,
@@ -56,4 +57,13 @@ describe('watch-progress-service', () => {
     expect(await clearProgress(USER)).toBe(1);
     expect(await WatchProgress.countDocuments({})).toBe(0);
   });
+});
+
+
+beforeAll(async () => {
+  await mongoose.connect(process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dzhoof_test');
+});
+
+afterAll(async () => {
+  await mongoose.disconnect();
 });
