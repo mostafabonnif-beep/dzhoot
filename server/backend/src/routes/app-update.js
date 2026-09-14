@@ -337,6 +337,36 @@ async function fetchReleaseSha256(candidate) {
   return sha256;
 }
 
+const MIN_SUPPORTED_ENV = 'APP_MIN_SUPPORTED_VERSION_CODE';
+let warnedAboutMinSupported = false;
+let warnedAboutUnreachableFloor = false;
+
+/**
+ * The oldest app build the operator still supports (operations brief §4: a device below
+ * this must be forced to update). Production serves releases straight from the GitHub
+ * fallback, which carries no per-release metadata, so this floor is deployment policy:
+ * `APP_MIN_SUPPORTED_VERSION_CODE` in `/etc/dzhoot/.env.production`.
+ *
+ * An unset, non-numeric or below-1 value keeps the previous behaviour (1 = nothing is
+ * forced) and warns once. A typo must never force every installed device to update.
+ */
+function minSupportedVersionFromEnv() {
+  const raw = process.env[MIN_SUPPORTED_ENV];
+  if (raw === undefined || String(raw).trim() === '') return 1;
+
+  const parsed = Number(String(raw).trim());
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    if (!warnedAboutMinSupported) {
+      warnedAboutMinSupported = true;
+      console.warn(
+        `[app-update] ignoring ${MIN_SUPPORTED_ENV}: it must be an integer >= 1 (no device is forced to update)`,
+      );
+    }
+    return 1;
+  }
+  return parsed;
+}
+
 function mapDbVersion(req, version) {
   if (!version) return null;
   return {
@@ -347,7 +377,11 @@ function mapDbVersion(req, version) {
     apkFileSize: Number(version.apkFileSize) || 0,
     downloadUrl: publicDownloadUrl(req, version.downloadUrl),
     isMandatory: version.isMandatory || false,
-    minCompatibleVersion: Number(version.minCompatibleVersion) || 1,
+    // The deployment-wide floor may raise a release's own minimum, never lower it.
+    minCompatibleVersion: Math.max(
+      Number(version.minCompatibleVersion) || 1,
+      minSupportedVersionFromEnv(),
+    ),
     releasedAt: version.releasedAt,
     releaseChannel: normalizeChannel(version.releaseChannel),
     distribution: version.distribution === 'play' || version.distribution === 'managed_device'
@@ -371,7 +405,8 @@ function mapGitHubVersion(release, apkAsset) {
     apkFileSize: Number(apkAsset.size) || 0,
     downloadUrl: apkAsset.browser_download_url,
     isMandatory: false,
-    minCompatibleVersion: 1,
+    // No per-release metadata on this path, so the operator's floor is the policy.
+    minCompatibleVersion: minSupportedVersionFromEnv(),
     releasedAt: release.published_at,
     releaseChannel: 'stable',
     distribution: 'external_apk',
@@ -443,7 +478,19 @@ router.get('/version', updateCheckLimiter, async (req, res) => {
 
     const minimumSupportedVersionCode = Math.max(1, Number(latest.minCompatibleVersion) || 1);
     const updateAvailable = latest.versionCode > currentVersionCode;
-    const mandatory = !!latest.isMandatory || currentVersionCode < minimumSupportedVersionCode;
+    // `mandatory` means "the device must take this update", so it only applies when there
+    // is an update to take: a floor raised above the newest published build would otherwise
+    // strand every device on a blocking prompt with nothing to install.
+    const mandatory =
+      updateAvailable &&
+      (!!latest.isMandatory || currentVersionCode < minimumSupportedVersionCode);
+
+    if (!updateAvailable && currentVersionCode < minimumSupportedVersionCode && !warnedAboutUnreachableFloor) {
+      warnedAboutUnreachableFloor = true;
+      console.warn(
+        '[app-update] the configured minimum supported version is above the newest published release; no device is forced to update',
+      );
+    }
 
     // Only pay for the checksum lookup when the device can actually act on it.
     if (updateAvailable && !latest.sha256) {
@@ -685,6 +732,7 @@ module.exports._private = {
   normalizeVersion,
   compareVersions,
   versionNameToCode,
+  minSupportedVersionFromEnv,
   getCanonicalDownloadUrl,
   isStaleLocalDownloadUrl,
   publicDownloadUrl,

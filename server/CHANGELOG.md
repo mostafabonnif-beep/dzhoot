@@ -10,6 +10,20 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Fixed (mandatory updates were inert)
+
+- `GET /api/v1/app/version` now honours a deployment-wide minimum supported version:
+  `APP_MIN_SUPPORTED_VERSION_CODE` (a release's own `minCompatibleVersion` may raise it,
+  never lower it). Production serves releases from the GitHub fallback, which carries no
+  per-release metadata, so `minimumSupportedVersionCode` was hard-coded to 1 there and
+  `mandatory` was always false — a build the operator considers unsupported could keep
+  running forever. An unset, non-numeric or below-1 value is ignored with a one-time
+  warning, so a typo cannot force every installed device to update, and `mandatory` is now
+  only reported when an update is actually available (a floor above the newest published
+  build no longer strands devices on a blocking prompt). Covered by five new cases in
+  `src/__tests__/app-update.test.ts`; documented in `server/.env.example` and
+  `docs/API_DOCUMENTATION.md`.
+
 ### Security (crash reports)
 
 - `POST /api/v1/app/crash-report` now redacts every free-text field before it is stored.
