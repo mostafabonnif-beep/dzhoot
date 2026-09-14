@@ -116,6 +116,24 @@ if command -v jq >/dev/null 2>&1; then
 fi
 echo 'ok: happy path writes the full manifest'
 
+# ─── 1b) Release-candidate versions keep their suffix on the APK ────────────
+# versionName "1.0.0-rc.1" derives versionCode 10000 (the suffix is dropped), and the
+# manifest records the full name — a candidate is a beta-channel artifact.
+rc_out="$TMP/rc-manifest.json"
+env ANDROID_SDK_ROOT="$SDK" \
+  FAKE_VERSION_NAME='1.0.0-rc.1' \
+  FAKE_VERSION_CODE='10000' \
+  RELEASE_COMMIT="$COMMIT" \
+  BUILT_AT="$BUILT_AT" \
+  bash "$SCRIPT" "$APK" 1.0.0-rc.1 beta external_apk "$rc_out" >/dev/null ||
+  fail 'a suffixed release-candidate version did not produce a manifest'
+grep -q '"versionName": "1.0.0-rc.1"' "$rc_out" || fail 'candidate manifest lost the suffix'
+grep -q '"versionCode": 10000' "$rc_out" || fail 'candidate manifest derived the wrong versionCode'
+grep -q '"releaseChannel": "beta"' "$rc_out" || fail 'candidate manifest is not on the beta channel'
+echo 'ok: release-candidate versions derive the code from the numeric base'
+expect_failure 'candidate with a mismatched versionCode' "FAKE_VERSION_NAME=1.0.0-rc.1 FAKE_VERSION_CODE=10001" \
+  "$APK" 1.0.0-rc.1 beta external_apk "$TMP/out-rc-code.json"
+
 # ─── 2) Fail-closed cases ───────────────────────────────────────────────────
 # An APK advertising a code the version name does not derive to must never ship.
 expect_failure 'versionCode below the derived code' "FAKE_VERSION_CODE=10300" \
