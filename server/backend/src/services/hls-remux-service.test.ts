@@ -60,8 +60,19 @@ afterAll(async () => {
   // (seen on CI: hls-remux passed at T, "Cannot log…" fired ~60s later, token A).
   // Empty the session map so later sweep ticks are no-ops.
   remux.shutdownHlsSessions();
-  for (let pass = 0; pass < 2; pass += 1) {
-    await new Promise((resolve) => setImmediate(resolve));
+  // The shutdown above kills any live fake ffmpeg; its 'exit' handler calls
+  // console.error for non-zero codes. That fires on a setImmediate — AFTER jest
+  // has closed this suite's console — and makes jest exit 1 despite every
+  // assertion passing. Silence console.error while we drain those immediates so
+  // no log can escape the suite lifecycle (fixes #216).
+  const origError = console.error;
+  console.error = () => {};
+  try {
+    for (let pass = 0; pass < 2; pass += 1) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  } finally {
+    console.error = origError;
   }
 });
 
