@@ -10,6 +10,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (admin release management UI)
+
+- `/admin/versions` can now publish and manage release metadata instead of being a
+  read-only view of the public endpoints. It lists the admin-managed `AppVersion` rows with
+  a provenance badge (COMPLETE only when sha256, a positive size, the file name and the
+  download URL are all present, otherwise the missing field is named — the same rule the
+  backend diagnostics apply), publishes new releases (auto-deriving `versionCode` from
+  `versionName` with the documented `major*10000+minor*100+patch` rule, overridable with an
+  explicit warning when the override disagrees, since clients reject such an artifact), and
+  edits only what the API allows to change — `isActive`, `releaseNotes`, `isMandatory`,
+  `minCompatibleVersion`, `releaseChannel`, `distribution`, `platforms`. Deactivating a
+  release asks for confirmation, and the UI states that the artifact identity is immutable
+  after publish (a fix means a new `versionCode`) and that every write is audited.
+- The release-metadata rules now live in `frontend/src/lib/release-metadata.ts` and are
+  unit-tested (16 tests).
+
 ### Added (release verification)
 
 - `src/scripts/verify-release-provenance.ts` (`npm run verify:release-provenance`) —
