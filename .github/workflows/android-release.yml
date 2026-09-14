@@ -123,8 +123,11 @@ jobs:
           DZHOOF_API_URL: ${{ env.API_URL }}
         run: ./gradlew assembleOfficialRelease --stacktrace --no-daemon -PversionName="${VERSION}"
 
-      - name: Verify and checksum APK
+      - name: Verify, checksum and describe APK
         working-directory: android
+        env:
+          RELEASE_COMMIT: ${{ github.sha }}
+          EXPECTED_PACKAGE: com.dzhoof.iptv
         run: |
           set -euo pipefail
           apk=app/build/outputs/apk/official/release/app-official-release.apk
@@ -140,6 +143,29 @@ jobs:
           named="dzhoof-tv-v${VERSION}-official.apk"
           cp "$apk" "$named"
           sha256sum "$named" > "${named}.sha256"
+          # Operations brief §3 + docs/RELEASE_PROVENANCE.md: every release ships a
+          # machine-readable manifest holding the values that must agree across Git,
+          # the APK, the Docker image, /health and the GitHub Release. The script reads
+          # the identity from the APK itself and fails closed — no checksum, no signing
+          # certificate, or a versionCode that disagrees with the derived code stops the
+          # release here, so nothing is uploaded.
+          bash ../scripts/ci/write-release-manifest.sh \
+            "$named" "${VERSION}" stable external_apk \
+            "dzhoof-tv-v${VERSION}-official.release.json"
+
+      - name: Publish provenance manifest in the step summary
+        working-directory: android
+        run: |
+          set -euo pipefail
+          manifest="dzhoof-tv-v${VERSION}-official.release.json"
+          test -s "$manifest"
+          {
+            echo '### Release provenance — DZ HOOF v'"${VERSION}"
+            echo
+            echo '```json'
+            cat "$manifest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub Release and upload APK
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
@@ -150,6 +176,7 @@ jobs:
           files: |
             android/dzhoof-tv-v${{ env.VERSION }}-official.apk
             android/dzhoof-tv-v${{ env.VERSION }}-official.apk.sha256
+            android/dzhoof-tv-v${{ env.VERSION }}-official.release.json
 
       - name: Remove signing material
         if: always()
