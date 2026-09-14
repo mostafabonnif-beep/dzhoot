@@ -33,6 +33,18 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      # Freemium ads — public identifiers only (they ship inside every client).
+      # The admin panel overrides them per field. Nothing is ever served while
+      # ADS_ENABLED is false, so this is safe to ship even before approval.
+      ADS_ENABLED: ${ADS_ENABLED:-false}
+      ADSENSE_CLIENT_ID: ${ADSENSE_CLIENT_ID:-}
+      ADSENSE_SLOT_BELOW_PLAYER: ${ADSENSE_SLOT_BELOW_PLAYER:-}
+      ADSENSE_SLOT_SIDEBAR: ${ADSENSE_SLOT_SIDEBAR:-}
+      ADMOB_APP_ID: ${ADMOB_APP_ID:-}
+      ADMOB_BANNER_UNIT_ID: ${ADMOB_BANNER_UNIT_ID:-}
+      ADMOB_INTERSTITIAL_UNIT_ID: ${ADMOB_INTERSTITIAL_UNIT_ID:-}
+      ADMOB_REWARDED_UNIT_ID: ${ADMOB_REWARDED_UNIT_ID:-}
+      ADS_SHOW_ON_FREE: ${ADS_SHOW_ON_FREE:-}
       # Direct playback (opt-in): with ALLOW_DIRECT_PLAYBACK=true and a source
       # flagged directPlayback, video bytes go straight from the provider CDN
       # to the viewer; the VPS only issues auth tokens. Keep video off the VPS
