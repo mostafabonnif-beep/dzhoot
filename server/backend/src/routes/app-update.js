@@ -100,6 +100,13 @@ const DEFAULT_DOWNLOAD_HOSTS = [
   'github.com',
   'objects.githubusercontent.com',
   'github-releases.githubusercontent.com',
+  // GitHub redirects a release-asset download to this host (the Location seen in
+  // production: release-assets.githubusercontent.com/github-production-release-asset/…).
+  // It was missing, so fetchReleaseSha256() validated the first hop on github.com, then
+  // rejected the redirect and returned null: /api/v1/app/version served `sha256: null` for
+  // every GitHub-sourced release even though the release publishes `<apk>.sha256`, leaving
+  // devices unable to verify a download. Same trust domain as the other GitHub asset hosts.
+  'release-assets.githubusercontent.com',
 ];
 
 function allowedDownloadHosts(req) {

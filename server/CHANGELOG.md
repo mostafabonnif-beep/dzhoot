@@ -10,6 +10,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Fixed (update API)
+
+- The update API now serves `sha256` for GitHub-sourced releases. GitHub answers a
+  release-asset request with a redirect to `release-assets.githubusercontent.com`, which
+  was missing from the download allowlist; the checksum lookup validates every redirect
+  hop, so it rejected that hop and returned null — `/api/v1/app/version` served
+  `sha256: null` for every GitHub release even though each one publishes `<apk>.sha256`,
+  leaving devices unable to verify a download. Found in production immediately after the
+  first deploy that exposed the field.
+
 ### Added (admin release management UI)
 
 - `/admin/versions` can now publish and manage release metadata instead of being a

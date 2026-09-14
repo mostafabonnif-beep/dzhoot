@@ -168,6 +168,19 @@ describe('app download URL helpers', () => {
     expect(isAllowedDownloadUrl('')).toBe(false);
   });
 
+  // GitHub answers a release-asset request with a redirect to this host. The checksum
+  // lookup walks redirects manually and validates every hop, so without this host the
+  // first hop passes on github.com, the redirect is rejected, and the API silently serves
+  // `sha256: null` for every GitHub-sourced release (seen in production 2026-09-14).
+  it('follows a release asset redirect to the GitHub asset host', () => {
+    expect(
+      isAllowedDownloadUrl(
+        'https://release-assets.githubusercontent.com/github-production-release-asset/1/x?sp=r&sig=abc'
+      )
+    ).toBe(true);
+    expect(isAllowedDownloadUrl('https://release-assets.githubusercontent.com.evil.example/x')).toBe(false);
+  });
+
   it('honors APP_UPDATE_ALLOWED_HOSTS and PUBLIC_BASE_URL hosts', () => {
     process.env.PUBLIC_BASE_URL = 'https://cdn.dzhoof.example/';
     process.env.APP_UPDATE_ALLOWED_HOSTS = 'mirror.example.com';
