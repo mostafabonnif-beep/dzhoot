@@ -574,7 +574,7 @@ async function collectHealthDetails() {
     require('./models/EpgProgram'),
   ];
   const [m3uSources, xtreamSources, programs, epgChannels ] = await Promise.all([
-    M3uSource.find().select('status syncStatus lastSyncAt lastError').lean(),
+    M3USource.find().select('status syncStatus lastSyncAt lastError').lean(),
     XtreamSource.find().select('status syncStatus lastSyncAt lastError').lean(),
     EpgProgram.countDocuments(),
     EpgProgram.distinct('channelEpgId').then((ids) => ids.length),
