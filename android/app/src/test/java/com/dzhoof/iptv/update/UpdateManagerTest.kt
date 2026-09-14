@@ -86,6 +86,33 @@ class UpdateManagerTest {
     }
 
     @Test
+    fun `a Play-managed install is delegated to the store and never sideloaded`() = runTest {
+        val repository = FakeRepository(UpdateRepository.Result.Found(update))
+        val store = FakeStore()
+        val playInstall = UpdateDistributionProvider { UpdateDistribution.PLAY }
+        val manager = UpdateManager(repository, store, playInstall)
+
+        val outcome = manager.check(UpdateManager.Trigger.APP_LAUNCH, nowMillis = 5_000L)
+
+        assertEquals(UpdateManager.Outcome.DelegatedToStore, outcome)
+        assertEquals(0, repository.calls)
+        assertTrue(store.records.isEmpty())
+    }
+
+    @Test
+    fun `a managed device still uses the verified external path`() = runTest {
+        val repository = FakeRepository(UpdateRepository.Result.Found(update))
+        val store = FakeStore()
+        val managed = UpdateDistributionProvider { UpdateDistribution.MANAGED_DEVICE }
+        val manager = UpdateManager(repository, store, managed)
+
+        val outcome = manager.check(UpdateManager.Trigger.MANUAL, nowMillis = 5_000L)
+
+        assertEquals(UpdateManager.Outcome.Available(update), outcome)
+        assertEquals(1, repository.calls)
+    }
+
+    @Test
     fun `an available update is returned and recorded`() = runTest {
         val repository = FakeRepository(UpdateRepository.Result.Found(update))
         val store = FakeStore()

@@ -114,6 +114,24 @@ if [ "$APPLY" -eq 1 ]; then
   sed -i "s|^DOCKER_IMAGE=.*|DOCKER_IMAGE=dzhoof-api:current|" "$ENV_FILE"
   sed -i "s|^DOCKER_FRONTEND_IMAGE=.*|DOCKER_FRONTEND_IMAGE=dzhoof-frontend:current|" "$ENV_FILE"
   say "ENV_FILE updated to dzhoof-api:current / dzhoof-frontend:current"
+  # Persist the release provenance into the env file as well. compose resolves
+  # RELEASE_COMMIT/RELEASE_BUILT_AT from --env-file, so a later manual
+  # `docker compose up -d` (which does not export them) would otherwise
+  # re-apply a stale value and make /health report the wrong commit — and any
+  # `release trace health` check would fail (observed 2026-09-13).
+  if [ "$RELEASE_COMMIT" != "unknown" ]; then
+    if grep -q '^RELEASE_COMMIT=' "$ENV_FILE"; then
+      sed -i "s|^RELEASE_COMMIT=.*|RELEASE_COMMIT=${RELEASE_COMMIT}|" "$ENV_FILE"
+    else
+      printf 'RELEASE_COMMIT=%s\n' "$RELEASE_COMMIT" >> "$ENV_FILE"
+    fi
+    if grep -q '^RELEASE_BUILT_AT=' "$ENV_FILE"; then
+      sed -i "s|^RELEASE_BUILT_AT=.*|RELEASE_BUILT_AT=${RELEASE_BUILT_AT}|" "$ENV_FILE"
+    else
+      printf 'RELEASE_BUILT_AT=%s\n' "$RELEASE_BUILT_AT" >> "$ENV_FILE"
+    fi
+    say "release metadata persisted to ENV_FILE (${RELEASE_COMMIT})"
+  fi
 else
   say "[dry-run] would update $ENV_FILE to dzhoof-api:current / dzhoof-frontend:current"
 fi
