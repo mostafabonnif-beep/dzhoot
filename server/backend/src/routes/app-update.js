@@ -615,6 +615,7 @@ router.get('/demo-code', async (req, res) => {
 // and every field is trimmed/sized so the payload can never be abused.
 // ---------------------------------------------------------------------------
 const CrashReport = require('../models/CrashReport');
+const { redactSensitiveText } = require('../services/audit-log');
 
 const crashReportLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
@@ -630,6 +631,19 @@ function cleanReportField(value, max) {
   return trimmed === '' ? null : trimmed;
 }
 
+/**
+ * Free-text fields (exception message, stack trace, screen, thread) are the only
+ * place a secret can reach the database through a crash report: a throwable
+ * message routinely embeds the URL or token that caused the failure. A crashed
+ * app cannot be trusted to have scrubbed its own payload, so redaction happens
+ * here, before storage — the operator must never gain credentials from a report.
+ */
+function cleanReportText(value, max) {
+  if (typeof value !== 'string') return null;
+  const redacted = redactSensitiveText(value, max).trim();
+  return redacted === '' ? null : redacted;
+}
+
 function cleanReportNumber(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 0) return null;
@@ -639,10 +653,6 @@ function cleanReportNumber(value) {
 router.post('/crash-report', crashReportLimiter, async (req, res) => {
   try {
     const body = req.body || {};
-    const stackTrace =
-      typeof body.stackTrace === 'string' && body.stackTrace.length > 0
-        ? body.stackTrace.slice(0, 50000)
-        : null;
 
     const report = await CrashReport.create({
       deviceId: cleanReportField(body.deviceId, 128),
@@ -656,11 +666,11 @@ router.post('/crash-report', crashReportLimiter, async (req, res) => {
       totalRamMb: cleanReportNumber(body.totalRamMb),
       freeRamMb: cleanReportNumber(body.freeRamMb),
       freeStorageMb: cleanReportNumber(body.freeStorageMb),
-      exceptionType: cleanReportField(body.exceptionType, 200),
-      exceptionMessage: cleanReportField(body.exceptionMessage, 2000),
-      stackTrace,
+      exceptionType: cleanReportText(body.exceptionType, 200),
+      exceptionMessage: cleanReportText(body.exceptionMessage, 2000),
+      stackTrace: cleanReportText(body.stackTrace, 50000),
       threadName: cleanReportField(body.threadName, 100),
-      screen: cleanReportField(body.screen, 100),
+      screen: cleanReportText(body.screen, 100),
     });
 
     return res.status(201).json({ ok: true, id: String(report._id) });
