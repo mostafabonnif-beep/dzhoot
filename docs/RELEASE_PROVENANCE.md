@@ -82,3 +82,11 @@ RELEASE_COMMIT="$(git rev-parse HEAD)" \
 
 `EXPECTED_PACKAGE` overrides the package check (useful when validating the script against a
 staging/debug APK locally); `BUILT_AT` overrides the timestamp.
+
+## Where it runs
+
+| Stage | What enforces the contract |
+|---|---|
+| Release build | `.github/workflows/android-release.yml` generates the manifest after `apksigner verify`, fails the job on any mismatch, prints the manifest in the step summary and uploads it next to the APK and its `.sha256`. |
+| Pull requests | `scripts/ci/test-write-release-manifest.sh`, run in the `Secret guard` job, drives the generator with stubbed `aapt`/`apksigner` and asserts the happy path plus every fail-closed case (versionCode above/below the derived code, foreign package, wrong versionName, unreadable certificate, unknown channel/distribution, empty or absent APK, missing SDK, missing arguments). |
+| Deploy | `server/backend/src/scripts/verify-release-provenance.ts` (`npm run verify:release-provenance` in `server/backend`) compares a published release against what the API actually serves. |
