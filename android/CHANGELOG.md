@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Changed (crash reports no longer leave the device with credentials)
+
+- The crash reporter redacts every free-text field before the report is queued to disk. A throwable message routinely embeds the URL or token that caused the failure — an Xtream `get.php?username=&password=` request, a `/live/<user>/<password>/1423.ts` path, a bearer token or a playback JWT — and none of those may be uploaded (operations brief §7). `CrashRedactor` is the Kotlin counterpart of the server's `redactSensitiveText` (same rules, kept in step) and runs on the device, so the credentials never leave it; the server redacts again on ingest, because a crashed app cannot be trusted to have scrubbed its own payload and shipped clients can be older. The failure site — exception type, message, `file:line` — is preserved so the bug stays reproducible.
+- The queue log line now prints the exception type only. It used to log the full exception message to logcat, which is exactly where a credential would be.
+
 ### Added
 - Release provenance manifest: every `vX.Y.Z` release now attaches `dzhoof-tv-vX.Y.Z-official.release.json` containing versionName, versionCode, channel, distribution, size, SHA-256, **signing certificate SHA-256 fingerprint**, min/target SDK, commit and build timestamp — see `docs/RELEASE_PROVENANCE.md`. The release job fails closed when the APK has no verifiable signature, when the checksum or fingerprint cannot be read, or when the APK's versionCode disagrees with the documented `major*10000+minor*100+patch` derivation, so a build can never publish without them.
   - The manifest is now actually produced and uploaded by `.github/workflows/android-release.yml` (it previously existed as a script that no workflow called) and printed in the run's step summary; the generator's fail-closed behaviour is covered by `scripts/ci/test-write-release-manifest.sh`, which CI runs in the Secret guard job.
