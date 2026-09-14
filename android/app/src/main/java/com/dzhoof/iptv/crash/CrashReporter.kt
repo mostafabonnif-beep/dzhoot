@@ -47,13 +47,16 @@ class CrashReporter(
         if (list.length() >= MAX_QUEUED) list.remove(0)
         list.put(entry)
         queueFile.writeText(list.toString())
-        Log.w(TAG, "Crash queued: ${entry.optString("exceptionType")} — ${entry.optString("exceptionMessage")}")
+        // The exception message is exactly where a credential would be, so logcat
+        // gets the (untrusted) type only.
+        Log.w(TAG, "Crash queued: ${CrashRedactor.logSafeExceptionType(entry.optString("exceptionType"))}")
     }
 
     companion object {
         private const val TAG = "CrashReporter"
         private const val MAX_QUEUED = 20
-        private const val MAX_STACK_CHARS = 40000
+        private const val MAX_STACK_CHARS = CrashRedactor.MAX_CHARS
+        private const val MAX_MESSAGE_CHARS = 1000
 
         fun crashQueueFile(context: Context): File =
             File(context.filesDir, "crashqueue.json")
@@ -85,8 +88,12 @@ class CrashReporter(
             report.put("freeStorageMb", storage)
 
             report.put("exceptionType", throwable.javaClass.name)
-            report.put("exceptionMessage", throwable.message?.take(1000))
-            report.put("stackTrace", stackTraceWithCauses(throwable).take(MAX_STACK_CHARS))
+            // Credentials are stripped here, on the device, before anything touches
+            // the disk queue: a throwable message routinely carries the URL or token
+            // that caused the failure, and the operator must never read those out of a
+            // stored report (operations brief §7). The server redacts again on ingest.
+            report.put("exceptionMessage", CrashRedactor.redact(throwable.message, MAX_MESSAGE_CHARS))
+            report.put("stackTrace", CrashRedactor.redact(stackTraceWithCauses(throwable), MAX_STACK_CHARS))
             report.put("threadName", thread.name)
             return report
         }
