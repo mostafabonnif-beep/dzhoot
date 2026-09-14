@@ -61,9 +61,11 @@ describe('watch-progress-service', () => {
 
 
 beforeAll(async () => {
-  await mongoose.connect(process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dzhoof_test');
+  if (mongoose.connection.readyState === 0) {
+    await mongoose.connect(process.env.TEST_MONGO_URI || 'mongodb://127.0.0.1:27017/dzhoof_test');
+  }
 });
 
 afterAll(async () => {
-  await mongoose.disconnect();
+  // Leave the connection open for other suites running in parallel.
 });
