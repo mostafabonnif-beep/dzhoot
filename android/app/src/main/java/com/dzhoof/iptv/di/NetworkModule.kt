@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.data.AppPreferences
+import com.dzhoof.iptv.data.RequestCorrelation
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import dagger.Module
 import dagger.Provides
@@ -71,7 +72,8 @@ object NetworkModule {
             .addInterceptor { chain ->
                 val original = chain.request()
                 val apiHost = Uri.parse(BuildConfig.API_BASE_URL).host
-                val isManagedApiRequest = apiHost != null && original.url.host == apiHost
+                val isManagedApiRequest =
+                    RequestCorrelation.isManagedHost(original.url.host, apiHost)
                 val isPlaybackRequest = original.url.encodedPath.contains("/api/v1/tv/playback/")
                 val builder = original.newBuilder()
                     // Manifests and segments are media, not JSON. Sending an
@@ -88,8 +90,21 @@ object NetworkModule {
                     builder.addHeader("X-TV-Code", tvCode)
                     if (sessionId.isNotBlank()) builder.addHeader("X-Session-Id", sessionId)
                     if (original.body != null) builder.addHeader("Content-Type", "application/json")
+
+                    // Correlate this call with the server access log (operations brief §7C):
+                    // a random UUID that labels the request and nothing else. The server
+                    // logs it as `rid=` and echoes it, and the diagnostics screen shows it
+                    // so support can find the exact request instead of guessing a window.
+                    val requestId = RequestCorrelation.newRequestId()
+                    builder.addHeader(RequestCorrelation.HEADER, requestId)
+                    RequestCorrelation.recordClientId(requestId)
                 }
-                chain.proceed(builder.build())
+
+                val response = chain.proceed(builder.build())
+                if (isManagedApiRequest) {
+                    RequestCorrelation.recordServerId(response.header(RequestCorrelation.HEADER))
+                }
+                response
             }
 
             .build()

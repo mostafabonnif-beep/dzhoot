@@ -6,6 +6,7 @@ import android.os.Build
 import android.util.Log
 import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.data.AppPreferences
+import com.dzhoof.iptv.data.RequestCorrelation
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.update.UpdateCheckStore
@@ -63,6 +64,8 @@ class AppDiagnosticsProvider @Inject constructor(
             serverBuiltAt = server?.builtAt,
             serverEnvironment = server?.environment,
             serverAvailable = server != null,
+            // Read last, after the identity probe above, so it reports that call's id.
+            lastRequestId = RequestCorrelation.lastCorrelationId(),
         )
     }
 
