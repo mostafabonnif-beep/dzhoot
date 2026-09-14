@@ -86,6 +86,15 @@ interface ResourceData {
   redisAvailable: boolean;
   series: SeriesPoint[];
   history: HistoryRow[];
+  /** Free-tier caps (0 = unlimited) + how often they would/did refuse. */
+  guard: GuardState;
+}
+
+interface GuardState {
+  enforce: boolean;
+  maxConcurrentStreams: number;
+  dailyEgressGb: number;
+  blocked: Record<string, number>;
 }
 
 type RawResources = Partial<{
@@ -98,6 +107,7 @@ type RawResources = Partial<{
   redisAvailable: boolean;
   series: SeriesPoint[];
   history: HistoryRow[];
+  guard: Partial<GuardState>;
 }>;
 
 function normalizeResources(raw: RawResources): ResourceData {
@@ -133,6 +143,12 @@ function normalizeResources(raw: RawResources): ResourceData {
     redisAvailable: raw.redisAvailable !== false,
     series: Array.isArray(raw.series) ? raw.series : [],
     history: Array.isArray(raw.history) ? raw.history : [],
+    guard: {
+      enforce: raw.guard?.enforce === true,
+      maxConcurrentStreams: Number(raw.guard?.maxConcurrentStreams) || 0,
+      dailyEgressGb: Number(raw.guard?.dailyEgressGb) || 0,
+      blocked: raw.guard?.blocked || {},
+    },
   };
 }
 
@@ -353,6 +369,62 @@ export default function ResourcesPage() {
           value={data.peak.concurrencyToday}
           icon={TrendingUp}
         />
+      </div>
+
+      {/* Free-tier guard: how close the free tier is to the operator's caps.
+          With no cap set this is a pure "what would happen" readout — exactly
+          what you want before switching enforcement on. */}
+      <div className="border border-border">
+        <div className="px-4 py-2 bg-muted/50 border-b border-border flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
+            حدود الطبقة المجانية
+          </h2>
+          <span
+            className={`text-[11px] px-2 py-0.5 rounded-full ${
+              data.guard.enforce
+                ? 'bg-emerald-500/10 text-emerald-600'
+                : 'bg-amber-500/10 text-amber-600'
+            }`}
+          >
+            {data.guard.enforce ? 'مفعّلة (تحجب)' : 'وضع قياس (لا تحجب)'}
+          </span>
+        </div>
+        <div className="px-4 py-4 grid gap-4 sm:grid-cols-3">
+          <div>
+            <div className="text-xs text-muted-foreground">مشاهدون مجانيون متزامنون</div>
+            <div className="mt-1 text-lg font-semibold">
+              {data.now.concurrentFree}
+              <span className="text-sm text-muted-foreground">
+                {' / '}
+                {data.guard.maxConcurrentStreams > 0 ? data.guard.maxConcurrentStreams : 'بلا حد'}
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">استهلاك المجاني اليوم</div>
+            <div className="mt-1 text-lg font-semibold">
+              {formatDecimal(data.byTier.free.egressTodayGb)} GB
+              <span className="text-sm text-muted-foreground">
+                {' / '}
+                {data.guard.dailyEgressGb > 0 ? `${data.guard.dailyEgressGb} GB` : 'بلا حد'}
+              </span>
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">محاولات رُفضت اليوم</div>
+            <div className="mt-1 text-lg font-semibold">
+              {(data.guard.blocked.CAPACITY_REACHED || 0) +
+                (data.guard.blocked.BUDGET_EXHAUSTED || 0)}
+              <span className="text-sm text-muted-foreground">
+                {' '}
+                (قياس: {data.guard.blocked.SHADOW_BLOCK || 0})
+              </span>
+            </div>
+          </div>
+        </div>
+        <p className="px-4 pb-3 text-xs text-muted-foreground">
+          لا يُقطع مشاهد يعمل الآن — يُمنع الدخول الجديد فقط عند تجاوز الحد.
+        </p>
       </div>
 
       {/* Hourly egress chart */}

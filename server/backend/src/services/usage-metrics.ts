@@ -363,6 +363,23 @@ export async function getHourlyEgressGb(hours = 24): Promise<Array<{ ts: string;
   return out;
 }
 
+/** Bytes of egress recorded today for one tier (Redis, memory fallback). */
+export async function getTierEgressTodayBytes(tier: UsageTier | string): Promise<number> {
+  const day = dayKey();
+  if (!process.env.REDIS_URL) return memory.byTier.get(String(tier)) || 0;
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const value = await redis.get(`${EGRESS_TIER_PREFIX}${day}:${tier}`);
+      const bytes = Number(value) || 0;
+      if (bytes > 0) return bytes;
+    } catch {
+      /* fall through to memory */
+    }
+  }
+  return memory.byTier.get(String(tier)) || 0;
+}
+
 /** Test seam: reset in-memory state between cases. */
 export function resetUsageState(): void {
   pending.total = 0;
@@ -405,6 +422,7 @@ module.exports = {
   createEgressMeter,
   recordEgressBytes,
   flushUsage,
+  getTierEgressTodayBytes,
   getUsageSnapshot,
   persistPeaks,
   getHourlyEgressGb,
