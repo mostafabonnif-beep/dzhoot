@@ -1557,6 +1557,31 @@ router.get('/stats/scheduler', async (req, res) => {
   }
 });
 
+// Resource dashboard — the numbers that decide whether the box survives a
+// free-tier wave: concurrent streams split by tier, egress (today / last
+// minute / Mbps), the day's peaks, and a 24h egress series. Free-tier
+// concurrency is derived from the account (shared free code or no active
+// subscription), so no streaming-path change was needed to measure it.
+router.get('/stats/resources', async (req, res) => {
+  try {
+    const { buildUsageConcurrency } = require('../services/stream-usage-service');
+    const { getUsageSnapshot, getHourlyEgressGb } = require('../services/usage-metrics');
+    const UsageDaily = require('../models/UsageDaily');
+
+    const concurrency = await buildUsageConcurrency();
+    const snapshot = await getUsageSnapshot(concurrency);
+    const [series, history] = await Promise.all([
+      getHourlyEgressGb(24),
+      UsageDaily.find().sort({ day: -1 }).limit(30).select('day peakConcurrency peakMbps egressGb freeConcurrent paidConcurrent').lean(),
+    ]);
+
+    return res.json({ success: true, data: { ...snapshot, series, history } });
+  } catch (err) {
+    console.error('[admin] resource stats error:', err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
 // Live Viewers — "who's watching now" (impress-me dashboard feature).
 // Reads active Redis playback sessions and enriches them with the username
 // so admins get a real-time view of concurrent viewers, what they're
