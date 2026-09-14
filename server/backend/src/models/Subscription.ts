@@ -9,6 +9,8 @@ export interface ISubscriptionDocument extends Document {
   status: SubscriptionStatus;
   startsAt: Date;
   expiresAt: Date;
+  /** YYYY-MM-DD of the last expiry reminder that reached this subscriber. */
+  lastExpiryNoticeOn?: string | null;
   cancelledAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -39,6 +41,7 @@ const subscriptionSchema = new Schema<ISubscriptionDocument>(
       default: 'ACTIVE',
       index: true,
     },
+    lastExpiryNoticeOn: { type: String, default: null },
     startsAt: {
       type: Date,
       required: true,

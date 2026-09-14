@@ -88,7 +88,12 @@ router.get('/notifications', async (req, res) => {
   try {
     const Notification = require('../models/Notification');
     const UserNotification = require('../models/UserNotification');
-    const notifications = await Notification.find({ status: 'SENT' })
+    // Broadcast announcements for everyone, plus messages addressed to this
+    // user specifically (e.g. their subscription is about to expire).
+    const notifications = await Notification.find({
+      status: 'SENT',
+      $or: [{ targetUserId: null }, { targetUserId: req.user.id }],
+    })
       .sort({ sentAt: -1 })
       .limit(50)
       .lean();
