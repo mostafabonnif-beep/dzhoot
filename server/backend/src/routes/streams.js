@@ -78,6 +78,30 @@ router.post('/authorize', async (req, res) => {
       });
     }
 
+    // Free-tier capacity guard (shared with /tv/playback-token): the free code is
+    // meant to be shared, so its consumption is capped — capacity and daily
+    // egress. Shadow mode counts without refusing; no Redis fails open.
+    const { resolveEgressTier } = require('../services/stream-usage-service');
+    const { checkFreeTierAdmission } = require('../services/free-tier-guard');
+    const viewerTier = await resolveEgressTier(
+      String(req.user?.id || ''),
+      req.user?.channelListCode,
+    );
+    if (viewerTier === 'free') {
+      const viewerKey = req.user?.channelListCode
+        ? `code:${req.user.channelListCode}`
+        : `user:${req.user?.id || 'anonymous'}`;
+      const ttlSec = Math.max(60, Math.round((Number(process.env.PLAYBACK_TOKEN_TTL_MS) || 900000) / 1000));
+      const admission = await checkFreeTierAdmission(viewerKey, ttlSec);
+      if (!admission.allowed) {
+        return res.status(429).json({
+          success: false,
+          error: 'The free preview is at capacity right now. Activate a subscription code to keep watching.',
+          code: admission.reason,
+        });
+      }
+    }
+
     let content = null;
     let url = null;
     let directPlayback = false;

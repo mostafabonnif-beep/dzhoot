@@ -70,10 +70,14 @@ function sanitize(key, value) {
   if (key === 'ads') return normalizeAdsConfig(value);
   if (key === 'free_access') {
     const raw = value && typeof value === 'object' ? value : {};
+    // `guard` caps what the free tier may consume (capacity + daily egress).
+    // Defaults are permissive: shadow mode, no limits.
+    const { normalizeGuard } = require('../services/free-tier-guard');
     return {
       enabled: raw.enabled === true,
       channelGroups: normalizeGroupList(raw.channelGroups),
       showAds: raw.showAds !== false,
+      guard: normalizeGuard(raw.guard),
     };
   }
   if (key === 'subscription_required') return !!value;
@@ -161,6 +165,7 @@ router.put('/', async (req, res) => {
     if ('ads' in saved || 'free_access' in saved) {
       clearAdsCache();
       clearScopeCache();
+      require('../services/free-tier-guard').clearFreeTierGuardCache();
     }
 
     audit({ ...reqCtx(req), action: 'APP_SETTINGS_UPDATE', resource: 'AppSetting', changes: { after: saved } });

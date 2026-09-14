@@ -1570,12 +1570,26 @@ router.get('/stats/resources', async (req, res) => {
 
     const concurrency = await buildUsageConcurrency();
     const snapshot = await getUsageSnapshot(concurrency);
+    const { getFreeTierGuardConfig, getFreeTierBlockedCounts } = require('../services/free-tier-guard');
     const [series, history] = await Promise.all([
       getHourlyEgressGb(24),
       UsageDaily.find().sort({ day: -1 }).limit(30).select('day peakConcurrency peakMbps egressGb freeConcurrent paidConcurrent').lean(),
     ]);
 
-    return res.json({ success: true, data: { ...snapshot, series, history } });
+    const [guardConfig, blocked] = await Promise.all([
+      getFreeTierGuardConfig(),
+      getFreeTierBlockedCounts(),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        ...snapshot,
+        guard: { ...guardConfig, blocked },
+        series,
+        history,
+      },
+    });
   } catch (err) {
     console.error('[admin] resource stats error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });

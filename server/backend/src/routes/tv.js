@@ -650,6 +650,25 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     // no subscription and no assigned channels, so they need explicit carve-outs
     // in the subscription gate and the channel-access check below.
     const isDemo = user?.demo === true;
+    // Free-tier capacity guard: the shared free code can reach thousands of
+    // people and every one of them pulls video through this box. Only ADMISSION
+    // is gated — an existing viewer is never cut off. Shadow mode (the default)
+    // counts without refusing, so the operator can size the cap from real data.
+    const { resolveEgressTier } = require('../services/stream-usage-service');
+    const { checkFreeTierAdmission } = require('../services/free-tier-guard');
+    const viewerTier = await resolveEgressTier(String(user?.id || ''), user?.channelListCode);
+    if (viewerTier === 'free') {
+      const viewerKey = user?.channelListCode ? `code:${user.channelListCode}` : `user:${user?.id}`;
+      const ttlSec = Math.max(60, Math.round((Number(process.env.PLAYBACK_TOKEN_TTL_MS) || 900000) / 1000));
+      const admission = await checkFreeTierAdmission(viewerKey, ttlSec);
+      if (!admission.allowed) {
+        return res.status(429).json({
+          success: false,
+          error: 'The free preview is at capacity right now. Activate a subscription code to keep watching.',
+          code: admission.reason,
+        });
+      }
+    }
     const { isSubscriptionRequired, getActiveSubscription } = require('../services/subscription-service');
     if (!isDemo && await isSubscriptionRequired() && user.role !== 'Admin' && !(await getActiveSubscription(user.id))) {
       return res.status(403).json({

@@ -30,10 +30,19 @@ interface AdsConfig {
   };
 }
 
+/** Caps on what the free tier may consume (0 = unlimited). */
+interface FreeTierGuard {
+  /** false = shadow mode: count what would be blocked, never refuse. */
+  enforce: boolean;
+  maxConcurrentStreams: number;
+  dailyEgressGb: number;
+}
+
 interface FreeAccessConfig {
   enabled: boolean;
   channelGroups: string[];
   showAds: boolean;
+  guard: FreeTierGuard;
 }
 
 const EMPTY_ADS: AdsConfig = {
@@ -45,7 +54,12 @@ const EMPTY_ADS: AdsConfig = {
   android: { appId: '', bannerUnitId: '', interstitialUnitId: '', rewardedUnitId: '' },
 };
 
-const EMPTY_FREE: FreeAccessConfig = { enabled: false, channelGroups: [], showAds: true };
+const EMPTY_FREE: FreeAccessConfig = {
+  enabled: false,
+  channelGroups: [],
+  showAds: true,
+  guard: { enforce: false, maxConcurrentStreams: 0, dailyEgressGb: 0 },
+};
 
 const inputClass =
   'flex h-9 w-full border border-border bg-background px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary';
@@ -62,10 +76,18 @@ function normalizeAds(raw: unknown): AdsConfig {
 
 function normalizeFree(raw: unknown): FreeAccessConfig {
   const value = (raw && typeof raw === 'object' ? raw : {}) as Partial<FreeAccessConfig>;
+  const guard = (value.guard && typeof value.guard === 'object' ? value.guard : {}) as Partial<
+    FreeTierGuard
+  >;
   return {
     enabled: value.enabled === true,
     showAds: value.showAds !== false,
     channelGroups: Array.isArray(value.channelGroups) ? value.channelGroups : [],
+    guard: {
+      enforce: guard.enforce === true,
+      maxConcurrentStreams: Number(guard.maxConcurrentStreams) || 0,
+      dailyEgressGb: Number(guard.dailyEgressGb) || 0,
+    },
   };
 }
 
@@ -194,6 +216,70 @@ export default function FreemiumSettings() {
               : ar
                 ? `${free.channelGroups.length} مجموعة محددة`
                 : `${free.channelGroups.length} groups selected`}
+          </p>
+        </section>
+
+        {/* Free-tier limits */}
+        <section className="space-y-3 border-t border-border pt-4">
+          <h3 className="text-sm font-bold">{ar ? 'حدود الطبقة المجانية' : 'Free-tier limits'}</h3>
+          <p className="text-xs text-muted-foreground">
+            {ar
+              ? 'كل مشاهد مجاني يستهلك معالج خادمك وعرض نطاقه. ضع سقفاً يحمي الخادم: عدد المشاهدين المتزامنين وميزانية الاستهلاك اليومية. 0 = بلا حد.'
+              : 'Every free viewer consumes your server CPU and bandwidth. Cap the concurrent viewers and the daily egress (0 = unlimited).'}
+          </p>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <input
+              type="checkbox"
+              className="h-4 w-4"
+              checked={free.guard.enforce}
+              onChange={(e) => setFree({ ...free, guard: { ...free.guard, enforce: e.target.checked } })}
+            />
+            <span>
+              {ar
+                ? 'فرض الحدود فعلياً (مطفأ = وضع قياس: يُعدّ ولا يحجب)'
+                : 'Enforce the limits (off = shadow mode: count only)'}
+            </span>
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">
+                {ar ? 'أقصى مشاهدين مجانيين متزامنين' : 'Max concurrent free viewers'}
+              </label>
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={free.guard.maxConcurrentStreams}
+                onChange={(e) =>
+                  setFree({
+                    ...free,
+                    guard: { ...free.guard, maxConcurrentStreams: Number(e.target.value) || 0 },
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">
+                {ar ? 'ميزانية الاستهلاك اليومية (GB)' : 'Daily egress budget (GB)'}
+              </label>
+              <input
+                type="number"
+                min={0}
+                className={inputClass}
+                value={free.guard.dailyEgressGb}
+                onChange={(e) =>
+                  setFree({
+                    ...free,
+                    guard: { ...free.guard, dailyEgressGb: Number(e.target.value) || 0 },
+                  })
+                }
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {ar
+              ? 'يتوقف الحجب عند أول حد يُلمس، وفي كل الأحوال لا يُقطع مشاهد يعمل الآن — يُمنع الدخول الجديد فقط.'
+              : 'Whichever limit is hit first applies. A viewer already watching is never cut off — only new admissions are refused.'}
           </p>
         </section>
 
