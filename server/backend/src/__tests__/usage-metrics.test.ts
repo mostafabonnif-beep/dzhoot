@@ -65,6 +65,12 @@ describe('egress accounting', () => {
     resetUsageState();
   });
 
+  // A pending flush timer must never outlive the file: it would log after the
+  // run ended (Jest then exits non-zero even with every test green).
+  afterAll(() => {
+    resetUsageState();
+  });
+
   it('counts bytes batched and exposes today+peak without Redis', async () => {
     recordEgressBytes(1024 * 1024, { tier: 'free', path: 'proxy' });
     recordEgressBytes(1024 * 1024, { tier: 'paid', path: 'remux' });

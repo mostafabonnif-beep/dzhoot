@@ -115,7 +115,12 @@ export async function flushUsage(): Promise<void> {
   pending.total = 0;
   pending.byTier = {};
   pending.byPath = {};
-  if (snapshot.total <= 0) return;
+
+  // Nothing to persist without Redis (the snapshot falls back to memory), and we
+  // must not touch getRedisClient() here: it logs on every call when REDIS_URL is
+  // unset, and a flush timer firing after a test file finished makes Jest report
+  // "Cannot log after tests are done" and exit non-zero.
+  if (snapshot.total <= 0 || !process.env.REDIS_URL) return;
 
   const redis = getRedisClient();
   if (!redis) return;
@@ -155,6 +160,7 @@ export async function flushUsage(): Promise<void> {
 
 function scheduleFlush(): void {
   if (flushTimer) return;
+  if (!process.env.REDIS_URL) return; // memory-only mode
   flushTimer = setTimeout(() => {
     flushTimer = null;
     void flushUsage();
