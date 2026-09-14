@@ -1,5 +1,3 @@
-import { APP_VERSION_DISTRIBUTIONS, APP_VERSION_RELEASE_CHANNELS } from '@dzhoof/shared';
-
 /**
  * Release-metadata rules for the admin versions panel.
  *
@@ -10,10 +8,46 @@ import { APP_VERSION_DISTRIBUTIONS, APP_VERSION_RELEASE_CHANNELS } from '@dzhoof
  * contract they mirror — including the `release_artifact_complete` and
  * `release_version_code` diagnostics — is documented in
  * `server/docs/API_DOCUMENTATION.md` §6 ("Admin: Manage Release Metadata").
+ *
+ * The enums below (and `CreateAppVersionInput`) are duplicated from
+ * `server/packages/shared/src/types/app-version.types.ts` and
+ * `.../schemas/app-version.schema.ts`, which remain the source of truth.
+ *
+ * The duplication is deliberate and load-bearing: the frontend **cannot** import
+ * `@dzhoof/shared` at runtime. TypeScript and jest resolve it through the
+ * workspace symlink, so the mistake is invisible locally — but `next build`
+ * (Turbopack) fails the CI frontend job with
+ * `Module not found: Can't resolve '@dzhoof/shared'`. A change to the shared
+ * schema must therefore be mirrored here.
  */
+export const APP_VERSION_RELEASE_CHANNELS = ['stable', 'beta'] as const;
+
+/** How a build reaches devices. Mirrors the client's three update paths. */
+export const APP_VERSION_DISTRIBUTIONS = ['play', 'external_apk', 'managed_device'] as const;
+
+export const APP_VERSION_PLATFORMS = ['android', 'android-tv', 'android-mobile', 'fire-tv'] as const;
 
 export type ReleaseChannel = (typeof APP_VERSION_RELEASE_CHANNELS)[number];
 export type Distribution = (typeof APP_VERSION_DISTRIBUTIONS)[number];
+export type AppVersionPlatform = (typeof APP_VERSION_PLATFORMS)[number];
+
+/** Client-side mirror of `createAppVersionSchema` (see the note above). */
+export interface CreateAppVersionInput {
+  versionName: string;
+  versionCode: number;
+  apkFileName: string;
+  apkFileSize: number;
+  downloadUrl: string;
+  releaseNotes: string;
+  isActive: boolean;
+  isMandatory: boolean;
+  minCompatibleVersion: number;
+  sha256: string | null;
+  releaseChannel: ReleaseChannel;
+  distribution: Distribution;
+  platforms?: AppVersionPlatform[] | null;
+  releasedAt?: Date;
+}
 
 /**
  * Platform scope selectable in this panel. The shared enum additionally accepts

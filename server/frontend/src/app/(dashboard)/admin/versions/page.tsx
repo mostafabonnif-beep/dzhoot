@@ -28,8 +28,7 @@ import {
   APP_VERSION_DISTRIBUTIONS,
   APP_VERSION_PLATFORMS,
   APP_VERSION_RELEASE_CHANNELS,
-} from '@dzhoof/shared';
-import type { CreateAppVersionInput } from '@dzhoof/shared';
+} from '@/lib/release-metadata';
 import {
   deriveVersionCode,
   isHttpsUrl,
@@ -42,6 +41,7 @@ import {
 } from '@/lib/release-metadata';
 import type {
   AppVersionRow,
+  CreateAppVersionInput,
   Distribution,
   MissingField,
   ReleaseChannel,
@@ -50,10 +50,11 @@ import type {
 // ---------------------------------------------------------------------------
 // Shared contract
 //
-// The `@dzhoof/shared` package is resolvable from the frontend, so the enum
-// values and the create-payload type are imported from it instead of being
-// duplicated here. The schemas that own these constraints live at
-// server/packages/shared/src/schemas/app-version.schema.ts.
+// The enum values and the create-payload type live in `@/lib/release-metadata`,
+// mirrored from server/packages/shared (the source of truth). They are NOT
+// imported from `@dzhoof/shared` here: TypeScript and jest resolve that package
+// through the workspace symlink, but `next build` cannot, and the CI frontend
+// job fails with "Module not found: Can't resolve '@dzhoof/shared'".
 // ---------------------------------------------------------------------------
 
 const SHA256_PATTERN = /^[a-fA-F0-9]{64}$/;
