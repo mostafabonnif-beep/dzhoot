@@ -1960,7 +1960,18 @@ router.get('/hls/:token/:file', async (req, res) => {
       'Access-Control-Allow-Origin': '*',
       'X-Content-Type-Options': 'nosniff',
     });
-    fs.createReadStream(path.join(hlsSession.dir, file)).pipe(res);
+    // Remux output is served from local disk: those bytes are our egress too.
+    const { createEgressMeter } = require('../services/usage-metrics');
+    const { resolveEgressTier } = require('../services/stream-usage-service');
+    const remuxTier = { current: 'unknown' };
+    void resolveEgressTier(payload.userId, payload.channelListCode)
+      .then((tier) => {
+        remuxTier.current = tier;
+      })
+      .catch(() => undefined);
+    fs.createReadStream(path.join(hlsSession.dir, file))
+      .pipe(createEgressMeter(() => remuxTier.current, 'remux'))
+      .pipe(res);
   } catch (error) {
     console.error('HLS remux route error:', error);
     if (!res.headersSent) res.status(500).send('Internal error');

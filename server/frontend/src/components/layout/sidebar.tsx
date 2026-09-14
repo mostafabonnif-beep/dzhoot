@@ -71,6 +71,7 @@ const adminLinks: NavigationLink[] = [
   { href: '/admin/versions', labelKey: 'nav.versions', icon: Package },
   { href: '/admin/diagnostics', labelKey: 'nav.diagnostics', icon: Stethoscope },
   { href: '/admin/stats', labelKey: 'nav.stats', icon: BarChart3 },
+  { href: '/admin/resources', labelKey: 'nav.resources', icon: Activity },
   { href: '/admin/activity', labelKey: 'nav.activity', icon: Activity },
   { href: '/admin/scheduler', labelKey: 'nav.scheduler', icon: Clock },
   { href: '/admin/notifications', labelKey: 'nav.notifications', icon: Bell },

@@ -658,6 +658,49 @@ async function sourceSyncWatchdogHandler(): Promise<TaskResult> {
   };
 }
 
+/**
+ * Usage rollup: read the live picture, keep the day's peaks, and write a durable
+ * daily row. Deliberately cheap (one Redis read + one upsert every few minutes).
+ */
+async function usageRollupHandler(): Promise<TaskResult> {
+  const { buildUsageConcurrency } = require('./stream-usage-service');
+  const { getUsageSnapshot, persistPeaks, dayKey } = require('./usage-metrics');
+  const UsageDaily = require('../models/UsageDaily');
+
+  const concurrency = await buildUsageConcurrency();
+  const snapshot = await getUsageSnapshot(concurrency);
+  await persistPeaks(snapshot.now.concurrentTotal, snapshot.now.egressMbps);
+
+  const day = dayKey();
+  await UsageDaily.updateOne(
+    { day },
+    {
+      $max: {
+        peakConcurrency: snapshot.now.concurrentTotal,
+        peakMbps: snapshot.now.egressMbps,
+      },
+      $set: {
+        egressGb: snapshot.now.egressTodayGb,
+        freeConcurrent: snapshot.now.concurrentFree,
+        paidConcurrent: snapshot.now.concurrentPaid,
+      },
+    },
+    { upsert: true },
+  );
+
+  return {
+    summary: {
+      concurrent: snapshot.now.concurrentTotal,
+      free: snapshot.now.concurrentFree,
+      paid: snapshot.now.concurrentPaid,
+      egressTodayGb: snapshot.now.egressTodayGb,
+      egressMbps: snapshot.now.egressMbps,
+      redisAvailable: snapshot.redisAvailable,
+    },
+    subtasks: [],
+  };
+}
+
 const tasks: TaskDefinition[] = [
   {
     name: 'liveness-check',
@@ -772,6 +815,14 @@ const tasks: TaskDefinition[] = [
     description: 'Light-probe active Xtream sources and drive the backup-source failover state',
     intervalMs: SOURCE_WATCHDOG_INTERVAL,
     handler: sourceWatchdogHandler,
+  },
+  {
+    name: 'usage-rollup',
+    displayName: 'Usage Metrics Rollup',
+    description:
+      'Persist concurrent-stream and egress peaks so the resource dashboard keeps history across Redis restarts',
+    intervalMs: intervalMs(process.env.USAGE_ROLLUP_INTERVAL_MS, 5 * 60 * 1000),
+    handler: usageRollupHandler,
   },
   {
     name: 'source-sync-watchdog',

@@ -5,6 +5,8 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { issuePlaybackToken } from './playback-token';
 import { createPinnedLookup, isPrivateIP, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
+import { createEgressMeter, type UsageTier } from './usage-metrics';
+import { resolveEgressTier } from './stream-usage-service';
 
 // Residential egress (home relay / hosted ISP proxy): when UPSTREAM_HTTP_PROXY
 // is set, every upstream stream fetch in this relay tunnels through it (CONNECT
@@ -560,6 +562,15 @@ export async function proxyUpstreamStream(
       let currentResponse = response;
       let midStreamFailovers = 0;
       const MAX_MID_STREAM_FAILOVERS = 2;
+      // Resource metering: resolve the viewer's tier once (memoized) and count
+      // the bytes we hand to the client. Read lazily so the first flush window
+      // of a brand-new stream is not mislabeled for the whole session.
+      const egressTier: { current: UsageTier } = { current: 'unknown' };
+      void resolveEgressTier(tokenContext?.userId, tokenContext?.channelListCode)
+        .then((tier) => {
+          egressTier.current = tier;
+        })
+        .catch(() => undefined);
       for (;;) {
         const upstream = currentResponse.data;
         const outcome = await new Promise<'end' | 'error' | 'closed'>((resolve) => {
@@ -569,7 +580,10 @@ export async function proxyUpstreamStream(
             done = true;
             resolve(r);
           };
-          upstream.pipe(res, { end: false });
+          // Pass-through meter (no buffering) keeps backpressure intact.
+          upstream
+            .pipe(createEgressMeter(() => egressTier.current, 'proxy'))
+            .pipe(res, { end: false });
           upstream.once('error', () => settle('error'));
           upstream.once('end', () => settle('end'));
           req.once('close', () => {
