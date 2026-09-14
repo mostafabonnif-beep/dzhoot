@@ -70,6 +70,7 @@ internal class SettingsActions(
     val onPairDevice: () -> Unit,
     val onNavigateToSelfHost: () -> Unit,
     val onNavigateToManageChannels: () -> Unit,
+    val onNavigateToDiagnostics: () -> Unit,
     val onCheckLiveliness: () -> Unit,
     val onClearCache: () -> Unit,
     val onResetGuide: () -> Unit,
@@ -375,6 +376,7 @@ private fun SectionContent(
             downloadError = uiState.downloadError,
             onCheckForUpdate = actions.onCheckForUpdate,
             onUpdateNow = actions.onUpdateNow,
+            onOpenDiagnostics = actions.onNavigateToDiagnostics,
             modifier = modifier
         )
     }

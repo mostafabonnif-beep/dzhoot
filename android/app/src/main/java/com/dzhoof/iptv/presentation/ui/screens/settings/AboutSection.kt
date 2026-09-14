@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,6 +20,7 @@ import com.dzhoof.iptv.presentation.ui.components.StatusText
 import com.dzhoof.iptv.presentation.ui.screens.FocusAwareOutlinedButton
 import com.dzhoof.iptv.presentation.ui.screens.SettingRowLayout
 import com.dzhoof.iptv.presentation.ui.screens.SettingsCard
+import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
 @Composable
 internal fun AboutSection(
@@ -30,6 +32,7 @@ internal fun AboutSection(
     downloadError: String?,
     onCheckForUpdate: () -> Unit,
     onUpdateNow: () -> Unit,
+    onOpenDiagnostics: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val busy = isChecking || isDownloading
@@ -75,6 +78,34 @@ internal fun AboutSection(
             Spacer(modifier = Modifier.height(6.dp))
             StatusText(text = error, status = Status.WARNING, fontWeight = FontWeight.Medium)
         }
+
+        Spacer(modifier = Modifier.height(10.dp))
+        HorizontalDivider(color = subtleBorder)
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Diagnostics entry sits with the version/update rows: when a user reports
+        // "the app doesn't update", this is the one place that answers why.
+        SettingRowLayout(
+            text = {
+                Text(
+                    text = "تشخيص التطبيق",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "اعرض الإصدار ومسار التحديث وآخر فحص والخادم، ثم انسخ تقريرًا للدعم",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            action = {
+                FocusAwareOutlinedButton(onClick = onOpenDiagnostics) {
+                    Text(text = "تشخيص  ▸", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
     }
 }
 
