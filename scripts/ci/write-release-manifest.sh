@@ -70,7 +70,12 @@ expected_package="${EXPECTED_PACKAGE:-com.dzhoof.iptv}"
 [ -n "$apk_version_code" ] || fail "could not read versionCode from the APK"
 
 # versionCode must be the documented derivation: major * 10000 + minor * 100 + patch.
-IFS=. read -r major minor patch <<<"$version_name"
+# A pre-release suffix (1.0.0-rc.1) is dropped for the derivation, exactly as
+# android/app/build.gradle.kts does (`.split("-")[0]`); the APK still reports the full
+# versionName. Without this the patch part parsed as "0-rc.1" and the comparison failed
+# for every release candidate.
+base_version="${version_name%%-*}"
+IFS=. read -r major minor patch <<<"$base_version"
 major="${major//[^0-9]/}"
 minor="${minor//[^0-9]/}"
 patch="${patch//[^0-9]/}"

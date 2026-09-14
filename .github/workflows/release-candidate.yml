@@ -124,8 +124,21 @@ jobs:
           "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "package: name='com.dzhoof.iptv'"
           VERSION_NAME="${{ inputs.version_name }}"
           "$SDK_BUILD_TOOLS/aapt" dump badging "$APK" | grep -q "versionName='$VERSION_NAME'"
-          sha256sum "$APK" > app-official-release.apk.sha256
-          ls -lh "$APK" app-official-release.apk.sha256
+          # Name the candidate the way the release names its artifact, and write the
+          # checksum next to it under `app/` — the path the upload step below reads.
+          # It used to be written to `android/app-official-release.apk.sha256` while the
+          # upload looked for `android/app/app-official-release.apk.sha256`, so the
+          # candidate was uploaded without its checksum (or failed outright).
+          named="dzhoof-tv-v${VERSION_NAME}-official.apk"
+          cp "$APK" "$named"
+          sha256sum "$named" > "${named}.sha256"
+          # A candidate is a beta-channel artifact; describe it with the same
+          # provenance manifest the release publishes, so the APK identity is
+          # checked (package, versionCode derivation, signature) before the tag.
+          bash ../scripts/ci/write-release-manifest.sh \
+            "$named" "${VERSION_NAME}" beta external_apk \
+            "dzhoof-tv-v${VERSION_NAME}-official.release.json"
+          ls -lh "$named" "${named}.sha256" "dzhoof-tv-v${VERSION_NAME}-official.release.json"
 
       - name: Upload official signed release APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -135,8 +148,9 @@ jobs:
           # staging flavor is intentionally excluded to prevent wrong-package
           # installation attempts and Play Protect confusion.
           path: |
-            android/app/build/outputs/apk/official/release/app-official-release.apk
-            android/app/app-official-release.apk.sha256
+            android/dzhoof-tv-v${{ inputs.version_name }}-official.apk
+            android/dzhoof-tv-v${{ inputs.version_name }}-official.apk.sha256
+            android/dzhoof-tv-v${{ inputs.version_name }}-official.release.json
           if-no-files-found: error
 
       - name: Remove signing material

@@ -59,6 +59,15 @@ jobs:
             api_url="${INPUT_API_URL:-${API_URL_VARIABLE:-https://iptv.ld-11.net/}}"
           fi
           [ -n "$version" ] || { echo 'Release version is required' >&2; exit 1; }
+          # A free-form `workflow_dispatch` input used to be accepted as-is and then
+          # became both the APK versionName and the git tag. Reject anything that is
+          # not X.Y.Z or X.Y.Z-suffix here, before a full build: the manifest gate
+          # would stop such a release later anyway, but only after the build.
+          version_pattern="^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?\$"
+          if ! printf '%s' "$version" | grep -Eq "$version_pattern"; then
+            echo "version must look like X.Y.Z or X.Y.Z-suffix (got: $version)" >&2
+            exit 1
+          fi
           case "$api_url" in https://*) ;; *) echo "API URL must use HTTPS (got: $api_url)" >&2; exit 1 ;; esac
           printf 'VERSION=%s\nAPI_URL=%s\n' "$version" "$api_url" >> "$GITHUB_ENV"
 
