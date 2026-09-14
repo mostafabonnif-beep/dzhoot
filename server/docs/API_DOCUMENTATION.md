@@ -1608,7 +1608,12 @@ Web dashboard confirms the pairing by submitting the PIN.
 Notes:
 
 - `mandatory` (and the legacy `isMandatory`) is true when the release is flagged mandatory or the
-  device is below `minimumSupportedVersionCode`.
+  device is below `minimumSupportedVersionCode`, and only when an update is actually available —
+  a floor raised above the newest published build never strands a device on a blocking prompt.
+- `minimumSupportedVersionCode` is the release's own `minCompatibleVersion` raised by the
+  deployment-wide floor `APP_MIN_SUPPORTED_VERSION_CODE` (GitHub-sourced releases have no
+  per-release minimum, so the floor is what makes `mandatory` work in production). An unset or
+  invalid value means 1: nothing is forced.
 - `sha256` is read from the release's published `<apk>.sha256` asset; it is `null` when unavailable.
 - `downloadUrl` is `null` when the source URL is not HTTPS or its host is not on the allowlist
   (GitHub hosts, `PUBLIC_BASE_URL` host, the request host, plus `APP_UPDATE_ALLOWED_HOSTS`).

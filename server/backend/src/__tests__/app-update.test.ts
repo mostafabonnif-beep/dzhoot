@@ -106,6 +106,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   delete process.env.PUBLIC_BASE_URL;
   delete process.env.APP_UPDATE_ALLOWED_HOSTS;
+  delete process.env.APP_MIN_SUPPORTED_VERSION_CODE;
   withDb(null);
   githubDown();
 });
@@ -479,5 +480,89 @@ describe('GET /api/v1/app/version rate limiting', () => {
     } finally {
       delete process.env.APP_UPDATE_RATE_LIMIT_MAX;
     }
+  });
+});
+
+// Operations brief §4: `minimumSupportedVersionCode` must actually force an update.
+// Production serves releases from the GitHub fallback, which has no per-release
+// metadata, so before this the floor was hard-coded to 1 and `mandatory` was inert.
+describe('operator minimum supported version floor', () => {
+  afterEach(() => {
+    delete process.env.APP_MIN_SUPPORTED_VERSION_CODE;
+  });
+
+  it('forces an update on a device below the configured floor (GitHub source)', async () => {
+    process.env.APP_MIN_SUPPORTED_VERSION_CODE = '10300';
+    githubUp();
+
+    const response = await request(buildApp()).get(
+      '/api/v1/app/version?currentVersionCode=10299',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.source).toBe('github');
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.mandatory).toBe(true);
+    expect(response.body.isMandatory).toBe(true);
+    expect(response.body.latestVersion.minimumSupportedVersionCode).toBe(10300);
+  });
+
+  it('leaves a device at the floor optional', async () => {
+    process.env.APP_MIN_SUPPORTED_VERSION_CODE = '10300';
+    githubUp();
+
+    const response = await request(buildApp()).get(
+      '/api/v1/app/version?currentVersionCode=10300',
+    );
+
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.mandatory).toBe(false);
+  });
+
+  it('ignores an invalid floor instead of forcing every installed device', async () => {
+    githubUp();
+
+    for (const invalid of ['not-a-number', '0', '-5', '1.5']) {
+      process.env.APP_MIN_SUPPORTED_VERSION_CODE = invalid;
+      // eslint-disable-next-line no-await-in-loop
+      const response = await request(buildApp()).get(
+        '/api/v1/app/version?currentVersionCode=10300',
+      );
+
+      expect(response.body.mandatory).toBe(false);
+      expect(response.body.latestVersion.minimumSupportedVersionCode).toBe(1);
+    }
+  });
+
+  it('never forces an update the device cannot take', async () => {
+    process.env.APP_MIN_SUPPORTED_VERSION_CODE = '10500';
+    withDb(dbVersion({ versionCode: 10400, minCompatibleVersion: 1 }));
+
+    const response = await request(buildApp()).get(
+      '/api/v1/app/version?currentVersionCode=10400',
+    );
+
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.mandatory).toBe(false);
+  });
+
+  it('raises a release minimum but never lowers it', async () => {
+    process.env.APP_MIN_SUPPORTED_VERSION_CODE = '10400';
+    withDb(dbVersion({ versionCode: 10500, minCompatibleVersion: 10200 }));
+
+    const raised = await request(buildApp()).get(
+      '/api/v1/app/version?currentVersionCode=10300',
+    );
+    expect(raised.body.latestVersion.minimumSupportedVersionCode).toBe(10400);
+    expect(raised.body.mandatory).toBe(true);
+
+    process.env.APP_MIN_SUPPORTED_VERSION_CODE = '10100';
+    withDb(dbVersion({ versionCode: 10500, minCompatibleVersion: 10400 }));
+
+    const kept = await request(buildApp()).get(
+      '/api/v1/app/version?currentVersionCode=10300',
+    );
+    expect(kept.body.latestVersion.minimumSupportedVersionCode).toBe(10400);
+    expect(kept.body.mandatory).toBe(true);
   });
 });
