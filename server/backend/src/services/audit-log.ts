@@ -23,14 +23,29 @@ const NOISY_ACTIONS = new Set([
   'check_liveness_batch',
 ]);
 
-/** Remove credentials, bearer tokens and common secret query parameters from diagnostics. */
-export function redactSensitiveText(value: unknown): string {
+/**
+ * Remove credentials, bearer tokens and common secret query parameters from diagnostics.
+ * `maxLength` bounds the stored text (audit entries keep 1000 characters; crash-report
+ * stack traces pass a larger bound and are redacted the same way).
+ */
+export function redactSensitiveText(value: unknown, maxLength = 1000): string {
   let text = value instanceof Error ? value.message : String(value ?? 'Unknown error');
   text = text.replace(/(https?:\/\/)([^\s/@:]+):([^\s/@:]+)@/gi, '$1[redacted]@');
+  // Xtream-style stream URLs carry the account as path segments
+  // (https://host:8080/live/<user>/<password>/1234.ts), so the query-parameter rule
+  // above never sees them. This deliberately over-redacts a two-segment path under a
+  // known stream prefix: garbled diagnostics are cheaper than a leaked account.
+  text = text.replace(
+    /(https?:\/\/[^\s/]+\/(?:live|movie|series|timeshift|vod)\/)[^\s/?#]+\/[^\s/?#]+\//gi,
+    '$1[redacted]/[redacted]/',
+  );
   text = text.replace(/([?&](?:username|user|password|pass|token|api[_-]?key|secret|auth)=)[^&\s]+/gi, '$1[redacted]');
   text = text.replace(/((?:password|passwd|secret|token|api[_-]?key|authorization)\s*[:=]\s*)(["']?)[^\s,"']+/gi, '$1$2[redacted]');
   text = text.replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, '$1[redacted]');
-  return text.slice(0, 1000);
+  // Signed JWTs (session, refresh and playback tokens) are base64url triples that
+  // start with the base64 of `{"`.
+  text = text.replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{2,}\b/g, '[redacted-jwt]');
+  return text.slice(0, maxLength);
 }
 
 /** Fire-and-forget audit log entry. Never throws. */

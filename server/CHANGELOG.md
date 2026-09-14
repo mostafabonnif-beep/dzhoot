@@ -10,6 +10,21 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Security (crash reports)
+
+- `POST /api/v1/app/crash-report` now redacts every free-text field before it is stored.
+  A crashed app cannot be trusted to have scrubbed its own payload, and a throwable message
+  routinely embeds the URL or token that caused the failure — so `exceptionMessage`,
+  `stackTrace` and `screen` pass through the central redactor
+  (`services/audit-log.ts#redactSensitiveText`), which now also covers Xtream-style account
+  path segments (`/live/<user>/<password>/1423.ts` — the query-parameter rule never saw
+  these) and signed JWTs (`eyJ…` triples), and accepts a per-call length bound so a stack
+  trace is still bounded at 50 000 characters. Operators reading a report can no longer
+  recover Xtream credentials, session tokens or playback tokens from it; the failure site
+  (exception type, message, file:line) is preserved. Covered by
+  `src/__tests__/app-update-crash-report.test.ts` plus the extended `redactSensitiveText`
+  cases in `src/services/audit-log.test.ts`.
+
 ### Added (admin release management UI)
 
 - `/admin/versions` can now publish and manage release metadata instead of being a
