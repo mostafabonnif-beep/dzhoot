@@ -25,7 +25,9 @@ trap 'rm -rf "$TMP"' EXIT
 say() { printf '[stage-release] %s\n' "$*"; }
 die() { printf '[stage-release][ABORT] %s\n' "$*" >&2; exit 1; }
 
-# The repo is private: GitHub API + tarball downloads need the server token.
+# The repository is public today, so these calls work unauthenticated; the server token
+# (/etc/dzhoot/github.token) is still used when present — it raises the API rate limit and
+# keeps working if the repo is made private again.
 TOKEN_FILE="${DZHOOT_TOKEN_FILE:-/etc/dzhoot/github.token}"
 github_auth_header() {
   if [ -f "$TOKEN_FILE" ]; then

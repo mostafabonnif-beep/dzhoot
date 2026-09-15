@@ -84,6 +84,18 @@ DZHOOF_DOMAIN=iptv.ld-11.net ./scripts/deploy/smoke-test.sh
 البريد غير المهيّأ يُسجّل مرة واحدة كـ`ALERT_EMAIL_DISABLED`، وعند فشل كل القنوات يُسجَّل
 `ALL_ALERT_CHANNELS_FAILED`.
 
+حظر الطلبات المشوّهة على مستوى الشبكة: تعريف jail `dzhoof-http` صار **داخل المستودع**
+(`scripts/security/fail2ban/`) بدل أن يكون على الخادم فقط، وأُضيفت قاعدة تحظر من يرسل
+ترويسة `Next-Action` مزيّفة (المعرّف الحقيقي 42 حرفاً؛ الفاحص الذي أنتج 75 خطأ كان يرسل
+`x`/`0`/`action`). التثبيت على الخادم بموافقة تشغيلية:
+
+```bash
+sudo ./scripts/security/setup-fail2ban-http-jail.sh --dry-run   # يعرض ويكتشف مسار السجل
+sudo ./scripts/security/setup-fail2ban-http-jail.sh             # يثبّت ويتحقق ثم يعيد التحميل
+#   يتحقق بـfail2ban-regex على السجل الحقيقي قبل أي تغيير، ويفشل-مغلق إن لم يطابق شيئاً
+fail2ban-client status dzhoof-http
+```
+
 تنظيف الوحدات الفاشلة العابرة على الخادم (بموافقة تشغيلية، وابدأ بـdry-run):
 
 ```bash

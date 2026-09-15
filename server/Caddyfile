@@ -16,12 +16,14 @@
     encode gzip zstd
     tls {$ACME_EMAIL}
 
-    # File access log, watched by the fail2ban jail `dzhoof-http` on the
-    # production host (/etc/fail2ban/jail.d/dzhoof-http.local: 6x 401/403 in 60s
-    # -> 1h ban). NOTE: that jail is configured on the host, NOT shipped in this
-    # repo — only scripts/security/secure-ssh-setup.sh defines the sshd jail.
-    # A fresh host must create the jail for this log to be watched.
-    # TODO: ship the jail definition under scripts/security/.
+    # File access log, watched by the fail2ban jail `dzhoof-http`.
+    # The jail and its filter ARE shipped now: scripts/security/fail2ban/ +
+    # scripts/security/setup-fail2ban-http-jail.sh (idempotent, validates the filter
+    # against this log before reloading). It bans 6x 401/403 in 60s for an hour, and —
+    # since 2026-09-15 — also a client that posts fabricated `Next-Action` headers
+    # (a real server-action id is 42 characters; the scanner that produced the 75
+    # `Server Reference ID did not match the expected format` errors sent "x"/"0").
+    # A fresh host must run that script for this log to be watched.
     log {
         output file /data/access.log {
             roll_size 50MiB
