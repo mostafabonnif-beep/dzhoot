@@ -10,6 +10,26 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Fixed (a release's Caddyfile could stay inactive — found while deploying)
+
+- `deploy-production.sh` reloaded Caddy but never verified that the container was
+  reading *that release's* file. A bind mount is anchored to the inode resolved at
+  container start, and the atomic swap renames release directories, so for six days
+  Caddy kept reading `/opt/dzhoot.previous-…/server/Caddyfile` while every `SIGUSR1`
+  reload reported success. The step now copies the release file into the container,
+  compares it there, recreates the container when it does not serve it — by content
+  **and** inode, since an identical file can still live in a directory the swap moved —
+  and re-copies before verifying.
+- The document routes answer `Cache-Control: no-store` via a dedicated `header_down`
+  inside their own `reverse_proxy` block. A site-level `header` (or one inside a
+  `handle` block) is overwritten when the proxy copies the upstream response, so the
+  previous attempt left `/` and `/admin` advertising `s-maxage=31536000`.
+- Rollback now restores the *deploy metadata* (`RELEASE_COMMIT`/`IMAGE_ID`/`IMAGE_DIGEST`
+  and friends in `/etc/dzhoot/.env.production`) from the backup taken before the deploy,
+  recreates the containers and reloads Caddy. Before this, a rolled-back release kept
+  reporting the failed release's commit, so `/health` claimed a build that was not
+  running.
+
 ### Added (disk retention for deploy artifacts)
 
 - `scripts/ops/prune-deploy-artifacts.sh` reclaims what repeated deploys leave behind:
