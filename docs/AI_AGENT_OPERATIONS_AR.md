@@ -45,8 +45,8 @@ cd <repo>/android
 3. تحقّق بعد البناء:
    - الأصول: `dzhoof-tv-vX.Y.Z-official.apk` + `.sha256` (اسم موحّد منذ PR #234).
    - `apksigner verify` + `aapt dump badging`: `versionName=X.Y.Z`، `versionCode` المشتق، `com.dzhoof.iptv`، وشهادة الإنتاج.
-   - نقطة التحديث: `GET https://iptv.ld-11.net/api/v1/app/version?currentVersion=<code>` ترجع `latestVersion.versionName=X.Y.Z` و`updateAvailable=true`.
-   - امسح كاش Redis مفتاح `ghrel:latest` بعد أي تغيير في أصول الإصدار (الريديس يحتاج AUTH من متغيّر الحاوية؛ **لا تطبع القيمة**).
+   - نقطة التحديث: `GET https://iptv.ld-11.net/api/v1/app/version?currentVersion=<code>` ترجع `latestVersion.versionName=X.Y.Z` و`updateAvailable=true`. **الـ`sha256` يُحلّ دائمًا** (حتى عندما يكون الجهاز محدَّثًا)؛ تأكّد من وجوده لا من `updateAvailable` وحده.
+   - إبطال كاش الـGitHub (`ghrel:latest`) صار **تلقائيًّا** داخل `POST`/`PATCH /api/v1/admin/app-versions` — لا حاجة لمسح redis يدويًّا بعد الآن. إن نُشر إصدار على GitHub وحده دون كتابة سجل `AppVersion`، يبقى الكاش حتى انتهاء الـTTL (10 دقائق) وهي الحدّ الموثّق.
 
 ## 4) اتفاقيات المنتج
 

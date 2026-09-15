@@ -1621,13 +1621,27 @@ Notes:
   `versionCode` derived from `versionName`, package name, and (when
   `APP_RELEASE_SIGNER_SHA256` is set) the signing certificate. A manifest that exists
   but disagrees is a failure, never a reason to fall back to the weaker source.
+- `sha256` is resolved **whether or not an update is offered**. A device that is already
+  current (and an operator asking "what is published?") reads the same verified digest;
+  resolving it only when `updateAvailable` was true is what made the live API answer
+  `sha256: null` to an up-to-date client on 2026-09-15. The lookup is Redis-cached for
+  10 minutes, so the steady-state cost is one cache read.
 - `checksumSource` is `manifest`, `sha256-asset` or `db`, and is `null` when no checksum
   could be verified. `signerSha256` is present when the manifest carries it.
+- A row from the `AppVersion` collection whose `downloadUrl` is (or is rewritten into)
+  this API's own `/api/v1/app/download` redirect does not deliver its own artifact: that
+  endpoint always redirects to the newest GitHub release. Such a row's `sha256` is
+  trusted only when it matches the checksum of the release the redirect actually serves
+  **and** the `versionCode` agrees; otherwise the row is withheld. Without this, a device
+  could be handed a checksum describing bytes it will never download, and the install
+  would fail on device.
 - **Fail-closed:** an update whose checksum cannot be verified is not offered.
   `updateAvailable` is `false` with `updateBlockedReason: "CHECKSUM_UNAVAILABLE"` (and a
   `message`), because a device refuses a null/invalid checksum anyway — offering the
-  download only wastes the transfer. `APP_UPDATE_REQUIRE_CHECKSUM=false` restores the
-  old behaviour while a release is repaired.
+  download only wastes the transfer. A blocked release keeps its version metadata but
+  returns `downloadUrl: null`, so the API never hands out bytes it has just declared
+  unverifiable. `APP_UPDATE_REQUIRE_CHECKSUM=false` restores the old behaviour while a
+  release is repaired.
 - The checksum download follows redirects manually, validating **every hop** against the
   HTTPS host allowlist and the SSRF guard. The allowlist includes
   `release-assets.githubusercontent.com`, which is where GitHub currently redirects a
@@ -1650,9 +1664,18 @@ Notes:
 
 ### 2. Get Latest Version
 
-**GET** `/app/latest`
+**GET** `/app/latest?channel=stable&platform=android-tv`
 
 **Auth:** Not required
+
+Returns the published release through the **same checksum contract as
+`/app/version`**: identical candidate selection, the same verified `sha256`, and the
+same fail-closed gate. It answers the "what is published?" question an operator or a
+fleet dashboard needs, without a `currentVersionCode`.
+
+`data` is the public shape described in §1 — never the raw internal candidate. The
+internal `sha256AssetUrl` / `manifestAssetUrl` fields used to fetch the checksum are
+not part of the response.
 
 **Response (200 OK):**
 
@@ -1660,17 +1683,32 @@ Notes:
 {
   "success": true,
   "data": {
-    "versionName": "v1.5",
-    "versionCode": 5,
-    "releaseNotes": "Bug fixes and improvements",
-    "apkFileName": "app-release.apk",
-    "apkFileSize": 25600000,
-    "downloadUrl": "https://github.com/.../app-release.apk",
+    "versionName": "1.4.2",
+    "versionCode": 10402,
+    "minimumSupportedVersionCode": 1,
+    "releaseChannel": "stable",
+    "distribution": "external_apk",
+    "downloadUrl": "https://github.com/mostafabonnif-beep/dzhoot/releases/download/v1.4.2/dzhoof-tv-v1.4.2-official.apk",
+    "sha256": "f0494df3f964b5f16ccb50be945e98cc25fa95a8fa187189c399a81a1b481e85",
+    "checksumSource": "manifest",
+    "signerSha256": "5938049a7b7eb803d7354efb96ca1989fdf17af1f62ff0e7fb68bd765920bb11",
+    "sizeBytes": 26840396,
+    "releaseNotesList": ["تحسين الثبات"],
+    "publishedAt": "2026-09-13T17:17:44.000Z",
+    "apkFileName": "dzhoof-tv-v1.4.2-official.apk",
+    "apkFileSize": 26840396,
     "isMandatory": false,
-    "releasedAt": "2026-01-15T10:00:00.000Z"
-  }
+    "source": "github"
+  },
+  "source": "github",
+  "checksumVerified": true
 }
 ```
+
+When the checksum cannot be verified the response carries
+`checksumVerified: false`, `updateBlockedReason: "CHECKSUM_UNAVAILABLE"`, a `message`,
+`data.sha256: null` and `data.downloadUrl: null`. `404` when no release exists in any
+active source.
 
 ---
 
@@ -1796,6 +1834,17 @@ let a device install bytes that no longer match the reviewed release — publish
 `versionCode` instead. Attempting it returns `400`. Because `sha256` is immutable, a row
 that has none can never gain one, so **activating** such a row returns
 `400 APP_VERSION_CHECKSUM_REQUIRED`; editing its other fields stays allowed.
+
+A successful `POST` or `PATCH` also drops the cached GitHub release lookup.
+
+`GET /app/version`, `/app/latest`, `/app/download` and `/app/download-url` read the
+GitHub release through a 10-minute Redis cache (`ghrel:latest`) so a fleet polling at
+boot does not exhaust the GitHub API rate limit. Nothing used to invalidate it, so after
+publishing a release the API kept advertising the previous one for up to ten minutes and
+the operator had to clear the key by hand. The write that makes the cache stale now
+clears it, so the step cannot be forgotten; a Redis failure never fails the write
+(a stale cache is a ten-minute delay, not a failed publish). A release published only on
+GitHub — with no `AppVersion` row written here — still waits out that TTL.
 
 ### 7. Admin: Diagnostics
 

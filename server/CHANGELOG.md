@@ -10,6 +10,66 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Fixed (the update API served `sha256: null` to a device that was already current, and on `/latest`)
+
+- `GET /api/v1/app/version` resolved the release checksum only when
+  `updateAvailable` was true, so a client asking "am I current?" — the request every
+  install makes at boot — was answered `sha256: null, checksumSource: null` while the
+  release carried a valid digest. Measured in production on 2026-09-15:
+  `?currentVersionCode=10301` → `null`, `?currentVersionCode=10202` → `f0494df3…`.
+  The checksum is now resolved for the published candidate **unconditionally** (the
+  lookup is Redis-cached for 10 minutes, so the steady-state cost is one cache read).
+- `GET /api/v1/app/latest` returned the raw internal candidate: its `sha256`,
+  `checksumSource` and `signerSha256` were always `null`, and it leaked the internal
+  `sha256AssetUrl` / `manifestAssetUrl` fields the server uses to fetch the digest. It
+  now goes through the same resolver and the same public shape as `/version`, so the
+  two endpoints can no longer disagree about what is published. It gains
+  `checksumVerified` and, when unverifiable, `updateBlockedReason:
+  "CHECKSUM_UNAVAILABLE"` with `data.downloadUrl: null`.
+- A blocked release no longer ships its `downloadUrl`. `/version` previously kept the
+  URL in the very response that declared the bytes unverifiable; `downloadUrl` is now
+  `null` whenever `updateBlockedReason` is set (the escape hatch
+  `APP_UPDATE_REQUIRE_CHECKSUM=false` is unaffected).
+
+### Fixed (an `AppVersion` row could bind its checksum to bytes it does not deliver)
+
+- A row whose `downloadUrl` is (or is rewritten into) this API's own
+  `/api/v1/app/download` redirect does not deliver its own artifact — that endpoint
+  always 302s to the newest GitHub release. Its `sha256` was served unchanged, so a
+  device could be handed a digest describing a file it will never download; the install
+  only failed later, on device. Production carries such rows (for example
+  `1.0.40`, whose `/downloads/…` path is rewritten to the redirect while its `sha256`
+  is `1170dcbc…`). Such a row is now trusted only when its checksum matches the release
+  the redirect actually serves **and** the `versionCode` agrees; otherwise it is
+  withheld (`CHECKSUM_UNAVAILABLE`) with a warning naming the reason.
+
+### Fixed (a republished artifact could keep serving the previous release's checksum)
+
+- The checksum cache key was `v<versionCode>`, so a re-cut APK republished under the
+  same `versionCode` — or a release whose asset was replaced after a failed upload —
+  kept serving the old digest for the rest of the 10-minute TTL. The key now hashes the
+  artifact identity (versionCode, asset name, asset size, and both asset URLs, which
+  carry the release tag) and the cache shape version is bumped, so stale entries are
+  ignored rather than misread as verified.
+
+### Fixed (a publish kept advertising the previous release for up to ten minutes)
+
+- `ghrel:latest` is cached in Redis for 10 minutes and nothing invalidated it, so after
+  publishing a release the API kept advertising the previous one until the TTL expired —
+  and `docs/AI_AGENT_OPERATIONS_AR.md` §3 had to tell the operator to clear the key by
+  hand. `POST` and `PATCH /api/v1/admin/app-versions` now clear it as part of the write,
+  so the step cannot be forgotten, and a Redis failure is logged without failing the
+  publish. The cache moved to `services/app-release-cache.js` so the admin router can
+  invalidate it without importing another router's internals.
+
+### Changed (two existing tests now encode the fail-closed contract)
+
+- `app-update.test.ts` previously asserted that a row pointing at a stale `/downloads/`
+  path was rewritten to the canonical redirect **and served**. Under the binding rule
+  above that row is withheld, so both cases now assert the withheld outcome and check
+  the rewrite rule through the exported helper instead. `publicDownloadUrl` behaviour is
+  unchanged and still covered directly in the "app download URL helpers" block.
+
 ### Fixed (a release's Caddyfile could stay inactive — found while deploying)
 
 - `deploy-production.sh` reloaded Caddy but never verified that the container was
