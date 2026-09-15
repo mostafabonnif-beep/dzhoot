@@ -79,6 +79,10 @@ rollback() {
       unset RELEASE_COMMIT RELEASE_BUILT_AT
       cd "$ACTIVE/server"
       docker compose -f docker-compose.production.yml --env-file "$ENV_FILE" up -d --no-deps api frontend scheduler || true
+      # Caddy keeps the config it loaded when its container started, and the failed
+      # deploy may have recreated it against the release that was active then. Reload
+      # so the restored release is the one actually served.
+      docker kill --signal=USR1 dzhoof-caddy >/dev/null 2>&1 || say "WARNING: could not reload caddy after rollback"
     fi
   fi
   # Only the ERR-trap path exits here; die() owns the exit status (1) when it

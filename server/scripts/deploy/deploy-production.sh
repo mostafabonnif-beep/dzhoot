@@ -184,13 +184,22 @@ step "4b/7  Apply the Caddyfile from this release"
 # by hand (e.g. the neighbouring dz1-tv stack) are re-attached right away instead of
 # waiting for the host's watchdog timer.
 if [ "$APPLY" -eq 1 ]; then
-  run "caddy validate (release file)" sh -c 'docker cp "$PWD/Caddyfile" dzhoof-caddy:/tmp/Caddyfile.release && docker exec dzhoof-caddy caddy validate --config /tmp/Caddyfile.release --adapter caddyfile' \
+  # Everything is compared INSIDE the container: a host path does not exist in the
+  # container namespace, and `cmp` against a missing file reports "different", which
+  # is how an earlier version of this check aborted a perfectly good deploy with
+  # "caddy still does not read this release's Caddyfile".
+  copy_release_caddyfile() {
+    docker cp "$PWD/Caddyfile" dzhoof-caddy:/tmp/Caddyfile.release
+  }
+
+  copy_release_caddyfile || die "could not copy the release Caddyfile into the caddy container"
+  run "caddy validate (release file)" docker exec dzhoof-caddy caddy validate --config /tmp/Caddyfile.release --adapter caddyfile \
     || die "the Caddyfile in this release is invalid — refusing to continue"
 
-  if docker exec dzhoof-caddy cmp -s /etc/caddy/Caddyfile "$PWD/Caddyfile"; then
-    say "Caddy already reads this release's Caddyfile — no recreate needed"
+  if docker exec dzhoof-caddy cmp -s /etc/caddy/Caddyfile /tmp/Caddyfile.release; then
+    say "Caddy already serves this release's Caddyfile — no recreate needed"
   else
-    say "Caddy is reading a stale config (bind mount anchored to a previous release) — recreating it"
+    say "Caddy serves a different Caddyfile (bind mount anchored to a previous release) — recreating it"
     run "recreate caddy" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps --force-recreate caddy \
       || die "could not recreate the caddy container"
     run "sleep" sleep 5
@@ -200,8 +209,9 @@ if [ "$APPLY" -eq 1 ]; then
     fi
     run "caddy running" sh -c 'docker inspect -f "{{.State.Running}}" dzhoof-caddy | grep -qx true' \
       || die "caddy is not running after the recreate"
-    run "caddy reads the release file" sh -c 'docker exec dzhoof-caddy cmp -s /etc/caddy/Caddyfile "$PWD/Caddyfile"' \
-      || die "caddy still does not read this release's Caddyfile"
+    copy_release_caddyfile || die "could not copy the release Caddyfile into the recreated container"
+    run "caddy serves the release file" docker exec dzhoof-caddy cmp -s /etc/caddy/Caddyfile /tmp/Caddyfile.release \
+      || die "caddy still does not serve this release's Caddyfile"
   fi
   say "Caddyfile applied from $PWD/Caddyfile"
 else
