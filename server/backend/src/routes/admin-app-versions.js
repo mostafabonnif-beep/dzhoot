@@ -81,6 +81,30 @@ function normalisePlatforms(platforms) {
   return Array.isArray(platforms) && platforms.length > 0 ? platforms : undefined;
 }
 
+const SHA256_PATTERN = /^[a-f0-9]{64}$/;
+
+/**
+ * Publish gate for a *served* release record.
+ *
+ * The update API withholds an update it cannot verify (routes/app-update.js,
+ * `APP_UPDATE_REQUIRE_CHECKSUM`), and the Android client refuses a null/invalid
+ * checksum outright. Publishing an active row without one therefore produces a
+ * release no device will ever install, while the operator believes it shipped.
+ * An inactive row is a draft and may omit it.
+ */
+function checksumGateError(version) {
+  if (version?.isActive === false) return null;
+  const sha256 = String(version?.sha256 || '').trim().toLowerCase();
+  if (SHA256_PATTERN.test(sha256)) return null;
+  return {
+    success: false,
+    errorCode: 'APP_VERSION_CHECKSUM_REQUIRED',
+    error:
+      'sha256 is required to publish an active version: it must be the 64-character lowercase hex ' +
+      'digest of the APK (publish it as inactive, or as a draft, if the checksum is not known yet)',
+  };
+}
+
 // GET / — newest first, bounded
 router.get('/', async (req, res) => {
   try {
@@ -99,6 +123,10 @@ router.post('/', async (req, res) => {
     if (!parsed.success) return validationError(res, parsed.error);
     const input = parsed.data;
 
+    // Publish gate: an active release must carry a verifiable checksum.
+    const gateError = checksumGateError(input);
+    if (gateError) return res.status(400).json(gateError);
+
     const duplicate = await AppVersion.findOne({
       $or: [{ versionCode: input.versionCode }, { versionName: input.versionName }],
     })
@@ -113,7 +141,9 @@ router.post('/', async (req, res) => {
 
     const created = await AppVersion.create({
       ...input,
-      sha256: input.sha256 || null,
+      // Stored lowercase: the model's pattern is case-sensitive, so an uppercase digest
+      // that passed the gate would otherwise surface as a 500 instead of a clean 400.
+      sha256: input.sha256 ? String(input.sha256).toLowerCase() : null,
       platforms: normalisePlatforms(input.platforms),
     });
 
@@ -165,6 +195,23 @@ router.patch('/:id', async (req, res) => {
     }
 
     const before = publicShape(version.toObject());
+    // Only a *transition* into the active state is gated: an existing active row that
+    // predates the checksum rule must stay editable (release notes, channel), while
+    // promoting a checksum-less draft would serve a release devices cannot verify.
+    // Whether this request *activates* the row has to be read from the stored document,
+    // not from the hydrated one: `isActive` carries a schema default, so a legacy row
+    // inserted without the field reports `true` when hydrated even though
+    // `findOne({ isActive: true })` never serves it. Only a PATCH that sets isActive
+    // true pays for the extra (indexed, by _id) lookup.
+    let activating = false;
+    if (parsed.data.isActive === true) {
+      const stored = await AppVersion.collection.findOne(
+        { _id: version._id },
+        { projection: { isActive: 1 } },
+      );
+      const wasActive = stored ? stored.isActive === true : version.isActive === true;
+      activating = !wasActive;
+    }
     for (const field of MUTABLE_FIELDS) {
       if (parsed.data[field] === undefined) continue;
       if (field === 'platforms') {
@@ -173,6 +220,12 @@ router.patch('/:id', async (req, res) => {
         version[field] = parsed.data[field];
       }
     }
+
+    if (activating) {
+      const gateError = checksumGateError({ isActive: true, sha256: version.sha256 });
+      if (gateError) return res.status(400).json(gateError);
+    }
+
     await version.save();
 
     const after = publicShape(version.toObject());

@@ -1614,7 +1614,25 @@ Notes:
   deployment-wide floor `APP_MIN_SUPPORTED_VERSION_CODE` (GitHub-sourced releases have no
   per-release minimum, so the floor is what makes `mandatory` work in production). An unset or
   invalid value means 1: nothing is forced.
-- `sha256` is read from the release's published `<apk>.sha256` asset; it is `null` when unavailable.
+- `sha256` is resolved from the release's **provenance manifest**
+  (`<apk-base>.release.json`, see `../docs/RELEASE_PROVENANCE.md`) when the release has
+  one, and from the published `<apk>.sha256` asset otherwise. It is cross-checked
+  against the APK asset the endpoint is about to hand out — file name, size, the
+  `versionCode` derived from `versionName`, package name, and (when
+  `APP_RELEASE_SIGNER_SHA256` is set) the signing certificate. A manifest that exists
+  but disagrees is a failure, never a reason to fall back to the weaker source.
+- `checksumSource` is `manifest`, `sha256-asset` or `db`, and is `null` when no checksum
+  could be verified. `signerSha256` is present when the manifest carries it.
+- **Fail-closed:** an update whose checksum cannot be verified is not offered.
+  `updateAvailable` is `false` with `updateBlockedReason: "CHECKSUM_UNAVAILABLE"` (and a
+  `message`), because a device refuses a null/invalid checksum anyway — offering the
+  download only wastes the transfer. `APP_UPDATE_REQUIRE_CHECKSUM=false` restores the
+  old behaviour while a release is repaired.
+- The checksum download follows redirects manually, validating **every hop** against the
+  HTTPS host allowlist and the SSRF guard. The allowlist includes
+  `release-assets.githubusercontent.com`, which is where GitHub currently redirects a
+  release asset (dropping it is what made production serve `sha256: null` on
+  2026-09-15).
 - `downloadUrl` is `null` when the source URL is not HTTPS or its host is not on the allowlist
   (GitHub hosts, `PUBLIC_BASE_URL` host, the request host, plus `APP_UPDATE_ALLOWED_HOSTS`).
 - `releaseNotesList` is the structured list; `releaseNotes` keeps the legacy string form for
@@ -1753,7 +1771,7 @@ Lists up to 100 records, newest `versionCode` first.
 | `apkFileSize` | yes | positive number |
 | `downloadUrl` | yes | must be a valid **https** URL |
 | `releaseNotes` | no | string, default `""` |
-| `sha256` | no | 64 lowercase hex, or `null` |
+| `sha256` | **yes while `isActive`** | 64 lowercase hex. Required to publish an active version: the update API withholds an unverifiable release, and the client refuses it, so an active row without one is a release no device will install. Publish `isActive: false` if the checksum is not known yet. |
 | `releaseChannel` | no | `stable` (default) \| `beta` |
 | `distribution` | no | `external_apk` (default) \| `play` \| `managed_device` |
 | `platforms` | no | array of `android` \| `android-tv` \| `android-mobile` \| `fire-tv`; empty/absent = all |
@@ -1762,7 +1780,9 @@ Lists up to 100 records, newest `versionCode` first.
 | `releasedAt` | no | ISO date, defaults to now |
 
 `400` with `details: [{ path, message }]` on a schema violation; `409` when the
-`versionCode` or `versionName` already exists.
+`versionCode` or `versionName` already exists; `400` with
+`errorCode: "APP_VERSION_CHECKSUM_REQUIRED"` when an active version is published without
+a valid checksum.
 
 **PATCH** `/admin/app-versions/:id` — update metadata (audit: `APP_VERSION_UPDATE`,
 with `changes.before` / `changes.after`).
@@ -1773,7 +1793,9 @@ Mutable: `releaseNotes`, `isActive`, `isMandatory`, `minCompatibleVersion`,
 **Immutable:** `versionName`, `versionCode`, `apkFileName`, `apkFileSize`,
 `downloadUrl`, `sha256`. Re-pointing a URL or checksum at the same `versionCode` would
 let a device install bytes that no longer match the reviewed release — publish a new
-`versionCode` instead. Attempting it returns `400`.
+`versionCode` instead. Attempting it returns `400`. Because `sha256` is immutable, a row
+that has none can never gain one, so **activating** such a row returns
+`400 APP_VERSION_CHECKSUM_REQUIRED`; editing its other fields stays allowed.
 
 ### 7. Admin: Diagnostics
 
