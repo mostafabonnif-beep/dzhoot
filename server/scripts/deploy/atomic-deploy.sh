@@ -85,12 +85,23 @@ trap rollback ERR
 say "target release: $RELEASE"
 say "environment: $ENV_FILE"
 
+# Provenance gate (2026-09-15): a staged SHA is not proof that the commit is
+# deployable. Refuse anything that is not an ancestor of an approved ref, and
+# anything whose required CI workflows are not green — production was running a
+# commit whose `DZ HOOF CI` (android) run had failed or been cancelled, and the
+# swap had no way to notice. Override only deliberately:
+#   ALLOW_UNVERIFIED_REF=1 (lineage) / REQUIRE_CI=0 (CI) / APPROVED_REFS=...
+# Runs only for a real deploy: a dry-run must stay usable on a host with no egress.
 if [ "$APPLY" -ne 1 ]; then
   say "DRY-RUN — nothing will change. Re-run with APPLY=1 to execute."
-  say "plan: pre-deploy health gate -> source backup -> swap $ACTIVE -> deploy-production.sh --apply -> health verification -> rollback on failure"
+  say "plan: pre-deploy health gate -> provenance gate -> source backup -> swap $ACTIVE -> deploy-production.sh --apply -> health verification -> post-deploy smoke -> rollback on failure"
   echo "DRY-RUN $SHA"
   exit 0
 fi
+
+say "verifying release provenance for $SHA"
+"$(dirname "$0")/verify-commit-provenance.sh" "$SHA" \
+  || die "commit $SHA is not proven deployable — refusing to swap it into production"
 
 say "pre-deploy health gate (Caddy-independent)"
 docker inspect -f '{{.State.Health.Status}}' dzhoof-api | grep -qx healthy || die "dzhoof-api not healthy before deploy"

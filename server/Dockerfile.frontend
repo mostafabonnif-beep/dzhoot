@@ -40,6 +40,13 @@ LABEL org.opencontainers.image.version=${APP_VERSION} \
 
 WORKDIR /app
 
+# Runtime release identity. The labels below are only visible to `docker inspect`;
+# the frontend needs the commit *at runtime* to tag log lines and the x-dzhoof-release
+# response header, exactly as the backend image already does (see Dockerfile).
+ENV APP_VERSION=${APP_VERSION} \
+    RELEASE_COMMIT=${RELEASE_COMMIT} \
+    RELEASE_BUILT_AT=${RELEASE_BUILT_AT}
+
 RUN apk add --no-cache curl
 
 # Copy standalone output from Next.js build
