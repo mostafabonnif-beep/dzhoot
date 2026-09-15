@@ -1846,7 +1846,94 @@ clears it, so the step cannot be forgotten; a Redis failure never fails the writ
 (a stale cache is a ten-minute delay, not a failed publish). A release published only on
 GitHub — with no `AppVersion` row written here — still waits out that TTL.
 
-### 7. Admin: Diagnostics
+### 7. Customer problem reports
+
+**POST** `/app/report-problem`
+
+**Auth:** not required. The report a customer most needs to send is the one they send when
+they cannot sign in, and a device that just failed to start has no session. A report therefore
+carries no credentials by construction: the description is redacted on the way in, the
+diagnostic snapshot is a closed list of keys, and the endpoint is rate-limited
+(`APP_REPORT_RATE_LIMIT_MAX`, default 20 / 10 minutes).
+
+**Request:**
+
+```json
+{
+  "message": "القناة تتوقف بعد ثانيتين من الفتح",
+  "feature": "player",
+  "platform": "android-tv",
+  "errorCode": "PLAYBACK_FAILED",
+  "correlationId": "3fccc0b2-b93a-416e-a414-931575af9f8c",
+  "deviceId": "dz-0018a80af2a8f852",
+  "appVersion": "1.3.1",
+  "appVersionCode": 10301,
+  "androidVersion": "14",
+  "sdkInt": 34,
+  "severity": "error",
+  "diagnostics": { "serverVersion": "1.0.1", "serverReachable": true }
+}
+```
+
+At least one of `message`, `errorCode` or a non-empty `diagnostics` object is required; a
+report that says nothing is refused with `400 REPORT_CONTENT_REQUIRED`. That guard exists
+because `POST {}` to the sibling `/app/crash-report` used to answer `201` and store a document
+whose every field was null (production, 2026-09-15 — record `6aa9ce27004c6f39fe9c9dfc`).
+
+**Response (201):**
+
+```json
+{ "success": true, "reportId": "DZR-7K3M9Q2P", "correlationId": "3fccc0b2-…", "messageMaxLength": 2000 }
+```
+
+`reportId` is what the customer quotes to support; it is not the internal ObjectId.
+`correlationId` is the client's when supplied, the request's otherwise, and a generated one as
+a last resort — a report is never orphaned in the log.
+
+When the same failure class (`errorCode` + `feature` + `appVersionCode`) reaches
+`APP_REPORT_ALERT_THRESHOLD` (default 5) within `APP_REPORT_ALERT_WINDOW_MS` (default 1 hour),
+`APP_PROBLEM_REPORT_REPEAT` is sent through the operational notifier with the class and count —
+never the customer's text. An undeliverable alert never fails the report.
+
+---
+
+### 8. Admin: Customer reports and captured crashes
+
+**GET** `/admin/error-reports` — Admin session required. One triage view over both
+`ProblemReport` and `CrashReport`; the crash collection was write-only before this endpoint,
+which is why five real production crashes sat unread.
+
+Query: `kind` (`problem`\|`crash`), `status` (`new`\|`triaged`\|`investigating`\|`resolved`\|`duplicate`),
+`errorCode`, `feature`, `appVersionCode`, `deviceId`, `correlationId`, `since`, `until`, `limit`
+(default 50, max 200).
+
+```json
+{
+  "success": true,
+  "data": [
+    { "id": "…", "kind": "problem", "reportId": "DZR-7K3M9Q2P", "status": "new",
+      "appVersionCode": 10301, "deviceModel": "SM-A057G", "feature": "player",
+      "screen": "channel_detail", "errorCode": "PLAYBACK_FAILED", "message": "…" }
+  ],
+  "groups": [
+    { "errorCode": "PLAYBACK_FAILED", "feature": "player", "appVersionCode": 10301,
+      "count": 4, "deviceCount": 3, "lastSeenAt": "2026-09-15T10:00:00.000Z" }
+  ],
+  "statusCounts": { "new": 4, "resolved": 1 }
+}
+```
+
+`groups` is what makes a spike visible without reading every report — `deviceCount` separates
+"one device retrying" from "a pattern".
+
+**GET** `/admin/error-reports/:id?kind=problem|crash` — one report.
+
+**PATCH** `/admin/error-reports/:id` (audit: `PROBLEM_REPORT_UPDATE`) — `status`,
+`adminNotes` (≤4000, emptied to clear) and `resolvedInVersion`. Unknown statuses are refused.
+
+---
+
+### 9. Admin: Diagnostics
 
 **GET** `/admin/diagnostics` — Admin session required. One ordered list of checks with
 the evidence behind each verdict, so an operator can tell "the app cannot update" from

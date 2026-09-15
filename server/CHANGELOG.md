@@ -10,6 +10,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (a customer can report a problem, and an operator can finally read it)
+
+- `POST /api/v1/app/report-problem` — the missing customer-facing path. Public on purpose
+  (the report that matters most comes from a customer who cannot sign in), rate-limited, with
+  a redacted description, a **closed** allow-list for the diagnostic snapshot and a quotable
+  `reportId`. Repeat reports of one failure class raise `APP_PROBLEM_REPORT_REPEAT` through the
+  operational notifier; an undeliverable alert never fails the report.
+- `GET`/`PATCH /api/v1/admin/error-reports` — one triage view over customer reports **and** the
+  automatically captured crashes, which had no read path at all: `POST /app/crash-report` had
+  been storing crashes since v1.0.39 with nothing to read them, so five real production
+  crashes (a repeated `Key "رياضة" was already used` LazyColumn failure, and
+  `Only VectorDrawables and rasterized asset types are supported`) went unexamined. Filters by
+  status, error code, feature, version, device and correlation id; recurring failure classes
+  summarised with a distinct-device count; triage state audited.
+- `ProblemReport` model, `/admin/error-reports` dashboard page, and «إبلاغ عن مشكلة» in the
+  Android app (Settings → About) with a D-pad-navigable report screen.
+- `ProblemReportPayload` on Android owns the payload rules: a closed category enum sent as a
+  key, and a snapshot that names each field explicitly so a field added to `DiagnosticsFacts`
+  later cannot reach the network by accident.
+
+### Fixed (`POST /app/crash-report` accepted an empty payload)
+
+- The endpoint stored whatever arrived, so `POST {}` returned `201` and created a document
+  whose every field was null — a row no operator can act on, and a free way to fill the
+  collection (production, 2026-09-15). A crash report must now carry at least one identifying
+  or diagnostic field (`400 CRASH_REPORT_CONTENT_REQUIRED` otherwise).
+
 ### Fixed (the update API served `sha256: null` to a device that was already current, and on `/latest`)
 
 - `GET /api/v1/app/version` resolved the release checksum only when
