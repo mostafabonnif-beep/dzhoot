@@ -703,6 +703,32 @@ describe('GET /api/v1/app/version checksum contract (P0-1)', () => {
     expect(validateUrlForSSRF).toHaveBeenCalled();
   });
 
+  it('refuses the release when the manifest and the .sha256 asset disagree', async () => {
+    // Both assets are produced from the same bytes, so a disagreement means one of
+    // them was replaced or mispublished — the manifest must not win silently.
+    const { release } = githubReleaseWithManifest();
+    serveRelease({ release, sha256Body: `${'ab'.repeat(32)}  apk\n` });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.status).toBe(200);
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
+  });
+
+  it('still uses a verified manifest when the .sha256 asset cannot be read', async () => {
+    // An unreadable secondary asset is not evidence of tampering; the manifest is the
+    // stronger source and the device verifies the downloaded APK itself.
+    const { release } = githubReleaseWithManifest();
+    serveRelease({ release, sha256Body: 'not-a-checksum\n' });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+    expect(response.body.latestVersion.checksumSource).toBe('manifest');
+  });
+
   it('prefers the provenance manifest and binds it to the APK asset', async () => {
     const { release } = githubReleaseWithManifest();
     serveRelease({ release });

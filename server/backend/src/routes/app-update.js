@@ -480,6 +480,28 @@ async function loadGithubChecksum(candidate) {
       );
       return null;
     }
+    // The pipeline publishes the manifest and the bare `.sha256` asset from the same
+    // bytes, so the two only ever disagree when one of them was replaced or
+    // mispublished. That is a failure, not a reason to prefer the manifest silently.
+    // An *unreadable* `.sha256` is not evidence of tampering — the manifest is the
+    // stronger source and the device verifies the downloaded APK itself — so it is
+    // reported and the verified manifest still wins.
+    if (candidate.sha256AssetUrl) {
+      const published = normalizeSha256(
+        await fetchTextFollowingValidatedRedirects(candidate.sha256AssetUrl),
+      );
+      if (published && published !== verdict.sha256) {
+        warnChecksumUnavailable(candidate, 'the .sha256 asset disagrees with the release manifest');
+        return null;
+      }
+      if (!published) {
+        console.warn(
+          `[app-update] the .sha256 asset could not be read for ` +
+            `${candidate.versionName || candidate.versionCode}; using the verified manifest instead`,
+        );
+      }
+    }
+
     return {
       sha256: verdict.sha256,
       source: 'manifest',
