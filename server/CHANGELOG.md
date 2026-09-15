@@ -10,6 +10,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Added (disk retention for deploy artifacts)
+
+- `scripts/ops/prune-deploy-artifacts.sh` reclaims what repeated deploys leave behind:
+  each deploy tags the previous image pair `rollback-<timestamp>` (the rollback safety
+  net, so never removed automatically) and keeps the build cache. After four deploys on
+  2026-09-15 the host carried 10 tagged api images — `docker system df` reported
+  8.08 GB reclaimable — with the filesystem at 83%. The script keeps the newest N
+  rollback generations (default 2), prunes build cache older than 168 h, refuses to run
+  when it cannot determine the images in use, never touches volumes, and is dry-run by
+  default: `--apply` is required to delete anything. Verified in dry-run against
+  production: it protected `dzhoof-api:current` and listed the three superseded
+  generations without changing the host.
+
 ### Fixed (update metadata served no checksum — P0-1)
 
 - `GET /api/v1/app/version` returned `sha256: null` for v1.3.1 while the release
