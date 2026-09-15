@@ -531,6 +531,7 @@ app.use('/api/v1/series', require('./routes/series'));
 app.use('/api/v1/config', require('./routes/config'));
 app.use('/api/v1/activity', require('./routes/activity'));
 app.use('/api/v1/scheduler', require('./routes/scheduler'));
+app.use('/api/v1/watch-progress', require('./routes/watch-progress'));
 
 // Initialize Redis (optional - app works without it)
 const { getRedisClient, isRedisReady, closeRedis } = require('./services/redis');
@@ -572,7 +573,7 @@ async function collectHealthDetails() {
     require('./models/XtreamSource'),
     require('./models/EpgProgram'),
   ];
-  const [m3uSources, xtreamSources, programs, epgChannels] = await Promise.all([
+  const [m3uSources, xtreamSources, programs, epgChannels ] = await Promise.all([
     M3USource.find().select('status syncStatus lastSyncAt lastError').lean(),
     XtreamSource.find().select('status syncStatus lastSyncAt lastError').lean(),
     EpgProgram.countDocuments(),
@@ -655,7 +656,7 @@ app.get('/health/ready', (req, res) => {
   });
 });
 
-// Health check. The public payload is intentionally minimal (audit-remediation-v1):
+// Health check. The public payload is intentionally minimal (audit-remediation-v1);
 // connectivity/uptime details are operational data and are only exposed with
 // ?details=true (for internal monitoring); the anonymous endpoint shows just
 // enough to confirm the service is alive and which build is running.
@@ -761,7 +762,7 @@ function startServer() {
       socketTimeoutMS: 45000,
     })
     .then(async () => {
-      console.log('✅ Connected to MongoDB');
+      console.log('━ Connected to MongoDB');
       getRedisClient();
 
       // Initialize Super Admin user
@@ -806,7 +807,7 @@ function startServer() {
       // Start server
       httpServer = app.listen(PORT, '0.0.0.0', () => {
         console.log(`🚀 Server running on port ${PORT}`);
-        console.log(`📺 DZ HOOF Server v${process.env.APP_VERSION || '0.0.0'}`);
+        console.log(`📺 DJ HOOF Server v${process.env.APP_VERSION || '0.0.0'}`);
         console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
         console.log(`📧 Email provider: ${process.env.MAIL_PROVIDER || 'mailhog'}`);
       });
