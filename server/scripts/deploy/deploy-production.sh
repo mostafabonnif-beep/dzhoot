@@ -196,10 +196,20 @@ if [ "$APPLY" -eq 1 ]; then
   run "caddy validate (release file)" docker exec dzhoof-caddy caddy validate --config /tmp/Caddyfile.release --adapter caddyfile \
     || die "the Caddyfile in this release is invalid — refusing to continue"
 
-  if docker exec dzhoof-caddy cmp -s /etc/caddy/Caddyfile /tmp/Caddyfile.release; then
-    say "Caddy already serves this release's Caddyfile — no recreate needed"
+  # Content equality is not enough: the mount is anchored to the inode it resolved at
+  # container start, so a container can read a file that is byte-identical to the
+  # release's yet lives in a directory the atomic swap moved to .previous-*/.failed-*.
+  # Compare inodes too — the container sees the host inode through the bind mount
+  # (measured on 2026-09-15: container inode 564445 vs release inode 262990, identical
+  # content, mount still anchored to the failed release).
+  RELEASE_INODE="$(stat -c %i "$PWD/Caddyfile")"
+  CONTAINER_INODE="$(docker exec dzhoof-caddy stat -c %i /etc/caddy/Caddyfile 2>/dev/null || echo '?')"
+
+  if docker exec dzhoof-caddy cmp -s /etc/caddy/Caddyfile /tmp/Caddyfile.release \
+     && [ "$CONTAINER_INODE" = "$RELEASE_INODE" ]; then
+    say "Caddy already serves this release's Caddyfile (inode $RELEASE_INODE) — no recreate needed"
   else
-    say "Caddy serves a different Caddyfile (bind mount anchored to a previous release) — recreating it"
+    say "Caddy does not serve this release's Caddyfile (container inode $CONTAINER_INODE, release inode $RELEASE_INODE) — recreating it"
     run "recreate caddy" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps --force-recreate caddy \
       || die "could not recreate the caddy container"
     run "sleep" sleep 5
