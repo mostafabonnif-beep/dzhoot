@@ -1101,6 +1101,30 @@ router.post('/crash-report', crashReportLimiter, async (req, res) => {
   try {
     const body = req.body || {};
 
+    // A crash report must describe something. Every field is optional by design (a client
+    // may only know the device id), but a payload with nothing in it produces a document
+    // whose every field is null — a row no operator can act on, and a free way to fill the
+    // collection. Observed in production on 2026-09-15: `POST {}` returned 201 and stored
+    // record `6aa9ce27004c6f39fe9c9dfc` with nothing in it.
+    const hasContent = [
+      'deviceId',
+      'appVersion',
+      'platform',
+      'deviceModel',
+      'exceptionType',
+      'exceptionMessage',
+      'stackTrace',
+      'errorCode',
+    ].some((field) => cleanReportField(body[field], 64) !== null);
+    if (!hasContent) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'CRASH_REPORT_CONTENT_REQUIRED',
+        error: 'A crash report must carry at least one identifying or diagnostic field',
+        requestId: req.requestId || null,
+      });
+    }
+
     const report = await CrashReport.create({
       deviceId: cleanReportField(body.deviceId, 128),
       appVersion: cleanReportField(body.appVersion, 40),

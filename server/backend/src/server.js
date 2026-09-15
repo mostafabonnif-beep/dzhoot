@@ -487,9 +487,13 @@ app.use('/api/v1/categories', require('./routes/categories'));
 app.use('/api/v1/favorites', require('./routes/favorites'));
 // App update routes (GitHub-based APK delivery)
 app.use('/api/v1/app', require('./routes/app-update'));
+// Customer problem reports (public: a device that cannot sign in can still report).
+app.use('/api/v1/app', require('./routes/app-problem-reports'));
 app.use('/api/v1/admin', require('./routes/admin'));
 // App release metadata (provenance, channel, distribution) — admin only.
 app.use('/api/v1/admin/app-versions', require('./routes/admin-app-versions'));
+// Customer reports + automatically captured crashes, in one triage view.
+app.use('/api/v1/admin/error-reports', require('./routes/admin-error-reports'));
 app.use('/api/v1/admin/diagnostics', require('./routes/admin-diagnostics'));
 // Subscription & activation (commercial backbone)
 app.use('/api/v1/admin/plans', require('./routes/admin-plans'));

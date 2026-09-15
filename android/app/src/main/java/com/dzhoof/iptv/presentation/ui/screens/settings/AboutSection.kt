@@ -33,6 +33,7 @@ internal fun AboutSection(
     onCheckForUpdate: () -> Unit,
     onUpdateNow: () -> Unit,
     onOpenDiagnostics: () -> Unit,
+    onOpenReportProblem: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val busy = isChecking || isDownloading
@@ -103,6 +104,33 @@ internal fun AboutSection(
             action = {
                 FocusAwareOutlinedButton(onClick = onOpenDiagnostics) {
                     Text(text = "تشخيص  ▸", fontWeight = FontWeight.SemiBold)
+                }
+            }
+        )
+
+        Spacer(modifier = Modifier.height(Dimens.Space3))
+
+        // «إبلاغ عن مشكلة» sits next to the diagnostics entry on purpose: the diagnostics
+        // screen answers "what is my build doing?", this one lets the customer tell us what
+        // went wrong — and attaches exactly the same non-sensitive facts.
+        SettingRowLayout(
+            text = {
+                Text(
+                    text = "إبلاغ عن مشكلة",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "صف ما لم يعمل وأرسله مع إصدار التطبيق ونوع الجهاز — بدون أي كلمة مرور",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            action = {
+                FocusAwareOutlinedButton(onClick = onOpenReportProblem) {
+                    Text(text = "إبلاغ  ▸", fontWeight = FontWeight.SemiBold)
                 }
             }
         )

@@ -38,6 +38,7 @@ import com.dzhoof.iptv.presentation.ui.screens.AddSourceScreen
 import com.dzhoof.iptv.presentation.ui.screens.SettingsScreen
 import com.dzhoof.iptv.presentation.ui.screens.settings.ManageChannelsScreen
 import com.dzhoof.iptv.presentation.ui.screens.settings.DiagnosticsScreen
+import com.dzhoof.iptv.presentation.ui.screens.settings.ReportProblemScreen
 
 /**
  * Navigation graph for DZ HOOF IPTV app.
@@ -345,6 +346,9 @@ fun DzhoofNavGraph(
                 },
                 onNavigateToDiagnostics = {
                     navController.navigate(Screen.Diagnostics.route)
+                },
+                onNavigateToReportProblem = {
+                    navController.navigate(Screen.ReportProblem.route)
                 }
             )
         }
@@ -352,6 +356,13 @@ fun DzhoofNavGraph(
         // ── Diagnostics (non-sensitive build/update/backend facts) ──────
         composable(route = Screen.Diagnostics.route) {
             DiagnosticsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── Report a problem (customer-facing, sends a non-sensitive snapshot) ──
+        composable(route = Screen.ReportProblem.route) {
+            ReportProblemScreen(
                 onNavigateBack = { navController.popBackStack() }
             )
         }

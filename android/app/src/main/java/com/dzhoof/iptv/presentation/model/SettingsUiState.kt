@@ -73,3 +73,24 @@ data class UpdateInfo(
     /** Below this versionCode the update is mandatory; null when the server omits it. */
     val minimumSupportedVersionCode: Int? = null
 )
+
+/**
+ * Draft state for the «إبلاغ عن مشكلة» screen.
+ *
+ * [result] is null while a draft is being edited, so the outcome of a *previous* report is
+ * never shown against newly typed text.
+ */
+data class ReportProblemUiState(
+    val category: com.dzhoof.iptv.update.diagnostics.ProblemReportPayload.Category =
+        com.dzhoof.iptv.update.diagnostics.ProblemReportPayload.Category.PLAYBACK,
+    val message: String = '',
+    val sending: Boolean = false,
+    val result: com.dzhoof.iptv.update.diagnostics.ProblemReporter.Result? = null,
+) {
+    /**
+     * A report needs a description or a category to be worth sending. The category always has
+     * a value, so in practice this means "say something" — which is the minimum the server
+     * accepts, and the reason the server rejects an empty report at all.
+     */
+    val canSubmit: Boolean get() = !sending && message.isNotBlank()
+}
