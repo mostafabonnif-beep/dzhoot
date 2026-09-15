@@ -51,6 +51,8 @@ jobs:
         run: bash scripts/security/check-secrets.sh
       - name: Test the release-manifest generator (fails closed)
         run: bash scripts/ci/test-write-release-manifest.sh
+      - name: Test the Android unit-test result verifier (fails closed)
+        run: bash scripts/ci/test-verify-android-test-results.sh
 
   backend:
     runs-on: ubuntu-latest
@@ -104,7 +106,19 @@ jobs:
     needs: changes
     if: needs.changes.outputs.android == 'true' || github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # lint runs over every variant once it is in the graph, so the budget is
+    # wider than the old lintStagingDebug-only job.
+    timeout-minutes: 35
+    env:
+      # The uploaded APK is a distributable staging build. It must point at the
+      # managed production API; a placeholder hostname makes device activation fail.
+      DZHOOF_API_URL: https://iptv.ld-11.net/
+      # The version the CI build advertises. Kept a repository variable so the
+      # workflow does not have to be edited for every release candidate.
+      ANDROID_VERSION_NAME: ${{ vars.DZHOOF_ANDROID_VERSION_NAME || '1.3.1' }}
+      # Pinned command-line tools. The action's own default moves with upstream;
+      # pinning keeps the runner reproducible (see the job history note below).
+      ANDROID_CMDLINE_TOOLS_VERSION: '14742923'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Verify Firebase configuration is external
@@ -118,21 +132,69 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+          cache: gradle
+      # `packages` is set explicitly on purpose. The action defaults to
+      # "tools platform-tools", and the legacy `tools` package no longer exists
+      # in the SDK repository: sdkmanager exits 1 with
+      #   Warning: Failed to find package 'tools'
+      # which failed this job at the setup step, before anything was built
+      # (run 34970591122 on 460b8cc). Requesting only what we install keeps the
+      # job independent of a package that upstream has removed.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+        with:
+          packages: 'platform-tools'
+          cmdline-tools-version: ${{ env.ANDROID_CMDLINE_TOOLS_VERSION }}
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
-      # The uploaded APK is a distributable staging build. It must point at the
-      # managed production API; a placeholder hostname makes device activation fail.
-      - name: Run Android lint and unit tests
+        run: |
+          set -euo pipefail
+          # Only the platform and build-tools this project declares in
+          # android/app/build.gradle.kts (compileSdk 34 / targetSdk 34).
+          if ! sdkmanager "platforms;android-34" "build-tools;34.0.0"; then
+            echo "::group::sdkmanager diagnostics (no secrets)"
+            sdkmanager --version || true
+            sdkmanager --list_installed || true
+            # `sdkmanager --list` is ~5k lines; the filter keeps the diagnostic
+            # useful in the log while still proving whether the package exists.
+            sdkmanager --list 2>&1 | grep -E 'platforms;android-34|build-tools;34\.0\.0' || true
+            echo "::endgroup::"
+            exit 1
+          fi
+          sdkmanager --list_installed
+      # The release gate runs the same task set the operations brief verifies on
+      # the build host (docs/AI_AGENT_OPERATIONS_AR.md §2): compiling the
+      # official release variant proves the R8/proguard path, the unit tests run
+      # on the staging variant, and lint covers the app module. `assembleStagingDebug`
+      # below still produces the downloadable staging APK.
+      - name: Android build, unit tests and lint
         working-directory: android
-        env:
-          DZHOOF_API_URL: https://iptv.ld-11.net/
-        run: ./gradlew lintStagingDebug testStagingDebugUnitTest --stacktrace
+        run: |
+          set -euo pipefail
+          ./gradlew \
+            :app:compileOfficialReleaseKotlin \
+            :app:testStagingDebugUnitTest \
+            :app:lint \
+            --no-daemon --stacktrace \
+            -PversionName="${ANDROID_VERSION_NAME}" \
+            -PdzhoofApiUrl="${DZHOOF_API_URL}"
+      # A green Gradle invocation is not proof that tests ran: Gradle reports
+      # success for an up-to-date/empty test task too. Read the JUnit XML.
+      - name: Verify unit-test results (XML)
+        if: always()
+        run: bash scripts/ci/verify-android-test-results.sh android/app/build/test-results/testStagingDebugUnitTest
       - name: Assemble Android debug APK
         working-directory: android
-        env:
-          DZHOOF_API_URL: https://iptv.ld-11.net/
-        run: ./gradlew assembleStagingDebug --stacktrace
+        run: ./gradlew assembleStagingDebug --stacktrace -PversionName="${ANDROID_VERSION_NAME}" -PdzhoofApiUrl="${DZHOOF_API_URL}"
+      # Assert the artifact exists *before* the best-effort upload step, so a
+      # broken build can never be hidden by an upload that tolerates failure.
+      - name: Verify the staging APK exists
+        working-directory: android
+        run: |
+          set -euo pipefail
+          ls -l app/build/outputs/apk/staging/debug/*.apk
+          test -s "$(ls app/build/outputs/apk/staging/debug/*.apk | head -1)"
       - name: Upload Android debug APK
         # Best-effort: the APK is a CI convenience, not a release gate. Keep
         # CI green when the account artifact-storage quota is exhausted; the
@@ -143,6 +205,12 @@ jobs:
           name: dzhoof-staging-production-apk
           path: android/app/build/outputs/apk/staging/debug/*.apk
           if-no-files-found: error
+
+  # TODO(android-tv): an emulator/instrumentation job (Android TV system image,
+  # `connectedAndroidTest` on the `official` flavour) belongs here once a runner
+  # with hardware acceleration is available. The hosted ubuntu runner cannot run
+  # an Android TV AVD with nested virtualisation, so it stays a separate future
+  # job rather than a gate that would fail for environmental reasons.
 
   frontend:
     needs: changes

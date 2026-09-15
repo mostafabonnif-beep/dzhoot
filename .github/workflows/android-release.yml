@@ -38,6 +38,14 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+        with:
+          # Never request the legacy `tools` package: the action's default is
+          # "tools platform-tools" and `tools` no longer exists upstream
+          # (sdkmanager exits 1 with "Failed to find package 'tools'").
+          packages: 'platform-tools'
+          cmdline-tools-version: '14742923'
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
 
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
