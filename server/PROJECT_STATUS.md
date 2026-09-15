@@ -56,5 +56,9 @@ DZ HOOF is based on the MIT-licensed FireVision IPTV Server, renamed and hardene
 - Full VOD/Series acceptance on a live source; cross-device watch-progress sync.
 - `AppVersion 1.2.2` is active without a `sha256`: backfill its checksum or deactivate it
   (the update API withholds it now instead of serving it unverifiable).
-- IPv6 is not covered by the crash-report redaction rules
-  (see `docs/DIAGNOSTICS_AND_CRASH_REPORTS.md`).
+- IPv6 crash-report redaction is now covered (compressed `::`, full eight-group and
+  bracketed forms) on both the device and the server, with a shared test table in
+  `CrashRedactorTest` and `audit-log.test.ts`. Closed 2026-09-15 together with four other
+  redaction classes that had passed through: JSON-encoded secrets, the credential half of
+  an `Authorization:` header, cookie/session assignments outside a header line, and
+  credentials in a non-HTTP (`rtsp`/`rtmp`) stream URL.
