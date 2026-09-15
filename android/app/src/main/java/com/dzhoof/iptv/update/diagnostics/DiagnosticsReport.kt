@@ -211,7 +211,12 @@ object DiagnosticsReport {
         null, "" -> NEVER_CHECKED
         "available" -> "يتوفر تحديث جديد"
         "up_to_date" -> "التطبيق محدَّث"
+        "held_for_verification" -> "إصدار أحدث موجود لكن بصمته لم تُتحقَّق بعد"
         "skipped" -> "تم تخطي الفحص (لم يحن موعده)"
+        // The Play-managed install path returns before recordCheck today, so this label is
+        // currently unreachable — it is here so the diagnostics screen says the truth if
+        // that wiring changes, instead of falling through to «غير معروف».
+        "delegated_to_store" -> "التحديث يديره Google Play"
         else -> UpdateErrorCode.entries
             .firstOrNull { it.name == resultCode.trim() }
             ?.userMessage

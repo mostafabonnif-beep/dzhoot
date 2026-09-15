@@ -49,6 +49,12 @@ class UpdateManager @Inject constructor(
          */
         data object DelegatedToStore : Outcome
         data object UpToDate : Outcome
+
+        /**
+         * A newer release exists but is withheld pending a verifiable checksum. Surfaced
+         * separately so the UI can say so instead of claiming the device is up to date.
+         */
+        data class HeldForVerification(val versionName: String?) : Outcome
         data class Available(val update: UpdateInfo) : Outcome
         data class Failed(val code: UpdateErrorCode) : Outcome
     }
@@ -80,6 +86,8 @@ class UpdateManager @Inject constructor(
         val outcome = when (val result = repository.fetchAvailableUpdate()) {
             is UpdateRepository.Result.Found -> Outcome.Available(result.update)
             UpdateRepository.Result.UpToDate -> Outcome.UpToDate
+            is UpdateRepository.Result.HeldForVerification ->
+                Outcome.HeldForVerification(result.versionName)
             is UpdateRepository.Result.Failed -> Outcome.Failed(result.code)
         }
 
@@ -97,6 +105,7 @@ class UpdateManager @Inject constructor(
     internal fun resultCode(outcome: Outcome): String = when (outcome) {
         is Outcome.Available -> "available"
         Outcome.UpToDate -> "up_to_date"
+        is Outcome.HeldForVerification -> "held_for_verification"
         is Outcome.Skipped -> "skipped"
         is Outcome.DelegatedToStore -> "delegated_to_store"
         is Outcome.Failed -> outcome.code.name

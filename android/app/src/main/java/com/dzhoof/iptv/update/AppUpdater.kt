@@ -24,8 +24,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.ln
-import kotlin.math.pow
 
 /**
  * Single source of truth for the in-app update flow — version check (server API
@@ -50,8 +48,35 @@ class AppUpdater @Inject constructor(
     }
 
     private var downloadId: Long = -1
+
+    /**
+     * URL of the request currently being enqueued, or null.
+     *
+     * `enqueue()` returns the id only after the DownloadManager has accepted the request, so
+     * during that window the broadcast handler cannot identify its own download by id. It
+     * confirms ownership from the DownloadManager row instead (see [onDownloadComplete]):
+     * the previous code compared against `downloadId == -1` and dropped the broadcast, which
+     * left the UI on "Downloading…" forever whenever the download finished quickly.
+     */
+    private var pendingDownloadUrl: String? = null
     private var downloadReceiver: BroadcastReceiver? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    /**
+     * Whether a completed download belongs to the request this updater just started.
+     *
+     * Two independent signals, because the enqueue window makes the id temporarily unusable:
+     * once `enqueue()` has returned, the id must match exactly; before that, the row's
+     * request URI must be the URL we asked for. A completion for an unrelated download is
+     * ignored either way.
+     */
+    private fun isRequestedDownload(id: Long, cursor: android.database.Cursor): Boolean {
+        if (downloadId != -1L) return id == downloadId
+        val uri = runCatching {
+            cursor.getString(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_URI))
+        }.getOrNull()
+        return uri != null && uri == pendingDownloadUrl
+    }
 
     private fun unregisterDownloadReceiver() {
         downloadReceiver?.let { runCatching { context.unregisterReceiver(it) } }
@@ -62,6 +87,17 @@ class AppUpdater @Inject constructor(
     sealed interface CheckResult {
         data class Found(val update: UpdateInfo) : CheckResult
         data object UpToDate : CheckResult
+
+        /**
+         * A newer release exists, but its checksum could not be verified so it was not
+         * offered (`updateBlockedReason: CHECKSUM_UNAVAILABLE`).
+         *
+         * Distinct from [UpToDate] on purpose: reporting "up to date" while a newer build
+         * is published but withheld tells the user something false, and hides a release
+         * problem the operator needs to see.
+         */
+        data class HeldForVerification(val versionName: String?) : CheckResult
+
         data class Failed(val code: UpdateErrorCode) : CheckResult
     }
 
@@ -77,11 +113,18 @@ class AppUpdater @Inject constructor(
         val server = checkFromServer()
         if (server is CheckResult.Found) return server
 
+        // The server is authoritative about what is published. If it says a release exists
+        // but is withheld, do not ask GitHub for a second opinion: GitHub would happily
+        // describe the same release without a verified checksum, which is exactly the
+        // download the gate exists to prevent.
+        if (server is CheckResult.HeldForVerification) return server
+
         val github = checkFromGitHub()
         if (github is CheckResult.Found) return github
 
         if (server is CheckResult.UpToDate) return CheckResult.UpToDate
         if (github is CheckResult.UpToDate) return CheckResult.UpToDate
+        if (github is CheckResult.HeldForVerification) return github
         return CheckResult.Failed(
             (server as? CheckResult.Failed)?.code ?: UpdateErrorCode.UPDATE_CHECK_NETWORK
         )
@@ -100,24 +143,16 @@ class AppUpdater @Inject constructor(
                 if (!resp.isSuccessful) {
                     return CheckResult.Failed(UpdateErrorCode.UPDATE_CHECK_NETWORK)
                 }
-                val json = org.json.JSONObject(resp.body?.string() ?: "{}")
-                if (json.optBoolean("success", false) && json.optBoolean("updateAvailable", false)) {
-                    val latest = json.optJSONObject("latestVersion")
-                        ?: return CheckResult.Failed(UpdateErrorCode.UPDATE_METADATA_INVALID)
-                    val update = UpdateInfo(
-                        versionName = latest.optString("versionName", ""),
-                        releaseNotes = latest.optString("releaseNotes", "").takeIf { it != "null" } ?: "",
-                        fileSize = formatFileSize(latest.optLong("apkFileSize", 0)),
-                        downloadUrl = latest.optString("downloadUrl", ""),
-                        isMandatory = json.optBoolean("mandatory", json.optBoolean("isMandatory", false)),
-                        versionCode = latest.optInt("versionCode", 0).takeIf { it > 0 },
-                        sha256 = latest.optString("sha256", "").takeIf { isSha256(it) },
-                        sizeBytes = latest.optLong("sizeBytes", 0).takeIf { it > 0 },
-                        minimumSupportedVersionCode =
-                            latest.optInt("minimumSupportedVersionCode", 0).takeIf { it > 0 }
-                    )
-                    CheckResult.Found(update)
-                } else CheckResult.UpToDate
+                // The response contract (including `checksumSource` and
+                // `updateBlockedReason`) is parsed in UpdateResponseParser, where it is
+                // unit-tested; this method only maps the outcome onto the check result.
+                when (val outcome = UpdateResponseParser.parse(resp.body?.string())) {
+                    is UpdateResponseParser.Outcome.Offered -> CheckResult.Found(outcome.update)
+                    UpdateResponseParser.Outcome.Current -> CheckResult.UpToDate
+                    is UpdateResponseParser.Outcome.HeldForVerification ->
+                        CheckResult.HeldForVerification(outcome.versionName)
+                    is UpdateResponseParser.Outcome.Invalid -> CheckResult.Failed(outcome.code)
+                }
             }
         } catch (_: Exception) {
             CheckResult.Failed(UpdateErrorCode.UPDATE_CHECK_NETWORK)
@@ -131,9 +166,6 @@ class AppUpdater @Inject constructor(
             uiMode == Configuration.UI_MODE_TYPE_TELEVISION
         return if (isTv) "android-tv" else "android"
     }
-
-    private fun isSha256(value: String): Boolean =
-        value.length == 64 && value.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }
 
     private fun checkFromGitHub(): CheckResult {
 
@@ -155,22 +187,48 @@ class AppUpdater @Inject constructor(
                     val assets = json.optJSONArray("assets")
                     var downloadUrl = ""
                     var fileSize = 0L
+                    var apkName = ""
                     if (assets != null) {
                         for (i in 0 until assets.length()) {
                             val asset = assets.getJSONObject(i)
                             if (asset.optString("name", "").endsWith(".apk")) {
+                                apkName = asset.optString("name", "")
                                 downloadUrl = asset.optString("browser_download_url", "")
                                 fileSize = asset.optLong("size", 0)
                                 break
                             }
                         }
                     }
+
+                    // The release publishes `<apk>.sha256` next to the APK (see
+                    // android-release.yml). This fallback used to build an UpdateInfo with
+                    // no checksum at all, so a server outage silently downgraded the device
+                    // to an unverifiable download. Resolve the published digest here, and
+                    // hold the release when there is none — the verifier now fails closed.
+                    val sha256AssetUrl = if (assets != null && apkName.isNotEmpty()) {
+                        (0 until assets.length())
+                            .map { assets.getJSONObject(it) }
+                            .firstOrNull { it.optString("name", "") == "$apkName.sha256" }
+                            ?.optString("browser_download_url", "")
+                            ?.takeIf { it.isNotBlank() }
+                    } else {
+                        null
+                    }
+                    val sha256 = sha256AssetUrl?.let { fetchPublishedSha256(it) }
+                    if (sha256 == null) {
+                        Log.w(TAG, "GitHub fallback found no usable checksum for $latestVersion")
+                        return CheckResult.HeldForVerification(latestVersion)
+                    }
+
                     val update = UpdateInfo(
                         versionName = latestVersion,
                         releaseNotes = json.optString("body", "").takeIf { it != "null" }?.take(500) ?: "",
-                        fileSize = formatFileSize(fileSize),
+                        fileSize = UpdateResponseParser.formatFileSize(fileSize),
                         downloadUrl = downloadUrl,
-                        isMandatory = false
+                        isMandatory = false,
+                        sha256 = sha256,
+                        sizeBytes = fileSize.takeIf { it > 0 },
+                        checksumSource = "sha256-asset"
                     )
                     CheckResult.Found(update)
                 } else CheckResult.UpToDate
@@ -181,10 +239,42 @@ class AppUpdater @Inject constructor(
     }
 
     /**
+     * Reads the digest from a release's published `<apk>.sha256` asset.
+     *
+     * The asset holds `<digest>  <filename>`, so the first 64-hex token is taken. Returns
+     * null when the asset is unreadable or carries no usable digest, and the caller then
+     * withholds the release rather than offering an unverifiable download.
+     */
+    private fun fetchPublishedSha256(assetUrl: String): String? = try {
+        PinnedHttpClient.get(assetUrl, mapOf("Accept" to "text/plain")).use { resp ->
+            if (!resp.isSuccessful) {
+                null
+            } else {
+                val token = Regex("[A-Fa-f0-9]{64}").find(resp.body?.string() ?: "")?.value
+                token?.lowercase()
+            }
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    /**
      * Downloads the APK and, once complete + signature-verified, launches the
      * system installer. [onState] is invoked on the main thread with the outcome.
      */
     fun downloadAndInstall(updateInfo: UpdateInfo, onState: (DownloadState) -> Unit) {
+        // Refuse before a single byte is requested: without a published checksum there is
+        // nothing to tie the downloaded APK to, and UpdateVerifier would reject it anyway
+        // once the download had already been paid for.
+        if (!UpdateResponseParser.isSha256(updateInfo.sha256)) {
+            Log.e(TAG, "Refusing to download an update that carries no verifiable checksum")
+            onState(DownloadState.Failed(
+                UpdateErrorCode.UPDATE_CHECKSUM_REQUIRED.userMessage,
+                UpdateErrorCode.UPDATE_CHECKSUM_REQUIRED
+            ))
+            return
+        }
+
         val allowedHosts = ApkUrlPolicy.allowedHosts(AppPreferences.getServerUrl(context))
         if (!ApkUrlPolicy.isAllowed(updateInfo.downloadUrl, allowedHosts)) {
             // Fail closed before a single byte is requested: an off-allowlist or non-HTTPS
@@ -199,6 +289,7 @@ class AppUpdater @Inject constructor(
         try {
             unregisterDownloadReceiver()
             downloadId = -1
+            pendingDownloadUrl = null
 
             val oldFile = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), APK_FILENAME)
             if (oldFile.exists()) oldFile.delete()
@@ -220,10 +311,13 @@ class AppUpdater @Inject constructor(
             downloadReceiver = object : BroadcastReceiver() {
                 override fun onReceive(ctx: Context, intent: Intent) {
                     val id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1)
-                    if (id != downloadId) return
-                    val cursor = downloadManager.query(DownloadManager.Query().apply { setFilterById(downloadId) })
+                    if (id < 0) return
+                    // Query by the id the broadcast carries, not by `downloadId`: while the
+                    // request is still being enqueued `downloadId` is -1, and filtering by
+                    // -1 matches nothing.
+                    val cursor = downloadManager.query(DownloadManager.Query().apply { setFilterById(id) })
                     try {
-                        if (cursor.moveToFirst()) {
+                        if (cursor.moveToFirst() && isRequestedDownload(id, cursor)) {
                             val status = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
                             if (status == DownloadManager.STATUS_SUCCESSFUL) {
                                 // Archive signature parsing can be slow for a large APK. Keep it
@@ -247,6 +341,7 @@ class AppUpdater @Inject constructor(
                             // terminal; an unrelated ViewModel being cleared must not interrupt it.
                             unregisterDownloadReceiver()
                             downloadId = -1
+                            pendingDownloadUrl = null
                         }
                     } finally {
                         cursor.close()
@@ -259,6 +354,7 @@ class AppUpdater @Inject constructor(
             // delivered on Android 13+ and the UI hangs at "Downloading...". Safe:
             // the receiver checks the download id, queries DownloadManager for the
             // real status, and the APK signature is verified pre-install.
+            pendingDownloadUrl = updateInfo.downloadUrl
             ContextCompat.registerReceiver(
                 context,
                 downloadReceiver,
@@ -271,6 +367,7 @@ class AppUpdater @Inject constructor(
             Log.e(TAG, "Error downloading update", e)
             unregisterDownloadReceiver()
             downloadId = -1
+            pendingDownloadUrl = null
             onState(DownloadState.Failed(
                 UpdateErrorCode.UPDATE_DOWNLOAD_FAILED.userMessage,
                 UpdateErrorCode.UPDATE_DOWNLOAD_FAILED
@@ -380,14 +477,6 @@ class AppUpdater @Inject constructor(
             if (p1 != p2) return p1.compareTo(p2)
         }
         return 0
-    }
-
-    private fun formatFileSize(bytes: Long): String {
-        if (bytes <= 0) return ""
-        if (bytes < 1024) return "$bytes B"
-        val exp = (ln(bytes.toDouble()) / ln(1024.0)).toInt().coerceIn(1, 6)
-        val pre = "KMGTPE"[exp - 1]
-        return "%.1f %sB".format(bytes / 1024.0.pow(exp.toDouble()), pre)
     }
 
     companion object {

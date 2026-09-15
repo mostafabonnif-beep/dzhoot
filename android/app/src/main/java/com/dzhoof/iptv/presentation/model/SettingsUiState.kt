@@ -68,6 +68,12 @@ data class UpdateInfo(
     val versionCode: Int? = null,
     /** Published SHA-256 (64 hex chars) of the APK, when the server provides it. */
     val sha256: String? = null,
+    /**
+     * Where the checksum came from (`manifest`, `sha256-asset`, `db`), as reported by the
+     * update API. Read for diagnostics only — the verification decision is driven by
+     * [sha256] alone, so a client never has to trust a label.
+     */
+    val checksumSource: String? = null,
     /** Exact APK size in bytes when known — used to detect a truncated download. */
     val sizeBytes: Long? = null,
     /** Below this versionCode the update is mandatory; null when the server omits it. */

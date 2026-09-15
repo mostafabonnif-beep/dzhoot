@@ -29,6 +29,13 @@ enum class UpdateErrorCode(
     /** The downloaded file's SHA-256 does not match the published checksum. */
     UPDATE_CHECKSUM_MISMATCH(true, "ملف التحديث تالف — البصمة لا تتطابق"),
 
+    /**
+     * No verified checksum was published for the offered release, so its bytes cannot be
+     * tied to the reviewed artifact. Fail closed: the client refuses a download it cannot
+     * verify rather than installing unverified bytes.
+     */
+    UPDATE_CHECKSUM_REQUIRED(false, "لا يمكن التحقق من سلامة التحديث — لم تُنشر بصمة موثّقة بعد"),
+
     /** The APK is not signed with the certificate of the installed application. */
     UPDATE_SIGNATURE_MISMATCH(false, "تعذر التحقق من التحديث — لا تتطابق التوقيعات"),
 
