@@ -30,6 +30,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
   reporting the failed release's commit, so `/health` claimed a build that was not
   running.
 
+### Fixed (a manifest and a .sha256 asset that disagree)
+
+- `loadGithubChecksum` now cross-checks the provenance manifest against the `.sha256`
+  asset when a release publishes both. The pipeline derives the two from the same
+  bytes, so a disagreement means one of them was replaced or mispublished — and the
+  documented rule for this path is that an inconsistency is a failure, never a reason
+  to prefer the stronger-looking source silently, so the update is withheld
+  (`CHECKSUM_UNAVAILABLE`). An *unreadable* secondary asset is not treated as
+  tampering: it is reported and the verified manifest still wins, because the device
+  verifies the downloaded APK itself. Two new cases in `app-update.test.ts` (verified
+  to fail without the cross-check). No published release ships a manifest yet
+  (v1.3.1 predates that step), so this guards the next one.
+
 ### Added (disk retention for deploy artifacts)
 
 - `scripts/ops/prune-deploy-artifacts.sh` reclaims what repeated deploys leave behind:
