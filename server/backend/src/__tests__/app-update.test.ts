@@ -30,6 +30,8 @@ const {
   versionNameToCode,
   getCanonicalDownloadUrl,
   isStaleLocalDownloadUrl,
+  isCanonicalRedirectUrl,
+  servesCanonicalRedirect,
   publicDownloadUrl,
   normalizeSha256,
   splitReleaseNotes,
@@ -39,6 +41,7 @@ const {
   pickManifestAsset,
   parseReleaseManifest,
   validateManifestAgainstAsset,
+  checksumCacheKey,
   GITHUB_ASSET_HOSTS,
 } = router._private;
 
@@ -354,15 +357,32 @@ describe('GET /api/v1/app/version contract', () => {
     expect(response.body.latestVersion.downloadUrl).toBeNull();
   });
 
-  it('rewrites a stale local download path to the canonical HTTPS redirect', async () => {
+  it('withholds a stale local download path whose checksum cannot be bound to the redirected bytes', async () => {
+    // `/downloads/*` rows are rewritten to the canonical `/api/v1/app/download`
+    // redirect, which always serves the *newest GitHub release* — not this row's
+    // artifact. The row's own sha256 therefore describes bytes the device will not
+    // receive, so advertising it would hand out an install that fails on device.
+    // The rewrite itself is still applied (asserted via the public helper below); the
+    // release is withheld instead of advertised with a wrong checksum.
     process.env.PUBLIC_BASE_URL = 'https://iptv.ld-11.net/';
     withDb(dbVersion({ downloadUrl: 'https://iptv.ld-11.net/downloads/dzhoof-tv-1.0.42.apk' }));
 
     const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
 
-    expect(response.body.latestVersion.downloadUrl).toBe(
-      'https://iptv.ld-11.net/api/v1/app/download',
-    );
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
+    expect(response.body.latestVersion.sha256).toBeNull();
+    // The metadata survives so a device can still report which build is published.
+    expect(response.body.latestVersion.versionCode).toBe(10402);
+    expect(response.body.latestVersion.downloadUrl).toBeNull();
+
+    // The rewrite rule itself is unchanged.
+    expect(
+      publicDownloadUrl(
+        { get: () => 'iptv.ld-11.net', protocol: 'https' },
+        'https://iptv.ld-11.net/downloads/dzhoof-tv-1.0.42.apk',
+      ),
+    ).toBe('https://iptv.ld-11.net/api/v1/app/download');
   });
 
   it('allows the API request host when PUBLIC_BASE_URL is not configured', async () => {
@@ -376,9 +396,22 @@ describe('GET /api/v1/app/version contract', () => {
       .set('X-Forwarded-Proto', 'https')
       .set('Host', 'iptv.ld-11.net');
 
-    expect(response.body.latestVersion.downloadUrl).toBe(
-      'https://iptv.ld-11.net/api/v1/app/download',
-    );
+    // The request host is still accepted as a valid redirect target (not blocked by the
+    // allowlist); the row is withheld for its unverifiable checksum, not for its host.
+    expect(response.body.latestVersion.downloadUrl).toBeNull();
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
+    expect(
+      isCanonicalRedirectUrl(
+        { get: () => 'iptv.ld-11.net' },
+        'https://iptv.ld-11.net/downloads/dzhoof-tv-1.0.42.apk',
+      ),
+    ).toBe(false);
+    expect(
+      servesCanonicalRedirect(
+        { get: () => 'iptv.ld-11.net' },
+        'https://iptv.ld-11.net/downloads/dzhoof-tv-1.0.42.apk',
+      ),
+    ).toBe(true);
   });
 });
 
@@ -907,6 +940,169 @@ describe('GET /api/v1/app/version checksum contract (P0-1)', () => {
     expect(response.body.updateAvailable).toBe(true);
     expect(response.body.latestVersion.sha256).toBe(SHA256);
     expect(response.body.latestVersion.checksumSource).toBe('db');
+  });
+});
+
+describe('published-release contract shared by /version and /latest', () => {
+  beforeEach(() => {
+    delete process.env.APP_UPDATE_REQUIRE_CHECKSUM;
+    delete process.env.APP_RELEASE_SIGNER_SHA256;
+    delete process.env.PUBLIC_BASE_URL;
+  });
+
+  // Regression for the production defect of 2026-09-15: the checksum lookup was
+  // gated behind `updateAvailable`, so the live API answered
+  // `sha256: null, checksumSource: null` to a device that was already current —
+  // the exact "sha256 missing from the Update API" report (#5 of the brief).
+  it('serves the verified checksum even when the device is already current', async () => {
+    githubUp();
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10402');
+
+    expect(response.status).toBe(200);
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+    expect(response.body.latestVersion.checksumSource).toBe('sha256-asset');
+  });
+
+  it('serves the verified checksum to an already-current device reading the DB source', async () => {
+    process.env.PUBLIC_BASE_URL = 'https://iptv.ld-11.net/';
+    withDb(dbVersion({ downloadUrl: 'https://iptv.ld-11.net/api/v1/app/download' }));
+    githubUp();
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10402');
+
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+  });
+
+  it('GET /latest carries the verified checksum instead of a null', async () => {
+    githubUp();
+
+    const response = await request(buildApp()).get('/api/v1/app/latest');
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.sha256).toBe(SHA256);
+    expect(response.body.data.checksumSource).toBe('sha256-asset');
+    expect(response.body.checksumVerified).toBe(true);
+  });
+
+  it('GET /latest never leaks the internal checksum-fetch asset URLs', async () => {
+    githubUp();
+
+    const response = await request(buildApp()).get('/api/v1/app/latest');
+
+    // These two fields exist only so the server can download the manifest and the
+    // .sha256 asset over the SSRF-checked redirect chain. They used to be returned
+    // verbatim by the raw-candidate response.
+    expect(response.body.data).not.toHaveProperty('sha256AssetUrl');
+    expect(response.body.data).not.toHaveProperty('manifestAssetUrl');
+    expect(JSON.stringify(response.body)).not.toContain('.sha256');
+    expect(JSON.stringify(response.body)).not.toContain('.release.json');
+  });
+
+  it('GET /latest withholds the download URL when no checksum can be verified', async () => {
+    serveRelease({ release: githubRelease(), sha256Body: 'not-a-checksum\n' });
+
+    const response = await request(buildApp()).get('/api/v1/app/latest');
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.sha256).toBeNull();
+    expect(response.body.data.downloadUrl).toBeNull();
+    expect(response.body.checksumVerified).toBe(false);
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
+  });
+
+  it('binds a canonical-redirect row whose checksum matches the release it serves', async () => {
+    process.env.PUBLIC_BASE_URL = 'https://iptv.ld-11.net/';
+    withDb(dbVersion({ downloadUrl: 'https://iptv.ld-11.net/api/v1/app/download' }));
+    githubUp();
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+    expect(response.body.latestVersion.checksumSource).toBe('db');
+    expect(response.body.latestVersion.downloadUrl).toBe('https://iptv.ld-11.net/api/v1/app/download');
+  });
+
+  it('withholds a canonical-redirect row whose checksum describes another release', async () => {
+    process.env.PUBLIC_BASE_URL = 'https://iptv.ld-11.net/';
+    withDb(
+      dbVersion({
+        downloadUrl: 'https://iptv.ld-11.net/api/v1/app/download',
+        // 1.0.40's real digest in production: correct for the file that /downloads/
+        // used to hold, wrong for the bytes the redirect serves today.
+        sha256: '1170dcbc1a1515f216cc571fcb2c0cb0444043ffbf4011bd2f2004317050e3d5',
+      }),
+    );
+    githubUp();
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.latestVersion.downloadUrl).toBeNull();
+  });
+
+  it('leaves a row that points at its own artifact untouched by the redirect binding', async () => {
+    withDb(dbVersion({ downloadUrl: APK_URL }));
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+    expect(response.body.latestVersion.checksumSource).toBe('db');
+    expect(response.body.latestVersion.downloadUrl).toBe(APK_URL);
+  });
+});
+
+describe('canonical redirect detection', () => {
+  const req = (host: string) => ({ get: () => host }) as unknown as express.Request;
+
+  it('recognizes the API\'s own /api/v1/app/download redirect', () => {
+    expect(isCanonicalRedirectUrl(req('iptv.ld-11.net'), 'https://iptv.ld-11.net/api/v1/app/download')).toBe(true);
+  });
+
+  it('ignores a plain asset URL on the same host', () => {
+    expect(isCanonicalRedirectUrl(req('iptv.ld-11.net'), 'https://iptv.ld-11.net/downloads/app.apk')).toBe(false);
+    expect(servesCanonicalRedirect(req('iptv.ld-11.net'), 'https://iptv.ld-11.net/downloads/app.apk')).toBe(true);
+  });
+
+  it('rejects a redirect path on another host or a non-HTTPS scheme', () => {
+    expect(isCanonicalRedirectUrl(req('iptv.ld-11.net'), 'https://evil.example.com/api/v1/app/download')).toBe(false);
+    expect(isCanonicalRedirectUrl(req('iptv.ld-11.net'), 'http://iptv.ld-11.net/api/v1/app/download')).toBe(false);
+    expect(isCanonicalRedirectUrl(req('iptv.ld-11.net'), '')).toBe(false);
+  });
+});
+
+describe('checksum cache identity', () => {
+  const candidate = {
+    versionCode: 10402,
+    apkFileName: 'dzhoof-tv-v1.4.2-official.apk',
+    apkFileSize: 123456789,
+    manifestAssetUrl: 'https://github.com/o/r/releases/download/v1.4.2/dzhoof-tv-v1.4.2-official.release.json',
+    sha256AssetUrl: 'https://github.com/o/r/releases/download/v1.4.2/dzhoof-tv-v1.4.2-official.apk.sha256',
+  };
+
+  it('is stable for the same artifact', () => {
+    expect(checksumCacheKey(candidate)).toBe(checksumCacheKey({ ...candidate }));
+  });
+
+  // The key used to be `v<versionCode>` alone, so a re-cut APK republished under the
+  // same versionCode kept serving the previous release's digest for the whole TTL.
+  it('changes when the artifact behind the same versionCode changes', () => {
+    const base = checksumCacheKey(candidate);
+    expect(checksumCacheKey({ ...candidate, apkFileName: 'dzhoof-tv-v1.4.2-recut.apk' })).not.toBe(base);
+    expect(checksumCacheKey({ ...candidate, apkFileSize: 1 })).not.toBe(base);
+    expect(
+      checksumCacheKey({ ...candidate, sha256AssetUrl: base.replace(base, 'https://github.com/o/r/releases/download/v1.4.2b/x.apk.sha256') }),
+    ).not.toBe(base);
+  });
+
+  it('never collides across different version codes', () => {
+    expect(checksumCacheKey({ ...candidate, versionCode: 10403 })).not.toBe(checksumCacheKey(candidate));
   });
 });
 

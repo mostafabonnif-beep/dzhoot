@@ -27,6 +27,16 @@ jest.mock('../services/audit-log', () => ({
   redactSensitiveText: (value: unknown) => String(value),
 }));
 
+// Redis is not available in the unit environment; the release cache is asserted
+// through its own module surface so the route stays testable without a cache server.
+jest.mock('../services/app-release-cache', () => ({
+  ghReleaseCache: { get: jest.fn(), set: jest.fn(), delete: jest.fn() },
+  invalidateReleaseCaches: jest.fn(async () => true),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const releaseCache = require('../services/app-release-cache');
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const auditModule = require('../services/audit-log');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -431,5 +441,64 @@ describe('admin app-versions route — checksum publish gate', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data.releaseNotes).toBe('ملاحظات مصحّحة');
+  });
+});
+
+describe('POST /cache/invalidate', () => {
+  const invalidate = releaseCache.invalidateReleaseCaches as jest.Mock;
+
+  beforeEach(() => {
+    invalidate.mockClear();
+  });
+
+  it('drops the cached release lookup so the next check re-reads GitHub', async () => {
+    const response = await request(buildApp()).post('/api/v1/admin/app-versions/cache/invalidate');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true, invalidated: ['ghrel:latest'] });
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('audits the invalidation', async () => {
+    audit.mockClear();
+
+    await request(buildApp()).post('/api/v1/admin/app-versions/cache/invalidate');
+
+    expect(audit).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'APP_VERSION_CACHE_INVALIDATE' }),
+    );
+  });
+
+  it('refuses an unauthenticated caller', async () => {
+    (global as any).__mockAuthDeny = true;
+    try {
+      const response = await request(buildApp()).post('/api/v1/admin/app-versions/cache/invalidate');
+
+      expect(response.status).toBe(401);
+      expect(invalidate).not.toHaveBeenCalled();
+    } finally {
+      delete (global as any).__mockAuthDeny;
+    }
+  });
+
+  it('refuses a non-admin caller', async () => {
+    (global as any).__mockUserRole = 'User';
+    try {
+      const response = await request(buildApp()).post('/api/v1/admin/app-versions/cache/invalidate');
+
+      expect(response.status).toBe(403);
+      expect(invalidate).not.toHaveBeenCalled();
+    } finally {
+      delete (global as any).__mockUserRole;
+    }
+  });
+
+  it('reports a failure instead of pretending the cache was cleared', async () => {
+    invalidate.mockRejectedValueOnce(new Error('redis down'));
+
+    const response = await request(buildApp()).post('/api/v1/admin/app-versions/cache/invalidate');
+
+    expect(response.status).toBe(500);
+    expect(response.body.success).toBe(false);
   });
 });
