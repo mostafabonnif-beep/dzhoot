@@ -169,25 +169,43 @@ step "4/7  Compose up (api, frontend, scheduler) — caddy/mongo/redis untouched
 run "compose up" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps api frontend scheduler
 
 step "4b/7  Apply the Caddyfile from this release"
-# The Caddyfile is bind-mounted (./Caddyfile:/etc/caddy/Caddyfile:ro in
-# docker-compose.production.yml) and the atomic swap replaces the directory it is
-# mounted from, but Caddy is deliberately NOT recreated by step 4 and runs with its
-# admin API disabled (`admin off`), so nothing applied a changed Caddyfile: a cache
-# or header fix shipped in a release would silently stay inactive until someone
-# restarted Caddy by hand (verified 2026-09-15). Validate first, then reload with
-# SIGUSR1 — Caddy re-reads its config file and keeps the running config when the new
-# one is invalid.
+# A bind mount is anchored to the inode resolved when the container STARTED, while the
+# atomic deploy swaps release directories by renaming. The running Caddy therefore kept
+# reading the Caddyfile of a release that had long been moved to .previous-* — every
+# reload re-applied the OLD config, reported success, and the change was silently
+# inactive (measured 2026-09-15: `docker exec dzhoof-caddy grep -c documentRoute
+# /etc/caddy/Caddyfile` = 0 while the active release had it; docker inspect still
+# prints the current path, which is what makes this so easy to miss).
+#
+# So: validate the NEW file first (copied into the container), then recreate the caddy
+# container so the mount resolves against the release that is active now. Recreating
+# costs a few seconds of downtime and is the only way the mount follows the swap; a
+# plain SIGUSR1 reload cannot fix a stale mount. Extra networks the operator attached
+# by hand (e.g. the neighbouring dz1-tv stack) are re-attached right away instead of
+# waiting for the host's watchdog timer.
 if [ "$APPLY" -eq 1 ]; then
-  run "caddy validate" docker exec dzhoof-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
+  run "caddy validate (release file)" sh -c 'docker cp "$PWD/Caddyfile" dzhoof-caddy:/tmp/Caddyfile.release && docker exec dzhoof-caddy caddy validate --config /tmp/Caddyfile.release --adapter caddyfile' \
     || die "the Caddyfile in this release is invalid — refusing to continue"
-  run "caddy reload (SIGUSR1)" docker kill --signal=USR1 dzhoof-caddy \
-    || die "Caddy did not accept the reload signal — the release Caddyfile is not active"
-  run "sleep" sleep 3
-  run "caddy running" sh -c 'docker inspect -f "{{.State.Running}}" dzhoof-caddy | grep -qx true' \
-    || die "caddy is not running after the reload"
+
+  if docker exec dzhoof-caddy cmp -s /etc/caddy/Caddyfile "$PWD/Caddyfile"; then
+    say "Caddy already reads this release's Caddyfile — no recreate needed"
+  else
+    say "Caddy is reading a stale config (bind mount anchored to a previous release) — recreating it"
+    run "recreate caddy" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps --force-recreate caddy \
+      || die "could not recreate the caddy container"
+    run "sleep" sleep 5
+    # Re-attach any network that is not in this compose file (dz1-tv-internal, …).
+    if [ -x /usr/local/sbin/ensure-dz1tv-caddy-net.sh ]; then
+      run "reattach auxiliary networks" /usr/local/sbin/ensure-dz1tv-caddy-net.sh || say "WARNING: network reattach failed"
+    fi
+    run "caddy running" sh -c 'docker inspect -f "{{.State.Running}}" dzhoof-caddy | grep -qx true' \
+      || die "caddy is not running after the recreate"
+    run "caddy reads the release file" sh -c 'docker exec dzhoof-caddy cmp -s /etc/caddy/Caddyfile "$PWD/Caddyfile"' \
+      || die "caddy still does not read this release's Caddyfile"
+  fi
   say "Caddyfile applied from $PWD/Caddyfile"
 else
-  say "[dry-run] would validate and reload the Caddyfile (SIGUSR1, admin API is off)"
+  say "[dry-run] would validate the release Caddyfile and recreate caddy if its bind mount is stale"
 fi
 
 step "5/7  Health verification"
