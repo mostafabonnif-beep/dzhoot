@@ -9,15 +9,11 @@ import {
 
 const USER = new (require('mongoose').Types.ObjectId)().toString();
 
-beforeEach(async () => {
-  await WatchProgress.deleteMany({});
-});
-
-afterAll(async () => {
-  await WatchProgress.deleteMany({});
-});
-
 describe('watch-progress-service', () => {
+  beforeEach(async () => {
+    await WatchProgress.deleteMany({});
+  });
+
   it('ignores positions below the resume threshold', async () => {
     const doc = await upsertProgress({ userId: USER, contentId: 'm1', contentType: 'movie', positionSec: 5 });
     expect(doc).toBeNull();
@@ -56,10 +52,4 @@ describe('watch-progress-service', () => {
     expect(await clearProgress(USER)).toBe(1);
     expect(await WatchProgress.countDocuments({})).toBe(0);
   });
-});
-
-
-
-afterAll(async () => {
-  // Leave the connection open for other suites running in parallel.
 });
