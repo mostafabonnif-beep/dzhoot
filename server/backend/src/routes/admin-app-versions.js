@@ -243,5 +243,8 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// Probe: a single new state-changing route, nothing else.
+router.post('/probe/noop', async (req, res) => res.json({ success: true }));
+
 module.exports = router;
 module.exports._private = { publicShape, normalisePlatforms, MUTABLE_FIELDS };
