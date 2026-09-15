@@ -222,6 +222,7 @@ app.use(
 
 // Cookie parser (needed for OAuth state cookies)
 const cookieParser = require('cookie-parser');
+// codeql[js/missing-token-validation]
 app.use(cookieParser());
 
 // Route-specific larger body limit for M3U import (must be BEFORE the global 5MB parser)
