@@ -59,6 +59,20 @@ rollback() {
     if [ -n "$FRONTEND_IMAGE_ID" ]; then docker tag "$FRONTEND_IMAGE_ID" dzhoof-frontend:current || true; fi
     if [ -d "$ACTIVE" ]; then mv "$ACTIVE" "$FAILED" || true; fi
     if [ -d "$PREVIOUS" ]; then mv "$PREVIOUS" "$ACTIVE" || true; fi
+    # The failed deploy rewrote the release metadata in ENV_FILE (RELEASE_COMMIT,
+    # RELEASE_BUILT_AT and the image ids). Without restoring it, the *rolled-back*
+    # release keeps reporting the failed commit from /health — production lying about
+    # what it actually runs, which is the very thing the provenance work exists to
+    # prevent (observed 2026-09-15, twice). deploy-production.sh takes a timestamped
+    # copy before its rewrites; put the newest one back.
+    ENV_BACKUP="$(ls -1t "${ENV_FILE}".bak-* 2>/dev/null | head -1 || true)"
+    if [ -n "$ENV_BACKUP" ] && [ "$ENV_BACKUP" -nt "$PREVIOUS" ]; then
+      if cp "$ENV_BACKUP" "$ENV_FILE"; then
+        say "restored release metadata in ENV_FILE from $ENV_BACKUP"
+      else
+        say "WARNING: could not restore $ENV_FILE from $ENV_BACKUP — /health may report the failed commit"
+      fi
+    fi
     if [ -d "$ACTIVE" ]; then
       # Do not retain release metadata from the failed deploy when starting the
       # restored source. Older releases fall back to compose's safe `unknown` value.
