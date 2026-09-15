@@ -5,6 +5,7 @@ const AppVersion = require('../models/AppVersion');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx } = require('../services/audit-log');
 const { createAppVersionSchema, updateAppVersionSchema } = require('@dzhoof/shared');
+const { invalidateReleaseCaches } = require('../services/app-release-cache');
 
 // Admin-only app release metadata: /api/v1/admin/app-versions
 //
@@ -239,6 +240,32 @@ router.patch('/:id', async (req, res) => {
     return res.json({ success: true, data: after });
   } catch (err) {
     console.error('[app-versions] update error:', err.message || err);
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
+/**
+ * POST /cache/invalidate — drop the cached GitHub release lookup.
+ *
+ * Publishing a release changes what `/api/v1/app/version`, `/latest`, `/download` and
+ * `/download-url` should answer, but the GitHub release response is cached in Redis for
+ * ten minutes and nothing invalidated it. An operator therefore had to clear
+ * `ghrel:latest` by hand after every publish (documented in
+ * `docs/AI_AGENT_OPERATIONS_AR.md` §3), and a missed step meant the API kept offering
+ * the previous release. This makes the step explicit and auditable.
+ */
+router.post('/cache/invalidate', async (req, res) => {
+  try {
+    await invalidateReleaseCaches();
+    audit({
+      ...reqCtx(req),
+      action: 'APP_VERSION_CACHE_INVALIDATE',
+      resource: 'AppVersion',
+      changes: { after: { cacheKey: 'ghrel:latest' } },
+    });
+    return res.json({ success: true, invalidated: ['ghrel:latest'] });
+  } catch (err) {
+    console.error('[app-versions] cache invalidate error:', err.message || err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
 });
