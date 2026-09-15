@@ -33,12 +33,31 @@ export interface BatchRunOptions {
   label?: (item: unknown) => string;
   /** AbortSignal tied to the whole batch (e.g. task-level watchdog). */
   signal?: AbortSignal;
+  /**
+   * Called when an item exceeds `timeoutMs`, with that item's label. Use it to abort
+   * the I/O the worker started (see `withTimeout` above).
+   */
+  onTimeout?: (itemLabel: string) => void;
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number | undefined): Promise<T> {
+function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number | undefined,
+  onTimeout?: () => void,
+): Promise<T> {
   if (!timeoutMs || timeoutMs <= 0) return promise;
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
+      // Give the caller a chance to cancel the work it started. Rejecting the
+      // promise only surrenders the *result*: an in-flight HTTP response, stream or
+      // XML parse keeps running (and keeps holding memory) until it finishes on its
+      // own — which is how a timed-out source could still push the process toward the
+      // heap limit it was supposed to be protected from.
+      try {
+        if (onTimeout) onTimeout();
+      } catch {
+        // a cancellation hook must never break the batch
+      }
       reject(new Error(`Timed out after ${timeoutMs}ms`));
     }, timeoutMs);
     promise.then(
@@ -104,7 +123,15 @@ export async function runBoundedBatch<T>(
       }
       // Side effects (processedCount) are only applied for workers that finish
       // within the timeout — a late resolution after a timeout is discarded.
-      await withTimeout(worker(item), options.timeoutMs);
+      await withTimeout(worker(item), options.timeoutMs, () => {
+        if (options.onTimeout) {
+          try {
+            options.onTimeout(options.label ? options.label(item) : String(item));
+          } catch {
+            // callbacks must never break the batch
+          }
+        }
+      });
       stats.processedCount += 1;
     } catch (err) {
       recordError(item, err);

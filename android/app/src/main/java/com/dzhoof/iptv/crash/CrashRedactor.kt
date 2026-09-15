@@ -30,6 +30,17 @@ object CrashRedactor {
         Regex("((?:password|passwd|secret|token|api[_-]?key|authorization)\\s*[:=]\\s*)([\"']?)[^\\s,\"']+")
     private val BEARER_TOKEN = Regex("(Bearer\\s+)[A-Za-z0-9._~+/=-]+")
     private val JWT = Regex("\\beyJ[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{2,}\\b")
+    /** A `Cookie:`/`Set-Cookie:` header line can carry a session token verbatim. */
+    private val COOKIE_HEADER = Regex("((?:set-)?cookie\\s*:\\s*)[^\\r\\n]+", RegexOption.IGNORE_CASE)
+    /**
+     * Raw IPv4 addresses (the client's own or an upstream's) are not needed to reproduce a
+     * crash and are personal/operational data. A dotted version string is a rare false
+     * positive in throwable text ("1.2.3.4" does appear in version-tagged messages); the
+     * operations brief forbids shipping a raw IP, so privacy wins over that edge case.
+     * IPv6 is out of scope here and is covered by nothing else either — see the note in
+     * docs/DIAGNOSTICS_AND_CRASH_REPORTS.md.
+     */
+    private val IPV4 = Regex("\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b")
 
     /**
      * Returns [value] with credentials replaced by placeholders, truncated to [maxChars],
@@ -47,6 +58,8 @@ object CrashRedactor {
         text = SECRET_ASSIGNMENT.replace(text, "$1$2[redacted]")
         text = BEARER_TOKEN.replace(text, "$1[redacted]")
         text = JWT.replace(text, "[redacted-jwt]")
+        text = COOKIE_HEADER.replace(text, "$1[redacted]")
+        text = IPV4.replace(text, "[redacted-ip]")
         return text.take(maxChars).ifBlank { null }
     }
 

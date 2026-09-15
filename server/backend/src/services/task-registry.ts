@@ -75,7 +75,10 @@ async function dailyReportHandler(): Promise<TaskResult> {
       name: 'daily-report',
       status: result.ok ? 'completed' : 'failed',
       durationMs: Date.now() - start,
-      result: { recipients: result.recipients },
+      // `delivered` is what the SMTP path accepted; `recipients` is who was meant to
+      // receive it. Reporting the first as the second is how a total delivery
+      // failure was logged as success (2026-09-15).
+      result: { recipients: result.recipients, delivered: result.delivered ?? 0 },
       error: result.error || undefined,
     },
   ];
@@ -91,7 +94,12 @@ async function expiryAlertHandler(): Promise<TaskResult> {
       name: 'subscription-expiry-alert',
       status: result.ok ? 'completed' : 'failed',
       durationMs: Date.now() - start,
-      result: { sent: result.sent, inApp: result.inApp || 0 },
+      result: {
+        sent: result.sent,
+        inApp: result.inApp || 0,
+        emailDisabled: result.emailDisabled || 0,
+        emailFailed: result.emailFailed || 0,
+      },
       error: result.error || undefined,
     },
   ];

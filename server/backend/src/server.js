@@ -621,6 +621,13 @@ function buildVersionMetadata() {
     version: process.env.APP_VERSION || '0.0.0',
     commit: process.env.RELEASE_COMMIT || null,
     builtAt: process.env.RELEASE_BUILT_AT || null,
+    // The immutable identity of the image that is actually running. A commit SHA
+    // cannot distinguish two builds of the same commit (rebuilt, amended, or a
+    // locally patched image), so the deploy guard compares this value too.
+    // `imageDigest` is a registry digest and is only present when the image was
+    // pulled/pushed through a registry.
+    imageId: process.env.RELEASE_IMAGE_ID || null,
+    imageDigest: process.env.RELEASE_IMAGE_DIGEST || null,
   };
 }
 
@@ -640,6 +647,8 @@ app.get('/health/version', (req, res) => {
     version: build.version,
     commit: build.commit,
     builtAt: build.builtAt,
+    imageId: build.imageId,
+    imageDigest: build.imageDigest,
     environment: process.env.NODE_ENV || 'development',
     requestId: req.requestId,
   });
@@ -669,6 +678,8 @@ app.get('/health', async (req, res) => {
     release: {
       commit: build.commit,
       builtAt: build.builtAt,
+      imageId: build.imageId,
+      imageDigest: build.imageDigest,
     },
     requestId: req.requestId,
   };
@@ -701,11 +712,28 @@ app.get('/health', async (req, res) => {
       const telegramToken = tgToken || String(process.env.ALERT_TELEGRAM_BOT_TOKEN || '').trim();
       const telegramChatId = tgChat || String(process.env.ALERT_TELEGRAM_CHAT_ID || '').trim();
       const alertingConfigured = Boolean(webhookUrl || alertEmail || (telegramToken && telegramChatId));
+      // Per-channel truth, so a broken email channel cannot hide behind
+      // `alertingConfigured: true` (2026-09-15: the scheduler failed every alert
+      // email with `Missing credentials for "PLAIN"` while this endpoint said
+      // alerting was configured, because Telegram was set). Reason codes and
+      // booleans only — no value ever leaves this endpoint.
+      let notifications;
+      try {
+        const { getAlertChannelStatus } = require('./services/alert-notifier');
+        const channels = await getAlertChannelStatus();
+        notifications = {
+          anyDeliverable: channels.some((channel) => channel.configured),
+          channels,
+        };
+      } catch (error) {
+        notifications = { error: redactSensitiveText(error) };
+      }
       response.details = {
         uptime: process.uptime(),
         mongodb: healthy ? 'connected' : 'disconnected',
         redis: isRedisReady() ? 'connected' : 'disconnected',
         alertingConfigured,
+        notifications,
         ...(await collectHealthDetails()),
       };
     } catch (error) {

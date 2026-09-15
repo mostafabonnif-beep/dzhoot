@@ -10,6 +10,121 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
 
 ## [Unreleased]
 
+### Fixed (update metadata served no checksum — P0-1)
+
+- `GET /api/v1/app/version` returned `sha256: null` for v1.3.1 while the release
+  published a valid `dzhoof-tv-v1.3.1-official.apk.sha256`. Two causes, both fixed:
+  the host allowlist was missing `release-assets.githubusercontent.com` — the host
+  GitHub *currently* redirects a release asset download to — so every checksum fetch
+  died on the second hop; and a missing checksum was treated as "advertise the update
+  anyway". The checksum is now resolved from the signed provenance manifest when the
+  release has one (falling back to the `.sha256` asset), is cross-checked against the
+  APK asset (name, size, derived `versionCode`, package, optional pinned signer), and
+  an update whose checksum cannot be verified is **withheld**
+  (`updateAvailable: false`, `updateBlockedReason: "CHECKSUM_UNAVAILABLE"`) instead of
+  being offered as a download the client will refuse. `APP_UPDATE_REQUIRE_CHECKSUM`
+  (default `true`) is the deliberate escape hatch. The response now reports
+  `checksumSource` (`manifest` \| `sha256-asset` \| `db`) and `signerSha256`.
+- `POST /admin/app-versions` refuses to publish an **active** version without a valid
+  64-hex `sha256` (`errorCode: APP_VERSION_CHECKSUM_REQUIRED`); a checksum-less row may
+  still be published as a draft (`isActive: false`), and `PATCH` refuses to *activate*
+  one. Production carries such a legacy row (`AppVersion 1.2.2`), which the API now
+  withholds rather than serving unverifiable.
+- 23 new/updated cases in `src/__tests__/app-update.test.ts` (including a regression
+  test for the real `github.com → release-assets.githubusercontent.com` redirect chain,
+  which the previous mocks never exercised) and 6 in
+  `src/__tests__/admin-app-versions.test.ts`.
+
+### Fixed (Android CI failed before building)
+
+- The `android` job died in `android-actions/setup-android` with
+  `Warning: Failed to find package 'tools'` (run 34970591122). The action's default
+  `packages` value is `tools platform-tools`, and the legacy `tools` package no longer
+  exists upstream. The workflow now pins `packages: platform-tools` and
+  `cmdline-tools-version` explicitly, installs only `platforms;android-34` and
+  `build-tools;34.0.0`, prints `sdkmanager` diagnostics on failure, runs the same task
+  set the operations brief verifies (`:app:compileOfficialReleaseKotlin
+  :app:testStagingDebugUnitTest :app:lint` with `-PversionName`/`-PdzhoofApiUrl`), and
+  reads the JUnit XML instead of trusting Gradle's exit code
+  (`scripts/ci/verify-android-test-results.sh`, itself covered by
+  `scripts/ci/test-verify-android-test-results.sh`). The same `packages` fix is applied
+  to `android-release.yml` and `release-candidate.yml`, which carried the identical
+  latent failure.
+
+### Added (deploy provenance and post-deploy verification — P0-3)
+
+- `scripts/deploy/verify-commit-provenance.sh` refuses to deploy a commit that is not
+  an ancestor of an approved ref **or** whose required workflows (`DZ HOOF CI`,
+  `CodeQL Security Analysis`) are not green. Wired into `atomic-deploy.sh` before the
+  swap, so an unreviewed or untested commit cannot reach production.
+- `scripts/deploy/smoke-test.sh` runs the operations-brief checks after a deploy:
+  `/health`, `/health/live`, `/health/ready`, `/health/version`, the update contract
+  (an offered update must carry a verifiable checksum), the public page, the admin
+  shell, and the static chunks the served HTML references. It fails the deploy, which
+  triggers the existing rollback.
+- `/health` and `/health/version` now report `imageId`/`imageDigest`, and
+  `deploy-production.sh` persists them so "which image is actually running" is
+  answerable — a commit SHA cannot distinguish two builds of the same commit.
+- `deploy-production.sh` applies the release `Caddyfile` (validate + `SIGUSR1`
+  reload). It was bind-mounted but never reloaded, so a header or cache fix shipped in
+  a release stayed inactive until Caddy was restarted by hand.
+
+### Fixed (notification readiness was invisible — P1-2)
+
+- `Missing credentials for "PLAIN"` was logged for every alert while
+  `/health?details=true` reported `alertingConfigured: true` (Telegram was set). The
+  email service now exposes `getEmailReadiness()` (`ok` \| `dev_sink` \|
+  `missing_credentials` — never a credential), `sendEmail` refuses to attempt SMTP when
+  the channel cannot work and logs `ALERT_EMAIL_DISABLED` **once**, and `/health`
+  reports per-channel status (`notifications.channels` + `anyDeliverable`).
+- The daily report and expiry reminders counted failures as successes
+  (`sendEmail` never throws, and the result was discarded), so a total delivery failure
+  was logged as `completed`. Both now count what the SMTP path actually accepted, and
+  `ALL_ALERT_CHANNELS_FAILED` is emitted when every configured channel fails.
+
+### Added (EPG latency visibility — P1-4)
+
+- The refresh (77 sources, ~900k programmes, 284–344s) now logs and exposes
+  p50/p95/max plus the five slowest sources (`lastRefreshSlowestSources` in
+  `GET /api/v1/epg/status`), and raises `slow-epg-refresh` through the existing alert
+  channels when a run exceeds `EPG_SLOW_REFRESH_MS` (default 15 min) or RSS crosses
+  `EPG_HEAP_GUARD_MB`. Only source labels and durations are logged — never a source URL
+  or XML.
+- The HTTP request now honours `EPG_SOURCE_TIMEOUT_MS` (it had a second, hardcoded
+  120000 literal) and carries an `AbortSignal`, so a source that exceeds its timeout is
+  actually cancelled instead of holding its stream and buffers to completion
+  (`runBoundedBatch` gained `onTimeout`).
+
+### Changed (frontend request hygiene and cache policy — P1-3)
+
+- 75 `The Server Reference ID did not match the expected format` errors in 96h came from
+  external scans posting a fabricated `Next-Action` header, not from a stale build. New
+  `src/middleware.ts` rejects such a request with `400` (or `429` past a small per-client
+  budget) and logs one classified line — `errorCode`, route (no query string), method,
+  status, client class, request id, release commit — instead of an unattributable
+  framework error. Legitimate requests (including a POST without the header) are
+  untouched: the guard mirrors Next's own 42-character rule
+  (`src/lib/request-hygiene.ts`, 21 unit tests).
+- Every frontend response now carries `x-request-id` and `x-dzhoof-release`, and the
+  request id is forwarded to the API, so a frontend log line can be joined to the API
+  and Caddy logs.
+- Next.js answered app HTML with `s-maxage=31536000` (one year). The Caddyfile now sends
+  `no-store` for extension-less (document/RSC) paths while content-hashed
+  `/_next/static/*` keeps `immutable`; the smoke test asserts both.
+
+### Security (crash reports and diagnostics — P1-1)
+
+- The end-to-end redaction test found two secret classes that passed every rule:
+  `Cookie:`/`Set-Cookie:` header lines and raw IPv4 addresses. Both are now redacted on
+  the device (`CrashRedactor`) and on ingest (`redactSensitiveText`).
+- Crash reports now store the classification fields the diagnostics view needs:
+  `errorCode`, `correlationId` (falling back to the API request id, so no report is
+  orphaned), `feature`, `retryable`, `severity` — all bounded and validated, never free
+  text.
+- `scripts/ops/clear-transient-failed-units.sh` cleans the failed *transient* unit a
+  2026-09-13 alerting test left behind (dry-run by default, refuses to touch permanent
+  units).
+
 ### Fixed (mandatory updates were inert)
 
 - `GET /api/v1/app/version` now honours a deployment-wide minimum supported version:

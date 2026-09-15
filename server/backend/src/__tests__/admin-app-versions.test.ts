@@ -303,3 +303,133 @@ describe('PATCH /api/v1/admin/app-versions/:id', () => {
     expect(missing.status).toBe(404);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Publish gate: an active release must carry a verifiable checksum
+//
+// GET /api/v1/app/version withholds an update it cannot verify, and the Android
+// client refuses a null checksum outright. Publishing an active row without one
+// therefore shipped a release no device would ever install.
+// ---------------------------------------------------------------------------
+describe('admin app-versions route — checksum publish gate', () => {
+  it('refuses to publish an active version without a checksum', async () => {
+    const response = await request(buildApp())
+      .post('/api/v1/admin/app-versions')
+      .send(publishBody({ sha256: null }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorCode).toBe('APP_VERSION_CHECKSUM_REQUIRED');
+    expect(audit).not.toHaveBeenCalled();
+    expect(await AppVersion.countDocuments()).toBe(0);
+  });
+
+  it('refuses to publish an active version with an invalid checksum', async () => {
+    const response = await request(buildApp())
+      .post('/api/v1/admin/app-versions')
+      .send(publishBody({ sha256: 'deadbeef' }));
+
+    expect(response.status).toBe(400);
+    expect(await AppVersion.countDocuments()).toBe(0);
+  });
+
+  it('allows a checksum-less draft as long as it is inactive', async () => {
+    const response = await request(buildApp())
+      .post('/api/v1/admin/app-versions')
+      .send(publishBody({ sha256: null, isActive: false }));
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.isActive).toBe(false);
+    expect(response.body.data.sha256).toBeNull();
+  });
+
+  it('refuses to activate a version that has no checksum', async () => {
+    const created = await AppVersion.create({
+      versionName: '1.4.2',
+      versionCode: 10402,
+      apkFileName: 'b.apk',
+      apkFileSize: 200,
+      downloadUrl: APK_URL,
+      isActive: false,
+    });
+
+    const response = await request(buildApp())
+      .patch(`/api/v1/admin/app-versions/${created._id}`)
+      .send({ isActive: true });
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorCode).toBe('APP_VERSION_CHECKSUM_REQUIRED');
+
+    const stored = await AppVersion.findById(created._id).lean();
+    expect(stored?.isActive).toBe(false);
+  });
+
+  it('allows activating a version that carries a checksum', async () => {
+    const created = await AppVersion.create({
+      versionName: '1.4.2',
+      versionCode: 10402,
+      apkFileName: 'b.apk',
+      apkFileSize: 200,
+      downloadUrl: APK_URL,
+      sha256: SHA256,
+      isActive: false,
+    });
+
+    const response = await request(buildApp())
+      .patch(`/api/v1/admin/app-versions/${created._id}`)
+      .send({ isActive: true });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.isActive).toBe(true);
+  });
+
+  it('refuses to activate a legacy row that never had the isActive field set', async () => {
+    // A row inserted by a script/migration rather than through this API has no
+    // `isActive` field at all — it is not served today, so activating it must clear the
+    // same gate (the check is `!== true`, not `=== false`).
+    const created = await AppVersion.create({
+      versionName: '1.1.0',
+      versionCode: 10100,
+      apkFileName: 'legacy.apk',
+      apkFileSize: 200,
+      downloadUrl: APK_URL,
+      isActive: true,
+    });
+    await AppVersion.collection.updateOne({ _id: created._id }, { $unset: { isActive: '' } });
+
+    const response = await request(buildApp())
+      .patch(`/api/v1/admin/app-versions/${created._id}`)
+      .send({ isActive: true });
+
+    expect(response.status).toBe(400);
+    expect(response.body.errorCode).toBe('APP_VERSION_CHECKSUM_REQUIRED');
+  });
+
+  it('stores an uppercase checksum lowercase instead of failing later', async () => {
+    const response = await request(buildApp())
+      .post('/api/v1/admin/app-versions')
+      .send(publishBody({ versionName: '1.6.0', versionCode: 10600, sha256: SHA256.toUpperCase() }));
+
+    expect(response.status).toBe(201);
+    expect(response.body.data.sha256).toBe(SHA256);
+  });
+
+  it('still lets an operator edit a legacy active row that has no checksum', async () => {
+    // Production carries such rows (AppVersion 1.2.2). Refusing an unrelated edit
+    // would lock the operator out of fixing release notes.
+    const created = await AppVersion.create({
+      versionName: '1.2.2',
+      versionCode: 10202,
+      apkFileName: 'old.apk',
+      apkFileSize: 200,
+      downloadUrl: APK_URL,
+      isActive: true,
+    });
+
+    const response = await request(buildApp())
+      .patch(`/api/v1/admin/app-versions/${created._id}`)
+      .send({ releaseNotes: 'ملاحظات مصحّحة' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.releaseNotes).toBe('ملاحظات مصحّحة');
+  });
+});

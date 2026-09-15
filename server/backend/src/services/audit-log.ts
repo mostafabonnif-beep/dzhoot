@@ -45,6 +45,14 @@ export function redactSensitiveText(value: unknown, maxLength = 1000): string {
   // Signed JWTs (session, refresh and playback tokens) are base64url triples that
   // start with the base64 of `{"`.
   text = text.replace(/\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{2,}\b/g, '[redacted-jwt]');
+  // Cookie/Set-Cookie header lines carry a session token verbatim and were the one
+  // secret class the rules above never matched (found by the crash-report end-to-end
+  // test on 2026-09-15: `cookie: session=…` was stored intact).
+  text = text.replace(/((?:set-)?cookie\s*:\s*)[^\r\n]+/gi, '$1[redacted]');
+  // Raw IPv4 addresses are neither needed to reproduce a failure nor safe to keep.
+  // A dotted version string is a rare false positive in error text; privacy wins.
+  // IPv6 is not covered (see docs/DIAGNOSTICS_AND_CRASH_REPORTS.md).
+  text = text.replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[redacted-ip]');
   return text.slice(0, maxLength);
 }
 

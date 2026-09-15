@@ -10,6 +10,9 @@ jest.mock('../models/CrashReport', () => ({ create: jest.fn() }));
 // only assert that the route consults it before every hop.
 jest.mock('../utils/ssrf-guard', () => ({
   validateUrlForSSRF: jest.fn(async () => ({ safe: true, resolvedAddresses: ['140.82.121.4'] })),
+  // The checksum fetch pins the address the guard resolved (no rebinding window), so
+  // the mock must expose the same surface as the real module.
+  createPinnedLookup: jest.fn(() => undefined),
 }));
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -32,6 +35,11 @@ const {
   splitReleaseNotes,
   isAllowedDownloadUrl,
   pickLatestVersion,
+  requireChecksumFromEnv,
+  pickManifestAsset,
+  parseReleaseManifest,
+  validateManifestAgainstAsset,
+  GITHUB_ASSET_HOSTS,
 } = router._private;
 
 const axiosGet = axios.get as jest.Mock;
@@ -54,6 +62,9 @@ function dbVersion(overrides: Record<string, unknown> = {}) {
     isMandatory: false,
     minCompatibleVersion: 10000,
     releasedAt: new Date('2026-09-13T00:00:00Z'),
+    // A row published through the admin API always carries a checksum now
+    // (admin-app-versions publish gate); the route withholds one that does not.
+    sha256: SHA256,
     ...overrides,
   };
 }
@@ -167,6 +178,21 @@ describe('app download URL helpers', () => {
     expect(isAllowedDownloadUrl('https://evil.example.com/x.apk')).toBe(false);
     expect(isAllowedDownloadUrl('https://127.0.0.1/x.apk')).toBe(false);
     expect(isAllowedDownloadUrl('')).toBe(false);
+  });
+
+  it('allowlists every host GitHub actually redirects a release asset to', () => {
+    // Regression: GitHub answers 302 from github.com to
+    // release-assets.githubusercontent.com. That host was missing, so every
+    // checksum fetch died on the second hop and the API served `sha256: null`
+    // for a release that had a perfectly good `.sha256` asset (production,
+    // 2026-09-15). The suite did not catch it because the checksum helpers were
+    // mocked without the redirect. Keep this list in sync with
+    // `curl -sI <asset url>`.
+    expect(GITHUB_ASSET_HOSTS).toContain('github.com');
+    expect(GITHUB_ASSET_HOSTS).toContain('release-assets.githubusercontent.com');
+    expect(isAllowedDownloadUrl('https://release-assets.githubusercontent.com/x.apk')).toBe(true);
+    expect(isAllowedDownloadUrl('https://release-assets.githubusercontent.com/gh/o?token=abc')).toBe(true);
+    expect(isAllowedDownloadUrl('https://notgithub.example.com/x.apk')).toBe(false);
   });
 
   it('honors APP_UPDATE_ALLOWED_HOSTS and PUBLIC_BASE_URL hosts', () => {
@@ -386,8 +412,11 @@ describe('GET /api/v1/app/version GitHub source', () => {
     const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
 
     expect(response.status).toBe(200);
-    expect(response.body.updateAvailable).toBe(true);
+    // The checksum is null *and* the update is withheld: an APK a device cannot
+    // verify must not be advertised (see the P0-1 checksum contract suite).
     expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
   });
 
   it('refuses a checksum redirect to an untrusted host', async () => {
@@ -405,6 +434,7 @@ describe('GET /api/v1/app/version GitHub source', () => {
     const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
 
     expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
   });
 
   it('survives invalid release metadata without a 5xx', async () => {
@@ -564,5 +594,358 @@ describe('operator minimum supported version floor', () => {
     );
     expect(kept.body.latestVersion.minimumSupportedVersionCode).toBe(10400);
     expect(kept.body.mandatory).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Verified-checksum contract (P0-1)
+//
+// The production defect: GET /api/v1/app/version answered `updateAvailable: true`
+// with `latestVersion.sha256: null` for v1.3.1 even though the release published
+// `dzhoof-tv-v1.3.1-official.apk.sha256`. Two things were wrong and both are
+// covered here — the allowlist lost the redirect host, and a missing checksum was
+// treated as "advertise it anyway" instead of "refuse to serve an unverifiable APK".
+// ---------------------------------------------------------------------------
+
+const MANIFEST_NAME = 'dzhoof-tv-v1.4.2-official.release.json';
+const MANIFEST_URL = `${APK_URL.replace(/\.apk$/, '')}.release.json`;
+const ASSET_HOST = 'release-assets.githubusercontent.com';
+const SIGNER_SHA256 = '5938049a7b7eb803d7354efb96ca1989fdf17af1f62ff0e7fb68bd765920bb11';
+const OTHER_SIGNER_SHA256 = '1111111111111111111111111111111111111111111111111111111111111111';
+
+function releaseManifest(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    packageName: 'com.dzhoof.iptv',
+    versionName: '1.4.2',
+    versionCode: 10402,
+    releaseChannel: 'stable',
+    distribution: 'external_apk',
+    apkFileName: 'dzhoof-tv-v1.4.2-official.apk',
+    sizeBytes: 123456789,
+    sha256: SHA256,
+    signerSha256: SIGNER_SHA256,
+    minSdk: 28,
+    targetSdk: 34,
+    commit: 'abc1234',
+    builtAt: '2026-09-13T00:00:00Z',
+    ...overrides,
+  };
+}
+
+/** The same release, plus the provenance manifest the pipeline publishes with it. */
+function githubReleaseWithManifest(
+  manifestOverrides: Record<string, unknown> = {},
+  releaseOverrides: Record<string, unknown> = {},
+) {
+  const release = githubRelease(releaseOverrides) as { assets: unknown[] };
+  release.assets.push({ name: MANIFEST_NAME, size: 512, browser_download_url: MANIFEST_URL });
+  return { release, manifest: releaseManifest(manifestOverrides) };
+}
+
+/**
+ * Models the real asset flow: the URL on github.com answers 302 to a signed URL on
+ * release-assets.githubusercontent.com, which serves the bytes. The previous
+ * helpers returned the body directly, which is exactly why the stale allowlist
+ * slipped through CI.
+ */
+function serveRelease({
+  release,
+  sha256Body = `${SHA256}  apk\n`,
+  manifestBody = JSON.stringify(releaseManifest()),
+}: {
+  release: unknown;
+  sha256Body?: string;
+  manifestBody?: string;
+}) {
+  axiosGet.mockImplementation(async (url: unknown) => {
+    const target = String(url);
+    if (isGithubApiUrl(target)) return { status: 200, headers: {}, data: release };
+    if (target === SHA256_URL) {
+      return { status: 302, headers: { location: `https://${ASSET_HOST}/asset?name=sha256` }, data: '' };
+    }
+    if (target === MANIFEST_URL) {
+      return { status: 302, headers: { location: `https://${ASSET_HOST}/asset?name=manifest` }, data: '' };
+    }
+    if (target.startsWith(`https://${ASSET_HOST}/`)) {
+      return { status: 200, headers: {}, data: target.includes('name=manifest') ? manifestBody : sha256Body };
+    }
+    throw new Error(`unexpected fetch: ${target}`);
+  });
+}
+
+describe('GET /api/v1/app/version checksum contract (P0-1)', () => {
+  beforeEach(() => {
+    delete process.env.APP_UPDATE_REQUIRE_CHECKSUM;
+    delete process.env.APP_RELEASE_SIGNER_SHA256;
+  });
+
+  it('serves the checksum when the release only publishes a .sha256 asset', async () => {
+    serveRelease({ release: githubRelease() });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.status).toBe(200);
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+    expect(response.body.latestVersion.checksumSource).toBe('sha256-asset');
+    expect(response.body.updateBlockedReason).toBeUndefined();
+  });
+
+  it('follows the github.com -> release-assets.githubusercontent.com redirect chain', async () => {
+    serveRelease({ release: githubRelease() });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    // The regression assertion: without release-assets.githubusercontent.com in the
+    // allowlist this is null, and production served exactly that to every device.
+    expect(response.body.latestVersion.sha256).not.toBeNull();
+    expect(validateUrlForSSRF).toHaveBeenCalled();
+  });
+
+  it('prefers the provenance manifest and binds it to the APK asset', async () => {
+    const { release } = githubReleaseWithManifest();
+    serveRelease({ release });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+    expect(response.body.latestVersion.checksumSource).toBe('manifest');
+    expect(response.body.latestVersion.signerSha256).toBe(SIGNER_SHA256);
+  });
+
+  it('does not fall back to the weaker .sha256 asset when the manifest is inconsistent', async () => {
+    // A swapped APK with a manifest describing the original: the weak asset is still
+    // present and valid, and using it would hide the swap.
+    const { release, manifest } = githubReleaseWithManifest({ apkFileName: 'dzhoof-tv-v1.4.2-evil.apk' });
+    serveRelease({ release, manifestBody: JSON.stringify(manifest) });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
+  });
+
+  it('withholds the update when the checksum asset is malformed', async () => {
+    serveRelease({ release: githubRelease(), sha256Body: 'not-a-checksum\n' });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.status).toBe(200);
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.mandatory).toBe(false);
+    expect(response.body.isMandatory).toBe(false);
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
+    // The release is still described, so an operator can see what was withheld.
+    expect(response.body.latestVersion.versionCode).toBe(10402);
+  });
+
+  it('withholds the update when the checksum is truncated', async () => {
+    serveRelease({ release: githubRelease(), sha256Body: `${SHA256.slice(0, 63)}\n` });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.latestVersion.sha256).toBeNull();
+  });
+
+  it('withholds the update when the manifest size disagrees with the APK asset', async () => {
+    const { release, manifest } = githubReleaseWithManifest({ sizeBytes: 1 });
+    serveRelease({ release, manifestBody: JSON.stringify(manifest) });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+  });
+
+  it('withholds the update when the manifest is for another package', async () => {
+    const { release, manifest } = githubReleaseWithManifest({ packageName: 'com.example.other' });
+    serveRelease({ release, manifestBody: JSON.stringify(manifest) });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+  });
+
+  it('withholds the update when the manifest versionCode disagrees with its versionName', async () => {
+    const { release, manifest } = githubReleaseWithManifest({ versionCode: 10999 });
+    serveRelease({ release, manifestBody: JSON.stringify(manifest) });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+  });
+
+  it('withholds the update when the manifest cannot be parsed', async () => {
+    const { release } = githubReleaseWithManifest();
+    serveRelease({ release, manifestBody: '{ truncated' });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+  });
+
+  it('withholds an update signed by an unexpected certificate when one is pinned', async () => {
+    process.env.APP_RELEASE_SIGNER_SHA256 = SIGNER_SHA256;
+    const { release, manifest } = githubReleaseWithManifest({ signerSha256: OTHER_SIGNER_SHA256 });
+    serveRelease({ release, manifestBody: JSON.stringify(manifest) });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+  });
+
+  it('withholds an update whose manifest carries no signer when one is pinned', async () => {
+    // Fail-closed on the pin: dropping `signerSha256` from a re-signed APK's manifest
+    // must not be a way past a configured APP_RELEASE_SIGNER_SHA256.
+    process.env.APP_RELEASE_SIGNER_SHA256 = SIGNER_SHA256;
+    const { release, manifest } = githubReleaseWithManifest({ signerSha256: null });
+    serveRelease({ release, manifestBody: JSON.stringify(manifest) });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+  });
+
+  it('serves an update whose signer matches the pinned certificate', async () => {
+    process.env.APP_RELEASE_SIGNER_SHA256 = SIGNER_SHA256;
+    const { release } = githubReleaseWithManifest();
+    serveRelease({ release });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+  });
+
+  it('does not offer a downgrade', async () => {
+    const { release } = githubReleaseWithManifest();
+    serveRelease({ release });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10402');
+
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.mandatory).toBe(false);
+    // The release is still described, but nothing is offered.
+    expect(response.body.latestVersion.versionCode).toBe(10402);
+  });
+
+  it('honours APP_UPDATE_REQUIRE_CHECKSUM=false as an explicit escape hatch', async () => {
+    process.env.APP_UPDATE_REQUIRE_CHECKSUM = 'false';
+    serveRelease({ release: githubRelease(), sha256Body: 'not-a-checksum\n' });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.latestVersion.checksumSource).toBeNull();
+  });
+
+  it('still withholds when the operator asked for the checksum to be required', async () => {
+    process.env.APP_UPDATE_REQUIRE_CHECKSUM = 'true';
+    serveRelease({ release: githubRelease(), sha256Body: 'not-a-checksum\n' });
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(false);
+  });
+
+  it('withholds a database release published without a checksum', async () => {
+    // Rows predating the publish gate exist in production (AppVersion 1.2.2 has no
+    // sha256). The API must not hand such a row to a device.
+    withDb(dbVersion({ sha256: null }));
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10100');
+
+    expect(response.body.source).toBe('db');
+    expect(response.body.latestVersion.sha256).toBeNull();
+    expect(response.body.latestVersion.checksumSource).toBeNull();
+    expect(response.body.updateAvailable).toBe(false);
+    expect(response.body.updateBlockedReason).toBe('CHECKSUM_UNAVAILABLE');
+  });
+
+  it('serves a database release that carries a checksum', async () => {
+    withDb(dbVersion());
+
+    const response = await request(buildApp()).get('/api/v1/app/version?currentVersionCode=10300');
+
+    expect(response.body.updateAvailable).toBe(true);
+    expect(response.body.latestVersion.sha256).toBe(SHA256);
+    expect(response.body.latestVersion.checksumSource).toBe('db');
+  });
+});
+
+describe('checksum gate helpers', () => {
+  it('parses a manifest only when it is a JSON object', () => {
+    expect(parseReleaseManifest(JSON.stringify(releaseManifest()))).toMatchObject({ schemaVersion: 1 });
+    expect(parseReleaseManifest('[1,2,3]')).toBeNull();
+    expect(parseReleaseManifest('{')).toBeNull();
+    expect(parseReleaseManifest('')).toBeNull();
+    expect(parseReleaseManifest(undefined as unknown as string)).toBeNull();
+  });
+
+  it('reports every disagreement between a manifest and its APK asset', () => {
+    const apkAsset = { name: 'dzhoof-tv-v1.4.2-official.apk', size: 123456789 };
+
+    expect(validateManifestAgainstAsset(releaseManifest(), apkAsset)).toMatchObject({
+      ok: true,
+      sha256: SHA256,
+      signerSha256: SIGNER_SHA256,
+    });
+
+    const bad = validateManifestAgainstAsset(
+      releaseManifest({ sha256: 'nope', sizeBytes: 5, apkFileName: 'other.apk', packageName: 'x.y' }),
+      apkAsset,
+    );
+    expect(bad.ok).toBe(false);
+    expect(bad.sha256).toBeNull();
+    expect(bad.problems.join(' | ')).toContain('sha256');
+    expect(bad.problems.join(' | ')).toContain('sizeBytes');
+    expect(bad.problems.join(' | ')).toContain('apkFileName');
+    expect(bad.problems.join(' | ')).toContain('packageName');
+  });
+
+  it('rejects a manifest for an unsupported schema version', () => {
+    const verdict = validateManifestAgainstAsset(releaseManifest({ schemaVersion: 99 }), null);
+    expect(verdict.ok).toBe(false);
+    expect(verdict.problems.join(' ')).toContain('schemaVersion');
+  });
+
+  it('picks the manifest that belongs to the APK, not an unrelated one', () => {
+    const release = {
+      assets: [
+        { name: 'dzhoof-tv-v1.4.2-official.apk', browser_download_url: APK_URL },
+        { name: 'dzhoof-tv-v1.4.1-official.release.json', browser_download_url: 'https://github.com/old.json' },
+        { name: MANIFEST_NAME, browser_download_url: MANIFEST_URL },
+      ],
+    };
+    const apkAsset = { name: 'dzhoof-tv-v1.4.2-official.apk' };
+
+    expect(pickManifestAsset(release, apkAsset)).toMatchObject({ browser_download_url: MANIFEST_URL });
+    expect(pickManifestAsset(release, { name: 'dzhoof-tv-v9.9.9-official.apk' })).toBeNull();
+    expect(pickManifestAsset(release, null)).toBeNull();
+  });
+
+  it('requires a checksum unless the operator explicitly opts out', () => {
+    delete process.env.APP_UPDATE_REQUIRE_CHECKSUM;
+    expect(requireChecksumFromEnv()).toBe(true);
+
+    for (const off of ['false', 'FALSE', '0', 'no', 'off']) {
+      process.env.APP_UPDATE_REQUIRE_CHECKSUM = off;
+      expect(requireChecksumFromEnv()).toBe(false);
+    }
+
+    process.env.APP_UPDATE_REQUIRE_CHECKSUM = 'true';
+    expect(requireChecksumFromEnv()).toBe(true);
+    delete process.env.APP_UPDATE_REQUIRE_CHECKSUM;
   });
 });

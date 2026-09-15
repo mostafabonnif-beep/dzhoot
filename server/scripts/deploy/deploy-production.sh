@@ -102,6 +102,20 @@ run "tag api current" docker tag "dzhoof-api:${BUILD_TAG}" "dzhoof-api:current" 
 run "build frontend" docker build -f Dockerfile.frontend --build-arg "APP_VERSION=${APP_VERSION}" --build-arg "RELEASE_COMMIT=${RELEASE_COMMIT}" --build-arg "RELEASE_BUILT_AT=${RELEASE_BUILT_AT}" --build-arg "NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL:-https://iptv.ld-11.net}" -t "dzhoof-frontend:${BUILD_TAG}" . || die "frontend build failed"
 run "tag frontend current" docker tag "dzhoof-frontend:${BUILD_TAG}" "dzhoof-frontend:current" || die "frontend tag failed"
 
+# Identity of the image just built. A commit SHA is not enough: two builds of the
+# same commit produce different images, and only the image id proves which bytes are
+# running. Persisted into ENV_FILE below so /health/version can be checked after the
+# fact, and so a rollback restores the right pair.
+RELEASE_IMAGE_ID="$(docker inspect -f '{{.Id}}' dzhoof-api:current 2>/dev/null || true)"
+# A missing id must stop the deploy, not silently keep the previous value in ENV_FILE:
+# two builds of the same commit would then compare equal at the verification step below
+# and a rebuild could masquerade as the reviewed release.
+[ -n "$RELEASE_IMAGE_ID" ] || die "could not read the id of dzhoof-api:current — cannot record the release image"
+RELEASE_IMAGE_DIGEST="$(docker inspect -f '{{range .RepoDigests}}{{println .}}{{end}}' dzhoof-api:current 2>/dev/null | head -n 1 || true)"
+RELEASE_FRONTEND_IMAGE_ID="$(docker inspect -f '{{.Id}}' dzhoof-frontend:current 2>/dev/null || true)"
+export RELEASE_IMAGE_ID RELEASE_IMAGE_DIGEST RELEASE_FRONTEND_IMAGE_ID
+say "release images: api=${RELEASE_IMAGE_ID:-<unknown>} frontend=${RELEASE_FRONTEND_IMAGE_ID:-<unknown>} digest=${RELEASE_IMAGE_DIGEST:-<none>}"
+
 step "3b/7  Point compose at :current (old refs recorded above for rollback)"
 if [ "$APPLY" -eq 1 ]; then
   # Back up the env file (0600) before the in-place sed rewrites, so a bad edit
@@ -130,6 +144,21 @@ if [ "$APPLY" -eq 1 ]; then
     else
       printf 'RELEASE_BUILT_AT=%s\n' "$RELEASE_BUILT_AT" >> "$ENV_FILE"
     fi
+    # Image identity, for the same reason: a manual `docker compose up -d` resolves
+    # the release metadata from this file, and /health/version must keep reporting
+    # the image that is actually running.
+    persist_env() {
+      local key="$1" value="$2"
+      [ -n "$value" ] || return 0
+      if grep -q "^${key}=" "$ENV_FILE"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$ENV_FILE"
+      else
+        printf '%s=%s\n' "$key" "$value" >> "$ENV_FILE"
+      fi
+    }
+    persist_env RELEASE_IMAGE_ID "$RELEASE_IMAGE_ID"
+    persist_env RELEASE_IMAGE_DIGEST "$RELEASE_IMAGE_DIGEST"
+    persist_env RELEASE_FRONTEND_IMAGE_ID "$RELEASE_FRONTEND_IMAGE_ID"
     say "release metadata persisted to ENV_FILE (${RELEASE_COMMIT})"
   fi
 else
@@ -138,6 +167,28 @@ fi
 
 step "4/7  Compose up (api, frontend, scheduler) — caddy/mongo/redis untouched"
 run "compose up" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" up -d --no-deps api frontend scheduler
+
+step "4b/7  Apply the Caddyfile from this release"
+# The Caddyfile is bind-mounted (./Caddyfile:/etc/caddy/Caddyfile:ro in
+# docker-compose.production.yml) and the atomic swap replaces the directory it is
+# mounted from, but Caddy is deliberately NOT recreated by step 4 and runs with its
+# admin API disabled (`admin off`), so nothing applied a changed Caddyfile: a cache
+# or header fix shipped in a release would silently stay inactive until someone
+# restarted Caddy by hand (verified 2026-09-15). Validate first, then reload with
+# SIGUSR1 — Caddy re-reads its config file and keeps the running config when the new
+# one is invalid.
+if [ "$APPLY" -eq 1 ]; then
+  run "caddy validate" docker exec dzhoof-caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile \
+    || die "the Caddyfile in this release is invalid — refusing to continue"
+  run "caddy reload (SIGUSR1)" docker kill --signal=USR1 dzhoof-caddy \
+    || die "Caddy did not accept the reload signal — the release Caddyfile is not active"
+  run "sleep" sleep 3
+  run "caddy running" sh -c 'docker inspect -f "{{.State.Running}}" dzhoof-caddy | grep -qx true' \
+    || die "caddy is not running after the reload"
+  say "Caddyfile applied from $PWD/Caddyfile"
+else
+  say "[dry-run] would validate and reload the Caddyfile (SIGUSR1, admin API is off)"
+fi
 
 step "5/7  Health verification"
 run "sleep" sleep 20
@@ -150,9 +201,25 @@ DOMAIN="$(sed -n 's/^DOMAIN=//p' "$ENV_FILE" | tr -d '"' | tr -d "'")"
 run "docker health api" sh -c 'docker inspect -f "{{.State.Health.Status}}" dzhoof-api | grep -qx healthy' || die "dzhoof-api not healthy after compose up"
 run "public health" curl -fsS "https://${DOMAIN}/health" || die "public health check failed after deploy"
 if [ "$RELEASE_COMMIT" != "unknown" ]; then
-  run "release trace health" sh -c "curl -fsS 'https://${DOMAIN}/health' | grep -F '\"commit\":\"${RELEASE_COMMIT}\"' >/dev/null"
+  run "release trace health" sh -c "curl -fsS 'https://${DOMAIN}/health' | grep -F '\"commit\":\"${RELEASE_COMMIT}\"' >/dev/null" \
+    || die "the running API does not report the deployed commit (${RELEASE_COMMIT})"
+fi
+# The commit alone does not prove which image is running (a rebuild of the same
+# commit is a different image). Compare the image id the build just produced.
+if [ -n "${RELEASE_IMAGE_ID:-}" ]; then
+  run "release trace image" sh -c "curl -fsS 'https://${DOMAIN}/health/version' | grep -F '\"imageId\":\"${RELEASE_IMAGE_ID}\"' >/dev/null" \
+    || die "the running API does not report the image that was just built (${RELEASE_IMAGE_ID})"
 fi
 run "details health" sh -c "curl -fsS 'https://${DOMAIN}/health?details=true' | head -c 400; echo"
+# Full post-deploy smoke: the four health endpoints, the update contract (an offered
+# update must carry a verifiable checksum), the public page, the admin shell and the
+# static chunks the served HTML references. A failure here fails the deploy, which
+# makes atomic-deploy.sh restore the previous release.
+SMOKE_ENV=(DZHOOF_DOMAIN="$DOMAIN")
+if [ "$RELEASE_COMMIT" != "unknown" ]; then SMOKE_ENV+=(EXPECTED_COMMIT="$RELEASE_COMMIT"); fi
+if [ -n "${RELEASE_IMAGE_ID:-}" ]; then SMOKE_ENV+=(EXPECTED_IMAGE_ID="$RELEASE_IMAGE_ID"); fi
+run "post-deploy smoke test" env "${SMOKE_ENV[@]}" ./scripts/deploy/smoke-test.sh \
+  || die "post-deploy smoke test failed — the release is not healthy"
 run "compose ps" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
 
 step "6/7  Scheduler smoke (must NOT crash with OOM)"

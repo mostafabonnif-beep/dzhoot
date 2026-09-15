@@ -15,6 +15,12 @@ const CrashReport = require('../models/CrashReport');
 function buildApp() {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
+  // Mirrors server.js: every request carries a request id, which the crash-report
+  // route uses as the correlation id when a client cannot supply one.
+  app.use((req: any, _res, next) => {
+    req.requestId = 'test-request-id';
+    next();
+  });
   app.use('/api/v1/app', router);
   return app;
 }
@@ -127,5 +133,127 @@ describe('POST /api/v1/app/crash-report — no secrets reach storage', () => {
     const stored = await CrashReport.findById(response.body.id).lean();
     expect(stored.stackTrace.length).toBeLessThanOrEqual(50000);
     expect(stored.stackTrace).toContain('IllegalStateException: boom');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// End-to-end privacy + correlation contract (P1-1)
+//
+// The device redacts first (CrashRedactor) and the server redacts again on ingest.
+// This suite is the server half: it posts a report whose every free-text field is
+// loaded with a secret, then asserts that no listed secret class survives anywhere in
+// the stored document, and that the report is classifiable/joinable without reading
+// that text.
+// ---------------------------------------------------------------------------
+describe('crash report end-to-end: no secret class survives, correlation is stored', () => {
+  /** Every string field of a stored document, so nothing can hide in an unexpected key. */
+  function allStrings(value: unknown, acc: string[] = []): string[] {
+    if (typeof value === 'string') acc.push(value);
+    else if (Array.isArray(value)) value.forEach((entry) => allStrings(entry, acc));
+    else if (value && typeof value === 'object') {
+      Object.values(value as Record<string, unknown>).forEach((entry) => allStrings(entry, acc));
+    }
+    return acc;
+  }
+
+  const SECRETS = {
+    password: 'SuperSecret1',
+    token: 'playback-token-9f8e7d6c5b4a',
+    cookie: 'session=abc123def456ghi789',
+    authorization: 'Bearer eyJhbGciOiJIUzI1NiJ9.payloadpart.signaturepart',
+    xtreamAccount: 'dz-user',
+    rawIp: '185.199.108.153',
+  };
+
+  it('stores nothing that the operations brief forbids', async () => {
+    const response = await post({
+      deviceId: 'device-e2e',
+      appVersion: '1.3.1',
+      appVersionCode: 10301,
+      platform: 'android-tv',
+      exceptionType: 'java.net.SocketTimeoutException',
+      exceptionMessage:
+        `failed ${XTREAM_QUERY_URL} with Authorization: ${SECRETS.authorization}` +
+        ` and Cookie: ${SECRETS.cookie} from 185.199.108.153`,
+      stackTrace: [
+        `java.io.IOException: 185.199.108.153:8080 refused`,
+        `\tat com.dzhoof.iptv.data.remote.XtreamApi.fetch(XtreamApi.kt:120)`,
+        `password=${SECRETS.password}`,
+        `token=${SECRETS.token}`,
+        `\tat http://${SECRETS.xtreamAccount}:${SECRETS.password}@185.199.108.153:8080/live/`,
+      ].join('\n'),
+      threadName: 'OkHttp Dispatcher',
+      screen: 'player',
+    });
+
+    expect(response.status).toBe(201);
+    const stored = await CrashReport.findById(response.body.id).lean();
+    expect(stored).not.toBeNull();
+
+    const storedText = allStrings(stored).join('\n');
+    for (const [name, secret] of Object.entries(SECRETS)) {
+      expect({ leaked: name, secret }).toEqual({ leaked: name, secret }); // keeps the label in the failure output
+      expect(storedText.toLowerCase()).not.toContain(secret.toLowerCase());
+    }
+    // Sanity: the report is still useful.
+    expect(storedText).toContain('XtreamApi.kt:120');
+  });
+
+  it('stores the correlation fields that make a report classifiable', async () => {
+    const response = await post({
+      deviceId: 'device-correlation',
+      appVersion: '1.3.1',
+      appVersionCode: 10301,
+      platform: 'android-tv',
+      errorCode: 'UPDATE_CHECK_NETWORK',
+      correlationId: 'corr-1234',
+      feature: 'app-update',
+      retryable: true,
+      severity: 'warning',
+      exceptionType: 'java.io.IOException',
+      exceptionMessage: 'network down',
+    });
+
+    expect(response.status).toBe(201);
+    const stored = await CrashReport.findById(response.body.id).lean();
+
+    expect(stored).toMatchObject({
+      errorCode: 'UPDATE_CHECK_NETWORK',
+      correlationId: 'corr-1234',
+      feature: 'app-update',
+      retryable: true,
+      severity: 'warning',
+      appVersion: '1.3.1',
+      platform: 'android-tv',
+    });
+  });
+
+  it('falls back to the API request id so a report is never orphaned', async () => {
+    const response = await post({
+      deviceId: 'device-no-correlation',
+      exceptionType: 'java.io.IOException',
+      exceptionMessage: 'no correlation id supplied',
+    });
+
+    const stored = await CrashReport.findById(response.body.id).lean();
+    expect(stored?.correlationId).toBe('test-request-id');
+    expect(stored?.errorCode).toBeNull();
+    expect(stored?.retryable).toBeNull();
+  });
+
+  it('rejects an unknown severity and a non-boolean retryable instead of storing free text', async () => {
+    const response = await post({
+      deviceId: 'device-bad-fields',
+      severity: 'catastrophic; DROP',
+      retryable: 'maybe',
+      errorCode: 'x'.repeat(200),
+      exceptionType: 'java.io.IOException',
+    });
+
+    const stored = await CrashReport.findById(response.body.id).lean();
+    expect(stored?.severity).toBeNull();
+    expect(stored?.retryable).toBeNull();
+    // Bounded, not stored whole.
+    expect((stored?.errorCode || '').length).toBeLessThanOrEqual(64);
   });
 });

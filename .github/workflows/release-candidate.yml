@@ -30,6 +30,13 @@ jobs:
           java-version: '17'
 
       - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+        with:
+          # See .github/workflows/ci.yml: the action's default `packages` value
+          # includes the removed legacy `tools` package and fails the job.
+          packages: 'platform-tools'
+          cmdline-tools-version: '14742923'
+          accept-android-sdk-licenses: 'true'
+          log-accepted-android-sdk-licenses: 'false'
 
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-34" "build-tools;34.0.0"

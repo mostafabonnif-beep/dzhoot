@@ -13,7 +13,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * codes activated yesterday (total + per reseller), new users, active subscriptions.
  * No secrets, no PII beyond what admins already see in the panel.
  */
-export async function sendDailyOpsReport(): Promise<{ ok: boolean; recipients: number; error?: string }> {
+export async function sendDailyOpsReport(): Promise<{
+  ok: boolean;
+  recipients: number;
+  /** Recipients the SMTP path actually accepted. `ok` is false when this is 0. */
+  delivered?: number;
+  error?: string;
+}> {
   try {
     const now = new Date();
     const yesterdayStart = new Date(now.getTime() - DAY_MS);
@@ -55,13 +61,35 @@ export async function sendDailyOpsReport(): Promise<{ ok: boolean; recipients: n
       activeSubs: String(activeSubs),
     };
 
+    // Count what was actually delivered. The previous version discarded the result
+    // and always returned `ok: true`, so the scheduler logged
+    // "'Daily Operations Report' completed" while every recipient's mail failed
+    // (2026-09-15: two admins, zero emails, job reported success).
+    const delivered: string[] = [];
+    const failed: string[] = [];
     for (const to of recipients) {
-      await sendEmail({ to, subject, template: 'daily-report', variables });
+      const res = await sendEmail({ to, subject, template: 'daily-report', variables });
+      if (res.ok) delivered.push(to);
+      else failed.push(`${to}${res.skipped ? ' (email channel disabled)' : ''}`);
     }
-    return { ok: true, recipients: recipients.length };
+    if (delivered.length === 0) {
+      // The job error string is persisted in the task history, so it carries a count
+      // and the reason code only — never the recipient addresses.
+      const reason = failed.length
+        ? `${failed.length} recipient(s) rejected by the email channel`
+        : 'no recipients configured';
+      console.error(
+        `[ops-report] daily report was NOT delivered to ${recipients.length} recipient(s): ${reason}`,
+      );
+      return { ok: false, recipients: recipients.length, delivered: 0, error: reason };
+    }
+    if (failed.length) {
+      console.warn(`[ops-report] daily report partially delivered: ${delivered.length}/${recipients.length}`);
+    }
+    return { ok: true, recipients: recipients.length, delivered: delivered.length };
   } catch (err: any) {
     console.error('[ops-report] daily report error:', err);
-    return { ok: false, recipients: 0, error: err?.message || String(err) };
+    return { ok: false, recipients: 0, delivered: 0, error: err?.message || String(err) };
   }
 }
 
@@ -71,7 +99,16 @@ export async function sendDailyOpsReport(): Promise<{ ok: boolean; recipients: n
  */
 export async function sendExpiryAlerts(
   withinDays = 3,
-): Promise<{ ok: boolean; sent: number; inApp?: number; error?: string }> {
+): Promise<{
+  ok: boolean;
+  sent: number;
+  inApp?: number;
+  /** Recipients whose email was skipped because the channel is not usable. */
+  emailDisabled?: number;
+  /** Recipients whose email was attempted and rejected by the SMTP server. */
+  emailFailed?: number;
+  error?: string;
+}> {
   try {
     const now = new Date();
     const horizon = new Date(now.getTime() + withinDays * DAY_MS);
@@ -88,6 +125,8 @@ export async function sendExpiryAlerts(
 
     let sent = 0;
     let inApp = 0;
+    let emailDisabled = 0;
+    let emailFailed = 0;
     for (const sub of subs) {
       const user = userMap.get(String(sub.userId));
       if (!user) continue;
@@ -126,7 +165,9 @@ export async function sendExpiryAlerts(
       const emailDeliverable = email && !/\.invalid$/i.test(email.split('@')[1] || '');
       if (emailDeliverable) {
         try {
-          await sendEmail({
+          // `sendEmail` never throws (it returns {ok:false}), so the old try/catch
+          // could not fire and `sent += 1` counted failures as successes.
+          const res = await sendEmail({
             to: email,
             subject: 'تنبيه: اشتراكك يقترب من الانتهاء',
             template: 'subscription-expiry',
@@ -136,8 +177,11 @@ export async function sendExpiryAlerts(
               expiresAt: expiryDate,
             },
           });
-          sent += 1;
+          if (res.ok) sent += 1;
+          else if (res.skipped) emailDisabled += 1;
+          else emailFailed += 1;
         } catch (e: any) {
+          emailFailed += 1;
           console.error(`[ops-report] expiry email failed for ${email}:`, e?.message || e);
         }
       }
@@ -145,7 +189,13 @@ export async function sendExpiryAlerts(
       // Mark the day so a second run does not duplicate the reminder.
       await Subscription.updateOne({ _id: sub._id }, { $set: { lastExpiryNoticeOn: today } });
     }
-    return { ok: true, sent, inApp };
+    if (emailDisabled || emailFailed) {
+      console.warn(
+        `[ops-report] expiry emails: ${sent} delivered, ${emailFailed} failed, ` +
+          `${emailDisabled} skipped (email channel disabled)`,
+      );
+    }
+    return { ok: true, sent, inApp, emailDisabled, emailFailed };
   } catch (err: any) {
     console.error('[ops-report] expiry alerts error:', err);
     return { ok: false, sent: 0, error: err?.message || String(err) };

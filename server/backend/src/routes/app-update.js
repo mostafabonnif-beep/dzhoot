@@ -5,7 +5,9 @@ const rateLimit = require('express-rate-limit');
 const AppVersion = require('../models/AppVersion');
 const { CacheService } = require('../services/cache');
 const { appVersionQuerySchema, buildErrorReport } = require('@dzhoof/shared');
-const { validateUrlForSSRF } = require('../utils/ssrf-guard');
+const https = require('https');
+const http = require('http');
+const { validateUrlForSSRF, createPinnedLookup } = require('../utils/ssrf-guard');
 // Shared demo-code guard (same strength rules + live-credential collision check).
 const { resolvePublicDemoCode } = require('./config');
 
@@ -96,11 +98,22 @@ const updateCheckLimiter = rateLimit({
 // operator's own PUBLIC_BASE_URL host and an explicit allowlist are added so a
 // self-hosted mirror keeps working. Anything else is dropped from the response
 // (fail-closed) so a poisoned DB row can never point a device at an untrusted host.
-const DEFAULT_DOWNLOAD_HOSTS = [
+//
+// `release-assets.githubusercontent.com` is where GitHub *currently* sends release
+// downloads: the asset URL on github.com answers 302 to a signed URL on that host.
+// Leaving it out was the production defect of 2026-09-15 — every checksum fetch
+// followed one hop and then failed the allowlist, so
+// GET /api/v1/app/version kept answering `sha256: null` while the release carried a
+// valid `.sha256` asset. Keep the GitHub hosts in sync with the redirect chain
+// (`curl -sI <asset url>`).
+const GITHUB_ASSET_HOSTS = [
   'github.com',
   'objects.githubusercontent.com',
   'github-releases.githubusercontent.com',
+  'release-assets.githubusercontent.com',
 ];
+
+const DEFAULT_DOWNLOAD_HOSTS = [...GITHUB_ASSET_HOSTS];
 
 function allowedDownloadHosts(req) {
   const hosts = new Set(DEFAULT_DOWNLOAD_HOSTS);
@@ -229,6 +242,11 @@ function toPublicLatestVersion(latest, req) {
     // Fail-closed: an off-allowlist or non-HTTPS URL is never handed to a device.
     downloadUrl: isAllowedDownloadUrl(latest.downloadUrl, req) ? latest.downloadUrl : null,
     sha256: latest.sha256 || null,
+    // Provenance of the checksum. `checksumSource` is null when nothing could be
+    // verified, so a client (and an operator) can tell "no checksum" apart from
+    // "checksum from a source I trust".
+    checksumSource: latest.sha256 ? latest.checksumSource || 'db' : null,
+    signerSha256: latest.signerSha256 || null,
     sizeBytes,
     releaseNotesList: splitReleaseNotes(latest.releaseNotes),
     publishedAt,
@@ -282,11 +300,92 @@ function pickSha256Asset(release, apkAsset) {
   return release.assets.find((a) => a && a.name === `${apkAsset.name}.sha256` && a.browser_download_url) || null;
 }
 
-const sha256Cache = new CacheService('ghsha:', 600); // 10 minutes, same window as the release cache
+/**
+ * The release pipeline also publishes `<apk-base>.release.json` — the provenance
+ * manifest described in docs/RELEASE_PROVENANCE.md. It is the only source that binds
+ * versionName, versionCode, apkFileName, sizeBytes, sha256 and the signing
+ * certificate together, so it is preferred over the bare `.sha256` asset.
+ */
+const RELEASE_MANIFEST_SUFFIX = '.release.json';
+const RELEASE_MANIFEST_SCHEMA_VERSION = 1;
+const EXPECTED_PACKAGE_NAME = process.env.GH_APP_PACKAGE_NAME || 'com.dzhoof.iptv';
+
+/**
+ * Optional pin for the production signing certificate (the `signerSha256` the release
+ * manifest records). When set, a release signed by any other key is refused here as
+ * well as on the device — a re-signed APK must never be offered silently.
+ */
+function expectedSignerSha256() {
+  return normalizeSha256(process.env.APP_RELEASE_SIGNER_SHA256);
+}
+
+function pickManifestAsset(release, apkAsset) {
+  if (!release || !Array.isArray(release.assets) || !apkAsset) return null;
+  if (!String(apkAsset.name).toLowerCase().endsWith('.apk')) return null;
+  const manifestName = `${apkAsset.name.slice(0, -'.apk'.length)}${RELEASE_MANIFEST_SUFFIX}`;
+  return release.assets.find((a) => a && a.name === manifestName && a.browser_download_url) || null;
+}
+
+/** Parses a manifest body; `null` means "unusable", never "trust it anyway". */
+function parseReleaseManifest(text) {
+  if (typeof text !== 'string' || !text.trim()) return null;
+  try {
+    const raw = JSON.parse(text);
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Binds a manifest's claims to the asset a device will actually download. Any
+ * disagreement — swapped APK, wrong size, another package, a versionCode that does
+ * not match its version name, a truncated checksum — means the identity of the
+ * bytes cannot be proven, so the caller must treat the release as unverifiable.
+ */
+function validateManifestAgainstAsset(manifest, apkAsset) {
+  const problems = [];
+  if (Number(manifest.schemaVersion) !== RELEASE_MANIFEST_SCHEMA_VERSION) {
+    problems.push(`unsupported schemaVersion (${manifest.schemaVersion})`);
+  }
+  if (manifest.packageName !== EXPECTED_PACKAGE_NAME) {
+    problems.push(`packageName is not ${EXPECTED_PACKAGE_NAME}`);
+  }
+  const sha256 = normalizeSha256(manifest.sha256);
+  if (!sha256) problems.push('sha256 is not 64 lowercase hex characters');
+
+  const manifestVersionName = normalizeVersion(manifest.versionName);
+  if (!manifestVersionName) {
+    problems.push('versionName is missing');
+  } else if (versionNameToCode(manifestVersionName) !== Number(manifest.versionCode)) {
+    problems.push(
+      `versionCode ${manifest.versionCode} does not match versionName ${manifestVersionName}`,
+    );
+  }
+  if (apkAsset) {
+    if (manifest.apkFileName !== apkAsset.name) problems.push('apkFileName does not match the APK asset');
+    if (Number(manifest.sizeBytes) !== Number(apkAsset.size)) {
+      problems.push('sizeBytes does not match the APK asset');
+    }
+  }
+  return {
+    ok: problems.length === 0,
+    problems,
+    sha256,
+    signerSha256: normalizeSha256(manifest.signerSha256),
+  };
+}
+
+const checksumCache = new CacheService('ghsha:', 600); // 10 minutes, same window as the release cache
+// Bumped when the cached value's shape changes, so entries written by an older
+// build (which stored a bare string) are ignored instead of misread as verified.
+const CHECKSUM_CACHE_VERSION = 2;
 
 /**
  * Downloads one small text asset, following redirects manually so *every hop* is
  * checked against the HTTPS allowlist and the SSRF guard before it is requested.
+ * NOTE: the hop after github.com is `release-assets.githubusercontent.com` — keep
+ * that host in GITHUB_ASSET_HOSTS or every checksum silently resolves to null.
  */
 async function fetchTextFollowingValidatedRedirects(url, { maxRedirects = 3, timeout = 8000, maxBytes = 4096 } = {}) {
   let current = url;
@@ -294,6 +393,17 @@ async function fetchTextFollowingValidatedRedirects(url, { maxRedirects = 3, tim
     if (!isAllowedDownloadUrl(current)) return null;
     const ssrf = await validateUrlForSSRF(current);
     if (!ssrf.safe) return null;
+
+    // Connect to the address the guard actually validated. Resolving again inside
+    // axios would let a DNS answer change between the check and the request (rebinding
+    // TOCTOU) for an allowlisted host.
+    const parsedHop = new URL(current);
+    const pinnedLookup = createPinnedLookup(ssrf.resolvedAddresses || []);
+    const hopAgent = pinnedLookup
+      ? parsedHop.protocol === 'https:'
+        ? new https.Agent({ lookup: pinnedLookup })
+        : new http.Agent({ lookup: pinnedLookup })
+      : undefined;
 
     let response;
     try {
@@ -304,6 +414,8 @@ async function fetchTextFollowingValidatedRedirects(url, { maxRedirects = 3, tim
         maxBodyLength: maxBytes,
         responseType: 'text',
         maxRedirects: 0,
+        httpAgent: parsedHop.protocol === 'http:' ? hopAgent : undefined,
+        httpsAgent: parsedHop.protocol === 'https:' ? hopAgent : undefined,
         validateStatus: (status) => status >= 200 && status < 400,
       });
     } catch {
@@ -324,17 +436,110 @@ async function fetchTextFollowingValidatedRedirects(url, { maxRedirects = 3, tim
   return null;
 }
 
-/** SHA-256 for a GitHub release, read from its published `.sha256` asset. Best-effort. */
-async function fetchReleaseSha256(candidate) {
-  if (!candidate || !candidate.sha256AssetUrl) return null;
-  const cacheKey = `v${candidate.versionCode}`;
-  const cached = await sha256Cache.get(cacheKey);
-  if (typeof cached === 'string' && cached) return cached;
+function warnChecksumUnavailable(candidate, reason) {
+  console.warn(
+    `[app-update] checksum unavailable for ${candidate?.versionName || candidate?.versionCode || 'release'}: ${reason}`,
+  );
+}
 
-  const text = await fetchTextFollowingValidatedRedirects(candidate.sha256AssetUrl);
-  const sha256 = normalizeSha256(text);
-  if (sha256) await sha256Cache.set(cacheKey, sha256);
-  return sha256;
+/**
+ * Resolves a *verified* SHA-256 for a GitHub candidate, or `null`.
+ *
+ * Order of trust: the provenance manifest, then the published `.sha256` asset.
+ * A manifest that exists but cannot be read or disagrees with its APK is a failure,
+ * not a reason to fall back — silently downgrading to the weaker source would hide
+ * exactly the tampering this check exists to catch.
+ */
+async function loadGithubChecksum(candidate) {
+  if (!candidate) return null;
+  const apkAsset = { name: candidate.apkFileName, size: candidate.apkFileSize };
+
+  if (candidate.manifestAssetUrl) {
+    const manifest = parseReleaseManifest(
+      await fetchTextFollowingValidatedRedirects(candidate.manifestAssetUrl),
+    );
+    if (!manifest) {
+      warnChecksumUnavailable(candidate, 'the release manifest could not be read');
+      return null;
+    }
+    const verdict = validateManifestAgainstAsset(manifest, apkAsset);
+    if (!verdict.ok) {
+      warnChecksumUnavailable(candidate, `the release manifest is inconsistent (${verdict.problems.join('; ')})`);
+      return null;
+    }
+    const expectedSigner = expectedSignerSha256();
+    // Fail closed on the pin: a manifest that carries no (or an unreadable) signer
+    // must not slip past a configured `APP_RELEASE_SIGNER_SHA256` — dropping the field
+    // is exactly what a re-signed APK would do.
+    if (expectedSigner && verdict.signerSha256 !== expectedSigner) {
+      warnChecksumUnavailable(
+        candidate,
+        verdict.signerSha256
+          ? 'the release was signed by an unexpected certificate'
+          : 'the release manifest does not carry the pinned signing certificate',
+      );
+      return null;
+    }
+    return {
+      sha256: verdict.sha256,
+      source: 'manifest',
+      signerSha256: verdict.signerSha256,
+      sizeBytes: Number(manifest.sizeBytes) || null,
+      apkFileName: manifest.apkFileName || null,
+    };
+  }
+
+  if (candidate.sha256AssetUrl) {
+    const sha256 = normalizeSha256(await fetchTextFollowingValidatedRedirects(candidate.sha256AssetUrl));
+    if (sha256) {
+      return { sha256, source: 'sha256-asset', signerSha256: null, sizeBytes: null, apkFileName: candidate.apkFileName || null };
+    }
+    warnChecksumUnavailable(candidate, 'the .sha256 asset could not be read');
+    return null;
+  }
+
+  warnChecksumUnavailable(candidate, 'the release publishes neither a manifest nor a .sha256 asset');
+  return null;
+}
+
+/** Cached wrapper around {@link loadGithubChecksum}. */
+async function fetchReleaseSha256(candidate) {
+  if (!candidate) return null;
+  const cacheKey = `v${candidate.versionCode}`;
+  const cached = await checksumCache.get(cacheKey);
+  if (cached && typeof cached === 'object' && cached.cacheVersion === CHECKSUM_CACHE_VERSION && cached.sha256) {
+    return cached;
+  }
+  const resolved = await loadGithubChecksum(candidate);
+  if (resolved) await checksumCache.set(cacheKey, { ...resolved, cacheVersion: CHECKSUM_CACHE_VERSION });
+  return resolved;
+}
+
+const REQUIRE_CHECKSUM_ENV = 'APP_UPDATE_REQUIRE_CHECKSUM';
+/**
+ * Whether an update may be advertised without a verified checksum.
+ *
+ * Default `true` (fail-closed): an APK a device cannot verify is worse than no
+ * update at all — the client refuses it, and the operator learns nothing. Set
+ * `APP_UPDATE_REQUIRE_CHECKSUM=false` only as a deliberate, temporary escape hatch
+ * while a release is fixed.
+ */
+function requireChecksumFromEnv() {
+  const raw = String(process.env[REQUIRE_CHECKSUM_ENV] ?? 'true')
+    .trim()
+    .toLowerCase();
+  return !['0', 'false', 'no', 'off'].includes(raw);
+}
+
+const warnedAboutUnverifiedVersions = new Set();
+function warnChecksumGate(versionKey) {
+  const key = String(versionKey || 'unknown');
+  if (warnedAboutUnverifiedVersions.has(key)) return;
+  warnedAboutUnverifiedVersions.add(key);
+  console.warn(
+    `[app-update] withholding update to ${key}: no verified checksum was available ` +
+      `(set ${REQUIRE_CHECKSUM_ENV}=false to advertise it anyway)`,
+  );
 }
 
 const MIN_SUPPORTED_ENV = 'APP_MIN_SUPPORTED_VERSION_CODE';
@@ -388,6 +593,9 @@ function mapDbVersion(req, version) {
       ? version.distribution
       : 'external_apk',
     sha256: normalizeSha256(version.sha256),
+    // Recorded so the response can state where a checksum came from; a row without
+    // one stays null and the route refuses to advertise the update (see the gate).
+    checksumSource: normalizeSha256(version.sha256) ? 'db' : null,
     // Optional per-version platform scope; absent means "all platforms".
     platforms: Array.isArray(version.platforms) ? version.platforms : null,
     source: 'db',
@@ -411,7 +619,10 @@ function mapGitHubVersion(release, apkAsset) {
     releaseChannel: 'stable',
     distribution: 'external_apk',
     sha256: null,
+    checksumSource: null,
+    signerSha256: null,
     sha256AssetUrl: pickSha256Asset(release, apkAsset)?.browser_download_url || null,
+    manifestAssetUrl: pickManifestAsset(release, apkAsset)?.browser_download_url || null,
     platforms: null,
     source: 'github',
   };
@@ -494,20 +705,40 @@ router.get('/version', updateCheckLimiter, async (req, res) => {
 
     // Only pay for the checksum lookup when the device can actually act on it.
     if (updateAvailable && !latest.sha256) {
-      latest.sha256 = await fetchReleaseSha256(latest);
+      const resolved = await fetchReleaseSha256(latest);
+      if (resolved) {
+        latest.sha256 = resolved.sha256;
+        latest.checksumSource = resolved.source;
+        latest.signerSha256 = resolved.signerSha256 || null;
+      }
     }
 
+    // Release gate: never advertise an update whose bytes cannot be verified. The
+    // Android client refuses a null/invalid checksum anyway (UpdateVerifier), so
+    // advertising one only produces a download that must be thrown away.
+    const checksumRequired = requireChecksumFromEnv();
+    const blockedByChecksum = updateAvailable && checksumRequired && !latest.sha256;
+    if (blockedByChecksum) warnChecksumGate(latest.versionName || latest.versionCode);
+
+    const updateOffered = updateAvailable && !blockedByChecksum;
     const publicLatest = toPublicLatestVersion(latest, req);
 
     return res.json({
       success: true,
-      updateAvailable,
-      mandatory,
+      updateAvailable: updateOffered,
+      mandatory: updateOffered ? mandatory : false,
       currentVersionCode,
       latestVersion: publicLatest,
+      ...(blockedByChecksum
+        ? {
+            updateBlockedReason: 'CHECKSUM_UNAVAILABLE',
+            message:
+              'A newer release exists but its checksum could not be verified, so it is not offered yet',
+          }
+        : {}),
       // Legacy top-level fields kept for shipped clients (AppUpdater reads isMandatory).
       currentVersion: currentVersionCode,
-      isMandatory: mandatory,
+      isMandatory: updateOffered ? mandatory : false,
       releaseNotes: publicLatest.releaseNotes,
       downloadUrl: publicLatest.downloadUrl,
       minCompatibleVersion: publicLatest.minCompatibleVersion,
@@ -697,6 +928,22 @@ function cleanReportNumber(value) {
   return Math.floor(parsed);
 }
 
+const CRASH_SEVERITIES = ['critical', 'error', 'warning', 'info'];
+
+/** Only a known label is stored; anything else becomes null rather than free text. */
+function cleanReportSeverity(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return CRASH_SEVERITIES.includes(normalized) ? normalized : null;
+}
+
+/** Tri-state: an unknown/missing value stays null instead of defaulting to false. */
+function cleanReportBoolean(value) {
+  if (value === true || value === false) return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return null;
+}
+
 router.post('/crash-report', crashReportLimiter, async (req, res) => {
   try {
     const body = req.body || {};
@@ -713,6 +960,14 @@ router.post('/crash-report', crashReportLimiter, async (req, res) => {
       totalRamMb: cleanReportNumber(body.totalRamMb),
       freeRamMb: cleanReportNumber(body.freeRamMb),
       freeStorageMb: cleanReportNumber(body.freeStorageMb),
+      // Correlation. A client that cannot name a request id still gets one: the API's
+      // own request id is the value the log line for this very upload carries, so a
+      // report is never orphaned.
+      correlationId: cleanReportField(body.correlationId || body.requestId, 64) || req.requestId || null,
+      errorCode: cleanReportField(body.errorCode, 64),
+      feature: cleanReportField(body.feature, 60),
+      retryable: cleanReportBoolean(body.retryable),
+      severity: cleanReportSeverity(body.severity),
       exceptionType: cleanReportText(body.exceptionType, 200),
       exceptionMessage: cleanReportText(body.exceptionMessage, 2000),
       stackTrace: cleanReportText(body.stackTrace, 50000),
@@ -733,6 +988,7 @@ module.exports._private = {
   compareVersions,
   versionNameToCode,
   minSupportedVersionFromEnv,
+  requireChecksumFromEnv,
   getCanonicalDownloadUrl,
   isStaleLocalDownloadUrl,
   publicDownloadUrl,
@@ -743,4 +999,9 @@ module.exports._private = {
   isAllowedDownloadUrl,
   pickLatestVersion,
   toPublicLatestVersion,
+  pickSha256Asset,
+  pickManifestAsset,
+  parseReleaseManifest,
+  validateManifestAgainstAsset,
+  GITHUB_ASSET_HOSTS,
 };

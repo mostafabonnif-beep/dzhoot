@@ -16,12 +16,14 @@
     encode gzip zstd
     tls {$ACME_EMAIL}
 
-    # File access log, watched by the fail2ban jail `dzhoof-http` on the
-    # production host (/etc/fail2ban/jail.d/dzhoof-http.local: 6x 401/403 in 60s
-    # -> 1h ban). NOTE: that jail is configured on the host, NOT shipped in this
-    # repo — only scripts/security/secure-ssh-setup.sh defines the sshd jail.
-    # A fresh host must create the jail for this log to be watched.
-    # TODO: ship the jail definition under scripts/security/.
+    # File access log, watched by the fail2ban jail `dzhoof-http`.
+    # The jail and its filter ARE shipped now: scripts/security/fail2ban/ +
+    # scripts/security/setup-fail2ban-http-jail.sh (idempotent, validates the filter
+    # against this log before reloading). It bans 6x 401/403 in 60s for an hour, and —
+    # since 2026-09-15 — also a client that posts fabricated `Next-Action` headers
+    # (a real server-action id is 42 characters; the scanner that produced the 75
+    # `Server Reference ID did not match the expected format` errors sent "x"/"0").
+    # A fresh host must run that script for this log to be watched.
     log {
         output file /data/access.log {
             roll_size 50MiB
@@ -45,6 +47,26 @@
 
     handle {
         reverse_proxy frontend:3000
+
+        # --- Cache policy for app routes (2026-09-15) ---------------------------
+        # Next.js answers prerendered HTML with `s-maxage=31536000` (one year, no
+        # max-age). Nothing in this stack is behind a CDN today, so the risk is
+        # latent — but a shared cache that honoured that header would pin HTML that
+        # names action ids and `/_next/static/...` chunk paths from an older release
+        # than the chunks themselves: the mixed-release failure the atomic deploy
+        # otherwise prevents (observed header on /, /admin, /login, /register).
+        #
+        # Extension-less paths are the app's routes (HTML / RSC payloads). Every
+        # genuinely cacheable asset is content-hashed and lives under /_next/static/
+        # or carries a file extension, so it never matches this matcher and keeps
+        # Next.js's own `public, max-age=31536000, immutable`.
+        # `/_next/*` is excluded explicitly: `/_next/image` has no dot in its path
+        # either, and it is a genuinely cacheable optimizer response.
+        @documentRoute {
+            path_regexp documentRoute ^/[^.]*$
+            not path /_next/*
+        }
+        header @documentRoute >Cache-Control "no-store"
     }
 
     # Defense-in-depth headers. CSP remains application-owned because Next.js

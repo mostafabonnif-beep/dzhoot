@@ -17,6 +17,17 @@ export interface ICrashReportDocument extends Document {
   totalRamMb: number | null;
   freeRamMb: number | null;
   freeStorageMb: number | null;
+  /**
+   * Correlation fields (2026-09-15). A report must be joinable to the request that
+   * produced it and classifiable without reading its free text: the previous shape
+   * stored only device/version context, so a crash could not be grouped by failure
+   * class or matched to a request id in the API log.
+   */
+  errorCode: string | null;
+  correlationId: string | null;
+  feature: string | null;
+  retryable: boolean | null;
+  severity: string | null;
   exceptionType: string | null;
   exceptionMessage: string | null;
   stackTrace: string | null;
@@ -38,6 +49,14 @@ const crashReportSchema = new Schema<ICrashReportDocument>(
     totalRamMb: { type: Number, default: null },
     freeRamMb: { type: Number, default: null },
     freeStorageMb: { type: Number, default: null },
+    // Bounded, indexed, and never free text: `errorCode` groups reports, `correlationId`
+    // joins one to the API request that produced it, `severity`/`retryable` are what the
+    // diagnostics view filters on.
+    errorCode: { type: String, trim: true, maxlength: 64, default: null, index: true },
+    correlationId: { type: String, trim: true, maxlength: 64, default: null, index: true },
+    feature: { type: String, trim: true, maxlength: 60, default: null },
+    retryable: { type: Boolean, default: null },
+    severity: { type: String, trim: true, maxlength: 20, default: null },
     exceptionType: { type: String, trim: true, maxlength: 200, default: null },
     exceptionMessage: { type: String, trim: true, maxlength: 2000, default: null },
     stackTrace: { type: String, default: null },

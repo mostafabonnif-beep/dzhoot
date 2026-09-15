@@ -1,0 +1,24 @@
+# fail2ban jail for the DZ HOOF web layer (Caddy).
+#
+# Install to /etc/fail2ban/jail.d/dzhoof-http.local — see
+# scripts/security/setup-fail2ban-http-jail.sh (it substitutes the real log path and
+# validates the filter before reloading).
+#
+# Why this exists: the zone that produced the 75 `Server Reference ID did not match the
+# expected format` errors hammered the web layer with 78 malformed POSTs and was never
+# banned — the jail only watched 401/403, so every 404/405 probe was invisible.
+# See scripts/security/fail2ban/filter.d/dzhoof-http.conf.
+
+[dzhoof-http]
+enabled  = true
+filter   = dzhoof-http
+backend  = pyinotify
+# Docker volume of the Caddy container. The compose project name prefixes it, so the
+# installer substitutes the path it actually finds (default: server_caddy_data).
+logpath  = /var/lib/docker/volumes/server_caddy_data/_data/access.log
+maxretry = 6
+findtime = 60
+bantime  = 3600
+# Ban on the DOCKER-USER chain so the rule also applies to traffic that is DNAT-ed to
+# the containers (the INPUT chain alone would not see it).
+action   = iptables-multiport[name=dzhoof-http, port="http,https", chain=DOCKER-USER]
