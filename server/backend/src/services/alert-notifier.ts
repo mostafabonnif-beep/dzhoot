@@ -107,6 +107,56 @@ function formatTelegramText(payload: AlertPayload, now: Date): string {
   return lines.join('\n').slice(0, TELEGRAM_MSG_LIMIT);
 }
 
+export interface AlertChannelStatus {
+  channel: 'webhook' | 'email' | 'telegram';
+  /** True when the channel is configured AND can be attempted. */
+  configured: boolean;
+  /** Machine-readable state; never contains a credential. */
+  reason: 'ok' | 'not_configured' | 'missing_credentials' | 'dev_sink';
+}
+
+/**
+ * Per-channel state for `/health?details=true` and the admin diagnostics page.
+ *
+ * Reported values are booleans and reason codes only — an operator learns *that* a
+ * channel is down and *why* (no credentials, not configured) without any value ever
+ * being echoed. `sendOperationalAlert` skips a channel that is not configured, so
+ * this is also the honest answer to "will an alert reach a human?".
+ */
+export async function getAlertChannelStatus(): Promise<AlertChannelStatus[]> {
+  const [webhookUrl, alertEmail, telegramToken, telegramChatId] = await Promise.all([
+    getWebhookUrl(),
+    getAlertEmail(),
+    getTelegramBotToken(),
+    getTelegramChatId(),
+  ]);
+
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getEmailReadiness } = require('./email') as typeof import('./email');
+  const email = await getEmailReadiness();
+
+  return [
+    {
+      channel: 'webhook',
+      configured: Boolean(webhookUrl),
+      reason: webhookUrl ? 'ok' : 'not_configured',
+    },
+    {
+      channel: 'email',
+      // An alert email is only useful when the transport can send it: a recipient
+      // with no credentials is the exact state that produced
+      // `Missing credentials for "PLAIN"` on every alert.
+      configured: Boolean(alertEmail) && email.configured,
+      reason: !alertEmail ? 'not_configured' : email.reason,
+    },
+    {
+      channel: 'telegram',
+      configured: Boolean(telegramToken && telegramChatId),
+      reason: telegramToken && telegramChatId ? 'ok' : 'not_configured',
+    },
+  ];
+}
+
 export async function sendOperationalAlert(payload: AlertPayload): Promise<boolean> {
   let webhookUrl = await getWebhookUrl();
   const alertEmail = await getAlertEmail();
@@ -121,6 +171,9 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
 
   const safeMessage = redactSensitiveText(payload.message);
   let delivered = false;
+  // Whether any channel was actually attempted. Distinct from "configured": a
+  // channel can be configured and still be skipped (an invalid webhook URL).
+  let attempted = false;
 
   // Channel 1: webhook (if configured). A broken webhook must not silence email.
   if (webhookUrl) {
@@ -145,6 +198,7 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
         );
         webhookUrl = '';
       } else {
+        attempted = true;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 5000);
         try {
@@ -180,6 +234,7 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
 
   // Channel 2: email to the operator (same Brevo path as the daily report).
   if (alertEmail && !delivered) {
+    attempted = true;
     try {
       const { sendEmail } = require('./email');
       const res = await sendEmail({
@@ -194,7 +249,11 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
         },
       });
       if (res.ok) delivered = true;
-      else console.error(`[alert] email delivery failed: ${redactSensitiveText(res.error || '')}`);
+      // A disabled channel is a known state, already logged once as
+      // ALERT_EMAIL_DISABLED by the email service; do not repeat it per alert.
+      else if (res.error !== 'ALERT_EMAIL_DISABLED') {
+        console.error(`[alert] email delivery failed: ${redactSensitiveText(res.error || '')}`);
+      }
     } catch (error: any) {
       console.error(`[alert] email channel error: ${redactSensitiveText(error?.message || error)}`);
     }
@@ -203,6 +262,7 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
   // Channel 3: Telegram (bot token + chat id from the admin panel). HTML
   // formatting, right-to-left friendly, truncated to Telegram's limit.
   if (telegramToken && telegramChatId && !delivered) {
+    attempted = true;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
     try {
@@ -229,6 +289,16 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
     }
   }
 
+  // Escalate when the alert went nowhere: every configured channel failed, so the
+  // operator is currently blind to this event. Emitting a distinct, greppable event
+  // is the only signal available when the alerting path itself is what is broken.
+  if (!delivered && attempted) {
+    console.error(
+      `[alert] ALL_ALERT_CHANNELS_FAILED event=${payload.event} severity=${payload.severity} — ` +
+        'no configured channel accepted this alert; check the channel status in /health?details=true',
+    );
+  }
+
   if (delivered) lastSentAt.set(key, now);
   return delivered;
 }
@@ -237,4 +307,4 @@ export function clearAlertCooldowns(): void {
   lastSentAt.clear();
 }
 
-module.exports = { sendOperationalAlert, clearAlertCooldowns };
+module.exports = { sendOperationalAlert, clearAlertCooldowns, getAlertChannelStatus };

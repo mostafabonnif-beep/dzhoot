@@ -11,8 +11,10 @@ import { sendExpiryAlerts } from '../services/ops-report-service';
 // @clients.dzhoof.invalid address, so an email-only reminder reaches nobody —
 // the reminder has to land in the in-app inbox as well.
 
+// `sendEmail` resolves a result object (`{ ok }`) and never throws; the reminder
+// service counts a reminder as sent only when that result says so.
 jest.mock('../services/email', () => ({
-  sendEmail: jest.fn().mockResolvedValue(undefined),
+  sendEmail: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 import { sendEmail } from '../services/email';

@@ -75,6 +75,51 @@ class CrashRedactorTest {
     }
 
     @Test
+    fun `strips a cookie header`() {
+        val redacted = assertRedacted(
+            "okhttp3.Request: Cookie: session=abc123def456; csrf=zzz",
+            "abc123def456",
+        )
+
+        assertFalse(redacted.contains("csrf=zzz"))
+        assertTrue(redacted.contains("Cookie: [redacted]"))
+    }
+
+    @Test
+    fun `strips a Set-Cookie header`() {
+        val redacted = assertRedacted(
+            "response header Set-Cookie: playback_token=topsecret",
+            "topsecret",
+        )
+
+        assertTrue(redacted.contains("[redacted]"))
+    }
+
+    @Test
+    fun `strips raw IPv4 addresses`() {
+        // The operations brief forbids shipping a raw IP off the device: it identifies the
+        // viewer's connection or an upstream host and is never needed to reproduce a crash.
+        val redacted = assertRedacted(
+            "SocketTimeoutException: failed to connect to /185.199.108.153 (port 8080)",
+            "185.199.108.153",
+        )
+
+        assertTrue(redacted.contains("[redacted-ip]"))
+        assertTrue(redacted.contains("SocketTimeoutException"))
+    }
+
+    @Test
+    fun `strips credentials and the IP from a playback URL in one pass`() {
+        val redacted = assertRedacted(
+            "ExoPlaybackException at http://dz-user:SuperSecret1@185.199.108.153:8080/live/",
+            "SuperSecret1",
+        )
+
+        assertFalse(redacted.contains("dz-user"))
+        assertFalse(redacted.contains("185.199.108.153"))
+    }
+
+    @Test
     fun `keeps the failure site so the report stays actionable`() {
         val redacted = CrashRedactor.redact(
             "java.lang.IllegalStateException: playlist $XTREAM_QUERY_URL\n" +

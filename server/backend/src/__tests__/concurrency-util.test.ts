@@ -111,3 +111,64 @@ describe('runBoundedBatch (audit-remediation-v1)', () => {
     expect(stats.failedCount).toBe(2);
   });
 });
+
+describe('runBoundedBatch onTimeout (request cancellation)', () => {
+  it('notifies the caller when an item times out, so it can abort its I/O', async () => {
+    // Regression: rejecting the promise only discarded the *result*. The in-flight
+    // HTTP response, stream and XML parse kept running (and holding memory) until the
+    // provider finished, which is the opposite of what the timeout is protecting.
+    const aborted: string[] = [];
+    const seen: string[] = [];
+
+    const stats = await runBoundedBatch(
+      ['hung-source'],
+      1,
+      async () => {
+        await new Promise(() => {});
+        return 0;
+      },
+      {
+        timeoutMs: 20,
+        label: (item) => String(item),
+        onTimeout: (label) => aborted.push(label),
+        onError: (label) => seen.push(label),
+      },
+    );
+
+    expect(aborted).toEqual(['hung-source']);
+    expect(seen).toEqual(['hung-source']);
+    expect(stats.failedCount).toBe(1);
+    expect(stats.processedCount).toBe(0);
+  });
+
+  it('a throwing onTimeout callback never breaks the batch', async () => {
+    const stats = await runBoundedBatch(
+      ['a'],
+      1,
+      async () => {
+        await new Promise(() => {});
+        return 0;
+      },
+      {
+        timeoutMs: 20,
+        onTimeout: () => {
+          throw new Error('callback exploded');
+        },
+      },
+    );
+
+    expect(stats.failedCount).toBe(1);
+  });
+
+  it('does not call onTimeout when the item finishes in time', async () => {
+    const aborted: string[] = [];
+
+    const stats = await runBoundedBatch(['quick'], 1, async () => 1, {
+      timeoutMs: 500,
+      onTimeout: (label) => aborted.push(label),
+    });
+
+    expect(aborted).toEqual([]);
+    expect(stats.processedCount).toBe(1);
+  });
+});

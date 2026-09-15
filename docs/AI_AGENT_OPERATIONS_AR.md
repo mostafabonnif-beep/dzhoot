@@ -28,6 +28,12 @@ cd <repo>/android
 ```
 
 - عند تغيير واجهة Repository أو ViewModel constructor، حدّث الـfakes في `app/src/test` **في نفس الالتزام**.
+- **فخ حزمة SDK القديمة** (`sdkmanager-tools-removed`): لا تطلب حزمة باسم `tools` من
+  `sdkmanager`؛ لم تعد موجودة و`android-actions/setup-android` يطلبها افتراضياً
+  (`packages: 'tools platform-tools'`) فيفشل الـjob قبل البناء. في هذا المستودع تُحدَّد
+  `packages: platform-tools` و`cmdline-tools-version` صراحةً — وأي workflow جديد يجب أن
+  يفعل الشيء نفسه. تحقّق أن الاختبارات **نُفّذت فعلاً** عبر نتائج XML
+  (`scripts/ci/verify-android-test-results.sh`) لا عبر نجاح gradle وحده.
 - **فخ التصدير الجزئي** (`partial-source-overlay`): عند التحقق على مضيف بعيد، صدّر `app/src` **كاملاً** من الفرع الحالي؛ تصدير شجرة جزئية من checkout قديم يخلط مراجعتين ويُظهر أخطاء وهمية «overrides nothing».
 
 ## 3) إصدار أندرويد (الوسم هو المصدر الوحيد للإصدار)
@@ -49,11 +55,46 @@ cd <repo>/android
 - نمط الدمج: فرع → PR → انتظار CI أخضر → دمج (`merge_method=merge`). **لا دمج مع CI أحمر.**
 - سجل الإصدارات: تحقّق من `https://iptv.ld-11.net/` (بوابة المشترك) قبل تشفير رابطها في QR.
 
+## 4-ب) بوابات النشر والتحقق (أُضيفت 2026-09-15)
+
+قبل أي نشر، هذه الفحوص إلزامية وكلها تفشل-مغلقة (fail-closed):
+
+```bash
+# 1) هل هذا الكوميت مسموح له أن يصل الإنتاج؟ (سلالة + CI أخضر)
+./scripts/deploy/verify-commit-provenance.sh <full-sha>
+#    يرفض: كوميت ليس سلفاً لـ main، أو DZ HOOF CI / CodeQL غير خضراء.
+#    تجاوزات واعية فقط: ALLOW_UNVERIFIED_REF=1 / REQUIRE_CI=0 / REQUIRED_WORKFLOWS=...
+
+# 2) بعد النشر: فحص شامل (صحة + عقد التحديث + الواجهة العامة + لوحة الإدارة + chunks)
+DZHOOF_DOMAIN=iptv.ld-11.net ./scripts/deploy/smoke-test.sh
+#    أي فشل هنا يُفشل النشر => atomic-deploy.sh يسترجع الإصدار السابق تلقائياً.
+```
+
+`atomic-deploy.sh` يستدعي البوابة الأولى قبل التبديل، و`deploy-production.sh` يستدعي
+الثانية بعد رفع الحاويات — فلا حاجة لتشغيلهما يدوياً في المسار الطبيعي.
+
+عقد التحديث (P0-1): `/api/v1/app/version` لا يعرض تحديثاً بلا **checksum مُتحقَّق منه**.
+`checksumSource` تقول من أين جاء (manifest / sha256-asset / db)، ومتى تعذّر التحقق يعود
+الرد بـ`updateAvailable: false` و`updateBlockedReason: CHECKSUM_UNAVAILABLE`.
+`APP_UPDATE_REQUIRE_CHECKSUM=false` هو مخرج طوارئ مؤقت فقط. السبب الجذري الأصلي كان نقص
+`release-assets.githubusercontent.com` في قائمة المضيفين المسموحة — لا تُزلها.
+
+هل التنبيهات تصل؟ `/health?details=true` يعرض `notifications.channels` لكل قناة
+(`ok` / `not_configured` / `missing_credentials` / `dev_sink`) و`anyDeliverable`.
+البريد غير المهيّأ يُسجّل مرة واحدة كـ`ALERT_EMAIL_DISABLED`، وعند فشل كل القنوات يُسجَّل
+`ALL_ALERT_CHANNELS_FAILED`.
+
+تنظيف الوحدات الفاشلة العابرة على الخادم (بموافقة تشغيلية، وابدأ بـdry-run):
+
+```bash
+./scripts/ops/clear-transient-failed-units.sh --dry-run
+```
+
 ## 5) المحاذير (تُنتهك كثيراً — اقرأها مرتين)
 
 1. **الإنتاج يُنشر نشراً ذرّياً** من `/opt/dzhoot-releases/<sha>`؛ أي تعديل مباشر على كود الإنتاج **يُمسح** عند النشر التالي. عدّل في المستودع، ثم انشر رسمياً.
 2. **تغييرات خادم الإنتاج (نشر `server/`) تحتاج موافقة الإنسان** — لا تنشر بلا إذن صريح.
-3. **لا تطبع أسراراً**: كلمات المرور، التوكنات، مفاتيح التوقيع. خزّنها مؤقتاً بـ600 واحذفها بعد الاستعمال.
+3. **لا تطبع أسراراً**: كلمات المرور، التوكنات، مفاتيح التوقيع. خزّنها مؤقتاً بـ600 واحذفها بعد الاستعمال. يُضاف إليها الآن: ترويسات الكوكي والعناوين IPv4 الخام — تُنقَّح في تقارير الأعطال على الجهاز وعلى الخادم معاً (راجع `docs/DIAGNOSTICS_AND_CRASH_REPORTS.md`).
 4. لا تدمج PR مع CI أحمر، ولا تتخطَّ الاختبارات لأن «التصريف نجح».
 5. لا تعِد بناء سطح تنقّل موجود: `SideNavRail` موصول في `ComposeMainActivity` (الوضع الأفقي).
 

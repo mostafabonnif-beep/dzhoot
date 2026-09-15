@@ -144,3 +144,66 @@ describe('EpgService auto-disable of oversized sources', () => {
     expect(doc?.disabled).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Source-fetch hardening (P1-4)
+//
+// Production timings: 77 sources, ~900k programmes, 284–344s. The controls below
+// (per-source timeout, decompressed-size cap, bounded concurrency) already existed;
+// what was missing was the request honouring the configured timeout, a timeout that
+// actually cancels the request, any per-source latency report, and tests for the
+// malformed-input path.
+// ---------------------------------------------------------------------------
+describe('EpgService source-fetch hardening', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('applies the configured per-source timeout to the HTTP request itself', async () => {
+    mockedAxios.get.mockResolvedValue({ data: Readable.from([Buffer.from('<tv></tv>')]) } as any);
+
+    await new EpgService().fetchAndParseXmltv('https://epg.example/guide.xml', []);
+
+    const config = mockedAxios.get.mock.calls[0][1] as any;
+    // EPG_SOURCE_TIMEOUT_MS, not a second hardcoded 120000: raising the env var used
+    // to move only the batch wrapper while the request kept its own literal.
+    expect(config.timeout).toBe(120000);
+    expect(config.responseType).toBe('stream');
+  });
+
+  it('forwards the cancellation signal to the request', async () => {
+    mockedAxios.get.mockResolvedValue({ data: Readable.from([Buffer.from('<tv></tv>')]) } as any);
+    const controller = new AbortController();
+
+    await new EpgService().fetchAndParseXmltv('https://epg.example/guide.xml', [], controller.signal);
+
+    const config = mockedAxios.get.mock.calls[0][1] as any;
+    // The batch wrapper's onTimeout aborts this controller, which is what stops a
+    // hung provider from holding its stream and buffers after the timeout fires.
+    expect(config.signal).toBe(controller.signal);
+  });
+
+  it('survives malformed or truncated XMLTV without crashing the refresh', async () => {
+    // fast-xml-parser is lenient: a truncated document parses to a partial tree
+    // instead of raising, so the contract here is "no throw, no usable programmes" —
+    // the caller records the source with 0 results and continues with the rest.
+    mockedAxios.get.mockResolvedValue({
+      data: Readable.from([Buffer.from('<tv><programme><title>x</tv></programme>')]),
+    } as any);
+
+    const programs = await new EpgService().fetchAndParseXmltv('https://epg.example/broken.xml', []);
+
+    expect(Array.isArray(programs)).toBe(true);
+    expect(programs).toHaveLength(0);
+  });
+
+  it('rejects an unsafe source URL without making a request', async () => {
+    const programs = await new EpgService()
+      .fetchAndParseXmltv('http://internal.example/guide.xml', [])
+      .catch((error: Error) => error);
+
+    expect(programs).toBeInstanceOf(Error);
+    expect((programs as Error).message).toContain('EPG URL rejected');
+    expect(mockedAxios.get).not.toHaveBeenCalled();
+  });
+});

@@ -228,7 +228,12 @@ class SchedulerService {
       await ScheduledTaskRun.updateOne(
         { _id: run._id, lockedBy: PROCESS_ID },
         {
-          status: 'completed',
+          // Derived from the subtasks rather than assumed: a total delivery failure is
+          // recorded as a failure, not as a successful run.
+          status:
+            result.subtasks.length > 0 && result.subtasks.every((subtask) => subtask.status === 'failed')
+              ? 'failed'
+              : 'completed',
           completedAt,
           durationMs,
           result: result.summary,
@@ -253,8 +258,19 @@ class SchedulerService {
         });
       }
 
+      // The run record and the log line must agree with the subtasks. They did not:
+      // every run was written as 'completed', so a job whose only delivery failed
+      // ("'Daily Operations Report' completed in 2.4s", 2026-09-15, with zero emails
+      // sent) still looked successful in the admin job history and counted as the last
+      // successful run for the catch-up logic.
+      const outcome = failedSubtasks.length > 0 && failedSubtasks.length === result.subtasks.length
+        ? 'failed'
+        : failedSubtasks.length > 0
+          ? 'completed with failures'
+          : 'completed';
+
       console.log(
-        `[scheduler] '${taskDef.displayName}' completed in ${(durationMs / 1000).toFixed(1)}s`,
+        `[scheduler] '${taskDef.displayName}' ${outcome} in ${(durationMs / 1000).toFixed(1)}s`,
       );
       return { ...result.summary, durationMs };
     } catch (err: any) {

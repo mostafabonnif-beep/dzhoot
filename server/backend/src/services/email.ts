@@ -78,6 +78,63 @@ async function getSmtpConfig(): Promise<SmtpConfig> {
   };
 }
 
+/** Why the email channel is (not) usable. A code, never a value. */
+export type EmailReadinessReason = 'ok' | 'dev_sink' | 'missing_credentials';
+
+export interface EmailReadiness {
+  channel: 'email';
+  provider: string;
+  /** True when `sendEmail` can realistically deliver. */
+  configured: boolean;
+  reason: EmailReadinessReason;
+}
+
+/**
+ * Whether transactional email can actually be sent — without contacting the SMTP
+ * server and without echoing any credential.
+ *
+ * Why this exists: on 2026-09-15 the scheduler logged
+ * `[email] send failed: Missing credentials for "PLAIN"` for every alert and the
+ * daily report while `/health` reported `alertingConfigured: true` (Telegram was
+ * configured) and the report job still reported `completed`. The operator had no
+ * way to see that the email channel was dead. This makes that state explicit and
+ * greppable instead of inferring it from a stack of failed sends.
+ */
+export async function getEmailReadiness(): Promise<EmailReadiness> {
+  const provider = (process.env.MAIL_PROVIDER || 'mailhog').toLowerCase();
+
+  if (provider !== 'brevo') {
+    // A MailHog/dev sink accepts mail without credentials, so sending still works —
+    // it is just not a production channel. Reporting it as unusable would break
+    // local development, so it stays "configured" with a distinct reason.
+    return { channel: 'email', provider, configured: true, reason: 'dev_sink' };
+  }
+
+  const [user, pass] = await Promise.all([
+    getSetting('brevo_user', process.env.BREVO_USER || ''),
+    getSetting('brevo_password', process.env.BREVO_PASSWORD || ''),
+  ]);
+  const configured = Boolean(user && pass);
+  return {
+    channel: 'email',
+    provider,
+    configured,
+    reason: configured ? 'ok' : 'missing_credentials',
+  };
+}
+
+// A broken channel is a known state, not a per-send incident: log it once (and once
+// more if the reason changes) instead of one line per alert.
+let loggedEmailState = '';
+function noteEmailUnusable(reason: EmailReadinessReason): void {
+  if (loggedEmailState === reason) return;
+  loggedEmailState = reason;
+  console.warn(
+    `[email] ALERT_EMAIL_DISABLED: the email channel cannot send (${reason}); ` +
+      'operational alerts continue on the remaining channels',
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Template loading & caching
 // ---------------------------------------------------------------------------
@@ -118,8 +175,20 @@ function loadTemplate(name: string): HandlebarsTemplateDelegate {
 // Core send function
 // ---------------------------------------------------------------------------
 
-export async function sendEmail(opts: SendEmailOptions): Promise<{ ok: boolean; error?: string }> {
+export async function sendEmail(opts: SendEmailOptions): Promise<{ ok: boolean; error?: string; skipped?: boolean }> {
+  // Refuse before touching the SMTP server when the channel cannot work: the attempt
+  // would fail with a credentials error on every call and drown the log line the
+  // operator actually needs (`ALERT_EMAIL_DISABLED`), and callers that ignore the
+  // result would behave identically either way.
   try {
+    // Inside the try on purpose: `sendEmail` promises never to throw, and a readiness
+    // lookup must not be the one path that breaks that promise.
+    const readiness = await getEmailReadiness();
+    if (!readiness.configured) {
+      noteEmailUnusable(readiness.reason);
+      return { ok: false, error: 'ALERT_EMAIL_DISABLED', skipped: true };
+    }
+
     const template = loadTemplate(opts.template);
     const html = template(opts.variables);
     const from = await getSetting('mail_from', process.env.MAIL_FROM || 'noreply@dzhoof.local');
@@ -194,4 +263,10 @@ export function sendPasswordResetEmail(
   });
 }
 
-module.exports = { sendEmail, sendWelcomeEmail, sendVerificationEmail, sendPasswordResetEmail };
+module.exports = {
+  sendEmail,
+  getEmailReadiness,
+  sendWelcomeEmail,
+  sendVerificationEmail,
+  sendPasswordResetEmail,
+};

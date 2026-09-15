@@ -58,6 +58,33 @@ The release job stops, and nothing is uploaded, when any of these is true:
 
 A release therefore never ships without a signer fingerprint and a checksum.
 
+## Where the update API reads the checksum
+
+`GET /api/v1/app/version` resolves `latestVersion.sha256` in this order:
+
+1. the **manifest** asset (`<apk-base>.release.json`) — the only source that binds
+   versionName, versionCode, apkFileName, sizeBytes and sha256 to the same artifact;
+2. the `<apk>.sha256` asset, for releases published before the manifest existed
+   (v1.3.1 is one of them).
+
+Either way the value is cross-checked against the APK asset the endpoint is about to
+hand out, and the download follows redirects manually with **every hop** validated
+against the HTTPS host allowlist and the SSRF guard. That allowlist must contain
+`release-assets.githubusercontent.com`: GitHub answers a release-asset request on
+`github.com` with a 302 to that host, and when it was missing the API silently served
+`sha256: null` for a release that published a perfectly good checksum (production,
+2026-09-15). Keep it in sync with:
+
+```bash
+curl -sI https://github.com/mostafabonnif-beep/dzhoot/releases/latest | grep -i ^location
+```
+
+A manifest that exists but disagrees with its APK is a **failure**, not a reason to fall
+back to the weaker `.sha256` asset — falling back would hide exactly the tampering the
+check exists to catch. When no checksum can be verified the update is withheld
+(`updateAvailable: false`, `updateBlockedReason: CHECKSUM_UNAVAILABLE`) rather than
+offered as a download the client will refuse.
+
 ## How it ties together
 
 - `sha256` and `sizeBytes` are the values `GET /api/v1/app/version` serves in
@@ -91,3 +118,19 @@ staging/debug APK locally); `BUILT_AT` overrides the timestamp.
 | Release candidate | `.github/workflows/release-candidate.yml` produces the same three files (APK, `.sha256`, manifest on the `beta` channel) as workflow artifacts, so a candidate's identity — package, derived `versionCode`, signing certificate — is proven before the tag exists. |
 | Pull requests | `scripts/ci/test-write-release-manifest.sh`, run in the `Secret guard` job, drives the generator with stubbed `aapt`/`apksigner` and asserts the happy path plus every fail-closed case (versionCode above/below the derived code, foreign package, wrong versionName, unreadable certificate, unknown channel/distribution, empty or absent APK, missing SDK, missing arguments) and a suffixed candidate version (`1.0.0-rc.1` → `10000`). |
 | Deploy | `server/backend/src/scripts/verify-release-provenance.ts` (`npm run verify:release-provenance` in `server/backend`) compares a published release against what the API actually serves. |
+| Deploy (gate) | `server/scripts/deploy/verify-commit-provenance.sh` refuses a commit that is not an ancestor of an approved ref or whose required workflows (`DZ HOOF CI`, `CodeQL Security Analysis`) are not green. `atomic-deploy.sh` runs it before the swap. |
+| Deploy (smoke) | `server/scripts/deploy/smoke-test.sh` checks `/health`, `/health/live`, `/health/ready`, `/health/version`, the update contract, the public page, the admin shell and the static chunks after the deploy. A failure fails the deploy, which triggers the rollback. |
+| Publish (gate) | `POST /admin/app-versions` refuses an active version without a valid 64-hex `sha256` (`APP_VERSION_CHECKSUM_REQUIRED`). |
+
+## Image identity
+
+A commit SHA cannot distinguish two builds of the same commit, so the deploy records the
+image it built and `/health/version` reports it:
+
+- `RELEASE_IMAGE_ID` — `docker inspect -f '{{.Id}}'` of the API image (always present);
+- `RELEASE_IMAGE_DIGEST` — the registry digest, when the image went through a registry;
+- `RELEASE_FRONTEND_IMAGE_ID` — the frontend image, recorded in the env file.
+
+`deploy-production.sh` persists them into `/etc/dzhoot/.env.production` and then verifies
+that the running API reports the image it just built. `scripts/deploy/smoke-test.sh`
+re-checks it independently.

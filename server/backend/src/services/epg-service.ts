@@ -3,6 +3,12 @@ import http from 'http';
 import https from 'https';
 import { XMLParser } from 'fast-xml-parser';
 import { createGunzip } from 'zlib';
+import {
+  formatDurationSummary,
+  summarizeDurations,
+  type DurationSummary,
+  type SourceDuration,
+} from '../utils/epg-timing';
 import EpgProgram from '../models/EpgProgram';
 import M3USource from '../models/M3USource';
 import EpgSourceOverride from '../models/EpgSourceOverride';
@@ -203,6 +209,8 @@ interface EpgStats {
   lastRefreshProgramCount: number;
   lastRefreshErrorCount: number;
   lastRefreshErrorSources: string[];
+  /** Slowest sources (label + durationMs) from the last refresh — never URLs. */
+  lastRefreshSlowestSources: SourceDuration[];
   memory: {
     heapUsedMb: number;
     heapTotalMb: number;
@@ -222,6 +230,8 @@ export class EpgService {
   private lastRefreshProgramCount = 0;
   private lastRefreshErrorCount = 0;
   private lastRefreshErrorSources: string[] = [];
+  /** Per-source wall time from the last refresh, for the p50/p95 report. */
+  private lastRefreshSourceDurations: SourceDuration[] = [];
 
   // ─── Lifecycle ──────────────────────────────────────────
 
@@ -299,13 +309,21 @@ export class EpgService {
       console.log(`[epg-service] Discovered ${sources.length} EPG sources to fetch (concurrency=${EPG_FETCH_CONCURRENCY}, heap=${heapUsedMb()}MB)`);
 
       const deferredSources: EpgSourceInfo[] = [];
+      // One in-flight fetch per source label, so a timeout can cancel the request
+      // instead of only discarding its result. Cleared as each source settles.
+      const inFlightFetches = new Map<string, AbortController>();
       const runSourceBatch = (batchSources: EpgSourceInfo[], deferMemoryFailures: boolean) =>
         runBoundedBatch(
           batchSources,
           EPG_FETCH_CONCURRENCY,
           async (source) => {
+            const label = source.source || String(source.url || '');
+            const sourceStartedAt = Date.now();
+            const controller = new AbortController();
+            inFlightFetches.set(label, controller);
             const currentRss = await waitForMemoryHeadroom();
             if (currentRss > EPG_HEAP_GUARD_MB) {
+              inFlightFetches.delete(label);
               if (deferMemoryFailures) {
                 deferredSources.push(source);
                 return 0;
@@ -314,7 +332,11 @@ export class EpgService {
             }
             const beforeHeap = heapUsedMb();
             try {
-              const programs = await this.fetchAndParseXmltv(source.url, source.coveredChannelIds);
+              const programs = await this.fetchAndParseXmltv(
+                source.url,
+                source.coveredChannelIds,
+                controller.signal,
+              );
               const count = programs.length > 0 ? await this.upsertPrograms(programs) : 0;
               await this.recordSourceResult(source.url, true);
               return count;
@@ -322,6 +344,10 @@ export class EpgService {
               await this.recordSourceResult(source.url, false, err?.message || String(err));
               throw err;
             } finally {
+              inFlightFetches.delete(label);
+              // Per-source wall time, kept for the p50/p95 + slowest-source report.
+              // Only the label is retained: never the URL (it can carry a token).
+              sourceDurations.push({ source: label, durationMs: Date.now() - sourceStartedAt });
               console.log(
                 `[epg-service] Source ${source.source}: heap ${beforeHeap}MB -> ${heapUsedMb()}MB (rss ${rssMb()}MB, ${Math.round((Date.now() - startTime) / 1000)}s elapsed)`,
               );
@@ -330,6 +356,15 @@ export class EpgService {
           {
             timeoutMs: EPG_SOURCE_TIMEOUT_MS,
             label: (source: any) => source.source || String(source.url || ''),
+            onTimeout: (label) => {
+              const controller = inFlightFetches.get(label);
+              if (controller && !controller.signal.aborted) {
+                console.warn(
+                  `[epg-service] Source ${label} exceeded ${EPG_SOURCE_TIMEOUT_MS}ms — aborting its request`,
+                );
+                controller.abort();
+              }
+            },
             onError: (label, err: any) => {
               this.lastRefreshErrorCount += 1;
               if (this.lastRefreshErrorSources.length < 10) {
@@ -339,6 +374,8 @@ export class EpgService {
             },
           },
         );
+
+      const sourceDurations: SourceDuration[] = [];
 
       let batchStats = await runSourceBatch(sources, true);
       if (deferredSources.length > 0) {
@@ -364,10 +401,17 @@ export class EpgService {
       // programs for channelEpgIds the cached set would otherwise filter out.
       await epgCache.deletePattern('*');
 
+      // Latency report: which sources made this run slow. Only labels and durations
+      // are logged — never a source URL (it can embed credentials) and never XML.
+      const timing = summarizeDurations(sourceDurations, { slowestLimit: 5 });
+      this.lastRefreshSourceDurations = timing.slowest;
       console.log(
         `[epg-service] EPG refresh complete: ${this.lastRefreshProgramCount} programs upserted from ${sources.length} sources ` +
           `(${batchStats.failedCount} failed) in ${durationMs}ms — heap ${heapUsedMb()}MB`,
       );
+      console.log(`[epg-service] per-source timings (${timing.count} sources): ${formatDurationSummary(timing)}`);
+
+      await this.reportRefreshAnomalies(timing, durationMs);
     } catch (err: any) {
       console.error('[epg-service] EPG refresh failed:', err.message);
       throw err;
@@ -664,7 +708,11 @@ export class EpgService {
 
   // ─── Fetch & Parse XMLTV ───────────────────────────────
 
-  async fetchAndParseXmltv(url: string, coveredChannelIds: string[]): Promise<ParsedProgram[]> {
+  async fetchAndParseXmltv(
+    url: string,
+    coveredChannelIds: string[],
+    signal?: AbortSignal,
+  ): Promise<ParsedProgram[]> {
     const coveredSet = new Set(coveredChannelIds.map((id) => id.toLowerCase()));
 
     // Stream the response to avoid holding compressed + decompressed buffers simultaneously
@@ -691,11 +739,18 @@ export class EpgService {
         : new http.Agent({ lookup: lookup as any });
 
       const hopResponse = await axios.get(currentUrl, {
-        timeout: 120000,
+        // Read the configured per-source timeout instead of a second hardcoded
+        // literal: raising EPG_SOURCE_TIMEOUT_MS used to move only the batch
+        // wrapper, leaving this request at 120s.
+        timeout: EPG_SOURCE_TIMEOUT_MS,
         responseType: 'stream',
         maxContentLength: 100 * 1024 * 1024,
         maxBodyLength: 100 * 1024 * 1024,
         maxRedirects: 0,
+        // Aborted when the batch wrapper's per-source timeout fires (see onTimeout
+        // in runSourceBatch): rejecting the promise alone left the response stream
+        // and its buffers alive until the provider finished sending.
+        signal,
         validateStatus: (status: number) => status < 400,
         httpAgent: parsedUrl.protocol === 'http:' ? agent : undefined,
         httpsAgent: parsedUrl.protocol === 'https:' ? agent : undefined,
@@ -996,6 +1051,53 @@ export class EpgService {
     };
   }
 
+  /**
+   * Alerting for the two failure modes this pipeline has actually shown: a refresh
+   * that runs far longer than usual, and a refresh that leaves the process close to
+   * the container limit. Neither is a hard failure — the refresh finished — so the
+   * point is to tell the operator before it becomes one.
+   *
+   * Best-effort: an alerting problem must never fail the refresh.
+   */
+  private async reportRefreshAnomalies(timing: DurationSummary, durationMs: number): Promise<void> {
+    const slowThresholdMs = Math.max(
+      60_000,
+      parseInt(process.env.EPG_SLOW_REFRESH_MS || '900000', 10) || 900000,
+    );
+    const anomalies: string[] = [];
+    if (durationMs > slowThresholdMs) {
+      anomalies.push(`refresh took ${Math.round(durationMs / 1000)}s (threshold ${Math.round(slowThresholdMs / 1000)}s)`);
+    }
+    if (timing.count > 0 && timing.p95Ms > slowThresholdMs / 2) {
+      anomalies.push(`p95 source latency ${Math.round(timing.p95Ms / 1000)}s`);
+    }
+    const rss = rssMb();
+    if (rss > EPG_HEAP_GUARD_MB) {
+      anomalies.push(`rss ${rss}MB above EPG_HEAP_GUARD_MB (${EPG_HEAP_GUARD_MB}MB)`);
+    }
+    if (anomalies.length === 0) return;
+
+    console.warn(`[epg-service] SLOW_EPG_REFRESH: ${anomalies.join('; ')}`);
+    try {
+      const { sendOperationalAlert } = require('./alert-notifier');
+      await sendOperationalAlert({
+        event: 'slow-epg-refresh',
+        severity: rss > EPG_HEAP_GUARD_MB ? 'critical' : 'warning',
+        message: `EPG refresh anomaly: ${anomalies.join('; ')}`,
+        details: {
+          durationMs,
+          sourceCount: timing.count,
+          p50Ms: Math.round(timing.p50Ms),
+          p95Ms: Math.round(timing.p95Ms),
+          slowest: timing.slowest.map((entry) => `${entry.source}:${Math.round(entry.durationMs / 1000)}s`),
+          rssMb: rss,
+        },
+      });
+    } catch (error: any) {
+      console.warn(`[epg-service] could not send the refresh anomaly alert: ${error?.message || error}`);
+    }
+  }
+
   async getStats(): Promise<EpgStats> {
     const [totalPrograms, distinctChannels, totalSystemChannels] = await Promise.all([
       EpgProgram.countDocuments(),
@@ -1017,6 +1119,8 @@ export class EpgService {
       lastRefreshProgramCount: this.lastRefreshProgramCount,
       lastRefreshErrorCount: this.lastRefreshErrorCount,
       lastRefreshErrorSources: this.lastRefreshErrorSources,
+      // Slowest sources from the last refresh (labels + durations only).
+      lastRefreshSlowestSources: this.lastRefreshSourceDurations,
       memory: {
         heapUsedMb: heapUsedMb(),
         heapTotalMb: Math.round(process.memoryUsage().heapTotal / 1048576),
