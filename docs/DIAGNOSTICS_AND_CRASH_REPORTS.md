@@ -20,17 +20,22 @@
 
 | الصنف | مثال | الناتج |
 |---|---|---|
-| بيانات اعتماد في URL | `https://user:pass@host/x` | `https://[redacted]@host/x` |
+| بيانات اعتماد في URL (أي بروتوكول) | `https://user:pass@host/x`، `rtsp://user:pass@host/x` | `https://[redacted]@host/x` |
 | حساب Xtream في المسار | `/live/<user>/<pass>/1423.ts` | `/live/[redacted]/[redacted]/` |
-| معاملات سرية | `?username=&password=&token=` | `?username=[redacted]&…` |
-| إسناد سرّي | `password=…`، `authorization: …` | `[redacted]` |
+| معاملات سرية | `?username=&password=&token=&sessionid=` | `?username=[redacted]&…` |
+| إسناد سرّي (بما فيه JSON ومفاتيح بين علامتي تنصيص) | `password=…`، `{"password":"…"}`، `"token":"…"` | `{"password":"[redacted]"}` |
+| ترويسة تفويض (كاملة) | `Authorization: Basic dXNlcjpwYXNz` | `Authorization: [redacted]` |
+| مخطط تفويض بلا ترويسة | `Basic dXNlcjpwYXNz` | `Basic [redacted]` |
 | رمز Bearer / JWT | `Bearer eyJ…` | `Bearer [redacted]` / `[redacted-jwt]` |
-| ترويسة كوكي | `Cookie: session=…`، `Set-Cookie: …` | `Cookie: [redacted]` |
+| كوكي (ترويسة أو إسناد) | `Cookie: session=…`، `sessionid=abc` | `Cookie: [redacted]` |
 | عنوان IPv4 خام | `185.199.108.153` | `[redacted-ip]` |
+| عنوان IPv6 خام | `2001:db8::1`، `[2001:db8::1]`، `::1` | `[redacted-ip]` |
 
-**غير مغطّى حالياً:** IPv6. لم تُضف قاعدة IPv6 بعد (تحتاج معالجة `::` المضغوطة
-والعناوين المضمّنة) — وهذا مسجّل هنا صراحةً كي لا يُفترض تغطيته. أضِفه مع اختبارات في
-`CrashRedactorTest` و`audit-log.test.ts` قبل الاعتماد عليه.
+**IPv6 مُغطّى الآن** (كان الفجوة الموثّقة سابقًا). القاعدة تطابق ثلاث صور: المضغوطة
+(تشترط `::` حرفيًّا)، والصيغة الكاملة بثماني مجموعات، والصورة المضمّنة بين قوسين كما تظهر
+في الـURL. اشتراط `::` مقصود: بدونه تُطابق سلسلة وقت مثل `12:34:56` وتُتلف نصًّا مفيدًا.
+القاعدتان متطابقتان في `CrashRedactor` (كوتلين) و`redactSensitiveText` (الخادم)، ومؤكَّدتان
+بجدول اختبارات واحد في `CrashRedactorTest` و`audit-log.test.ts`.
 
 ملاحظة عن العناوين: قاعدة IPv4 تعني أن سلسلة إصدار من أربعة أرقام (`1.2.3.4`) داخل نص
 عطل ستُستبدل أيضاً. هذا مقبول: الخصوصية أولى، ونصّ الفشل (النوع، الرسالة، `file:line`)
