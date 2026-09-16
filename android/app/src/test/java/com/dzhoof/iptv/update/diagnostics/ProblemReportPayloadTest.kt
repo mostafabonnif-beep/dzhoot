@@ -88,11 +88,11 @@ class ProblemReportPayloadTest {
     fun `the diagnostic snapshot names each field and copies nothing else`() {
         val diagnostics = ProblemReportPayload.diagnostics(facts())!!
 
-        assertEquals("1.3.1", diagnostics["appVersion"))
-        assertEquals("official", diagnostics["releaseChannel"))
-        assertEquals("external_apk", diagnostics["distribution"))
-        assertEquals("1.0.1", diagnostics["serverVersion"))
-        assertEquals("b36f4d28", diagnostics["serverCommit"))
+        assertEquals("1.3.1", diagnostics["appVersion"])
+        assertEquals("official", diagnostics["releaseChannel"])
+        assertEquals("external_apk", diagnostics["distribution"])
+        assertEquals("1.0.1", diagnostics["serverVersion"])
+        assertEquals("b36f4d28", diagnostics["serverCommit"])
         assertEquals(true, diagnostics["serverReachable"])
         assertEquals(34, diagnostics["sdkInt"])
         // Exactly the documented keys: a field added to DiagnosticsFacts later must not
