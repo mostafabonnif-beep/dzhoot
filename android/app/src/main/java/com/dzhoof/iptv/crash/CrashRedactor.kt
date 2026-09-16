@@ -27,12 +27,12 @@ object CrashRedactor {
      * `https?`-only rule left intact.
      */
     private val URL_CREDENTIALS =
-        Regex("([a-z][a-z0-9+.-]*://)[^\\s/@:]+:[^\\s/@:]+@", RegexOption.IGNORE_CASE)
+        Regex("([a-z][a-z0-9+.-]{0,31}://)[^\\s/@:]{1,256}:[^\\s/@:]{1,256}@", RegexOption.IGNORE_CASE)
     private val XTREAM_PATH_ACCOUNT =
-        Regex("(https?://[^\\s/]+/(?:live|movie|series|timeshift|vod)/)[^\\s/?#]+/[^\\s/?#]+/", RegexOption.IGNORE_CASE)
+        Regex("(https?://[^\\s/]{1,256}/(?:live|movie|series|timeshift|vod)/)[^\\s/?#]{1,256}/[^\\s/?#]{1,256}/", RegexOption.IGNORE_CASE)
     private val SECRET_QUERY_PARAM =
         Regex(
-            "([?&](?:username|user|password|pass|passwd|token|api[_-]?key|secret|auth|authorization|session|sessionid|session[_-]?id|cookie|cookies|sid)=)[^&\\s]+",
+            "([?&](?:username|user|password|pass|passwd|token|api[_-]?key|secret|auth|authorization|session|sessionid|session[_-]?id|cookie|cookies|sid)=)[^&\\s]{1,2000}",
             RegexOption.IGNORE_CASE,
         )
     /**
@@ -42,10 +42,10 @@ object CrashRedactor {
      * of the line is the only reliable form for a header.
      */
     private val SECRET_HEADER_LINE =
-        Regex("((?:set-)?cookie|proxy-authorization|authorization)(\\s*:\\s*)[^\\r\\n]+", RegexOption.IGNORE_CASE)
+        Regex("((?:set-)?cookie|proxy-authorization|authorization)(\\s*:\\s*)[^\\r\\n]{1,4096}", RegexOption.IGNORE_CASE)
     /** An auth scheme inline without the header form: `upstream said: Basic dXNlcjpwYXNz`. */
     private val AUTH_SCHEME =
-        Regex("((?:\\bbasic|\\bdigest|\\bnegotiate)\\s+)[A-Za-z0-9._~+/=-]{6,}", RegexOption.IGNORE_CASE)
+        Regex("((?:\\bbasic|\\bdigest|\\bnegotiate)\\s{1,8})[A-Za-z0-9._~+/=-]{6,512}", RegexOption.IGNORE_CASE)
     /**
      * The key may be quoted and/or JSON-encoded. `{"password":"hunter2"}` is exactly what
      * `JSONObject.toString()` puts into a throwable message, and the previous rule never
@@ -56,7 +56,7 @@ object CrashRedactor {
      */
     private val SECRET_ASSIGNMENT =
         Regex(
-            "((?:password|passwd|secret|token|api[_-]?key|authorization|auth|session|sessionid|session[_-]?id|cookie|cookies|pin|credentials?)\\s*[\"']?\\s*[:=]\\s*)([\"']?)[^\\s,\"'&}]+",
+            "((?:password|passwd|secret|token|api[_-]?key|authorization|auth|session|sessionid|session[_-]?id|cookie|cookies|pin|credentials?)[\\s\"']{0,8}[:=]\\s{0,8})([\"']?)[^\\s,\"'&}]{1,2000}",
             RegexOption.IGNORE_CASE,
         )
     private val BEARER_TOKEN = Regex("(Bearer\\s+)[A-Za-z0-9._~+/=-]+", RegexOption.IGNORE_CASE)
@@ -73,10 +73,10 @@ object CrashRedactor {
      * requiring a literal `::`, so a wall-clock time like `12:34:56` never matches.
      */
     private val IP_ADDRESS = Regex(
-        "\\[[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,}\\]" +
+        "\\[[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}\\]" +
             "|\\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\\b" +
-            "|\\b(?:[0-9a-fA-F]{1,4}:)+:(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4})*)?\\b" +
-            "|(?<![0-9a-fA-F:])::(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4})*)?\\b" +
+            "|\\b(?:[0-9a-fA-F]{1,4}:){1,7}:(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6})?\\b" +
+            "|(?<![0-9a-fA-F:])::(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){0,6})?\\b" +
             "|\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b",
     )
 
