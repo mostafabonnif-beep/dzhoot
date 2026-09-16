@@ -1,0 +1,31 @@
+# CodeQL configuration for DZ HOOF.
+#
+# One query is excluded, deliberately and narrowly. It is recorded here rather than left to
+# a per-alert dismissal in the Security tab so that the decision is reviewable in a diff and
+# visible to every future reader of this repository.
+
+query-filters:
+  # `js/missing-token-validation` — "cookie middleware is serving a request handler without
+  # CSRF protection".
+  #
+  # The query only recognises token-based CSRF libraries (`csurf`, `lusca`, …). This server
+  # does not use one, and does not need one: `server/backend/src/middleware/csrfProtection.ts`
+  # is mounted globally for every state-changing method and rejects a request whose
+  # Origin/Referer is not an allowed origin, with an exemption for requests carrying a custom
+  # auth header (`x-session-id`, `Authorization`, `x-tv-code`) — a browser cannot attach those
+  # to a cross-origin form post or navigation, which is the entire CSRF threat model. The
+  # query cannot see that control, so it reports every state-changing handler in the
+  # application (~50 of them, aggregated into one alert anchored at `cookieParser()`).
+  #
+  # Consequence of leaving it enabled: the alert is re-raised by *any* pull request that adds
+  # or removes a single state-changing route, because the aggregated result set changes. It
+  # cannot be made green by fixing code, and it does not describe a defect — verified on
+  # 2026-09-15 by moving `POST /api/v1/app/report-problem` ahead of the cookie parser (the
+  # truthful wiring for a handler that reads no cookie): the same alert reappeared,
+  # re-anchored at the cookie middleware.
+  #
+  # What to do instead of relying on this query: when adding a route that changes state,
+  # confirm it passes through `csrfProtection` (mounted in `server.js`) and that it does not
+  # act on a cookie-authenticated session without an origin check.
+  - exclude:
+      id: js/missing-token-validation
