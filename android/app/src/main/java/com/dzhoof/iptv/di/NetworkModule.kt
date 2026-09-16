@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.data.AppPreferences
+import com.dzhoof.iptv.data.CredentialSafeHttpLogger
 import com.dzhoof.iptv.data.RequestCorrelation
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import dagger.Module
@@ -12,7 +13,6 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
@@ -58,16 +58,12 @@ object NetworkModule {
             .readTimeout(120, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
 
-            .addInterceptor(
-                HttpLoggingInterceptor().apply {
-                    level = if (BuildConfig.DEBUG) {
-                        HttpLoggingInterceptor.Level.HEADERS
-                    } else {
-                        HttpLoggingInterceptor.Level.NONE
-                    }
-                    redactHeader("X-TV-Code")
-                }
-            )
+            // Debug logging that cannot leak a credential. The previous
+            // HttpLoggingInterceptor(Level.HEADERS) printed the full URL and every
+            // header: the Xtream account in a BYO URL, the managed playback token
+            // in the path, and X-Session-Id (only X-TV-Code was redacted). See
+            // CredentialSafeHttpLogger / RequestLogRedactor.
+            .addInterceptor(CredentialSafeHttpLogger(enabled = BuildConfig.DEBUG))
 
             .addInterceptor { chain ->
                 val original = chain.request()

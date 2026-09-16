@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.source.local.dao.ChannelDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
+import com.dzhoof.iptv.data.source.local.dao.getAllHealthResilient
 import com.dzhoof.iptv.data.source.local.dao.FavoriteCategoryDao
 import com.dzhoof.iptv.domain.usecase.GetFavoriteChannelsUseCase
 import com.dzhoof.iptv.domain.usecase.ReorderFavoritesUseCase
@@ -59,7 +60,7 @@ class FavoritesViewModel @Inject constructor(
             combine(
                 favoriteCategoryDao.getAllFavoriteCategories(),
                 channelDao.getAllChannels(),
-                channelHealthDao.getAllHealth()
+                channelHealthDao.getAllHealthResilient()
             ) { favCategories, allChannels, healthList ->
                 val channelsByCategory = allChannels.groupBy { it.categoryId }
                 val healthMap = healthList.associateBy { it.channelId }
@@ -97,7 +98,7 @@ class FavoritesViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true, error = null) }
 
             getFavoriteChannelsUseCase(Unit)
-                .combine(channelHealthDao.getAllHealth()) { result, healthList ->
+                .combine(channelHealthDao.getAllHealthResilient()) { result, healthList ->
                     result to healthList
                 }
                 .collect { (result, healthList) ->
