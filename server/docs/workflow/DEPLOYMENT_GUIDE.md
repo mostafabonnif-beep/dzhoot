@@ -262,14 +262,22 @@ APPLY=0 /opt/dzhoot/server/scripts/deploy/atomic-deploy.sh <sha>
 APPLY=1 /opt/dzhoot/server/scripts/deploy/atomic-deploy.sh <sha>
 ```
 
-**نشر من GitHub Actions** — `.github/workflows/deploy.yml` (تشغيل يدوي):
-1. أنشئ مفتاح نشر مخصصًا ولا تعِد استخدام مفاتيح شخصية:
-   ```bash
-   ssh-keygen -t ed25519 -f prod_deploy_key -C "dzhoof-prod-deploy"
-   ```
-2. أضف المفتاح العام إلى `/root/.ssh/authorized_keys` على الخادم.
-3. أضف أسرار الريبو: `PROD_HOST` (مثال `5.135.79.221`) و`PROD_SSH_KEY` (المفتاح الخاص كاملًا).
-4. من تبويب Actions → **Deploy to Production** → اختر SHA و"Apply for real" (بدونها dry-run).
+**لا يوجد نشر تلقائي من GitHub Actions.** هذا الدليل كان يصف `.github/workflows/deploy.yml`
+وزر «Deploy to Production» في تبويب Actions — و**هذا الملف لم يوجد يومًا** (‏`git log --all --
+.github/workflows/deploy.yml` فارغ). النشر يديره مشغّل بشري على الخادم، عبر بوابة سلالة وCI:
+
+```bash
+# على الخادم، بعد موافقة بشرية صريحة:
+/opt/dzhoot/server/scripts/deploy/stage-release.sh <full-sha>   # يجلب ويثبّت الإصدار
+APPLY=1 /opt/dzhoot/server/scripts/deploy/atomic-deploy.sh <full-sha>
+```
+
+`atomic-deploy.sh` يشغّل البوابة `verify-commit-provenance.sh` (سلالة `main` + خضرة
+`DZ HOOF CI` و`CodeQL`)، ثم يبدّل الكود، ثم ينشر الحاويات، ثم يفحص الصحة، ثم يشغّل
+`smoke-test.sh` — وأي فشل في تلك الخطوات يفعّل التراجع التلقائي.
+
+سبب عدم وجود نشر من Actions: نشر الإنتاج يحتاج مفتاح SSH ومخزن أسرار على الخادم، ولم
+يُمنح موصل GitHub صلاحية كتابة على `.github/workflows/` أصلًا.
 
 > **ملاحظة فحص الصحة:** Caddy يعيد توجيه كل حركة بورت 80 إلى HTTPS برمز `308`، لذا لا تستخدم `http://127.0.0.1/health` في الفحوص الآلية إطلاقًا. استخدم فحص حاوية API (`docker inspect -f '{{.State.Health.Status}}' dzhoof-api`) و/أو `https://<DOMAIN>/health`.
 
