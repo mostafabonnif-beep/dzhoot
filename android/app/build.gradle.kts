@@ -268,6 +268,10 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockk)
     testImplementation(libs.turbine)
+    // The real org.json, not the stubbed copy from android.jar: `unitTests.isReturnDefaultValues`
+    // makes every framework method return a default, so `JSONObject` would silently yield nulls
+    // and the update-response contract tests below could not assert anything.
+    testImplementation("org.json:json:20240303")
 }
 
 val sentryAuthToken = System.getenv("SENTRY_AUTH_TOKEN")?.trim().orEmpty()

@@ -15,6 +15,13 @@ interface UpdateRepository {
     sealed interface Result {
         data class Found(val update: UpdateInfo) : Result
         data object UpToDate : Result
+
+        /**
+         * A newer release is published but withheld because its checksum could not be
+         * verified. Distinct from [UpToDate]: the device is *not* up to date.
+         */
+        data class HeldForVerification(val versionName: String?) : Result
+
         data class Failed(val code: UpdateErrorCode) : Result
     }
 
@@ -31,6 +38,8 @@ class AppUpdaterUpdateRepository @Inject constructor(
         when (val result = appUpdater.checkDetailed()) {
             is AppUpdater.CheckResult.Found -> UpdateRepository.Result.Found(result.update)
             AppUpdater.CheckResult.UpToDate -> UpdateRepository.Result.UpToDate
+            is AppUpdater.CheckResult.HeldForVerification ->
+                UpdateRepository.Result.HeldForVerification(result.versionName)
             is AppUpdater.CheckResult.Failed -> UpdateRepository.Result.Failed(result.code)
         }
 }
