@@ -473,6 +473,11 @@ const common = {
   'portal.ticketClose': ['إغلاق', 'Close', 'Fermer'],
   'portal.ticketReopen': ['إعادة فتح', 'Reopen', 'Rouvrir'],
   'portal.ticketEmpty': ['لا توجد تذاكر بعد.', 'No tickets yet.', 'Aucun ticket pour le moment.'],
+  'portal.ticketLoadFailed': [
+    'تعذّر تحميل التذاكر. أعد المحاولة.',
+    'Could not load tickets. Try again.',
+    'Impossible de charger les tickets. Réessayez.',
+  ],
   'portal.ticketCreated': ['تم فتح التذكرة ✓', 'Ticket opened ✓', 'Ticket ouvert ✓'],
   'portal.replySent': ['تم إرسال الرد ✓', 'Reply sent ✓', 'Réponse envoyée ✓'],
   'portal.codeActions': ['إدارة الاشتراك', 'Subscription tools', 'Outils d\'abonnement'],
