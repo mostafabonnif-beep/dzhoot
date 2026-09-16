@@ -9,12 +9,18 @@ export const metadata: Metadata = {
   description: 'اختر باقتك من DZ HOOF واشترك عبر واتساب أو من أقرب محل. استلم كود التفعيل فوراً.',
 };
 
-export default function BuyPage({
+export default async function BuyPage({
   searchParams,
 }: {
-  searchParams: { shop?: string };
+  // Next 15+ hands `searchParams` over as a Promise. Reading it synchronously
+  // (the previous `searchParams.shop`) yielded `undefined` and — because the
+  // access was invisible to Next — kept this route statically prerendered, so
+  // every reseller storefront link (`/buy?shop=<id>`) rendered the platform's
+  // generic plans and platform WhatsApp number instead of that reseller's.
+  searchParams: Promise<{ shop?: string }>;
 }) {
-  const shopId = typeof searchParams.shop === 'string' ? searchParams.shop : undefined;
+  const params = await searchParams;
+  const shopId = typeof params.shop === 'string' ? params.shop : undefined;
 
   return (
     <main className="min-h-screen bg-background text-foreground">

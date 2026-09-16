@@ -112,6 +112,11 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
 
   // Drag position for mini player
   const [position, setPosition] = useState({ right: 16, bottom: 16 });
+  // Mirrors `position` for the drag handlers. They are deliberately memoized with
+  // empty deps so the window listeners are installed once; reading the `position`
+  // state there captured the FIRST render's value forever, so every drag after the
+  // first snapped the mini player back to the bottom-right corner before moving.
+  const positionRef = useRef(position);
   const dragRef = useRef<{ mouseX: number; mouseY: number; right: number; bottom: number } | null>(
     null,
   );
@@ -621,24 +626,31 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
     };
   }, []);
 
+  // Keep the drag origin in sync with the committed position.
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
+
   // Drag handler for mini player header
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     dragRef.current = {
       mouseX: e.clientX,
       mouseY: e.clientY,
-      right: position.right,
-      bottom: position.bottom,
+      right: positionRef.current.right,
+      bottom: positionRef.current.bottom,
     };
 
     const handleMove = (ev: MouseEvent) => {
       if (!dragRef.current) return;
       const dx = dragRef.current.mouseX - ev.clientX;
       const dy = dragRef.current.mouseY - ev.clientY;
-      setPosition({
+      const next = {
         right: Math.max(0, dragRef.current.right + dx),
         bottom: Math.max(0, dragRef.current.bottom + dy),
-      });
+      };
+      positionRef.current = next;
+      setPosition(next);
     };
     const cleanup = () => {
       window.removeEventListener('mousemove', handleMove);
@@ -652,7 +664,8 @@ export default function StreamPlayer({ channel, onClose, mode = 'proxy' }: Strea
     window.addEventListener('mousemove', handleMove);
     window.addEventListener('mouseup', handleUp);
     dragCleanupRef.current = cleanup;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- position captured at drag start via dragRef, adding to deps would break drag
+    // Deps stay empty on purpose: the listeners are installed for the duration of
+    // one drag and the origin now comes from positionRef, not from a stale closure.
   }, []);
 
   if (!channel) return null;

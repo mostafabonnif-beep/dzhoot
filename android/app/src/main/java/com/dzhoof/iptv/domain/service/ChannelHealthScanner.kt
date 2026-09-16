@@ -12,6 +12,7 @@ import com.dzhoof.iptv.domain.repository.HealthSyncEntry
 import com.dzhoof.iptv.domain.repository.StreamMetricsRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -74,7 +75,16 @@ class ChannelHealthScanner @Inject constructor(
     private var scanJob: Job? = null
     private val scanMutex = Mutex()
     private val supervisorJob = SupervisorJob()
-    private val scope = CoroutineScope(supervisorJob + dispatcher)
+    // A SupervisorJob only isolates siblings: an exception escaping a root
+    // coroutine in this scope still goes to the default handler and kills the
+    // process. This scanner runs an unattended background loop (and a manual
+    // scan) that touches Room and the network, so one SQLite/IO failure used to
+    // crash the app at launch, repeatedly. Log and keep the scope alive instead.
+    private val exceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Health scanner coroutine failed", throwable)
+    }
+
+    private val scope = CoroutineScope(supervisorJob + dispatcher + exceptionHandler)
 
     /**
      * Loop: health scan → 5 min → thumbnail extraction (ONLINE only) → 30 min → repeat

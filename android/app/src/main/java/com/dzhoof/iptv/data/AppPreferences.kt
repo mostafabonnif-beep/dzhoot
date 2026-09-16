@@ -45,6 +45,40 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
     @Volatile
     private var parentalUnlockedThisSession = false
 
+    /**
+     * Cached encrypted-preferences handle.
+     *
+     * Constructing `SecurePreferences` builds a MasterKey and opens
+     * EncryptedSharedPreferences — real Keystore IPC. `getTvCode()` is called from
+     * the OkHttp interceptor on every managed request (and from main-thread call
+     * sites), so the old "construct one per call" pattern paid that cost per
+     * request. The handle is stable for the process lifetime, so it is cached.
+     *
+     * Returns null when the device keystore is unusable (SecurePreferences throws
+     * SecurityException in that case). Callers must degrade, never crash: that
+     * exception used to escape straight out of a UI-thread save.
+     */
+    @Volatile
+    private var securePreferences: SecurePreferences? = null
+    @Volatile
+    private var securePreferencesFailed = false
+
+    private fun secure(context: Context): SecurePreferences? {
+        securePreferences?.let { return it }
+        if (securePreferencesFailed) return null
+        return try {
+            SecurePreferences(context).also { securePreferences = it }
+        } catch (e: Exception) {
+            securePreferencesFailed = true
+            android.util.Log.e(
+                "AppPreferences",
+                "Encrypted storage unavailable (${e.message}); sensitive values will not be persisted",
+                e
+            )
+            null
+        }
+    }
+
     fun getServerUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return prefs.getString(SERVER_URL_KEY, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
@@ -52,7 +86,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
 
     fun getTvCode(context: Context): String {
         val secure = runCatching {
-            SecurePreferences(context).getString(TV_CODE_KEY, "") ?: ""
+            secure(context)?.getString(TV_CODE_KEY, "") ?: ""
         }.getOrDefault("")
         if (secure.isNotEmpty()) return secure
         // Upgrade path: codes written by older builds live in plain SharedPreferences.
@@ -60,7 +94,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
         val legacy = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getString(TV_CODE_KEY, "") ?: ""
         if (legacy.isNotEmpty()) {
-            runCatching { SecurePreferences(context).putString(TV_CODE_KEY, legacy) }
+            runCatching { secure(context)?.putString(TV_CODE_KEY, legacy) }
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit().remove(TV_CODE_KEY).apply()
         }
@@ -69,18 +103,26 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
 
     fun getSessionId(context: Context): String {
         return try {
-            SecurePreferences(context).getString(SESSION_ID_KEY, "") ?: ""
+            secure(context)?.getString(SESSION_ID_KEY, "") ?: ""
         } catch (_: Exception) {
             ""
         }
     }
 
-    fun setSessionId(context: Context, sessionId: String) {
-        SecurePreferences(context).putString(SESSION_ID_KEY, sessionId.trim())
+    /** @return true when the session id was persisted. */
+    fun setSessionId(context: Context, sessionId: String): Boolean {
+        val securePrefs = secure(context) ?: return false
+        return runCatching {
+            securePrefs.putString(SESSION_ID_KEY, sessionId.trim())
+            true
+        }.getOrElse {
+            android.util.Log.w("AppPreferences", "Could not persist the session id", it)
+            false
+        }
     }
 
     fun clearSessionId(context: Context) {
-        runCatching { SecurePreferences(context).remove(SESSION_ID_KEY) }
+        runCatching { secure(context)?.remove(SESSION_ID_KEY) }
     }
 
     fun hasChannelSelection(context: Context): Boolean {
@@ -103,7 +145,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
         val sanitized = code.trim().replace(Regex("[^A-Za-z0-9]"), "")
         // tv_code is a bearer credential for the managed API (X-TV-Code) — store it
         // encrypted like the session id (security audit).
-        runCatching { SecurePreferences(context).putString(TV_CODE_KEY, sanitized) }
+        runCatching { secure(context)?.putString(TV_CODE_KEY, sanitized) }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         // Pairing is a server-backed source — clear any prior BYO playlist selection
         // so refreshChannels() hits the server instead of a stale M3U/Xtream source.
@@ -118,7 +160,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
 
     fun setDemoMode(context: Context, code: String) {
         val sanitized = code.trim().replace(Regex("[^A-Za-z0-9]"), "")
-        runCatching { SecurePreferences(context).putString(TV_CODE_KEY, sanitized) }
+        runCatching { secure(context)?.putString(TV_CODE_KEY, sanitized) }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .remove(TV_CODE_KEY)
@@ -184,7 +226,35 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
         return prefs.getString(M3U_URL_KEY, "") ?: ""
     }
 
-    fun setXtreamSource(context: Context, host: String, username: String, password: String) {
+    /**
+     * Store an Xtream source. The credentials go to EncryptedSharedPreferences and
+     * are never written to plain prefs.
+     *
+     * @return false when the device keystore is unusable, in which case nothing is
+     *   switched: the previous source stays active instead of leaving the app
+     *   pointing at a source whose password was never stored. The old
+     *   implementation let the constructor's SecurityException escape into the
+     *   caller's UI-thread coroutine and crash the app.
+     */
+    fun setXtreamSource(
+        context: Context,
+        host: String,
+        username: String,
+        password: String
+    ): Boolean {
+        // Credentials first: if encrypted storage is unavailable we must not
+        // switch the active source.
+        val securePrefs = secure(context) ?: return false
+        val stored = runCatching {
+            securePrefs.putString(XTREAM_USER_KEY, username.trim())
+            securePrefs.putString(XTREAM_PASS_KEY, password.trim())
+            true
+        }.getOrElse {
+            android.util.Log.w("AppPreferences", "Could not store Xtream credentials", it)
+            false
+        }
+        if (!stored) return false
+
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .putString(PLAYLIST_SOURCE_TYPE_KEY, SOURCE_XTREAM)
@@ -192,10 +262,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
             .remove(XTREAM_USER_KEY) // migrate any legacy plaintext creds out of plain prefs
             .remove(XTREAM_PASS_KEY)
             .apply()
-        // Credentials are sensitive — store them in EncryptedSharedPreferences, never plain prefs.
-        val secure = SecurePreferences(context)
-        secure.putString(XTREAM_USER_KEY, username.trim())
-        secure.putString(XTREAM_PASS_KEY, password.trim())
+        return true
     }
 
     fun getXtreamHost(context: Context): String {
@@ -209,7 +276,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
 
     private fun readSecure(context: Context, key: String): String =
         try {
-            SecurePreferences(context).getString(key, "") ?: ""
+            secure(context)?.getString(key, "") ?: ""
         } catch (_: Exception) {
             ""
         }
@@ -250,7 +317,7 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
     }
 
     fun clearPairing(context: Context) {
-        runCatching { SecurePreferences(context).remove(TV_CODE_KEY) }
+        runCatching { secure(context)?.remove(TV_CODE_KEY) }
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit()
             .remove(TV_CODE_KEY)
