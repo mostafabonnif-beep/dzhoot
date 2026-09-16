@@ -48,15 +48,15 @@ class ProblemReportPayloadTest {
             platform = "android-tv",
         )
 
-        assertEquals("القناة تتوقف بعد ثانيتين", body.getString("message"))
+        assertEquals("القناة تتوقف بعد ثانيتين", body["message"])
         // The wire value is the key, never the Arabic label.
-        assertEquals("player", body.getString("feature"))
-        assertEquals("android-tv", body.getString("platform"))
-        assertEquals("dz-0018a80af2a8f852", body.getString("deviceId"))
-        assertEquals("1.3.1", body.getString("appVersion"))
-        assertEquals(10301, body.getInt("appVersionCode"))
-        assertEquals("14", body.getString("androidVersion"))
-        assertEquals(34, body.getInt("sdkInt"))
+        assertEquals("player", body["feature"])
+        assertEquals("android-tv", body["platform"])
+        assertEquals("dz-0018a80af2a8f852", body["deviceId"])
+        assertEquals("1.3.1", body["appVersion"])
+        assertEquals(10301, body["appVersionCode"])
+        assertEquals("14", body["androidVersion"])
+        assertEquals(34, body["sdkInt"])
     }
 
     @Test
@@ -68,8 +68,8 @@ class ProblemReportPayloadTest {
             deviceId = "dz-x",
         )
 
-        assertFalse(body.has("message"))
-        assertEquals("other", body.getString("feature"))
+        assertFalse(body.containsKey("message"))
+        assertEquals("other", body["feature"])
     }
 
     @Test
@@ -81,20 +81,20 @@ class ProblemReportPayloadTest {
             deviceId = null,
         )
 
-        assertEquals(ProblemReportPayload.MESSAGE_MAX, body.getString("message").length)
+        assertEquals(ProblemReportPayload.MESSAGE_MAX, (body["message"] as String).length)
     }
 
     @Test
     fun `the diagnostic snapshot names each field and copies nothing else`() {
         val diagnostics = ProblemReportPayload.diagnostics(facts())!!
 
-        assertEquals("1.3.1", diagnostics.getString("appVersion"))
-        assertEquals("official", diagnostics.getString("releaseChannel"))
-        assertEquals("external_apk", diagnostics.getString("distribution"))
-        assertEquals("1.0.1", diagnostics.getString("serverVersion"))
-        assertEquals("b36f4d28", diagnostics.getString("serverCommit"))
-        assertTrue(diagnostics.getBoolean("serverReachable"))
-        assertEquals(34, diagnostics.getInt("sdkInt"))
+        assertEquals("1.3.1", diagnostics["appVersion"))
+        assertEquals("official", diagnostics["releaseChannel"))
+        assertEquals("external_apk", diagnostics["distribution"))
+        assertEquals("1.0.1", diagnostics["serverVersion"))
+        assertEquals("b36f4d28", diagnostics["serverCommit"))
+        assertEquals(true, diagnostics["serverReachable"])
+        assertEquals(34, diagnostics["sdkInt"])
         // Exactly the documented keys: a field added to DiagnosticsFacts later must not
         // reach the network without being named on purpose.
         assertEquals(
@@ -102,7 +102,7 @@ class ProblemReportPayloadTest {
                 "appVersion", "appVersionCode", "releaseChannel", "distribution",
                 "serverVersion", "serverCommit", "serverReachable", "sdkInt",
             ),
-            diagnostics.keys().asSequence().toSet(),
+            diagnostics.keys,
         )
     }
 
@@ -136,8 +136,8 @@ class ProblemReportPayloadTest {
             deviceId = null,
         )
 
-        assertFalse(body.has("diagnostics"))
-        assertFalse(body.has("appVersion"))
+        assertFalse(body.containsKey("diagnostics"))
+        assertFalse(body.containsKey("appVersion"))
         assertNull(ProblemReportPayload.diagnostics(null))
     }
 
@@ -149,7 +149,7 @@ class ProblemReportPayloadTest {
             facts = facts(lastCheckResultCode = "UPDATE_CHECKSUM_REQUIRED"),
             deviceId = null,
         )
-        assertEquals("error", failed.getString("severity"))
+        assertEquals("error", failed["severity"])
 
         val routine = ProblemReportPayload.build(
             message = "something else",
@@ -157,7 +157,7 @@ class ProblemReportPayloadTest {
             facts = facts(lastCheckResultCode = "up_to_date"),
             deviceId = null,
         )
-        assertEquals("warning", routine.getString("severity"))
+        assertEquals("warning", routine["severity"])
     }
 
     @Test

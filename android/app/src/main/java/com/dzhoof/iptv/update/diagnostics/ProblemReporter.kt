@@ -48,14 +48,17 @@ internal class ProblemReporter @Inject constructor(
     ): Result = withContext(ioDispatcher) {
         try {
             val facts = runCatching { diagnosticsProvider.collect() }.getOrNull()
-            val body = ProblemReportPayload.build(
+            // Serialised here, not inside ProblemReportPayload: the rules stay pure (and
+            // unit-testable on the JVM, where android.jar's JSONObject is a stub) and the
+            // real org.json is used at the one place that actually talks to the network.
+            val body = org.json.JSONObject(ProblemReportPayload.build(
                 message = message,
                 category = category,
                 facts = facts,
                 deviceId = deviceId(),
                 platform = ProblemReportPayload.platformOf(context),
                 errorCode = errorCode,
-            )
+            ))
 
             val response = PinnedHttpClient.post(
                 "${AppPreferences.getServerUrl(context)}/api/v1/app/report-problem",

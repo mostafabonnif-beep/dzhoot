@@ -1,7 +1,6 @@
 package com.dzhoof.iptv.update.diagnostics
 
 import com.dzhoof.iptv.BuildConfig
-import org.json.JSONObject
 
 /**
  * Builds the payload for `POST /api/v1/app/report-problem` — the "إبلاغ عن مشكلة" report.
@@ -16,8 +15,11 @@ import org.json.JSONObject
  *    shown. No tokens, no JWTs, no playback/Xtream/EPG URLs, no usernames, no account codes
  *    and no raw base URL.
  *
- * Pure and dependency-free on purpose: the contract is unit-tested on the JVM without a
- * device, which is the only way a payload rule this important stays honest.
+ * Returns plain maps, not an `org.json` object: on the JVM the `JSONObject` from
+ * `android.jar` is a stub that returns defaults (`unitTests.isReturnDefaultValues`), so the
+ * rules could not be asserted in a unit test — which is the only way a payload rule this
+ * important stays honest. `ProblemReporter` serialises the map at the network edge, where
+ * the real `org.json` is available.
  */
 internal object ProblemReportPayload {
 
@@ -52,26 +54,26 @@ internal object ProblemReportPayload {
         platform: String = "android",
         correlationId: String? = null,
         errorCode: String? = null,
-    ): JSONObject {
-        val body = JSONObject()
+    ): Map<String, Any?> {
+        val body = linkedMapOf<String, Any?>()
         val trimmed = message.trim().take(MESSAGE_MAX)
 
-        if (trimmed.isNotEmpty()) body.put("message", trimmed)
-        body.put("feature", category.key)
-        body.put("platform", platform)
-        deviceId?.takeIf { it.isNotBlank() }?.let { body.put("deviceId", it) }
-        errorCode?.takeIf { it.isNotBlank() }?.let { body.put("errorCode", it) }
-        correlationId?.takeIf { it.isNotBlank() }?.let { body.put("correlationId", it) }
+        if (trimmed.isNotEmpty()) body["message"] = trimmed
+        body["feature"] = category.key
+        body["platform"] = platform
+        deviceId?.takeIf { it.isNotBlank() }?.let { body["deviceId"] = it }
+        errorCode?.takeIf { it.isNotBlank() }?.let { body["errorCode"] = it }
+        correlationId?.takeIf { it.isNotBlank() }?.let { body["correlationId"] = it }
 
         facts?.let { safe ->
-            safe.appVersionName?.let { body.put("appVersion", it) }
-            safe.appVersionCode?.let { body.put("appVersionCode", it) }
-            safe.androidRelease?.let { body.put("androidVersion", it) }
-            safe.sdkInt?.let { body.put("sdkInt", it) }
-            safe.lastCheckResultCode?.let { body.put("severity", severityFor(it)) }
+            safe.appVersionName?.let { body["appVersion"] = it }
+            safe.appVersionCode?.let { body["appVersionCode"] = it }
+            safe.androidRelease?.let { body["androidVersion"] = it }
+            safe.sdkInt?.let { body["sdkInt"] = it }
+            safe.lastCheckResultCode?.let { body["severity"] = severityFor(it) }
         }
 
-        diagnostics(facts)?.let { body.put("diagnostics", it) }
+        diagnostics(facts)?.let { body["diagnostics"] = it }
         return body
     }
 
@@ -82,21 +84,21 @@ internal object ProblemReportPayload {
      * field added to [DiagnosticsFacts] later cannot reach the network by accident — the
      * failure mode that turns a diagnostic into a leak.
      */
-    fun diagnostics(facts: DiagnosticsFacts?): JSONObject? {
+    fun diagnostics(facts: DiagnosticsFacts?): Map<String, Any?>? {
         if (facts == null) return null
-        val out = JSONObject()
-        facts.appVersionName?.let { out.put("appVersion", it) }
-        facts.appVersionCode?.let { out.put("appVersionCode", it.toString()) }
-        facts.releaseChannel?.let { out.put("releaseChannel", it) }
-        facts.distributionWireName?.let { out.put("distribution", it) }
-        facts.serverVersion?.let { out.put("serverVersion", it) }
-        facts.serverCommit?.let { out.put("serverCommit", it) }
-        facts.lastCheckResultCode?.let { out.put("lastCheckOutcome", it) }
+        val out = linkedMapOf<String, Any?>()
+        facts.appVersionName?.let { out["appVersion"] = it }
+        facts.appVersionCode?.let { out["appVersionCode"] = it.toString() }
+        facts.releaseChannel?.let { out["releaseChannel"] = it }
+        facts.distributionWireName?.let { out["distribution"] = it }
+        facts.serverVersion?.let { out["serverVersion"] = it }
+        facts.serverCommit?.let { out["serverCommit"] = it }
+        facts.lastCheckResultCode?.let { out["lastCheckOutcome"] = it }
         // Only booleans/numbers/known labels: `serverAvailable` is a boolean fact, never a
         // host name — the raw base URL is deliberately absent from a report.
-        out.put("serverReachable", facts.serverAvailable)
-        facts.sdkInt?.let { out.put("sdkInt", it) }
-        return if (out.length() == 0) null else out
+        out["serverReachable"] = facts.serverAvailable
+        facts.sdkInt?.let { out["sdkInt"] = it }
+        return if (out.isEmpty()) null else out
     }
 
     /**
