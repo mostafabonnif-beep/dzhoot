@@ -54,7 +54,11 @@ class ProblemReportPayloadTest {
         assertEquals("android-tv", body["platform"])
         assertEquals("dz-0018a80af2a8f852", body["deviceId"])
         assertEquals("1.3.1", body["appVersion"])
-        assertEquals(10301, body["appVersionCode"])
+        // A number here, and deliberately a *string* inside `diagnostics`: the top-level field
+        // is what the API validates as a number, the snapshot is a display copy. Pinning the
+        // type keeps that asymmetry from being "fixed" into a rejected request one day.
+        assertEquals(10301L, body["appVersionCode"])
+        assertTrue(body["appVersionCode"] is Long)
         assertEquals("14", body["androidVersion"])
         assertEquals(34, body["sdkInt"])
     }
