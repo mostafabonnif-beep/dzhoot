@@ -39,7 +39,12 @@ object RequestLogRedactor {
     /**
      * @return a URL summary that is safe to write to a log, e.g.
      *   `https://api.example.com/api/v1/channels (query hidden: 2 params)`
-     *   `https://panel.example.com/live/***/***/123.ts`
+     *   `https://panel.example.com/live/<masked>/<masked>/123.ts`
+     *
+     * The mask is `MASK` below. It is not spelled out in this comment on purpose:
+     * the literal three asterisks followed by a slash would close the block
+     * comment and the rest of it would be parsed as code (which is exactly how
+     * this file first failed to compile).
      */
     fun summarize(url: HttpUrl): String = summarize(url.toString())
 
