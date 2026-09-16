@@ -77,8 +77,10 @@ fun AddSourceScreen(
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
 
     // Advance to Home once a bring-your-own playlist loads successfully.
+    // Compare against the ViewModel's own constant — the two literals here and in
+    // SettingsViewModel had drifted, so this never fired for a successful import.
     LaunchedEffect(uiState.playlistResult) {
-        if (uiState.playlistResult == "Playlist loaded") onPlaylistLoaded()
+        if (uiState.playlistResult == SettingsViewModel.PLAYLIST_RESULT_LOADED) onPlaylistLoaded()
     }
 
     // Preselect the tab for the source that's currently in use, so opening this
@@ -361,7 +363,7 @@ private fun LoadPlaylistRow(
         result?.let {
             StatusText(
                 text = it,
-                status = if (it == "Playlist loaded") Status.SUCCESS else Status.WARNING,
+                status = if (it == SettingsViewModel.PLAYLIST_RESULT_LOADED) Status.SUCCESS else Status.WARNING,
                 fontWeight = FontWeight.SemiBold
             )
         }

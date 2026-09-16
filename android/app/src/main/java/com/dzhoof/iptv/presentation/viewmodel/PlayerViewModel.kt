@@ -69,6 +69,9 @@ private const val BOUNDARY_GRACE_MS = 2_000L      // let the clock actually pass
 private const val BOUNDARY_MIN_DELAY_MS = 5_000L  // floor so a stale/past endTime can't spin
 private const val EPG_TICK_MS = 60_000L
 
+/** Log tag for the non-fatal playback/health diagnostics in this file. */
+private const val PLAYER_LOG_TAG = "PlayerViewModel"
+
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val getChannelByIdUseCase: GetChannelByIdUseCase,
@@ -1218,15 +1221,29 @@ class PlayerViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            val previousHealth = channelHealthDao.getHealthByChannelId(channelId).firstOrNull()
+            val previousHealth = try {
+                channelHealthDao.getHealthByChannelId(channelId).firstOrNull()
+            } catch (e: Exception) {
+                // Never let a local-DB failure kill playback error handling.
+                android.util.Log.w(PLAYER_LOG_TAG, "health read failed for $channelId", e)
+                null
+            }
 
-            channelHealthDao.upsertPreservingThumbnail(
-                channelId = channelId,
-                status = ChannelHealthStatus.OFFLINE.name,
-                lastCheckedAt = System.currentTimeMillis(),
-                responseTimeMs = null,
-                errorMessage = errorMessage
-            )
+            try {
+                // `channel_health.channelId` is a foreign key into `channels` with
+                // enforcement on, so a background sync that dropped this channel
+                // makes this insert raise SQLiteConstraintException — uncaught in a
+                // viewModelScope job, that crashed the process mid-stream.
+                channelHealthDao.upsertPreservingThumbnail(
+                    channelId = channelId,
+                    status = ChannelHealthStatus.OFFLINE.name,
+                    lastCheckedAt = System.currentTimeMillis(),
+                    responseTimeMs = null,
+                    errorMessage = errorMessage
+                )
+            } catch (e: Exception) {
+                android.util.Log.w(PLAYER_LOG_TAG, "health write failed for $channelId", e)
+            }
             reportStreamStatusUseCase(
                 ReportStreamStatusUseCase.Params(
                     channelId = channelId,
@@ -1259,13 +1276,19 @@ class PlayerViewModel @Inject constructor(
     fun onStreamUnresponsive() {
         val channelId = _uiState.value.channel?.id ?: return
         viewModelScope.launch {
-            channelHealthDao.upsertPreservingThumbnail(
-                channelId = channelId,
-                status = ChannelHealthStatus.UNRESPONSIVE.name,
-                lastCheckedAt = System.currentTimeMillis(),
-                responseTimeMs = null,
-                errorMessage = "المصدر لا يستجيب (تجاوز مهلة التخزين المؤقت)"
-            )
+            try {
+                // Same foreign-key hazard as onStreamDead: a channel removed by a
+                // concurrent sync must not crash the app.
+                channelHealthDao.upsertPreservingThumbnail(
+                    channelId = channelId,
+                    status = ChannelHealthStatus.UNRESPONSIVE.name,
+                    lastCheckedAt = System.currentTimeMillis(),
+                    responseTimeMs = null,
+                    errorMessage = "المصدر لا يستجيب (تجاوز مهلة التخزين المؤقت)"
+                )
+            } catch (e: Exception) {
+                android.util.Log.w(PLAYER_LOG_TAG, "health write failed for $channelId", e)
+            }
             reportStreamStatusUseCase(
                 ReportStreamStatusUseCase.Params(
                     channelId = channelId,

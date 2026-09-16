@@ -8,6 +8,23 @@ import api from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
 import { AuthSidePanel } from '@/components/layout/auth-side-panel';
 
+/**
+ * Only a well-formed address may be shown as the trusted "contact the
+ * administrator" mailto. `?admin_email=` is attacker-controlled, and without
+ * this `/login?message=account_disabled&admin_email=attacker@evil.com` made the
+ * platform present a stranger's address to a locked-out user — exactly the
+ * phishing the `message` whitelist below already guards against.
+ */
+const EMAIL_SHAPE = /^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/;
+const MAX_ADMIN_EMAIL_LENGTH = 254;
+
+function safeAdminEmail(value: string | null | undefined): string {
+  if (!value) return '';
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > MAX_ADMIN_EMAIL_LENGTH) return '';
+  return EMAIL_SHAPE.test(trimmed) ? trimmed : '';
+}
+
 // Whitelist of known message codes → fixed copy. Prevents arbitrary `?message=`
 // text (phishing) from being rendered in trusted UI chrome.
 const MESSAGE_STRINGS: Record<string, string> = {
@@ -71,7 +88,7 @@ function LoginContent() {
         setError(
           'تم تعطيل حسابك. يُرجى التواصل مع مسؤول الخادم لإعادة تفعيله.',
         );
-        const email = searchParams.get('admin_email');
+        const email = safeAdminEmail(searchParams.get('admin_email'));
         if (email) setAdminEmail(email);
       } else {
         setError('فشلت المصادقة الخارجية. جرّب طريقة دخول أخرى أو تواصل مع الدعم.');
@@ -200,14 +217,14 @@ function LoginContent() {
                 <p>
                   تم تعطيل حسابك. يُرجى التواصل مع مسؤول الخادم لإعادة تفعيله.
                 </p>
-                {searchParams.get('admin_email') && (
+                {safeAdminEmail(searchParams.get('admin_email')) && (
                   <p className="mt-1.5">
                     التواصل:{' '}
                     <a
-                      href={`mailto:${searchParams.get('admin_email')}`}
+                      href={`mailto:${safeAdminEmail(searchParams.get('admin_email'))}`}
                       className="underline hover:text-destructive/80"
                     >
-                      {searchParams.get('admin_email')}
+                      {safeAdminEmail(searchParams.get('admin_email'))}
                     </a>
                   </p>
                 )}
