@@ -6,12 +6,20 @@ import crypto from 'crypto';
  * so we never store plaintext credentials in the database.
  */
 
+// Same policy as server.js: the guard is keyed off "real runtime", not off
+// NODE_ENV alone — a production process started without NODE_ENV=production used
+// to silently encrypt every stored credential with the public dev constant below.
+const { securityEnforced } = require('./security-env');
+
 function getKey(): Buffer {
   const secret = process.env.XTREAM_SECRET_KEY || process.env.JWT_ACCESS_SECRET;
-  if (!secret && process.env.NODE_ENV === 'production') {
-    throw new Error('XTREAM_SECRET_KEY or JWT_ACCESS_SECRET must be configured in production');
+  if (!secret) {
+    if (securityEnforced()) {
+      throw new Error('XTREAM_SECRET_KEY or JWT_ACCESS_SECRET must be configured');
+    }
+    return crypto.createHash('sha256').update('dzhoof-dev-secret').digest();
   }
-  return crypto.createHash('sha256').update(secret || 'dzhoof-dev-secret').digest();
+  return crypto.createHash('sha256').update(secret).digest();
 }
 
 export function encryptSecret(plain: string): string {

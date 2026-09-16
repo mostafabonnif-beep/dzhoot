@@ -120,6 +120,16 @@ async function isChannelAllowedForUser(user, channel) {
 }
 
 /**
+ * True when this user's code may watch a channel in `group`.
+ * `allowedGroupsForUser` returning null means "unrestricted" → allow.
+ */
+async function isGroupAllowedForUser(user, group) {
+  const groups = await allowedGroupsForUser(user);
+  if (!groups) return true;
+  return groups.includes(String(group ?? '').trim());
+}
+
+/**
  * Merge the user's group scope into a Mongo query object.
  * Mutates and returns `query` for convenient chaining at call sites.
  */
@@ -158,6 +168,7 @@ module.exports = {
   getFreeAccessConfig,
   allowedGroupsForUser,
   isChannelAllowedForUser,
+  isGroupAllowedForUser,
   applyGroupScope,
   groupScopeClause,
   listCatalogGroups,

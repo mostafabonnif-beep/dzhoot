@@ -96,7 +96,11 @@ export default function ShopPlans({ shopId, compact }: { shopId?: string; compac
         setPayingPlanId(null);
       }
     },
-    [shopId],
+    // `cinetPayEnabled` is read inside the callback: leaving it out froze the
+    // value captured on the first render (before /payments/*/config resolved),
+    // so a shop whose only provider is CinetPay still POSTed to the Chargily
+    // checkout and the customer could not pay.
+    [shopId, cinetPayEnabled],
   );
 
   if (error) {
