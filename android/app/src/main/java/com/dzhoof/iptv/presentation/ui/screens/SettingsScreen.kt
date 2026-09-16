@@ -24,6 +24,7 @@ fun SettingsScreen(
     onNavigateToSelfHost: () -> Unit = {},
     onNavigateToManageChannels: () -> Unit = {},
     onNavigateToDiagnostics: () -> Unit = {},
+    onNavigateToReportProblem: () -> Unit = {},
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
@@ -34,7 +35,7 @@ fun SettingsScreen(
     // AddSource screen (self-hosted connect, M3U/Xtream load) shows on return.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshSource() }
 
-    val actions = remember(viewModel, onPairDevice, onResetPairing, onNavigateToSelfHost, onNavigateToManageChannels, onNavigateToDiagnostics) {
+    val actions = remember(viewModel, onPairDevice, onResetPairing, onNavigateToSelfHost, onNavigateToManageChannels, onNavigateToDiagnostics, onNavigateToReportProblem) {
         SettingsActions(
             onResetPairing = {
                 viewModel.resetPairing()
@@ -44,6 +45,7 @@ fun SettingsScreen(
             onNavigateToSelfHost = onNavigateToSelfHost,
             onNavigateToManageChannels = onNavigateToManageChannels,
             onNavigateToDiagnostics = onNavigateToDiagnostics,
+            onNavigateToReportProblem = onNavigateToReportProblem,
             onCheckLiveliness = viewModel::triggerLivelinessCheck,
             onClearCache = viewModel::clearCache,
             onResetGuide = viewModel::resetGuideData,

@@ -71,6 +71,7 @@ internal class SettingsActions(
     val onNavigateToSelfHost: () -> Unit,
     val onNavigateToManageChannels: () -> Unit,
     val onNavigateToDiagnostics: () -> Unit,
+    val onNavigateToReportProblem: () -> Unit,
     val onCheckLiveliness: () -> Unit,
     val onClearCache: () -> Unit,
     val onResetGuide: () -> Unit,
@@ -377,6 +378,7 @@ private fun SectionContent(
             onCheckForUpdate = actions.onCheckForUpdate,
             onUpdateNow = actions.onUpdateNow,
             onOpenDiagnostics = actions.onNavigateToDiagnostics,
+            onOpenReportProblem = actions.onNavigateToReportProblem,
             modifier = modifier
         )
     }
