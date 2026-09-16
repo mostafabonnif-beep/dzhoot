@@ -170,7 +170,13 @@ fun SideNavRail(
             modifier = Modifier.padding(vertical = if (compact) Dimens.Space1 else Dimens.Space2)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                // Must be a raster or a `<vector>`: `painterResource` throws on anything else.
+                // This used to be `ic_launcher_foreground`, a `<layer-list>` whose single item
+                // was `@drawable/dzhoof_logo` — so it drew the same bitmap, via a resource
+                // Compose refuses to load. Every landscape session on a top-level route died
+                // with `IllegalArgumentException: Only VectorDrawables and rasterized asset
+                // types are supported` (3 reports, SM-A057G, 1.0.48).
+                painter = painterResource(id = R.drawable.dzhoof_logo),
                 contentDescription = "DZ HOOF",
                 modifier = Modifier.size(if (compact) Dimens.NavRailBrandIconMobile else Dimens.NavRailBrandIconTv)
             )
