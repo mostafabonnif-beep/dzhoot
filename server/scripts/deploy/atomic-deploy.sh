@@ -27,6 +27,9 @@ ENV_FILE="${ENV_FILE:-/etc/dzhoot/.env.production}"
 RELEASE="$RELEASES_ROOT/$SHA"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 PREVIOUS="${ACTIVE}.previous-${STAMP}"
+# Where deploy outcomes are recorded. `deploy-production.sh` writes the success rows;
+# this script adds the failure rows (see rollback()).
+DEPLOY_LOG="${DEPLOY_LOG:-/var/log/dzhoof-deploys.log}"
 FAILED="${ACTIVE}.failed-${STAMP}"
 SOURCE_BACKUP="/var/backups/dzhoot/source/pre-${SHA}-${STAMP}.tar.gz"
 APPLY="${APPLY:-0}"
@@ -53,6 +56,17 @@ die() {
 #   exits on the trap path; on the die() path it returns so die() can exit 1.
 rollback() {
   code="${1:-$?}"
+  # Record the failure. `deploy-production.sh` appends a row only when it reaches step 7/7
+  # "Record deploy", so a deploy that fails and rolls back leaves nothing in
+  # /var/log/dzhoof-deploys.log — the rollback did its job and no trace of why survived. That
+  # is how three failed deploys on 2026-09-15 became invisible. The row uses the same five
+  # tab-separated columns as a success row with `FAILED` in the tag column, so `grep FAILED`
+  # finds every failed deploy next to the ones that worked. Logging must never break the
+  # rollback: failures here are swallowed.
+  printf '%s\tFAILED\t%s\t-\tatomic-deploy abort (exit %s%s)\n' \
+    "$(date -u +%FT%TZ)" "${SHA:-unknown}" "$code" \
+    "$([ "${SWAPPED:-0}" -eq 1 ] && printf ', production source swapped and restored')" \
+    >> "$DEPLOY_LOG" 2>/dev/null || true
   if [ "$SWAPPED" -eq 1 ]; then
     say "deployment failed (exit ${code}); restoring source and running images"
     if [ -n "$API_IMAGE_ID" ]; then docker tag "$API_IMAGE_ID" dzhoof-api:current || true; fi

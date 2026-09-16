@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Loader2, MessageSquare, Send, Lock, RefreshCw, Search } from 'lucide-react';
 import api from '@/lib/api';
+import { describeApiError } from '@/lib/api-error';
 import { useLocale } from '@/components/locale-provider';
 import { useToast } from '@/hooks/use-toast';
 import Modal from '@/components/ui/modal';
@@ -44,9 +45,15 @@ const priorityClass: Record<string, string> = {
 };
 
 export default function AdminTicketsPage() {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const { toast } = useToast();
   const [rows, setRows] = useState<TicketRow[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const pick = useCallback(
+    (ar: string, en: string, fr: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en),
+    [locale],
+  );
   const [summary, setSummary] = useState({ OPEN: 0, PENDING: 0, CLOSED: 0 });
   const [tab, setTab] = useState<(typeof STATUS_TABS)[number]>('ALL');
   const [search, setSearch] = useState('');
@@ -60,12 +67,17 @@ export default function AdminTicketsPage() {
       const res = await api.get('/admin/tickets', { params: { status: tab === 'ALL' ? undefined : tab } });
       setRows(res.data?.data || []);
       setSummary(res.data?.summary || { OPEN: 0, PENDING: 0, CLOSED: 0 });
-    } catch {
+      setLoadError(null);
+    } catch (err) {
+      // A failed request must never be rendered as "no tickets yet": an operator cannot tell
+      // "nothing is wrong" from "the fetch failed", and 401/403/500 are exactly the moments
+      // someone is looking at this page. Mirrors the diagnostics page.
       setRows([]);
+      setLoadError(describeApiError(err, pick));
     } finally {
       setLoading(false);
     }
-  }, [tab]);
+  }, [tab, pick]);
 
   useEffect(() => {
     load();
@@ -160,6 +172,10 @@ export default function AdminTicketsPage() {
       {loading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : loadError ? (
+        <div className="border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
         </div>
       ) : filtered.length === 0 ? (
         <div className="border border-dashed border-border p-10 text-center text-muted-foreground">
