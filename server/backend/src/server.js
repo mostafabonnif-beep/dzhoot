@@ -711,12 +711,11 @@ app.get('/health', async (req, res) => {
       const alertEmail = email || String(process.env.ALERT_EMAIL || '').trim();
       const telegramToken = tgToken || String(process.env.ALERT_TELEGRAM_BOT_TOKEN || '').trim();
       const telegramChatId = tgChat || String(process.env.ALERT_TELEGRAM_CHAT_ID || '').trim();
-      const alertingConfigured = Boolean(webhookUrl || alertEmail || (telegramToken && telegramChatId));
-      // Per-channel truth, so a broken email channel cannot hide behind
-      // `alertingConfigured: true` (2026-09-15: the scheduler failed every alert
-      // email with `Missing credentials for "PLAIN"` while this endpoint said
-      // alerting was configured, because Telegram was set). Reason codes and
-      // booleans only — no value ever leaves this endpoint.
+      // Per-channel truth, so a broken email channel cannot hide behind a green
+      // top-level flag (2026-09-15: the scheduler failed every alert email with
+      // `Missing credentials for "PLAIN"` while this endpoint said alerting was
+      // configured, because Telegram was set). Reason codes and booleans only — no
+      // value ever leaves this endpoint.
       let notifications;
       try {
         const { getAlertChannelStatus } = require('./services/alert-notifier');
@@ -728,6 +727,14 @@ app.get('/health', async (req, res) => {
       } catch (error) {
         notifications = { error: redactSensitiveText(error) };
       }
+      // `alertingConfigured` answers "will an alert actually be delivered?", which is the
+      // question an operator reads it as — and it is reported as `false` whenever the
+      // status could not be determined, so an unknown state never reads as healthy. It used
+      // to be `Boolean(webhookUrl || alertEmail || telegram)`, a *configuration* test: with
+      // a recipient set but the mail provider unusable it answered `true` while every alert
+      // email failed, which is precisely how the 2026-09-15 email outage stayed invisible.
+      // The configuration facts remain available under `notifications.channels`.
+      const alertingConfigured = notifications.anyDeliverable === true;
       response.details = {
         uptime: process.uptime(),
         mongodb: healthy ? 'connected' : 'disconnected',

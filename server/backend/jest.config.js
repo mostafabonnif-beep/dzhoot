@@ -3,7 +3,11 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
-  testMatch: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts'],
+  // `.js` as well as `.ts`: a `.test.js` file was silently never executed, so
+  // `src/routes/catalog-helpers.test.js` had been reporting nothing since it was
+  // written — a green suite that never ran it. The backend still ships a few CommonJS
+  // route modules, and their tests are allowed to match them.
+  testMatch: ['**/__tests__/**/*.ts', '**/*.test.ts', '**/*.spec.ts', '**/*.test.js', '**/*.spec.js'],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: 'tsconfig.json',
