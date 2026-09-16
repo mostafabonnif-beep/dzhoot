@@ -1146,7 +1146,11 @@ router.post('/crash-report', crashReportLimiter, async (req, res) => {
       exceptionType: cleanReportText(body.exceptionType, 200),
       exceptionMessage: cleanReportText(body.exceptionMessage, 2000),
       stackTrace: cleanReportText(body.stackTrace, 50000),
-      threadName: cleanReportField(body.threadName, 100),
+      // Redacted, like `screen` below. The doc comment on `cleanReportText` lists "thread"
+      // among the free-text fields that must be scrubbed, but this line only truncated: a
+      // crashed app sends the thread name from wherever the failure happened, and a URL that
+      // reached a worker thread carries its credentials in the name.
+      threadName: cleanReportText(body.threadName, 100),
       screen: cleanReportText(body.screen, 100),
     });
 
