@@ -4,10 +4,12 @@ const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 const AppVersion = require('../models/AppVersion');
 const { CacheService } = require('../services/cache');
+const { ghReleaseCache, invalidateReleaseCaches } = require('../services/app-release-cache');
 const { appVersionQuerySchema, buildErrorReport } = require('@dzhoof/shared');
 const https = require('https');
 const http = require('http');
 const { validateUrlForSSRF, createPinnedLookup } = require('../utils/ssrf-guard');
+const { createHash } = require('crypto');
 // Shared demo-code guard (same strength rules + live-credential collision check).
 const { resolvePublicDemoCode } = require('./config');
 
@@ -72,6 +74,37 @@ function isStaleLocalDownloadUrl(req, value) {
 
 function publicDownloadUrl(req, value) {
   return isStaleLocalDownloadUrl(req, value) ? getCanonicalDownloadUrl(req) : value;
+}
+
+/**
+ * Whether a published download URL is (or is rewritten into) this API's own
+ * `/api/v1/app/download` redirect.
+ *
+ * That redirect always serves the *newest GitHub release*, not the release the row
+ * describes. So a row pointing at it cannot bind its own `sha256` to the bytes a
+ * device actually receives: the two only agree while the row happens to describe
+ * GitHub's current release. The publish path therefore refuses to advertise such a
+ * row unless its checksum is confirmed against the release the redirect serves (see
+ * `resolvePublishedRelease`).
+ */
+function isCanonicalRedirectUrl(req, value) {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:') return false;
+    const requestHost = String(req?.get?.('host') || '').trim().toLowerCase();
+    const configuredBaseUrl = String(process.env.PUBLIC_BASE_URL || '').trim();
+    const configuredHost = configuredBaseUrl ? new URL(configuredBaseUrl).host.toLowerCase() : requestHost;
+    if (!configuredHost) return false;
+    return parsed.host.toLowerCase() === configuredHost && parsed.pathname === '/api/v1/app/download';
+  } catch {
+    return false;
+  }
+}
+
+/** True when the row's bytes come from the canonical redirect rather than its own URL. */
+function servesCanonicalRedirect(req, value) {
+  return isStaleLocalDownloadUrl(req, value) || isCanonicalRedirectUrl(req, value);
 }
 
 // ---------------------------------------------------------------------------
@@ -228,7 +261,7 @@ function pickLatestVersion(candidates, { channel = null, platform = null } = {})
   return matching[0] || null;
 }
 
-function toPublicLatestVersion(latest, req) {
+function toPublicLatestVersion(latest, req, { withholdDownload = false } = {}) {
   const minimumSupportedVersionCode = Math.max(1, Number(latest.minCompatibleVersion) || 1);
   const sizeBytes = Number(latest.apkFileSize) || 0;
   const publishedAt = toIsoString(latest.releasedAt);
@@ -239,8 +272,10 @@ function toPublicLatestVersion(latest, req) {
     minimumSupportedVersionCode,
     releaseChannel: latest.releaseChannel,
     distribution: latest.distribution,
-    // Fail-closed: an off-allowlist or non-HTTPS URL is never handed to a device.
-    downloadUrl: isAllowedDownloadUrl(latest.downloadUrl, req) ? latest.downloadUrl : null,
+    // Fail-closed: an off-allowlist or non-HTTPS URL is never handed to a device, and a
+    // release whose checksum could not be verified keeps its metadata but loses its URL.
+    downloadUrl:
+      !withholdDownload && isAllowedDownloadUrl(latest.downloadUrl, req) ? latest.downloadUrl : null,
     sha256: latest.sha256 || null,
     // Provenance of the checksum. `checksumSource` is null when nothing could be
     // verified, so a client (and an operator) can tell "no checksum" apart from
@@ -267,7 +302,8 @@ function toPublicLatestVersion(latest, req) {
 // polling /version at boot) a live api.github.com call per request exhausts the
 // API rate limit and the app-update endpoints degrade to HTTP 429 — seen in the
 // 2026-09-05 production load test (0% success at 25 concurrent users).
-const ghReleaseCache = new CacheService('ghrel:', 600); // 10 minutes
+// The cache (and its explicit invalidation) lives in services/app-release-cache so the
+// admin publish path can clear it without importing this router.
 
 async function fetchLatestRelease() {
   const cached = await ghReleaseCache.get('latest');
@@ -379,7 +415,41 @@ function validateManifestAgainstAsset(manifest, apkAsset) {
 const checksumCache = new CacheService('ghsha:', 600); // 10 minutes, same window as the release cache
 // Bumped when the cached value's shape changes, so entries written by an older
 // build (which stored a bare string) are ignored instead of misread as verified.
-const CHECKSUM_CACHE_VERSION = 2;
+const CHECKSUM_CACHE_VERSION = 3;
+
+/**
+ * Identity of the artifact a checksum belongs to.
+ *
+ * The key used to be `v<versionCode>` alone, so a release republished under the same
+ * versionCode (a re-cut APK, or an asset replaced after a failed upload) kept serving
+ * the previous release's digest for the rest of the TTL — the exact "checksum of other
+ * bytes" failure the gate exists to prevent. The asset name/size and both asset URLs
+ * carry the release tag, so including them changes the key whenever the artifact does.
+ */
+function checksumCacheKey(candidate) {
+  const identity = [
+    CHECKSUM_CACHE_VERSION,
+    candidate.versionCode,
+    candidate.apkFileName || '',
+    candidate.apkFileSize || '',
+    candidate.manifestAssetUrl || '',
+    candidate.sha256AssetUrl || '',
+  ].join('|');
+  return createHash('sha256').update(identity).digest('hex').slice(0, 40);
+}
+
+/** Cached wrapper around {@link loadGithubChecksum}. */
+async function fetchReleaseSha256(candidate) {
+  if (!candidate) return null;
+  const cacheKey = checksumCacheKey(candidate);
+  const cached = await checksumCache.get(cacheKey);
+  if (cached && typeof cached === 'object' && cached.cacheVersion === CHECKSUM_CACHE_VERSION && cached.sha256) {
+    return cached;
+  }
+  const resolved = await loadGithubChecksum(candidate);
+  if (resolved) await checksumCache.set(cacheKey, { ...resolved, cacheVersion: CHECKSUM_CACHE_VERSION });
+  return resolved;
+}
 
 /**
  * Downloads one small text asset, following redirects manually so *every hop* is
@@ -524,19 +594,6 @@ async function loadGithubChecksum(candidate) {
   return null;
 }
 
-/** Cached wrapper around {@link loadGithubChecksum}. */
-async function fetchReleaseSha256(candidate) {
-  if (!candidate) return null;
-  const cacheKey = `v${candidate.versionCode}`;
-  const cached = await checksumCache.get(cacheKey);
-  if (cached && typeof cached === 'object' && cached.cacheVersion === CHECKSUM_CACHE_VERSION && cached.sha256) {
-    return cached;
-  }
-  const resolved = await loadGithubChecksum(candidate);
-  if (resolved) await checksumCache.set(cacheKey, { ...resolved, cacheVersion: CHECKSUM_CACHE_VERSION });
-  return resolved;
-}
-
 const REQUIRE_CHECKSUM_ENV = 'APP_UPDATE_REQUIRE_CHECKSUM';
 /**
  * Whether an update may be advertised without a verified checksum.
@@ -618,6 +675,9 @@ function mapDbVersion(req, version) {
     // Recorded so the response can state where a checksum came from; a row without
     // one stays null and the route refuses to advertise the update (see the gate).
     checksumSource: normalizeSha256(version.sha256) ? 'db' : null,
+    // Records that the delivered bytes come from the canonical redirect, so the row's
+    // own `sha256` cannot be assumed to describe them (see `servesCanonicalRedirect`).
+    downloadUrlCanonical: servesCanonicalRedirect(req, version.downloadUrl),
     // Optional per-version platform scope; absent means "all platforms".
     platforms: Array.isArray(version.platforms) ? version.platforms : null,
     source: 'db',
@@ -672,8 +732,66 @@ async function getVersionCandidates(req) {
   return candidates;
 }
 
-async function getLatestPublishedVersion(req) {
-  return pickLatestVersion(await getVersionCandidates(req));
+/**
+ * The single source of truth for "what is published, and may it be advertised?".
+ *
+ * `/version` (a device asking) and `/latest` (an operator or integration asking "what
+ * is out there?") both go through this, so the checksum contract cannot drift between
+ * them again. It used to be applied inside `/version` only, and only when a device
+ * could act on the update — which is why the live API answered `sha256: null` to an
+ * already-current device and on `/latest` unconditionally.
+ */
+async function resolvePublishedRelease(req, { channel = null, platform = null } = {}) {
+  const candidates = await getVersionCandidates(req);
+  const latest = pickLatestVersion(candidates, { channel, platform });
+  if (!latest) return null;
+
+  const githubCandidate = candidates.find((candidate) => candidate && candidate.source === 'github') || null;
+
+  // Resolve the checksum for the published candidate *unconditionally* — not only when
+  // `updateAvailable` is true. `fetchReleaseSha256` is Redis-cached for 10 minutes, so
+  // the steady-state cost for a fleet polling at boot is one cache read, while an
+  // operator (or a fleet dashboard) asking "what is published?" always reads a real
+  // digest instead of a misleading `null`.
+  if (!latest.sha256 && latest.source === 'github') {
+    const resolved = await fetchReleaseSha256(latest);
+    if (resolved) {
+      latest.sha256 = resolved.sha256;
+      latest.checksumSource = resolved.source;
+      latest.signerSha256 = resolved.signerSha256 || null;
+    }
+  }
+
+  // A database row that resolves to the canonical `/api/v1/app/download` redirect does
+  // not deliver its own artifact: that endpoint always redirects to the newest GitHub
+  // release. The row's `sha256` may therefore describe bytes a device will never
+  // receive, which is exactly the mismatch that makes an install fail on device. Trust
+  // it only when it matches the release the redirect actually serves.
+  if (latest.source === 'db' && latest.sha256 && latest.downloadUrlCanonical) {
+    const servedByRedirect = githubCandidate ? await fetchReleaseSha256(githubCandidate) : null;
+    const binds =
+      !!servedByRedirect &&
+      servedByRedirect.sha256 === latest.sha256 &&
+      Number(githubCandidate.versionCode) === Number(latest.versionCode);
+    if (!binds) {
+      warnChecksumUnavailable(
+        latest,
+        servedByRedirect
+          ? 'the row points at the canonical download redirect, whose bytes belong to a different release'
+          : 'the row points at the canonical download redirect and the served release could not be resolved',
+      );
+      latest.sha256 = null;
+      latest.checksumSource = null;
+      latest.signerSha256 = null;
+      latest.checksumUnbound = true;
+    }
+  }
+
+  return {
+    latest,
+    minimumSupportedVersionCode: Math.max(1, Number(latest.minCompatibleVersion) || 1),
+    checksumRequired: requireChecksumFromEnv(),
+  };
 }
 
 router.get('/version', updateCheckLimiter, async (req, res) => {
@@ -697,9 +815,9 @@ router.get('/version', updateCheckLimiter, async (req, res) => {
         ? parsedQuery.data.currentVersionCode
         : parsedQuery.data.currentVersion;
 
-    const latest = pickLatestVersion(await getVersionCandidates(req), { channel, platform });
+    const resolved = await resolvePublishedRelease(req, { channel, platform });
 
-    if (!latest) {
+    if (!resolved) {
       return res.json({
         success: true,
         updateAvailable: false,
@@ -709,7 +827,7 @@ router.get('/version', updateCheckLimiter, async (req, res) => {
       });
     }
 
-    const minimumSupportedVersionCode = Math.max(1, Number(latest.minCompatibleVersion) || 1);
+    const { latest, minimumSupportedVersionCode, checksumRequired } = resolved;
     const updateAvailable = latest.versionCode > currentVersionCode;
     // `mandatory` means "the device must take this update", so it only applies when there
     // is an update to take: a floor raised above the newest published build would otherwise
@@ -725,25 +843,17 @@ router.get('/version', updateCheckLimiter, async (req, res) => {
       );
     }
 
-    // Only pay for the checksum lookup when the device can actually act on it.
-    if (updateAvailable && !latest.sha256) {
-      const resolved = await fetchReleaseSha256(latest);
-      if (resolved) {
-        latest.sha256 = resolved.sha256;
-        latest.checksumSource = resolved.source;
-        latest.signerSha256 = resolved.signerSha256 || null;
-      }
-    }
-
     // Release gate: never advertise an update whose bytes cannot be verified. The
     // Android client refuses a null/invalid checksum anyway (UpdateVerifier), so
     // advertising one only produces a download that must be thrown away.
-    const checksumRequired = requireChecksumFromEnv();
     const blockedByChecksum = updateAvailable && checksumRequired && !latest.sha256;
     if (blockedByChecksum) warnChecksumGate(latest.versionName || latest.versionCode);
 
     const updateOffered = updateAvailable && !blockedByChecksum;
-    const publicLatest = toPublicLatestVersion(latest, req);
+    // A blocked release keeps its version metadata (so the device can say "there is a
+    // newer build, but not yet") but never its download URL: the API would be handing
+    // out bytes it has just declared unverifiable.
+    const publicLatest = toPublicLatestVersion(latest, req, { withholdDownload: blockedByChecksum });
 
     return res.json({
       success: true,
@@ -776,18 +886,39 @@ router.get('/version', updateCheckLimiter, async (req, res) => {
 
 router.get('/latest', async (req, res) => {
   try {
-    const latest = await getLatestPublishedVersion(req);
-    if (!latest) {
+    const parsedQuery = appVersionQuerySchema.safeParse(req.query);
+    const { channel = null, platform = null } = parsedQuery.success ? parsedQuery.data : {};
+
+    const resolved = await resolvePublishedRelease(req, { channel, platform });
+    if (!resolved) {
       return res.status(404).json({
         success: false,
         error: 'No APK asset available in active release sources',
       });
     }
 
+    const { latest, checksumRequired } = resolved;
+    // Same contract as `/version`: this endpoint used to answer the raw internal
+    // candidate (checksum always null, plus the internal `sha256AssetUrl` /
+    // `manifestAssetUrl` used to fetch it) which both leaked publish-path detail and
+    // made the published digest unreadable from the outside.
+    const blockedByChecksum = checksumRequired && !latest.sha256;
+    if (blockedByChecksum) warnChecksumGate(latest.versionName || latest.versionCode);
+
+    const publicLatest = toPublicLatestVersion(latest, req, { withholdDownload: blockedByChecksum });
+
     return res.json({
       success: true,
-      data: latest,
+      data: publicLatest,
       source: latest.source,
+      checksumVerified: !!latest.sha256,
+      ...(blockedByChecksum
+        ? {
+            updateBlockedReason: 'CHECKSUM_UNAVAILABLE',
+            message:
+              'This release exists but its checksum could not be verified, so it is not offered for download',
+          }
+        : {}),
     });
   } catch (error) {
     console.error('Error fetching latest version from GitHub:', error.message || error);
@@ -1013,6 +1144,8 @@ module.exports._private = {
   requireChecksumFromEnv,
   getCanonicalDownloadUrl,
   isStaleLocalDownloadUrl,
+  isCanonicalRedirectUrl,
+  servesCanonicalRedirect,
   publicDownloadUrl,
   normalizeSha256,
   normalizeChannel,
@@ -1025,5 +1158,8 @@ module.exports._private = {
   pickManifestAsset,
   parseReleaseManifest,
   validateManifestAgainstAsset,
+  checksumCacheKey,
+  CHECKSUM_CACHE_VERSION,
+  invalidateReleaseCaches,
   GITHUB_ASSET_HOSTS,
 };

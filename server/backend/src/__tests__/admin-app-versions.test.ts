@@ -27,6 +27,16 @@ jest.mock('../services/audit-log', () => ({
   redactSensitiveText: (value: unknown) => String(value),
 }));
 
+// Redis is not available in the unit environment; the release cache is asserted
+// through its own module surface so the route stays testable without a cache server.
+jest.mock('../services/app-release-cache', () => ({
+  ghReleaseCache: { get: jest.fn(), set: jest.fn(), delete: jest.fn() },
+  invalidateReleaseCaches: jest.fn(async () => true),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const releaseCache = require('../services/app-release-cache');
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const auditModule = require('../services/audit-log');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -431,5 +441,65 @@ describe('admin app-versions route — checksum publish gate', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data.releaseNotes).toBe('ملاحظات مصحّحة');
+  });
+});
+
+describe('release cache invalidation', () => {
+  const invalidate = releaseCache.invalidateReleaseCaches as jest.Mock;
+
+  beforeEach(() => {
+    invalidate.mockClear();
+  });
+
+  it('drops the cached release lookup when a release is published', async () => {
+    // The update endpoints read GitHub through a 10-minute Redis cache; a publish that
+    // left it in place kept advertising the previous release, and the operator had to
+    // clear ghrel:latest by hand (docs/AI_AGENT_OPERATIONS_AR.md §3).
+    const response = await request(buildApp())
+      .post('/api/v1/admin/app-versions')
+      .send(publishBody({ versionName: '1.9.4', versionCode: 10904 }));
+
+    expect(response.status).toBe(201);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops the cached release lookup when release metadata changes', async () => {
+    const created = await AppVersion.create({
+      versionName: '1.9.5',
+      versionCode: 10905,
+      apkFileName: 'dzhoof-tv-v1.9.5-official.apk',
+      apkFileSize: 1234,
+      downloadUrl: APK_URL,
+      sha256: SHA256,
+      isActive: true,
+    });
+
+    const response = await request(buildApp())
+      .patch(`/api/v1/admin/app-versions/${created._id}`)
+      .send({ isMandatory: true });
+
+    expect(response.status).toBe(200);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not clear the cache when the publish is refused', async () => {
+    const response = await request(buildApp())
+      .post('/api/v1/admin/app-versions')
+      .send(publishBody({ versionName: '1.9.6', versionCode: 10906, sha256: undefined }));
+
+    expect(response.status).toBe(400);
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('still publishes when the cache cannot be cleared', async () => {
+    // A stale cache is a ten-minute delay; it must never fail the write.
+    invalidate.mockRejectedValueOnce(new Error('redis down'));
+
+    const response = await request(buildApp())
+      .post('/api/v1/admin/app-versions')
+      .send(publishBody({ versionName: '1.9.7', versionCode: 10907 }));
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
   });
 });

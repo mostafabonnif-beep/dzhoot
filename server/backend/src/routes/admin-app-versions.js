@@ -5,6 +5,7 @@ const AppVersion = require('../models/AppVersion');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx } = require('../services/audit-log');
 const { createAppVersionSchema, updateAppVersionSchema } = require('@dzhoof/shared');
+const { invalidateReleaseCaches } = require('../services/app-release-cache');
 
 // Admin-only app release metadata: /api/v1/admin/app-versions
 //
@@ -105,6 +106,30 @@ function checksumGateError(version) {
   };
 }
 
+/**
+ * Drop the cached GitHub release lookup after a write that changes what the update
+ * endpoints should answer.
+ *
+ * `GET /app/version`, `/app/latest`, `/app/download` and `/app/download-url` read the
+ * GitHub release through a 10-minute Redis cache (`ghrel:latest`) so a fleet polling at
+ * boot does not exhaust the GitHub API rate limit. Nothing invalidated it, so after a
+ * publish the API kept advertising the previous release until the TTL expired — and
+ * `docs/AI_AGENT_OPERATIONS_AR.md` §3 told the operator to clear the key by hand.
+ *
+ * Invalidating here rather than behind an operator-triggered endpoint makes it
+ * automatic: the cache is cleared by the write that made it stale, so it cannot be
+ * forgotten. A release published only on GitHub (no `AppVersion` row written) still
+ * waits out the TTL; ten minutes is the documented bound.
+ */
+async function invalidateReleaseCacheAfterWrite() {
+  try {
+    await invalidateReleaseCaches();
+  } catch (err) {
+    // A stale cache is a ten-minute delay, not a failed publish: never fail the write.
+    console.error('[app-versions] could not invalidate the release cache:', err.message || err);
+  }
+}
+
 // GET / — newest first, bounded
 router.get('/', async (req, res) => {
   try {
@@ -155,6 +180,7 @@ router.post('/', async (req, res) => {
       resourceId: String(created._id),
       changes: { after: shaped },
     });
+    await invalidateReleaseCacheAfterWrite();
     return res.status(201).json({ success: true, data: shaped });
   } catch (err) {
     if (err && err.code === 11000) {
@@ -236,6 +262,7 @@ router.patch('/:id', async (req, res) => {
       resourceId: String(id),
       changes: { before, after },
     });
+    await invalidateReleaseCacheAfterWrite();
     return res.json({ success: true, data: after });
   } catch (err) {
     console.error('[app-versions] update error:', err.message || err);
