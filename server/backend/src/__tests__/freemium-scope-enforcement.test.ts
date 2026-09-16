@@ -198,23 +198,30 @@ describe('session auth has a single implementation', () => {
 
   it('attaches the freemium scope fields to req.user', async () => {
     const { sessionId } = await makeUser({ accessGroups: ['AR'], freeAccess: true });
-    const app = express();
-    app.get('/probe', sharedAuthMiddleware.requireAuth, (req: any, res) => {
-      res.json({
-        id: req.user.id,
-        accessGroups: req.user.accessGroups,
-        freeAccess: req.user.freeAccess,
-        allCatalog: req.user.allCatalog,
-      });
+
+    // Drive the middleware directly rather than through a throwaway Express
+    // route: the middleware reads the Session collection, and an ad-hoc
+    // unauthenticated route that touches the DB is exactly what the CodeQL
+    // missing-rate-limiting query flags.
+    const req = {
+      headers: { 'x-session-id': sessionId },
+      ip: '127.0.0.1',
+    } as any;
+    let captured: any = null;
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn().mockReturnThis(),
+    } as any;
+
+    await sharedAuthMiddleware.requireAuth(req, res, () => {
+      captured = req.user;
     });
 
-    const res = await request(app).get('/probe').set('x-session-id', sessionId);
-
-    expect(res.status).toBe(200);
+    expect(captured).not.toBeNull();
     // String, not ObjectId — the shape every route now shares.
-    expect(typeof res.body.id).toBe('string');
-    expect(res.body.accessGroups).toEqual(['AR']);
-    expect(res.body.freeAccess).toBe(true);
-    expect(res.body.allCatalog).toBe(false);
+    expect(typeof captured.id).toBe('string');
+    expect(captured.accessGroups).toEqual(['AR']);
+    expect(captured.freeAccess).toBe(true);
+    expect(captured.allCatalog).toBe(false);
   });
 });

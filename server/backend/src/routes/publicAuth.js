@@ -17,9 +17,33 @@ const signupLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Basic validators
+// Basic validators.
+//
+// The previous shape regex (`/^[^\s@]+@[^\s@]+\.[^\s@]+$/`) is ambiguous —
+// its character classes also match '.' — so CodeQL flagged it as a polynomial
+// ReDoS. This validator is length-bounded and uses only anchored, unambiguous
+// character classes, so the work is linear in the input.
+const EMAIL_LOCAL_MAX = 64;
+const EMAIL_TOTAL_MAX = 254;
+const EMAIL_LABEL = /^[A-Za-z0-9-]+$/;
+
 function validateEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  if (typeof email !== 'string') return false;
+  const value = email.trim();
+  if (value.length < 6 || value.length > EMAIL_TOTAL_MAX) return false;
+  if (/\s/.test(value)) return false;
+
+  const at = value.indexOf('@');
+  if (at <= 0 || at !== value.lastIndexOf('@')) return false;
+
+  const local = value.slice(0, at);
+  const domain = value.slice(at + 1);
+  if (!local || local.length > EMAIL_LOCAL_MAX) return false;
+  if (domain.includes('..')) return false;
+
+  const labels = domain.split('.');
+  if (labels.length < 2) return false;
+  return labels.every((label) => label.length > 0 && label.length <= 63 && EMAIL_LABEL.test(label));
 }
 
 function validateUsername(username) {

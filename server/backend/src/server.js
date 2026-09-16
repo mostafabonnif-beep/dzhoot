@@ -231,8 +231,21 @@ app.use(cookieParser());
 // before the session check. The route itself re-checks admin access.
 const { requireAuth: requireSessionAuth } = require('./middleware/requireAuth');
 const { requireAdmin: requireAdminRole } = require('./middleware/requireAdmin');
+// Its own limiter, registered first in the chain: the session check reads Mongo,
+// so without a budget in front of it an unauthenticated caller could drive DB
+// lookups (and, behind them, 50 MB of buffering) at an unbounded rate. The
+// generic /api/ limiter is registered later in this file, i.e. after this chain.
+const m3uImportLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: rateLimitIp,
+  message: { success: false, error: 'Too many import attempts, please try again later', code: 'RATE_LIMITED' },
+});
 app.use(
   '/api/v1/admin/channels/import-m3u',
+  m3uImportLimiter,
   requireSessionAuth,
   requireAdminRole,
   express.json({ limit: '50mb' }),
