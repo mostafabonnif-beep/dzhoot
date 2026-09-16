@@ -5,11 +5,14 @@ const router = express.Router();
 const User = require('../models/User');
 const { signAccessToken, signRefreshToken, persistRefreshToken } = require('../utils/jwtUtil');
 const { sendVerificationEmail } = require('../services/email');
+const { verifyRecaptchaToken } = require('../utils/recaptcha');
 
-// Rate limiter for signup to mitigate abuse
+// Rate limiter for signup to mitigate abuse. `parseInt` always gets an explicit
+// radix: without one an env value like `0x10` is read as hex (16 attempts).
+const SIGNUP_RATE_LIMIT_MAX = Number.parseInt(process.env.SIGNUP_RATE_LIMIT_MAX || '10', 10);
 const signupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: parseInt(process.env.SIGNUP_RATE_LIMIT_MAX || '10'),
+  max: Number.isFinite(SIGNUP_RATE_LIMIT_MAX) && SIGNUP_RATE_LIMIT_MAX > 0 ? SIGNUP_RATE_LIMIT_MAX : 10,
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -41,7 +44,7 @@ router.post('/signup', signupLimiter, async (req, res) => {
       });
     }
 
-    const { username, email, password } = req.body;
+    const { username, email, password, recaptchaToken } = req.body;
     if (!username || !email || !password) {
       return res.status(400).json({ success: false, error: 'username, email, password required' });
     }
@@ -64,6 +67,27 @@ router.post('/signup', signupLimiter, async (req, res) => {
     const reserved = process.env.SUPER_ADMIN_USERNAME;
     if (reserved && username.toLowerCase() === reserved.toLowerCase()) {
       return res.status(403).json({ success: false, error: 'Username reserved' });
+    }
+
+    // reCAPTCHA: this route is the sibling of /api/v1/auth/register and used to
+    // skip the check entirely, so an attacker could mass-register here and get a
+    // channel-list code plus JWTs with no bot protection. Same helper, same rules.
+    const captcha = await verifyRecaptchaToken(recaptchaToken, req.ip);
+    if (!captcha.ok) {
+      if (captcha.reason === 'missing_token') {
+        return res.status(400).json({ success: false, error: 'reCAPTCHA verification is required' });
+      }
+      if (captcha.reason === 'verification_unavailable') {
+        console.error('reCAPTCHA verification unavailable:', captcha.error?.message || captcha.error);
+        return res
+          .status(503)
+          .json({ success: false, error: 'Registration is temporarily unavailable. Please try again later.' });
+      }
+      console.warn(`reCAPTCHA failed for public signup: score=${captcha.score}, IP: ${req.ip}`);
+      return res.status(403).json({
+        success: false,
+        error: 'Registration blocked — suspected bot activity. Please try again.',
+      });
     }
 
     // Uniqueness checks

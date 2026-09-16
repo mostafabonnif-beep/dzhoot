@@ -76,8 +76,11 @@ const requireAuth = async (req: Request, res: Response, next: NextFunction) => {
       emailVerified: user.emailVerified,
       // Freemium scope must survive every auth path, otherwise a group-limited
       // code would fall back to "unrestricted" on session-authenticated routes.
+      // This is the single auth implementation (routes/auth.js re-exports it),
+      // so every route now sees the same shape.
       accessGroups: (user as { accessGroups?: string[] }).accessGroups || [],
       freeAccess: (user as { freeAccess?: boolean }).freeAccess === true,
+      allCatalog: (user as { allCatalog?: boolean }).allCatalog === true,
     };
 
     req.sessionId = sessionId;

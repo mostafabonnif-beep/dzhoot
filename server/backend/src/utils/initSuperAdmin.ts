@@ -79,7 +79,9 @@ async function initializeSuperAdmin(): Promise<IUserDocument> {
       ) {
         existingAdmin.channelListCode = channelListCode;
         await existingAdmin.save();
-        console.log(`Super Admin channel list code updated to: ${channelListCode}`);
+        // Never print the code itself: it is a live playback credential and
+        // container logs are shipped off-box. The create path already withholds it.
+        console.log('Super Admin channel list code updated from SUPER_ADMIN_CHANNEL_LIST_CODE');
       }
 
       return existingAdmin;

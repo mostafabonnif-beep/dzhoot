@@ -9,6 +9,7 @@ const Session = require('../models/Session');
 const RefreshToken = require('../models/RefreshToken');
 const { audit } = require('../services/audit-log');
 const { sendVerificationEmail, sendPasswordResetEmail } = require('../services/email');
+const { verifyRecaptchaToken } = require('../utils/recaptcha');
 const { createTotpSetup, verifyTotpToken } = require('../services/totp-service');
 const {
   setSessionCookie,
@@ -79,94 +80,20 @@ const upload = multer({
 });
 
 /**
- * Middleware to check if user is authenticated
- * Validates session from database and attaches user info to request
+ * Middleware to check if user is authenticated.
+ *
+ * This file used to carry its own copy of the session check. It attached a
+ * *different* `req.user` than `middleware/requireAuth.ts` — crucially without
+ * `accessGroups` / `freeAccess` / `allCatalog` — and 28 route modules import it
+ * from here. Every group-scoped route reached through those modules therefore
+ * saw a user with no scope, and `channel-scope.allowedGroupsForUser` returned
+ * null ("unrestricted"), silently disabling the freemium boundary.
+ *
+ * There is now exactly one implementation: `middleware/requireAuth.ts`. The
+ * re-export below keeps the existing `require('./auth')` call sites working.
  */
-const requireAuth = async (req, res, next) => {
-  try {
-    // x-session-id header (Android/API clients) or the httpOnly cookie (web).
-    const sessionId = getSessionId(req);
-
-    if (!sessionId) {
-      return res.status(401).json({
-        success: false,
-        error: 'No session ID provided',
-      });
-    }
-
-    // Find session in database
-    const session = await Session.findOne({ sessionId }).populate('userId');
-
-    if (!session) {
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid session',
-      });
-    }
-
-    // Check if session is expired
-    if (!session.isValid()) {
-      await Session.deleteOne({ sessionId });
-      return res.status(401).json({
-        success: false,
-        error: 'Session expired',
-      });
-    }
-
-    // Check if user still exists and is active
-    if (!session.userId || !session.userId.isActive) {
-      await Session.deleteOne({ sessionId });
-      return res.status(401).json({
-        success: false,
-        error: 'User account is inactive',
-      });
-    }
-
-    // Update last activity
-    await session.updateActivity();
-
-    // Attach user info to request
-    req.user = {
-      id: session.userId._id,
-      username: session.userId.username,
-      email: session.userId.email,
-      role: session.userId.role,
-      channelListCode: session.userId.channelListCode,
-      isActive: session.userId.isActive,
-    };
-
-    req.sessionId = sessionId;
-
-    next();
-  } catch (error) {
-    console.error('Auth middleware error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Authentication error',
-    });
-  }
-};
-
-/**
- * Middleware to check if user has admin role
- */
-const requireAdmin = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      error: 'Unauthorized',
-    });
-  }
-
-  if (req.user.role !== 'Admin') {
-    return res.status(403).json({
-      success: false,
-      error: 'Forbidden - Admin access required',
-    });
-  }
-
-  next();
-};
+const requireAuth = require('../middleware/requireAuth').requireAuth;
+const requireAdmin = require('../middleware/requireAdmin').requireAdmin;
 
 /**
  * Login endpoint
@@ -1060,36 +987,30 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // Verify reCAPTCHA if configured
-    const recaptchaSecret = process.env.GOOGLE_RECAPTCHA_SECRET_KEY;
-    if (recaptchaSecret) {
-      if (!recaptchaToken) {
+    // Verify reCAPTCHA when it is configured (shared helper — the same check
+    // guards /api/v1/public/signup).
+    const captcha = await verifyRecaptchaToken(recaptchaToken, req.ip);
+    if (!captcha.ok) {
+      if (captcha.reason === 'missing_token') {
         return res.status(400).json({
           success: false,
           error: 'reCAPTCHA verification is required',
         });
       }
-
-      const verifyRes = await fetch('https://www.google.com/recaptcha/api/siteverify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          secret: recaptchaSecret,
-          response: recaptchaToken,
-          remoteip: req.ip,
-        }),
-      });
-      const verifyData = await verifyRes.json();
-
-      if (!verifyData.success || verifyData.score < 0.5) {
-        console.warn(
-          `reCAPTCHA failed for registration: score=${verifyData.score}, success=${verifyData.success}, IP: ${req.ip}`,
-        );
-        return res.status(403).json({
+      if (captcha.reason === 'verification_unavailable') {
+        console.error('reCAPTCHA verification unavailable:', captcha.error?.message || captcha.error);
+        return res.status(503).json({
           success: false,
-          error: 'Registration blocked — suspected bot activity. Please try again.',
+          error: 'Registration is temporarily unavailable. Please try again later.',
         });
       }
+      console.warn(
+        `reCAPTCHA failed for registration: score=${captcha.score}, IP: ${req.ip}`,
+      );
+      return res.status(403).json({
+        success: false,
+        error: 'Registration blocked — suspected bot activity. Please try again.',
+      });
     }
 
     // Validate username format

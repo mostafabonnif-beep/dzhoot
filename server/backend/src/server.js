@@ -224,8 +224,19 @@ app.use(
 const cookieParser = require('cookie-parser');
 app.use(cookieParser());
 
-// Route-specific larger body limit for M3U import (must be BEFORE the global 5MB parser)
-app.use('/api/v1/admin/channels/import-m3u', express.json({ limit: '50mb' }));
+// Route-specific larger body limit for M3U import (must be BEFORE the global 5MB
+// parser, otherwise the 5MB global limit rejects a legitimate 50MB playlist).
+// Auth runs FIRST in that chain: the body parser is what lets an unauthenticated
+// caller make the process buffer 50 MB per request, so it must not be reachable
+// before the session check. The route itself re-checks admin access.
+const { requireAuth: requireSessionAuth } = require('./middleware/requireAuth');
+const { requireAdmin: requireAdminRole } = require('./middleware/requireAdmin');
+app.use(
+  '/api/v1/admin/channels/import-m3u',
+  requireSessionAuth,
+  requireAdminRole,
+  express.json({ limit: '50mb' }),
+);
 
 // Chargily Pay webhook: signature verification requires the EXACT raw bytes
 // Chargily sent (HMAC over the un-reparsed body) — must run BEFORE the global
@@ -467,6 +478,25 @@ const paymentCheckoutLimiter = rateLimit({
   message: { success: false, error: 'Too many checkout attempts, please try again later', code: 'RATE_LIMITED' },
 });
 app.use('/api/v1/payments/chargily/checkout', paymentCheckoutLimiter);
+// CinetPay checkout is public for the same reason (the customer has no session
+// yet) and drives an outbound gateway call per request — it needs the same cap.
+app.use('/api/v1/payments/cinetpay/checkout', paymentCheckoutLimiter);
+
+// Logo relay: public by design (logos render before a client authenticates) and
+// it performs an outbound fetch + up to 300 KB of in-process caching per request,
+// so it gets its own budget instead of riding the generic API limiter.
+// 300/min is a deliberate ceiling: a freshly installed client painting its first
+// channel grid legitimately bursts a few hundred distinct logos, while a single
+// IP sustaining more than ~5 fetches/second is not a client.
+const logoProxyLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: rateLimitIp,
+  message: { success: false, error: 'Too many logo requests, please slow down', code: 'RATE_LIMITED' },
+});
+app.use('/api/v1/tv/logo', logoProxyLimiter);
 
 // Static files for uploads
 app.use('/uploads', express.static(path.join(PROJECT_ROOT, 'uploads')));

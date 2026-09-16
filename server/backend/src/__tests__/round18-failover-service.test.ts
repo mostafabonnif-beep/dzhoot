@@ -57,6 +57,15 @@ jest.mock('../services/alert-notifier', () => ({
   sendOperationalAlert: jest.fn().mockResolvedValue(true),
 }));
 
+// The watchdog/probe/auto-match paths fetch operator-configured upstream URLs
+// unattended, so they run through the same SSRF guard as the interactive import
+// paths. The guard resolves DNS, which these tests must not do.
+jest.mock('../utils/ssrf-guard', () => ({
+  validateUrlForSSRF: jest.fn().mockResolvedValue({ safe: true, resolvedAddresses: ['93.184.216.34'] }),
+  createPinnedLookup: jest.fn().mockReturnValue(() => {}),
+  isPrivateIP: jest.fn().mockReturnValue(false),
+}));
+
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const svc = require('../services/source-failover-service');
 
