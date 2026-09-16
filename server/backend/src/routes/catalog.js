@@ -23,6 +23,28 @@ function episodeFetchStale(series) {
 // Browseable catalog (movies / series / seasons / episodes / unified search).
 // Auth is optional — anonymous browsing is allowed; subscription gating is
 // enforced separately at /streams/authorize.
+
+// The single aggregation key for a category bucket, shared by the two category
+// endpoints so they cannot drift apart.
+//
+// Why it is not just `'$category'`: the stored value can be absent, empty, or the
+// literal `'Uncategorized'`. Grouping by the raw value produced SEPARATE buckets for
+// those, which the response then mapped onto the SAME served name (`c._id ||
+// 'Uncategorized'`) — so one response could carry two entries called exactly
+// "Uncategorized". A client that keys a lazy list by name (the Android catalog rail
+// does: `items(ordered, key = { it.name })`) then throws
+// `IllegalArgumentException: Key "Uncategorized" was already used` while composing,
+// and the whole screen dies. Production data did not hit this on 2026-09-15 (434
+// distinct names for 434 buckets, same for series), so it is a latent defect rather
+// than an observed crash — but a single imported document with a missing category is
+// enough to arm it.
+//
+// Collapsing the key also makes the count the true total for the served name instead
+// of two partial counts, and leaves `c._id || 'Uncategorized'` in the mapping as a
+// belt-and-braces default that can no longer be reached by an empty key.
+const CATEGORY_KEY = {
+  $cond: [{ $eq: [{ $ifNull: ['$category', ''] }, ''] }, 'Uncategorized', '$category'],
+};
 router.use(optionalAuth);
 
 
@@ -63,7 +85,7 @@ router.get('/movies/categories', async (req, res) => {
   try {
     const cats = await Movie.aggregate([
       { $match: { isActive: true } },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $group: { _id: CATEGORY_KEY, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
     return res.json({
@@ -111,7 +133,7 @@ router.get('/series/categories', async (req, res) => {
   try {
     const cats = await Series.aggregate([
       { $match: { isActive: true } },
-      { $group: { _id: '$category', count: { $sum: 1 } } },
+      { $group: { _id: CATEGORY_KEY, count: { $sum: 1 } } },
       { $sort: { _id: 1 } },
     ]);
     return res.json({
