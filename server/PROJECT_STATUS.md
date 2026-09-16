@@ -1,8 +1,63 @@
 # DZ HOOF — Server Project Status
 
-_Last verified: 2026-09-15 (production VPS + CI). See "Re-verified 2026-09-15" below:
-two claims in this file were out of date, and several defects were found and fixed on a
-branch (`fix/production-integrity-and-diagnostics`, PR #289)._
+_Last verified: 2026-09-16 (production VPS + CI). The newest section is
+"Re-verified 2026-09-16" below; the older sections are kept for their measured history._
+
+## Re-verified 2026-09-16 (audit hardening pass)
+
+Measured on the VPS and against the repository, not copied forward:
+
+- **Baseline was green before anything was changed**: backend 94 suites / 866 tests,
+  frontend 12 suites / 68 tests, lint 0 errors, production builds clean, and
+  `scripts/deploy/smoke-test.sh` 15/15 against `https://iptv.ld-11.net`. The defects fixed
+  in this pass were therefore *semantic*, not test failures — they were found by reading
+  the code against its own contracts.
+- **Fixed (PR #312, server)** — each with regression tests (99 suites / 899 tests now):
+  - the freemium channel-group boundary could be bypassed: `PUT/GET/POST
+    /api/v1/user-playlist/me/channels` minted playback tokens without applying the group
+    scope `/tv/playback-token` applies, and `/tv/playback/:token` did not re-check at
+    consumption time;
+  - `routes/auth.js` carried a second, divergent `requireAuth` (imported by 28 route
+    modules) that dropped `accessGroups`/`freeAccess`/`allCatalog`, so group-scoped routes
+    reached through it failed open. One implementation now;
+  - `POST /api/v1/public/signup` never verified reCAPTCHA (its sibling `/auth/register`
+    did), so it handed out channel-list codes and JWTs to bots;
+  - the 50 MB M3U body parser ran before authentication;
+  - `GET /app/demo-code` had no error handling (hung client + `unhandledRejection`);
+  - `POST /me/notifications/:id/read` accepted any notification id;
+  - the failover watchdog, stream probe and auto-match helper fetched operator-configured
+    upstream URLs with no SSRF guard;
+  - `utils/initSuperAdmin.ts` logged a live channel-list code;
+  - `utils/crypto.ts` / `routes/jwt.js` gated their dev-fallback secrets on
+    `NODE_ENV === 'production'` only;
+  - OAuth CSRF state lived in a process-global `Map`, so an in-flight Google/GitHub
+    sign-in failed with "Invalid or missing state parameter" whenever the API container
+    was replaced (i.e. on every deploy) and could not work with more than one replica;
+  - `POST /payments/cinetpay/checkout` had no limiter, and the public logo relay had no
+    dedicated budget.
+- **Fixed (PR #313, app + web)**: Android onboarding never advanced after a BYO playlist
+  import (`"Playlist loaded"` vs `"تم تحميل قائمة التشغيل"`), unencoded channel ids in the
+  player/multiview routes (Navigation crash), an uncaught Room foreign-key violation in
+  `PlayerViewModel`, an unattended health-scanner scope without a
+  `CoroutineExceptionHandler`, a Multiview `PlayerView` bound to a released player, and
+  `SecurePreferences` construction throwing/caching per call. Web: `/buy?shop=` never
+  reached `ShopPlans` (Next 15+ `searchParams` is a Promise), `/watch` had stale-response
+  races, `/buy/success` could poll forever, the mini-player drag origin was a stale
+  closure, and `?admin_email=` was reflected unvalidated.
+- **`AppVersion` 1.2.2 (versionCode 10202, no `sha256`) was deactivated.** Its
+  `downloadUrl` points at `/api/v1/app/download`, which redirects to the *latest* release,
+  so backfilling a checksum for it would have advertised a hash that never matches the
+  bytes a client downloads. `/api/v1/app/version` now resolves 1.3.2 from the GitHub
+  release manifest with a verified `sha256` (`checksumSource: manifest`).
+- **Ops spot-check**: fail2ban `sshd` + `dzhoof-http` active (1 currently banned),
+  0 failed systemd units, disk 76% used.
+- **Still open, needs a human**: email alerts are unconfigured
+  (`/health?details=true` → `notifications.email: missing_credentials`; Telegram is
+  `ok`, so alerts are deliverable); the reseller portal requires a fresh login after every
+  page reload because the reseller JWT is deliberately kept out of browser storage (F11) —
+  that is a product/security trade-off, not a bug to fix silently; no signed APK release
+  has been produced from these Android fixes yet; and real-device/Android-TV validation
+  remains environmental.
 
 ## Re-verified 2026-09-15
 
