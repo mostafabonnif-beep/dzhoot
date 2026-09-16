@@ -7,10 +7,9 @@ const { validateReport, generateReportId, MESSAGE_MAX } = require('../services/p
 
 // Customer problem reports from the Android app: POST /api/v1/app/report-problem
 //
-// Mounted before the cookie parser in server.js (see the comment there): this handler reads
-// no cookie and sets none, so keeping it out of the cookie-authenticated middleware chain is
-// the truthful wiring — and it keeps the endpoint out of CodeQL's "cookie middleware is
-// serving a request handler without CSRF protection" dataflow.
+// Mounted with every other route, behind the global `csrfProtection`. It is unauthenticated
+// by design (the report that matters most comes from a customer who cannot sign in), so it
+// reads no cookie — but it still gets the origin check, and its own limiter bounds volume.
 //
 // Public on purpose: the most valuable report is the one sent by a customer who cannot
 // sign in, and a device that just failed to start has no session. A report therefore
@@ -78,7 +77,7 @@ async function alertOnRepeat(report, count) {
   }
 }
 
-router.post('/', reportLimiter, async (req, res) => {
+router.post('/report-problem', reportLimiter, async (req, res) => {
   try {
     const verdict = validateReport(req.body);
     if (!verdict.ok) {

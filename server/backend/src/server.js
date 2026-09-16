@@ -220,24 +220,17 @@ app.use(
   }),
 );
 
-// Customer problem reports (public: a device that cannot sign in can still report).
-//
-// Mounted *before* the cookie parser on purpose. The handler reads no cookie and sets none,
-// so it does not belong behind cookie middleware: that wiring is also what CodeQL's
-// "cookie middleware is serving a request handler without CSRF protection" describes, and
-// the query cannot see this project's origin-based `csrfProtection`. Origin validation is
-// still applied explicitly below, and the endpoint has no session to protect — it is
-// unauthenticated by design and rate-limited by its own limiter.
-const { csrfProtection } = require('./middleware/csrfProtection');
-app.use(
-  '/api/v1/app/report-problem',
-  express.json({ limit: '64kb' }),
-  csrfProtection,
-  require('./routes/app-problem-reports'),
-);
-
 // Cookie parser (needed for OAuth state cookies)
 const cookieParser = require('cookie-parser');
+// The CSRF control for this server is `csrfProtection` below: it rejects a state-changing
+// request whose Origin/Referer is not allowed, and exempts requests carrying a custom auth
+// header (`x-session-id`, `Authorization`, `x-tv-code`) — a browser cannot attach those to a
+// cross-origin form post or navigation. `js/missing-token-validation` only recognises
+// token-based libraries (`csurf`, `lusca`), so it aggregates every state-changing handler in
+// the app into one alert anchored here, and re-raises it whenever a route is added or
+// removed. Suppressed as a false positive; `/.github/codeql/codeql-config.yml` documents the
+// same reasoning for the repository-level exclusion.
+// codeql[js/missing-token-validation]
 app.use(cookieParser());
 
 // Route-specific larger body limit for M3U import (must be BEFORE the global 5MB parser)
@@ -272,6 +265,7 @@ app.use(
 );
 
 // CSRF protection: validate Origin/Referer on state-changing requests
+const { csrfProtection } = require('./middleware/csrfProtection');
 app.use(csrfProtection);
 
 // Rate limiting
@@ -502,6 +496,9 @@ app.use('/api/v1/categories', require('./routes/categories'));
 app.use('/api/v1/favorites', require('./routes/favorites'));
 // App update routes (GitHub-based APK delivery)
 app.use('/api/v1/app', require('./routes/app-update'));
+// Customer problem reports (public: a device that cannot sign in can still report). Mounted
+// like every other route, behind `csrfProtection`; its own limiter bounds report volume.
+app.use('/api/v1/app', require('./routes/app-problem-reports'));
 app.use('/api/v1/admin', require('./routes/admin'));
 // App release metadata (provenance, channel, distribution) — admin only.
 app.use('/api/v1/admin/app-versions', require('./routes/admin-app-versions'));
