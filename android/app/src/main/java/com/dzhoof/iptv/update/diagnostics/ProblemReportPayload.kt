@@ -22,7 +22,7 @@ import org.json.JSONObject
 internal object ProblemReportPayload {
 
     /** Categories offered in the UI. The wire value is the key, never the label. */
-    enum class Category(val key: String, val label: String) {
+    internal enum class Category(val key: String, val label: String) {
         PLAYBACK("player", "تشغيل القنوات أو الأفلام"),
         UPDATE("update", "التحديث أو التثبيت"),
         PAIRING("pairing", "الاقتران أو تسجيل الدخول"),

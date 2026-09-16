@@ -17,10 +17,12 @@ const ProblemReport = require('../models/ProblemReport');
 
 const sendOperationalAlert = alertNotifier.sendOperationalAlert as jest.Mock;
 
+// Matches the real wiring in `server.js`: the router serves `/` (the report endpoint reads
+// no cookie, so it is mounted before the cookie parser there).
 function buildApp() {
   const app = express();
   app.use(express.json());
-  app.use('/api/v1/app', router);
+  app.use('/api/v1/app/report-problem', router);
   return app;
 }
 

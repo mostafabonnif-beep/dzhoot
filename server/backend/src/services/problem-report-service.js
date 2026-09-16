@@ -60,9 +60,11 @@ const DIAGNOSTIC_SHAPE = {
 /** A short, human-quotable id. Crockford-safe alphabet, no look-alike characters. */
 function generateReportId() {
   const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-  const bytes = crypto.randomBytes(8);
   let out = '';
-  for (let i = 0; i < 8; i += 1) out += alphabet[bytes[i] % alphabet.length];
+  // `randomInt` is rejection-sampled, so every character is equally likely. `bytes[i] %
+  // alphabet.length` is biased, which CodeQL flags (and which would matter the moment the
+  // alphabet length changed).
+  for (let i = 0; i < 8; i += 1) out += alphabet[crypto.randomInt(0, alphabet.length)];
   return `DZR-${out}`;
 }
 

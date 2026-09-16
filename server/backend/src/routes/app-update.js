@@ -1106,17 +1106,15 @@ router.post('/crash-report', crashReportLimiter, async (req, res) => {
     // whose every field is null — a row no operator can act on, and a free way to fill the
     // collection. Observed in production on 2026-09-15: `POST {}` returned 201 and stored
     // record `6aa9ce27004c6f39fe9c9dfc` with nothing in it.
-    const hasContent = [
-      'deviceId',
-      'appVersion',
-      'platform',
-      'deviceModel',
-      'exceptionType',
-      'exceptionMessage',
-      'stackTrace',
-      'errorCode',
-    ].some((field) => cleanReportField(body[field], 64) !== null);
-    if (!hasContent) {
+    const REPORT_FIELDS = [
+      'deviceId', 'appVersion', 'appVersionCode', 'platform', 'deviceModel', 'deviceBrand',
+      'androidVersion', 'sdkInt', 'exceptionType', 'exceptionMessage', 'stackTrace',
+      'threadName', 'screen', 'errorCode', 'correlationId', 'feature', 'severity', 'retryable',
+    ];
+    const namesAReportField = REPORT_FIELDS.some((field) =>
+      Object.prototype.hasOwnProperty.call(body, field),
+    );
+    if (!namesAReportField) {
       return res.status(400).json({
         success: false,
         errorCode: 'CRASH_REPORT_CONTENT_REQUIRED',

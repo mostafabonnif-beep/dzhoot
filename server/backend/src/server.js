@@ -220,6 +220,22 @@ app.use(
   }),
 );
 
+// Customer problem reports (public: a device that cannot sign in can still report).
+//
+// Mounted *before* the cookie parser on purpose. The handler reads no cookie and sets none,
+// so it does not belong behind cookie middleware: that wiring is also what CodeQL's
+// "cookie middleware is serving a request handler without CSRF protection" describes, and
+// the query cannot see this project's origin-based `csrfProtection`. Origin validation is
+// still applied explicitly below, and the endpoint has no session to protect — it is
+// unauthenticated by design and rate-limited by its own limiter.
+const { csrfProtection } = require('./middleware/csrfProtection');
+app.use(
+  '/api/v1/app/report-problem',
+  express.json({ limit: '64kb' }),
+  csrfProtection,
+  require('./routes/app-problem-reports'),
+);
+
 // Cookie parser (needed for OAuth state cookies)
 const cookieParser = require('cookie-parser');
 app.use(cookieParser());
@@ -256,7 +272,6 @@ app.use(
 );
 
 // CSRF protection: validate Origin/Referer on state-changing requests
-const { csrfProtection } = require('./middleware/csrfProtection');
 app.use(csrfProtection);
 
 // Rate limiting
@@ -487,8 +502,6 @@ app.use('/api/v1/categories', require('./routes/categories'));
 app.use('/api/v1/favorites', require('./routes/favorites'));
 // App update routes (GitHub-based APK delivery)
 app.use('/api/v1/app', require('./routes/app-update'));
-// Customer problem reports (public: a device that cannot sign in can still report).
-app.use('/api/v1/app', require('./routes/app-problem-reports'));
 app.use('/api/v1/admin', require('./routes/admin'));
 // App release metadata (provenance, channel, distribution) — admin only.
 app.use('/api/v1/admin/app-versions', require('./routes/admin-app-versions'));

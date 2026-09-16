@@ -80,10 +80,10 @@ data class UpdateInfo(
  * [result] is null while a draft is being edited, so the outcome of a *previous* report is
  * never shown against newly typed text.
  */
-data class ReportProblemUiState(
+internal data class ReportProblemUiState(
     val category: com.dzhoof.iptv.update.diagnostics.ProblemReportPayload.Category =
         com.dzhoof.iptv.update.diagnostics.ProblemReportPayload.Category.PLAYBACK,
-    val message: String = '',
+    val message: String = "",
     val sending: Boolean = false,
     val result: com.dzhoof.iptv.update.diagnostics.ProblemReporter.Result? = null,
 ) {

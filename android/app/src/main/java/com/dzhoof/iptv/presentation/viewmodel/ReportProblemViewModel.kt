@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
  * [ProblemReportPayload], where they are unit-tested.
  */
 @HiltViewModel
-class ReportProblemViewModel @Inject constructor(
+internal class ReportProblemViewModel @Inject constructor(
     private val reporter: ProblemReporter,
 ) : ViewModel() {
 

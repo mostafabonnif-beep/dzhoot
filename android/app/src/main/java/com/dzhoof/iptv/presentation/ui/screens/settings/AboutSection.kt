@@ -20,6 +20,7 @@ import com.dzhoof.iptv.presentation.ui.components.StatusText
 import com.dzhoof.iptv.presentation.ui.screens.FocusAwareOutlinedButton
 import com.dzhoof.iptv.presentation.ui.screens.SettingRowLayout
 import com.dzhoof.iptv.presentation.ui.screens.SettingsCard
+import com.dzhoof.iptv.presentation.ui.theme.Dimens
 import com.dzhoof.iptv.presentation.ui.theme.subtleBorder
 
 @Composable

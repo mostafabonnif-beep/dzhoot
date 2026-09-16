@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
  * retry, or copy the diagnostics manually), never shown a success id that does not exist.
  */
 @Singleton
-class ProblemReporter @Inject constructor(
+internal class ProblemReporter @Inject constructor(
     @ApplicationContext private val context: Context,
     private val diagnosticsProvider: AppDiagnosticsProvider,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,

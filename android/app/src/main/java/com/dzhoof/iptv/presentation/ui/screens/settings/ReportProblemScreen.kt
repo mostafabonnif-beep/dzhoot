@@ -106,8 +106,7 @@ internal fun ReportProblemScreen(
                 ProblemReportPayload.Category.entries.forEach { category ->
                     val selected = uiState.category == category
                     FocusAwareOutlinedButton(
-                        onClick = { viewModel.selectCategory(category) },
-                        enabled = !uiState.sending,
+                        onClick = { if (!uiState.sending) viewModel.selectCategory(category) },
                     ) {
                         Text(
                             text = if (selected) "◉ ${category.label}" else "○ ${category.label}",

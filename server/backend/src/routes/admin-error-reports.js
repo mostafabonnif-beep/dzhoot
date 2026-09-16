@@ -245,10 +245,14 @@ router.patch('/:id', async (req, res) => {
     const before = await ProblemReport.findById(req.params.id).lean();
     if (!before) return res.status(404).json({ success: false, error: 'Report not found' });
 
-    const after = await ProblemReport.findByIdAndUpdate(req.params.id, update, {
-      new: true,
-      runValidators: true,
-    }).lean();
+    // `$set` with an explicitly built, whitelisted object: every field is sanitised above,
+    // and an operator makes it impossible for a request-body key to be read as a query
+    // operator (CodeQL reported taint on the bare update document).
+    const after = await ProblemReport.findByIdAndUpdate(
+      req.params.id,
+      { $set: update },
+      { new: true, runValidators: true },
+    ).lean();
 
     audit({
       ...reqCtx(req),
