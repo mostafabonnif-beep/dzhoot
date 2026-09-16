@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -561,7 +562,12 @@ private fun CatalogCategoryRail(
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
-            items(items = ordered, key = { it.name }) { category ->
+            // Index-prefixed, like every other lazy list in this file: two categories that
+            // arrive with the same name would otherwise share a key and Compose would throw
+            // `Key "..." was already used` while composing, killing the screen. The API now
+            // collapses those buckets server-side; this is the second line of defence, so a
+            // future response shape can never take the catalog down.
+            itemsIndexed(items = ordered, key = { i, category -> "$i:${category.name}" }) { _, category ->
                 SelectableRow(
                     label = "${category.name}  (${category.count})",
                     selected = selectedCategory == category.name,

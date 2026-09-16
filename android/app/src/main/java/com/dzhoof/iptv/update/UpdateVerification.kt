@@ -126,12 +126,21 @@ object UpdateVerifier {
             }
         }
 
-        if (expected.sha256 != null) {
-            val actual = observed.sha256
-                ?: return blocked(UpdateErrorCode.UPDATE_CHECKSUM_MISMATCH, "checksum could not be computed")
-            if (!actual.equals(expected.sha256, ignoreCase = true)) {
-                return blocked(UpdateErrorCode.UPDATE_CHECKSUM_MISMATCH, "checksum mismatch")
-            }
+        // Fail closed on a missing checksum. The guard used to be `if (expected.sha256 !=
+        // null)`, so a release whose metadata carried no digest — the GitHub fallback
+        // always built one that way — was installed with only the package, versionCode and
+        // signature checks. Those prove *who* signed the bytes, not *which* bytes were
+        // signed against the published release, which is the whole point of pinning a
+        // checksum. The server withholds an unverifiable release for the same reason.
+        val expectedSha256 = expected.sha256
+            ?: return blocked(
+                UpdateErrorCode.UPDATE_CHECKSUM_REQUIRED,
+                "the release metadata carries no verified checksum",
+            )
+        val actualSha256 = observed.sha256
+            ?: return blocked(UpdateErrorCode.UPDATE_CHECKSUM_MISMATCH, "checksum could not be computed")
+        if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
+            return blocked(UpdateErrorCode.UPDATE_CHECKSUM_MISMATCH, "checksum mismatch")
         }
 
         val archivePackage = observed.archivePackageName

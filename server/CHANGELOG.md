@@ -37,6 +37,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This p
   collection (production, 2026-09-15). A crash report must now carry at least one identifying
   or diagnostic field (`400 CRASH_REPORT_CONTENT_REQUIRED` otherwise).
 
+### Fixed (`/health` said alerting was configured while every alert email failed)
+
+- `alertingConfigured` was `Boolean(webhookUrl || alertEmail || telegram)`, a *configuration*
+  test. On 2026-09-15 production answered `alertingConfigured: true` while the email channel
+  reported `missing_credentials` and every alert email had been failing with
+  `Missing credentials for "PLAIN"` — the flag read as "alerts are working" and hid the
+  outage. It now reflects deliverability (`notifications.anyDeliverable`), and reports `false`
+  when the channel status cannot be determined, so an unknown state never reads as healthy.
+  The per-channel facts remain under `notifications.channels`.
+
+### Fixed (a test file that had never run)
+
+- `jest.config.js` matched only `*.ts`, so `src/routes/catalog-helpers.test.js` was never
+  executed — a green backend suite that had silently skipped it since it was written. The
+  suite now runs it (3 more tests).
+
+### Fixed (the deploy script advertised a smoke test it never ran)
+
+- `atomic-deploy.sh` has printed `… -> post-deploy smoke -> rollback on failure` in its
+  dry-run plan since it was written, but the code path only checked container health and
+  `/health`. A release could therefore pass the gate with a broken update contract, a
+  mixed-version chunk set, or an HTML page cached for a year, and the automatic rollback
+  would never see it. `smoke-test.sh` (18+ fail-closed checks) now runs after the deploy and
+  a non-zero exit triggers the rollback.
+
+### Changed (documentation that described a workflow which never existed)
+
+- `docs/workflow/DEPLOYMENT_GUIDE.md`, `PROJECT_ROADMAP.md` and `README.md` described
+  `.github/workflows/deploy.yml` and a "Deploy to Production" Actions button. That file never
+  existed (`git log --all -- .github/workflows/deploy.yml` is empty). The guides now describe
+  the real path: a human operator on the host, behind the provenance gate and CI.
+- Removed `middleware/errorHandler.ts`: dead code (imported nowhere) whose only difference
+  from the live handler was that it logged `err.message` **without** `redactSensitiveText` —
+  a trap for whoever wired it up next.
+
 ### Fixed (the update API served `sha256: null` to a device that was already current, and on `/latest`)
 
 - `GET /api/v1/app/version` resolved the release checksum only when

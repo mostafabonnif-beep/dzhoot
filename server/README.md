@@ -158,7 +158,7 @@ Features: HLS live streaming via ExoPlayer, D-pad navigation, server-synced favo
 | [Architecture](docs/ARCHITECTURE.md)                      | System design and data flow                  |
 | [Setup Guide](docs/workflow/SETUP_GUIDE.md)               | Local dev environment                        |
 | [TV Pairing System](docs/workflow/TV_PAIRING_SYSTEM.md)   | How device pairing works                     |
-| [Deployment Guide](docs/workflow/DEPLOYMENT_GUIDE.md)     | Tag-based auto-deploy via GitHub Actions     |
+| [Deployment Guide](docs/workflow/DEPLOYMENT_GUIDE.md)     | Host-operator atomic deploy (no auto-deploy) |
 | [OAuth Setup](docs/workflow/OAUTH_SETUP.md)               | Google & GitHub OAuth configuration          |
 | [Feature List](docs/FEATURE_LIST.md)                      | Complete feature inventory                   |
 

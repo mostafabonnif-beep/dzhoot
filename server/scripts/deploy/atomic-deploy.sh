@@ -171,5 +171,20 @@ docker inspect -f '{{.State.Health.Status}}' dzhoof-api | grep -qx healthy || di
 curl -fsS --max-time 15 "https://$(sed -n 's/^DOMAIN=//p' "$ENV_FILE" | tr -d '"' | tr -d "'")/health" >/dev/null || die "public health check failed after deploy"
 docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
 
+# Post-deploy smoke. This script's own DRY-RUN plan has advertised a "post-deploy smoke"
+# step since it was written, but the code path above only checked container health and
+# /health — so a release could pass the gate with a broken update contract, a mixed-version
+# chunk set, or an HTML page cached for a year, and the rollback below would never see it.
+# `smoke-test.sh` asserts exactly those (18+ checks, each failing closed); it was only ever
+# run by hand. Exit non-zero here and the automatic rollback takes over.
+SMOKE_DOMAIN="$(sed -n 's/^DOMAIN=//p' "$ENV_FILE" | tr -d '"' | tr -d "'")"
+if [ -x ./scripts/deploy/smoke-test.sh ]; then
+  say "post-deploy smoke test"
+  DZHOOF_DOMAIN="$SMOKE_DOMAIN" ./scripts/deploy/smoke-test.sh \
+    || die "post-deploy smoke test failed — rolling back"
+else
+  say "WARNING: scripts/deploy/smoke-test.sh is missing or not executable; post-deploy verification skipped"
+fi
+
 say "deployment and health verification completed: $SHA"
 echo "DEPLOYED $SHA"

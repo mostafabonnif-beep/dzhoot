@@ -17,7 +17,7 @@
 
 - **الإنتاج منصوب وصحي**: `https://iptv.ld-11.net` يعمل بـ HTTPS (شهادة Let's Encrypt صالحة حتى 2026-11-16)، و`/health` يستجيب `{"status":"ok"}`، ولوحة الإدارة تعمل.
 - **الستاك**: `dzhoof-api` + `dzhoof-scheduler` + `dzhoof-frontend` + `dzhoof-mongodb` + `dzhoof-redis` + `dzhoof-caddy` — كلها healthy على الخادم.
-- **النشر**: إصدارات مثبّتة (pinned) عبر staged releases في `/opt/dzhoot-releases/<sha>` مع مبادلة ذرية وتراجع تلقائي (`scripts/deploy/atomic-deploy.sh`) وأتمتة من GitHub Actions (`deploy.yml`).
+- **النشر**: إصدارات مثبّتة (pinned) عبر staged releases في `/opt/dzhoot-releases/<sha>` مع مبادلة ذرية وتراجع تلقائي (`scripts/deploy/atomic-deploy.sh`). **لا يوجد نشر تلقائي من GitHub Actions** — كان هذا السطر يدّعي وجود `.github/workflows/deploy.yml` وهو ملف لم يوجد يومًا؛ النشر يديره مشغّل بشري على الخادم بعد بوابة السلالة وCI.
 - **النسخ الاحتياطي**: mongodump يومي (03:15 UTC) + restic مشفّر محلي (يومي، استبقاء 7 أيام/4 أسابيع/6 أشهر) + **restic offsite مفعّل ويعمل** (`dzhoof-restic-offsite-backup.timer` يومي 03:20 UTC + فحص أسبوعي؛ آخر نجاح 2026-08-30).
 - **الـ CI**: أخضر على `main` — backend (typecheck/lint/build/audit/اختبارات 177+ / smoke) + Android (lint/unit tests/بناء APK بعنوان الإنتاج).
 - **الأمان**: الجدار الناري يفتح 22/80/443 فقط للعامة؛ MongoDB وRedis داخليان؛ الأسرار في `/etc/dzhoot/.env.production` (perm 600) ولا شيء منها في Git.

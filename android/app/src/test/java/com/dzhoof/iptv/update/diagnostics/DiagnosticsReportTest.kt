@@ -191,4 +191,38 @@ class DiagnosticsReportTest {
         assertFalse(report.contains("ABCDEF"))
         assertFalse(report.contains("user@host"))
     }
+
+    // ── Correlation id (§7C / §8) ─────────────────────────────────────────────
+
+    @Test
+    fun `report carries the correlation id support should quote`() {
+        val facts = healthyFacts.copy(
+            lastRequestId = "9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f",
+        )
+
+        assertTrue(DiagnosticsReport.reportText(facts).contains("9f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f"))
+    }
+
+    @Test
+    fun `correlation id renders as unavailable when no managed call happened`() {
+        val report = DiagnosticsReport.reportText(healthyFacts.copy(lastRequestId = null))
+
+        assertTrue(report.contains("معرّف آخر طلب"))
+        assertTrue(report.contains(DiagnosticsReport.NOT_AVAILABLE))
+    }
+
+    @Test
+    fun `a hostile correlation id is never echoed`() {
+        val hostile = listOf(
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.c2ln",
+            "https://iptv.ld-11.net/api/v1/tv/playback/token",
+            "not-a-uuid",
+            "9f1c2d3e4a5b4c6d8e7f0a1b2c3d4e5f",
+        )
+
+        hostile.forEach { value ->
+            val report = DiagnosticsReport.reportText(healthyFacts.copy(lastRequestId = value))
+            assertFalse("leaked: $value", report.contains(value))
+        }
+    }
 }

@@ -82,6 +82,14 @@ export const ERROR_CODES = {
     severity: 'error',
     remediation: 'Delete the partial download and retry; if it repeats, the release is bad.',
   }),
+  UPDATE_CHECKSUM_REQUIRED: define('update', 'UPDATE_CHECKSUM_REQUIRED', {
+    developerMessage:
+      'The release metadata carries no verified checksum, so the downloaded bytes cannot be tied to the published artifact.',
+    retryable: false,
+    severity: 'error',
+    remediation:
+      'Do not install. Publish the release with its manifest or .sha256 asset, then retry the check.',
+  }),
   UPDATE_SIGNATURE_MISMATCH: define('update', 'UPDATE_SIGNATURE_MISMATCH', {
     developerMessage: 'The APK signing certificate does not match the installed application.',
     retryable: false,

@@ -164,21 +164,51 @@ class UpdateVerifierTest {
     }
 
     @Test
-    fun `still verifies package, versionCode and signature when the source omits checksum and size`() {
-        // The GitHub-releases fallback has no checksum or size — those checks are skipped,
-        // but the identity checks must still hold.
-        val result = UpdateVerifier.verify(
-            expected(sha256 = null, sizeBytes = null),
-            observed(sha256 = null, sizeBytes = 999L),
-            installedVersionCode = 10000,
-        )
-        assertEquals(UpdateVerificationResult.Ok, result)
-
+    fun `blocks a release whose metadata carries no checksum (fail closed)`() {
+        // This asserted `Ok` before: a missing `expected.sha256` skipped the digest check
+        // entirely, so the GitHub-releases fallback — which never set one — installed an APK
+        // verified only by package, versionCode and signature. Those prove *who* signed the
+        // bytes, not *which* bytes were signed against the published release. The server
+        // withholds such a release for the same reason, so the client must not accept it.
         val code = blocked(
             UpdateVerifier.verify(
                 expected(sha256 = null, sizeBytes = null),
-                observed(sha256 = null, signatureMatches = false),
+                observed(sha256 = null, sizeBytes = 999L),
+                installedVersionCode = 10000,
             ),
+        )
+        assertEquals(UpdateErrorCode.UPDATE_CHECKSUM_REQUIRED, code)
+    }
+
+    @Test
+    fun `an unusable checksum is rejected before the identity checks are reached`() {
+        // The refusal must not depend on the rest of the artifact being wrong.
+        val code = blocked(
+            UpdateVerifier.verify(
+                expected(sha256 = null, sizeBytes = null),
+                observed(
+                    sha256 = null,
+                    archivePackageName = "com.example.other",
+                    signatureMatches = false,
+                ),
+            ),
+        )
+        assertEquals(UpdateErrorCode.UPDATE_CHECKSUM_REQUIRED, code)
+    }
+
+    @Test
+    fun `a published checksum still verifies package, versionCode and signature`() {
+        assertEquals(
+            UpdateVerificationResult.Ok,
+            UpdateVerifier.verify(
+                expected(),
+                observed(),
+                installedVersionCode = 10000,
+            ),
+        )
+
+        val code = blocked(
+            UpdateVerifier.verify(expected(), observed(signatureMatches = false)),
         )
         assertEquals(UpdateErrorCode.UPDATE_SIGNATURE_MISMATCH, code)
     }
