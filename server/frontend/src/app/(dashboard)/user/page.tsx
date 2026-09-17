@@ -24,9 +24,15 @@ export default function UserDashboard() {
   });
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState('');
+  // A failed /auth/me used to be swallowed whole: the dashboard then rendered
+  // its normal shell with no code and 0 channels, which is indistinguishable
+  // from "my channels were deleted". Surface it and offer a retry.
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     setOrigin(window.location.origin);
+    setLoadError(false);
     const controller = new AbortController();
 
     async function fetchData() {
@@ -53,12 +59,13 @@ export default function UserDashboard() {
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'CanceledError') return;
+        setLoadError(true);
       }
     }
 
     fetchData();
     return () => controller.abort();
-  }, []);
+  }, [reloadKey]);
 
   const code = profile?.channelListCode || user?.channelListCode;
   const playlistUrl = code && origin ? `${origin}/api/v1/tv/playlist/${code}` : null;
@@ -92,6 +99,25 @@ export default function UserDashboard() {
           Welcome back{user?.username ? `, ${user.username}` : ''}
         </p>
       </div>
+
+      {loadError && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm"
+        >
+          <span>
+            We could not load your account details. Your channels and code are unchanged — this
+            is a loading problem.
+          </span>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            className="border border-destructive/40 px-3 py-1 text-xs font-semibold uppercase tracking-wide hover:bg-destructive/10"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       <div className="border border-border">
         <div className="grid grid-cols-3 sm:grid-cols-3">
