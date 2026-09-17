@@ -120,13 +120,13 @@ export default function ProfilePage() {
           email: updated.email || editEmail,
         });
       }
-      setSaveMsg({ type: 'success', text: 'Profile updated successfully' });
+      setSaveMsg({ type: 'success', text: 'تم تحديث الملف الشخصي بنجاح' });
       setEditing(false);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
       setSaveMsg({
         type: 'error',
-        text: axiosErr.response?.data?.error || 'Failed to update profile',
+        text: axiosErr.response?.data?.error || 'فشل تحديث الملف الشخصي',
       });
     } finally {
       setSaveLoading(false);
@@ -142,7 +142,7 @@ export default function ProfilePage() {
         currentPassword: currentPw,
         newPassword: newPw,
       });
-      setPwMsg({ type: 'success', text: res.data.message || 'Password changed successfully' });
+      setPwMsg({ type: 'success', text: res.data.message || 'تم تغيير كلمة المرور بنجاح' });
       setCurrentPw('');
       setNewPw('');
       setShowPwForm(false);
@@ -151,7 +151,7 @@ export default function ProfilePage() {
       const axiosErr = err as { response?: { data?: { error?: string } } };
       setPwMsg({
         type: 'error',
-        text: axiosErr.response?.data?.error || 'Failed to change password',
+        text: axiosErr.response?.data?.error || 'فشل تغيير كلمة المرور',
       });
     } finally {
       setPwLoading(false);
@@ -161,7 +161,7 @@ export default function ProfilePage() {
   async function handleRegenerateCode() {
     if (
       !confirm(
-        'Regenerate your channel list code? The old code will stop working on all paired devices.',
+        'هل تريد إعادة توليد كود قائمة القنوات؟ سيتوقف الكود القديم عن العمل على جميع الأجهزة المرتبطة.',
       )
     )
       return;
@@ -203,9 +203,9 @@ export default function ProfilePage() {
       if (picUrl) {
         setProfile((prev) => (prev ? { ...prev, profilePicture: picUrl } : prev));
       }
-      setPicMsg({ type: 'success', text: 'Profile picture updated' });
+      setPicMsg({ type: 'success', text: 'تم تحديث الصورة الشخصية' });
     } catch {
-      setPicMsg({ type: 'error', text: 'Failed to upload picture' });
+      setPicMsg({ type: 'error', text: 'فشل رفع الصورة' });
     } finally {
       setUploadingPic(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -213,13 +213,13 @@ export default function ProfilePage() {
   }
 
   async function handleDeletePicture() {
-    if (!confirm('Remove your profile picture?')) return;
+    if (!confirm('هل تريد إزالة صورتك الشخصية؟')) return;
     try {
       await api.delete('/auth/profile-picture');
       setProfile((prev) => (prev ? { ...prev, profilePicture: undefined } : prev));
-      setPicMsg({ type: 'success', text: 'Profile picture removed' });
+      setPicMsg({ type: 'success', text: 'تمت إزالة الصورة الشخصية' });
     } catch {
-      setPicMsg({ type: 'error', text: 'Failed to remove picture' });
+      setPicMsg({ type: 'error', text: 'فشلت إزالة الصورة' });
     }
   }
 
@@ -231,12 +231,12 @@ export default function ProfilePage() {
   }
 
   function parseBrowser(ua?: string): string {
-    if (!ua) return 'Unknown';
+    if (!ua) return 'غير معروف';
     if (ua.includes('Firefox')) return 'Firefox';
     if (ua.includes('Edg')) return 'Edge';
     if (ua.includes('Chrome')) return 'Chrome';
     if (ua.includes('Safari')) return 'Safari';
-    return 'Browser';
+    return 'متصفح';
   }
 
   if (loading) {
@@ -253,7 +253,7 @@ export default function ProfilePage() {
         role="alert"
         className="border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
       >
-        Failed to load profile
+        فشل تحميل الملف الشخصي
       </div>
     );
   }
@@ -261,15 +261,15 @@ export default function ProfilePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">My Profile</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your account and security</p>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">الملف الشخصي</h1>
+        <p className="text-sm text-muted-foreground mt-1">أدر حسابك وأمانك</p>
       </div>
 
       {/* Profile Picture */}
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border">
           <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Profile Picture
+            الصورة الشخصية
           </h2>
         </div>
         <div className="px-4 py-4">
@@ -282,7 +282,7 @@ export default function ProfilePage() {
                     ? `/api/v1${profile.profilePicture}`
                     : profile.profilePicture
                 }
-                alt="Profile"
+                alt="الصورة الشخصية"
                 loading="lazy"
                 className="h-16 w-16 rounded-full object-cover border-2 border-border"
               />
@@ -303,10 +303,10 @@ export default function ProfilePage() {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingPic}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors disabled:opacity-50"
-                aria-label="Upload profile picture"
+                aria-label="رفع صورة شخصية"
               >
                 <Upload className="h-3.5 w-3.5" />
-                {uploadingPic ? 'Uploading...' : 'Upload'}
+                {uploadingPic ? 'جارٍ الرفع...' : 'رفع'}
               </button>
               {profile.profilePicture && (
                 <button
@@ -314,12 +314,12 @@ export default function ProfilePage() {
                   className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-destructive hover:border-destructive/20 transition-colors"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                  Remove
+                  إزالة
                 </button>
               )}
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">JPEG, PNG, or GIF. Max 5 MB.</p>
+          <p className="text-xs text-muted-foreground mt-2">JPEG أو PNG أو GIF. الحد الأقصى 5 ميغابايت.</p>
           {picMsg && (
             <div
               role="alert"
@@ -336,7 +336,7 @@ export default function ProfilePage() {
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border flex items-center justify-between">
           <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Account Details
+            بيانات الحساب
           </h2>
           {!editing && (
             <button
@@ -346,7 +346,7 @@ export default function ProfilePage() {
               }}
               className="text-xs uppercase tracking-[0.1em] text-primary hover:text-primary/80 transition-colors font-medium"
             >
-              Edit
+              تعديل
             </button>
           )}
         </div>
@@ -359,7 +359,7 @@ export default function ProfilePage() {
                   htmlFor="edit-username"
                   className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
                 >
-                  Username
+                  اسم المستخدم
                 </label>
                 <input
                   id="edit-username"
@@ -375,7 +375,7 @@ export default function ProfilePage() {
                   htmlFor="edit-email"
                   className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
                 >
-                  Email
+                  البريد الإلكتروني
                 </label>
                 <input
                   id="edit-email"
@@ -393,7 +393,7 @@ export default function ProfilePage() {
                 disabled={saveLoading}
                 className="px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                {saveLoading ? 'Saving...' : 'Save Changes'}
+                {saveLoading ? 'جارٍ الحفظ...' : 'حفظ التغييرات'}
               </button>
               <button
                 type="button"
@@ -405,45 +405,45 @@ export default function ProfilePage() {
                 }}
                 className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
               >
-                Cancel
+                إلغاء
               </button>
             </div>
           </form>
         ) : (
           <div className="divide-y divide-border">
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-sm text-muted-foreground">Username</span>
+              <span className="text-sm text-muted-foreground">اسم المستخدم</span>
               <span className="text-sm font-medium">{profile.username}</span>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-sm text-muted-foreground">Email</span>
+              <span className="text-sm text-muted-foreground">البريد الإلكتروني</span>
               <span className="text-sm font-medium">{profile.email}</span>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-sm text-muted-foreground">Role</span>
+              <span className="text-sm text-muted-foreground">الدور</span>
               <div className="relative inline-flex items-center gap-1.5">
                 <Shield className="h-3.5 w-3.5 text-primary" />
                 <span className="text-sm font-medium">{profile.role}</span>
               </div>
             </div>
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-sm text-muted-foreground">Status</span>
+              <span className="text-sm text-muted-foreground">الحالة</span>
               <div className="relative inline-flex items-center gap-1.5">
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${profile.isActive ? 'bg-signal-green' : 'bg-signal-red'}`}
                   aria-hidden="true"
                 />
                 <span className="text-sm font-medium">
-                  {profile.isActive ? 'Active' : 'Inactive'}
+                  {profile.isActive ? 'نشط' : 'غير نشط'}
                 </span>
                 <span className="sr-only">
-                  {profile.isActive ? 'Account is active' : 'Account is inactive'}
+                  {profile.isActive ? 'الحساب نشط' : 'الحساب غير نشط'}
                 </span>
               </div>
             </div>
             {profile.createdAt && (
               <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm text-muted-foreground">Member Since</span>
+                <span className="text-sm text-muted-foreground">عضو منذ</span>
                 <span className="text-sm font-medium">
                   {new Date(profile.createdAt).toLocaleDateString()}
                 </span>
@@ -467,7 +467,7 @@ export default function ProfilePage() {
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border">
           <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Channel List Code
+            كود قائمة القنوات
           </h2>
         </div>
         <div className="px-4 py-4">
@@ -479,15 +479,15 @@ export default function ProfilePage() {
               <button
                 onClick={handleCopyCode}
                 className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Copy code"
+                aria-label="نسخ الكود"
               >
                 {copiedCode ? (
                   <>
-                    <Check className="h-4 w-4 text-signal-green" /> Copied
+                    <Check className="h-4 w-4 text-signal-green" /> تم النسخ
                   </>
                 ) : (
                   <>
-                    <Copy className="h-4 w-4" /> Copy
+                    <Copy className="h-4 w-4" /> نسخ
                   </>
                 )}
               </button>
@@ -496,11 +496,11 @@ export default function ProfilePage() {
               onClick={handleRegenerateCode}
               className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors ml-2"
             >
-              <RefreshCw className="h-4 w-4" /> Regenerate
+              <RefreshCw className="h-4 w-4" /> إعادة توليد
             </button>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
-            This code is used by the TV app to load your channel list.
+            يستخدم تطبيق التلفاز هذا الكود لتحميل قائمة قنواتك.
           </p>
         </div>
       </div>
@@ -509,7 +509,7 @@ export default function ProfilePage() {
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border flex items-center justify-between">
           <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Password
+            كلمة المرور
           </h2>
           {!showPwForm && (
             <button
@@ -519,7 +519,7 @@ export default function ProfilePage() {
               }}
               className="text-xs uppercase tracking-[0.1em] text-primary hover:text-primary/80 transition-colors font-medium"
             >
-              Change
+              تغيير
             </button>
           )}
         </div>
@@ -531,7 +531,7 @@ export default function ProfilePage() {
                   htmlFor="current-pw"
                   className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
                 >
-                  Current Password
+                  كلمة المرور الحالية
                 </label>
                 <div className="relative">
                   <input
@@ -546,7 +546,7 @@ export default function ProfilePage() {
                     type="button"
                     onClick={() => setShowCurrentPassword(!showCurrentPassword)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={showCurrentPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showCurrentPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                   >
                     {showCurrentPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -561,7 +561,7 @@ export default function ProfilePage() {
                   htmlFor="new-pw"
                   className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
                 >
-                  New Password
+                  كلمة المرور الجديدة
                 </label>
                 <div className="relative">
                   <input
@@ -572,13 +572,13 @@ export default function ProfilePage() {
                     value={newPw}
                     onChange={(e) => setNewPw(e.target.value)}
                     className="flex h-10 w-full border border-border bg-background px-3 py-2 pr-10 text-sm focus-visible:outline-none focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary"
-                    placeholder="Min. 8 characters"
+                    placeholder="8 أحرف على الأقل"
                   />
                   <button
                     type="button"
                     onClick={() => setShowNewPassword(!showNewPassword)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
-                    aria-label={showNewPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showNewPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
                   >
                     {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -591,7 +591,7 @@ export default function ProfilePage() {
                 disabled={pwLoading}
                 className="px-6 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
-                {pwLoading ? 'Updating...' : 'Update Password'}
+                {pwLoading ? 'جارٍ التحديث...' : 'تحديث كلمة المرور'}
               </button>
               <button
                 type="button"
@@ -603,14 +603,14 @@ export default function ProfilePage() {
                 }}
                 className="px-6 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground transition-colors"
               >
-                Cancel
+                إلغاء
               </button>
             </div>
           </form>
         ) : (
           <div className="px-4 py-4">
             <p className="text-sm text-muted-foreground">
-              Password is set. Click &quot;Change&quot; to update it.
+              كلمة المرور مضبوطة. اضغط «تغيير» لتحديثها.
             </p>
           </div>
         )}
@@ -630,7 +630,7 @@ export default function ProfilePage() {
         <div className="border border-border">
           <div className="px-4 py-2 bg-muted/50 border-b border-border">
             <h2 className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-              Active Sessions ({sessions.length})
+              الجلسات النشطة ({sessions.length})
             </h2>
           </div>
           <div className="divide-y divide-border">
@@ -642,21 +642,21 @@ export default function ProfilePage() {
                     <p className="text-sm font-medium truncate">{parseBrowser(s.userAgent)}</p>
                     {s.isCurrent && (
                       <span className="text-xs uppercase tracking-[0.1em] bg-primary/10 text-primary px-1.5 py-0.5 font-medium">
-                        Current
+                        الحالية
                       </span>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">
-                    {s.ipAddress || 'Unknown IP'} &middot; {new Date(s.createdAt).toLocaleString()}
+                    {s.ipAddress || 'IP غير معروف'} &middot; {new Date(s.createdAt).toLocaleString()}
                   </p>
                 </div>
                 {!s.isCurrent && (
                   <button
                     onClick={() => handleRevokeSession(s.sessionId)}
                     className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors shrink-0"
-                    aria-label="Revoke session"
+                    aria-label="إلغاء الجلسة"
                   >
-                    <LogOut className="h-3.5 w-3.5" /> Revoke
+                    <LogOut className="h-3.5 w-3.5" /> إلغاء
                   </button>
                 )}
               </div>

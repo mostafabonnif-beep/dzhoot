@@ -53,13 +53,25 @@ const ALL_LANGUAGES = [
 
 const PROMINENT_COUNT = 12;
 
+const LANG_NAMES_AR: Record<string, string> = {
+  eng: 'الإنجليزية', hin: 'الهندية', spa: 'الإسبانية', fra: 'الفرنسية', deu: 'الألمانية',
+  por: 'البرتغالية', ara: 'العربية', rus: 'الروسية', jpn: 'اليابانية', kor: 'الكورية',
+  zho: 'الصينية', ita: 'الإيطالية', tur: 'التركية', nld: 'الهولندية', pol: 'البولندية',
+  swe: 'السويدية', tam: 'التاميلية', tel: 'التيلوغوية', ben: 'البنغالية', mar: 'الماراثية',
+  guj: 'الغوجاراتية', kan: 'الكنادية', mal: 'المالايالامية', pan: 'البنجابية', urd: 'الأردية',
+  tha: 'التايلاندية', vie: 'الفيتنامية', ind: 'الإندونيسية', msa: 'الملايوية', fil: 'الفلبينية',
+  ron: 'الرومانية', ces: 'التشيكية', ell: 'اليونانية', hun: 'المجرية', heb: 'العبرية',
+  fas: 'الفارسية', ukr: 'الأوكرانية', cat: 'الكتالانية', nor: 'النرويجية', dan: 'الدنماركية',
+  fin: 'الفنلندية',
+};
+
 interface LanguageStepProps {
   selectedLanguages: string[];
   onToggleLanguage: (code: string) => void;
 }
 
 export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageStepProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [search, setSearch] = useState('');
   const [showAll, setShowAll] = useState(false);
 
@@ -69,6 +81,7 @@ export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageSt
     return ALL_LANGUAGES.filter(
       (l) =>
         l.name.toLowerCase().includes(search.toLowerCase()) ||
+        LANG_NAMES_AR[l.code]?.includes(search) ||
         l.code.toLowerCase().includes(search.toLowerCase()),
     );
   }, [search, showAll]);
@@ -114,7 +127,7 @@ export function LanguageStep({ selectedLanguages, onToggleLanguage }: LanguageSt
                   : 'border-border bg-card hover:border-primary/40'
               }`}
             >
-              {lang.name}
+              {locale === 'ar' && LANG_NAMES_AR[lang.code] ? LANG_NAMES_AR[lang.code] : lang.name}
             </button>
           );
         })}

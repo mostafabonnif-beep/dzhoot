@@ -84,10 +84,10 @@ export default function QrScanner({ open, onClose, onScan }: QrScannerProps) {
         );
       } catch (err) {
         if (!cancelled) {
-          const msg = err instanceof Error ? err.message : 'Camera access denied';
+          const msg = err instanceof Error ? err.message : 'تعذّر الوصول إلى الكاميرا';
           setError(
             msg.includes('NotAllowedError')
-              ? 'Camera permission denied. Allow camera access and try again.'
+              ? 'رُفض إذن الكاميرا. اسمح بالوصول إلى الكاميرا ثم حاول مرة أخرى.'
               : msg,
           );
         }
@@ -130,19 +130,19 @@ export default function QrScanner({ open, onClose, onScan }: QrScannerProps) {
         ref={scannerRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Scan QR code from TV"
+        aria-label="امسح رمز QR الظاهر على التلفاز"
         className="relative w-full max-w-sm bg-background border border-border"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b border-border">
           <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium flex items-center gap-2">
             <Camera className="h-3.5 w-3.5" />
-            Scan TV QR Code
+            مسح رمز QR من التلفاز
           </p>
           <button
             onClick={onClose}
             className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-            aria-label="Close scanner"
+            aria-label="إغلاق الماسح"
           >
             <X className="h-4 w-4" />
           </button>
@@ -151,7 +151,7 @@ export default function QrScanner({ open, onClose, onScan }: QrScannerProps) {
         {/* Scanner area */}
         <div className="p-4">
           <p className="text-sm text-muted-foreground mb-3">
-            Point your camera at the QR code shown on your TV&apos;s pairing screen.
+            وجّه الكاميرا نحو رمز QR الظاهر على شاشة الاقتران في التلفاز.
           </p>
 
           <div className="relative bg-black aspect-square w-full overflow-hidden [&_video]:!w-full [&_video]:!h-full [&_video]:!object-cover [&_#qr-shaded-region]:!border-none">
@@ -160,7 +160,7 @@ export default function QrScanner({ open, onClose, onScan }: QrScannerProps) {
               <div className="absolute inset-0 flex items-center justify-center bg-black/80">
                 <div className="text-center space-y-2">
                   <Camera className="h-8 w-8 text-muted-foreground mx-auto animate-pulse" />
-                  <p className="text-xs text-muted-foreground">Starting camera…</p>
+                  <p className="text-xs text-muted-foreground">جارٍ تشغيل الكاميرا…</p>
                 </div>
               </div>
             )}

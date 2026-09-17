@@ -1,6 +1,7 @@
 'use client';
 
 import { type ReactNode } from 'react';
+import { useLocale } from '@/components/locale-provider';
 import DataTable, { type DataTableColumn } from './data-table';
 import ChannelLogo from './channel-logo';
 import ChannelRowActions from './channel-row-actions';
@@ -55,6 +56,8 @@ export default function ChannelDataTable<T>({
   selectableHeader,
   renderSelectCell,
 }: ChannelDataTableProps<T>) {
+  const { locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
   const selectionColumn: DataTableColumn<T> | null =
     selectableHeader && renderSelectCell
       ? {
@@ -71,7 +74,7 @@ export default function ChannelDataTable<T>({
       key: 'name',
       ariaSort: nameAriaSort,
       mobileStyle: 'flex:1;min-width:0',
-      header: nameHeader || <span className={HEADER_TEXT}>Name</span>,
+      header: nameHeader || <span className={HEADER_TEXT}>{L('الاسم', 'Nom', 'Name')}</span>,
       cell: (item) => (
         <div
           tabIndex={0}
@@ -95,7 +98,7 @@ export default function ChannelDataTable<T>({
       key: 'actions',
       headerClassName: `text-right`,
       mobileStyle: 'margin-left:auto',
-      header: <span className={HEADER_TEXT}>Actions</span>,
+      header: <span className={HEADER_TEXT}>{L('الإجراءات', 'Actions', 'Actions')}</span>,
       cell: (item) => <ChannelRowActions {...getActions(item)} />,
     },
   ];

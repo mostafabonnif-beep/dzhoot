@@ -91,7 +91,8 @@ export function ConfirmStep({
   mode,
   onReset,
 }: ConfirmStepProps) {
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -199,13 +200,13 @@ export function ConfirmStep({
             onClick={onReset}
             className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-2 border-border bg-card hover:border-primary/40 uppercase tracking-[0.1em] transition-colors"
           >
-            <RotateCcw className="h-3.5 w-3.5" /> Pick More
+            <RotateCcw className="h-3.5 w-3.5" /> {L('اختيار المزيد', 'Choisir d’autres chaînes', 'Pick More')}
           </button>
           <a
             href={mode === 'user' ? '/user/channels' : '/admin/channels'}
             className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"
           >
-            {mode === 'user' ? 'My Channels' : 'View Channels'}{' '}
+            {mode === 'user' ? L('قنواتي', 'Mes chaînes', 'My Channels') : L('عرض القنوات', 'Voir les chaînes', 'View Channels')}{' '}
             <ArrowRight className="h-3.5 w-3.5" />
           </a>
         </div>
@@ -216,12 +217,16 @@ export function ConfirmStep({
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">Step 6</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">{L('الخطوة 6', 'Étape 6', 'Step 6')}</p>
         <h2 className="text-base font-display font-bold uppercase tracking-[0.08em]">
-          Confirm Selection
+          {L('تأكيد الاختيار', 'Confirmer la sélection', 'Confirm Selection')}
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Review your selection and add to {mode === 'user' ? 'your list' : 'the system'}.
+          {L(
+            `راجع اختيارك وأضفه إلى ${mode === 'user' ? 'قائمتك' : 'النظام'}.`,
+            `Vérifiez votre sélection et ajoutez-la à ${mode === 'user' ? 'votre liste' : 'au système'}.`,
+            `Review your selection and add to ${mode === 'user' ? 'your list' : 'the system'}.`,
+          )}
         </p>
       </div>
 
@@ -243,7 +248,7 @@ export function ConfirmStep({
                 {SOURCE_LABELS[source] || source}
               </h3>
               <span className="text-xs text-muted-foreground">
-                {channels.length} channel{channels.length !== 1 ? 's' : ''}
+                {channels.length} {L('قناة', 'chaîne(s)', `channel${channels.length !== 1 ? 's' : ''}`)}
               </span>
             </div>
             <div className="divide-y divide-border max-h-[40vh] sm:max-h-[200px] overflow-y-auto">
@@ -263,7 +268,7 @@ export function ConfirmStep({
 
       <div className="flex items-center justify-between pt-2" aria-live="polite">
         <p className="text-sm font-medium">
-          Total: {selectedChannels.length} channel{selectedChannels.length !== 1 ? 's' : ''}
+          {L('المجموع', 'Total', 'Total')}: {selectedChannels.length} {L('قناة', 'chaîne(s)', `channel${selectedChannels.length !== 1 ? 's' : ''}`)}
         </p>
         <button
           onClick={handleImport}
@@ -272,10 +277,10 @@ export function ConfirmStep({
         >
           {importing ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" /> Importing...
+              <Loader2 className="h-4 w-4 animate-spin" /> {L('جارٍ الاستيراد…', 'Importation…', 'Importing...')}
             </>
           ) : (
-            <>Add to {mode === 'user' ? 'My Channels' : 'System'}</>
+            <>{L('إضافة إلى', 'Ajouter à', 'Add to')} {mode === 'user' ? L('قنواتي', 'mes chaînes', 'My Channels') : L('النظام', 'le système', 'System')}</>
           )}
         </button>
       </div>
