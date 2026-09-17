@@ -62,7 +62,12 @@ router.post('/', async (req, res) => {
     });
   } catch (err) {
     const status = err.status || 500;
-    return res.status(status).json({ success: false, error: err.message || 'Failed to start recording' });
+    if (status >= 500) console.error('[admin-recordings] start failed', err);
+    // Controlled service errors (4xx) keep their message; 5xx stays generic.
+    const safe = status < 500 && typeof err.message === 'string' && err.message.length <= 200
+      ? err.message
+      : 'Failed to start recording';
+    return res.status(status).json({ success: false, error: safe });
   }
 });
 
@@ -76,7 +81,11 @@ router.post('/:id/stop', async (req, res) => {
     return res.json({ success: true, data: { id: String(rec._id), status: rec.status } });
   } catch (err) {
     const status = err.status || 500;
-    return res.status(status).json({ success: false, error: err.message || 'Failed to stop recording' });
+    if (status >= 500) console.error('[admin-recordings] stop failed', err);
+    const safe = status < 500 && typeof err.message === 'string' && err.message.length <= 200
+      ? err.message
+      : 'Failed to stop recording';
+    return res.status(status).json({ success: false, error: safe });
   }
 });
 

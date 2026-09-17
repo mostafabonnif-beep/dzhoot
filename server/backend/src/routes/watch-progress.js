@@ -34,7 +34,8 @@ router.put('/:contentType/:contentId', async (req, res) => {
 
     return res.json({ success: true, data: doc });
   } catch (err) {
-    return res.status(400).json({ success: false, error: err.message });
+    console.error('[watch-progress] save failed', err);
+    return res.status(400).json({ success: false, error: 'Failed to save watch progress' });
   }
 });
 
@@ -50,7 +51,8 @@ router.get('/', async (req, res) => {
     const items = await listContinueWatching(userId, limit);
     return res.json({ success: true, data: items });
   } catch (err) {
-    return res.status(400).json({ success: false, error: err.message });
+    console.error('[watch-progress] list failed', err);
+    return res.status(400).json({ success: false, error: 'Failed to load continue watching' });
   }
 });
 
@@ -65,7 +67,8 @@ router.get('/:contentType/:contentId', async (req, res) => {
     const doc = await getProgress(userId, req.params.contentId);
     return res.json({ success: true, data: doc });
   } catch (err) {
-    return res.status(400).json({ success: false, error: err.message });
+    console.error('[watch-progress] get failed', err);
+    return res.status(400).json({ success: false, error: 'Failed to load watch progress' });
   }
 });
 
@@ -80,7 +83,8 @@ router.delete('/:contentType/:contentId', async (req, res) => {
     const removed = await removeProgress(userId, req.params.contentId);
     return res.json({ success: true, data: { removed } });
   } catch (err) {
-    return res.status(400).json({ success: false, error: err.message });
+    console.error('[watch-progress] remove failed', err);
+    return res.status(400).json({ success: false, error: 'Failed to remove watch progress' });
   }
 });
 
@@ -95,7 +99,8 @@ router.delete('/', async (req, res) => {
     const removed = await clearProgress(userId);
     return res.json({ success: true, data: { removed } });
   } catch (err) {
-    return res.status(400).json({ success: false, error: err.message });
+    console.error('[watch-progress] clear failed', err);
+    return res.status(400).json({ success: false, error: 'Failed to clear watch progress' });
   }
 });
 
