@@ -8,7 +8,6 @@ import android.net.Uri
 import android.util.Log
 import android.view.Surface
 import androidx.annotation.OptIn
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -17,6 +16,7 @@ import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.data.source.remote.playlist.StreamUrlTemplate
+import com.dzhoof.iptv.presentation.ui.player.PlayerFactory
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +39,9 @@ class DzhoofTvInputService : TvInputService() {
 
     @Inject
     lateinit var apiService: DzhoofApiService
+
+    @Inject
+    lateinit var playerFactory: PlayerFactory
 
     override fun onCreateSession(inputId: String): Session {
         return DzhoofSession(this)
@@ -81,7 +84,7 @@ class DzhoofTvInputService : TvInputService() {
             // Release existing player
             player?.release()
 
-            val exoPlayer = ExoPlayer.Builder(ctx).build().apply {
+            val exoPlayer = playerFactory.create().apply {
                 setVideoSurface(currentSurface)
                 volume = currentVolume
                 playWhenReady = true
@@ -123,7 +126,11 @@ class DzhoofTvInputService : TvInputService() {
                         val body = response.body()
                         val playbackUrl = body?.data?.playbackUrl
                         if (response.isSuccessful && body?.success == true && !playbackUrl.isNullOrBlank()) {
-                            exoPlayer.setMediaItem(MediaItem.fromUri(playbackUrl))
+                            // Honour the token's mimeType hint instead of guessing
+                            // from the extension-less relay URL (D7).
+                            exoPlayer.setMediaSource(
+                                playerFactory.createMediaSource(playbackUrl, body?.data?.mimeType, null),
+                            )
                             exoPlayer.prepare()
                         } else {
                             Log.e(TAG, "Playback token request failed: HTTP ${response.code()} ${body?.error}")
@@ -140,7 +147,9 @@ class DzhoofTvInputService : TvInputService() {
                     Log.e(TAG, "No stream URL for unpaired channel: $channelUri")
                     notifyVideoUnavailable(TvInputManager.VIDEO_UNAVAILABLE_REASON_UNKNOWN)
                 } else {
-                    exoPlayer.setMediaItem(MediaItem.fromUri(StreamUrlTemplate.resolve(ctx, streamUrl)))
+                    exoPlayer.setMediaSource(
+                        playerFactory.createMediaSource(StreamUrlTemplate.resolve(ctx, streamUrl), null, null),
+                    )
                     exoPlayer.prepare()
                 }
             }

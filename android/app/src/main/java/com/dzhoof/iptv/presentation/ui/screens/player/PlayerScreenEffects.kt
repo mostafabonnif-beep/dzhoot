@@ -15,7 +15,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
@@ -29,30 +28,11 @@ import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.source.remote.playlist.StreamUrlTemplate
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager
+import com.dzhoof.iptv.presentation.ui.player.PlaybackContainer
 import com.dzhoof.iptv.presentation.ui.player.isTvDevice
 import com.dzhoof.iptv.presentation.viewmodel.PlayerViewModel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-
-private fun mediaItem(url: String, mimeType: String?): MediaItem {
-    val builder = MediaItem.Builder().setUri(url)
-    if (!mimeType.isNullOrBlank()) builder.setMimeType(mimeType)
-    return builder.build()
-}
-
-/**
- * True when the server-described stream is HLS. Media3's
- * MimeTypes.APPLICATION_M3U8 constant is "application/x-mpegURL", while the
- * ecosystem (and older server builds) commonly send
- * "application/vnd.apple.mpegurl". A plain equals() against the constant
- * misses that and routes the playlist to the PROGRESSIVE extractor, which
- * sniffs the playlist text and dies instantly with
- * ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED — before fetching any segment.
- */
-internal fun isHlsMimeType(mimeType: String): Boolean {
-    val m = mimeType.trim().lowercase()
-    return m.contains("mpegurl") || m.contains("m3u8") || m.contains("apple.streaming")
-}
 
 /**
  * Point the player at a channel: builds the live stream slots (primary +
@@ -68,7 +48,9 @@ internal suspend fun prepareChannelStream(
     catchupStartMs: Long,
     catchupDurationMin: Int,
     resolvePlaybackUrl: suspend (channelId: String, slot: Int, catchupStartMs: Long, catchupDurationMin: Int) -> PlaybackTarget?,
-    buildHlsMediaSource: (url: String) -> MediaSource,
+    // Single source builder shared with ErrorRecoveryManager. `container` null
+    // routes from url + mimeType; non-null forces that container (D4 retry).
+    buildMediaSource: (url: String, mimeType: String?, container: PlaybackContainer?) -> MediaSource,
 ): Boolean {
     errorRecoveryManager.reset()
     val serverUrl = AppPreferences.getServerUrl(context).trimEnd('/')
@@ -82,7 +64,9 @@ internal suspend fun prepareChannelStream(
             errorRecoveryManager.setStreamSlots(
                 listOf(ErrorRecoveryManager.StreamSlot(catchupTarget.url, null, isPrimary = true, mimeType = catchupTarget.mimeType)),
             )
-            exoPlayer.setMediaSource(buildHlsMediaSource(catchupTarget.url))
+            exoPlayer.setMediaSource(
+                buildMediaSource(catchupTarget.url, catchupTarget.mimeType, null),
+            )
         } else {
             // Request only the primary token on startup. Optional fallback tokens
             // are obtained on demand after a real playback failure, which makes
@@ -109,25 +93,15 @@ internal suspend fun prepareChannelStream(
                     )
                 }
             }
-            // Server playback serves a normalized HLS media playlist for HLS
-            // upstreams, but relays progressive MPEG-TS upstreams (e.g. the
-            // backup source) as a raw TS stream. Force an explicit HLS source
-            // only for HLS/null mime; otherwise hand the TS stream to the
-            // progressive extractor via the server's mimeType hint. Forcing
-            // HLS on a TS passthrough fails with
-            // ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ("تنسيق البث غير
-            // متوافق") because HlsMediaSource never fetches a segment.
-            val primaryMime = primaryTarget.mimeType
-            if (primaryMime.isNullOrBlank() || isHlsMimeType(primaryMime)) {
-                exoPlayer.setMediaSource(buildHlsMediaSource(primaryTarget.url))
-            } else {
-                exoPlayer.setMediaItem(
-                    MediaItem.Builder()
-                        .setUri(primaryTarget.url)
-                        .setMimeType(primaryMime)
-                        .build(),
-                )
-            }
+            // The relay may serve a normalized HLS playlist for HLS upstreams
+            // OR relay a raw MPEG-TS upstream, on the SAME opaque, extension-
+            // less URL. The server's mimeType hint decides, and a null hint is
+            // NOT evidence of HLS: an extensionless TS upstream is the biggest
+            // production failure bucket (D1). Routing lives in
+            // PlaybackSourceRouting so recovery makes the identical choice.
+            exoPlayer.setMediaSource(
+                buildMediaSource(primaryTarget.url, primaryTarget.mimeType, null),
+            )
         }
         exoPlayer.prepare()
         return true
@@ -146,7 +120,7 @@ internal suspend fun prepareChannelStream(
         errorRecoveryManager.setStreamSlots(
             listOf(ErrorRecoveryManager.StreamSlot(catchupUrl, null, isPrimary = true)),
         )
-        exoPlayer.setMediaItem(MediaItem.Builder().setUri(catchupUrl).build())
+        exoPlayer.setMediaSource(buildMediaSource(catchupUrl, null, null))
     } else {
         val slots = mutableListOf<ErrorRecoveryManager.StreamSlot>()
         slots.add(ErrorRecoveryManager.StreamSlot(url, null, isPrimary = true))
@@ -163,7 +137,7 @@ internal suspend fun prepareChannelStream(
             }
         }
         errorRecoveryManager.setStreamSlots(slots)
-        exoPlayer.setMediaItem(MediaItem.Builder().setUri(url).build())
+        exoPlayer.setMediaSource(buildMediaSource(url, null, null))
     }
     exoPlayer.prepare()
     return true

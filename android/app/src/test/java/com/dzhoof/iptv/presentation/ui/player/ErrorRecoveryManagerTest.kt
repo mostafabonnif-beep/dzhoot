@@ -1,15 +1,14 @@
 package com.dzhoof.iptv.presentation.ui.player
 
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MediaSource
 import io.mockk.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
@@ -21,6 +20,14 @@ class ErrorRecoveryManagerTest {
     private lateinit var player: ExoPlayer
     private val listenerSlot = slot<Player.Listener>()
 
+    /** Sources requested through the injected builder, in order. */
+    private data class BuiltSource(
+        val url: String,
+        val mimeType: String?,
+        val container: PlaybackContainer?,
+    )
+    private val builtSources = mutableListOf<BuiltSource>()
+
     private val onErrorMessages = mutableListOf<String>()
     private val onRecoveringAttempts = mutableListOf<Int>()
     private var onRecoveredCalled = false
@@ -31,13 +38,9 @@ class ErrorRecoveryManagerTest {
 
     @Before
     fun setup() {
-        // Mock MediaItem.Builder to avoid Media3 SDK exceptions in unit tests
-        mockkConstructor(MediaItem.Builder::class)
-        every { anyConstructed<MediaItem.Builder>().setUri(any<String>()) } returns mockk(relaxed = true)
-        every { anyConstructed<MediaItem.Builder>().build() } returns mockk()
-
         player = mockk(relaxed = true)
         every { player.addListener(capture(listenerSlot)) } just runs
+        builtSources.clear()
         onErrorMessages.clear()
         onRecoveringAttempts.clear()
         onRecoveredCalled = false
@@ -47,15 +50,14 @@ class ErrorRecoveryManagerTest {
         onAlternateFallbackUrls.clear()
     }
 
-    @After
-    fun tearDown() {
-        unmockkConstructor(MediaItem.Builder::class)
-    }
-
     private fun makeManager(scope: kotlinx.coroutines.CoroutineScope): ErrorRecoveryManager {
         return ErrorRecoveryManager(
             player = player,
             scope = scope,
+            buildMediaSource = { url, mimeType, container ->
+                builtSources.add(BuiltSource(url, mimeType, container))
+                mockk<MediaSource>(relaxed = true)
+            },
             onError = { onErrorMessages.add(it) },
             onRecovering = { onRecoveringAttempts.add(it) },
             onRecovered = { onRecoveredCalled = true },
@@ -69,18 +71,33 @@ class ErrorRecoveryManagerTest {
     private fun networkError(): PlaybackException =
         PlaybackException("Network error", null, PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED)
 
+    private fun parsingError(): PlaybackException =
+        PlaybackException("Parsing error", null, PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED)
+
     private fun nonNetworkError(): PlaybackException =
         PlaybackException("Decode error", null, PlaybackException.ERROR_CODE_UNSPECIFIED)
 
     private fun primarySlot(
         directUrl: String = "http://primary.m3u8",
-        proxyUrl: String? = null
-    ) = ErrorRecoveryManager.StreamSlot(directUrl = directUrl, proxyUrl = proxyUrl, isPrimary = true)
+        proxyUrl: String? = null,
+        mimeType: String? = null
+    ) = ErrorRecoveryManager.StreamSlot(
+        directUrl = directUrl,
+        proxyUrl = proxyUrl,
+        isPrimary = true,
+        mimeType = mimeType,
+    )
 
     private fun alternateSlot(
         directUrl: String = "http://alt.m3u8",
-        proxyUrl: String? = null
-    ) = ErrorRecoveryManager.StreamSlot(directUrl = directUrl, proxyUrl = proxyUrl, isPrimary = false)
+        proxyUrl: String? = null,
+        mimeType: String? = null
+    ) = ErrorRecoveryManager.StreamSlot(
+        directUrl = directUrl,
+        proxyUrl = proxyUrl,
+        isPrimary = false,
+        mimeType = mimeType,
+    )
 
     // ── Registration ─────────────────────────────────────────────
 
@@ -326,5 +343,143 @@ class ErrorRecoveryManagerTest {
         )
 
         assertEquals(6, manager.maxTotalAttempts)
+    }
+
+    // ── Opposite-container retry (D4) ────────────────────────────
+
+    @Test
+    fun `parsing error rebuilds same url with opposite container before failing over`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(
+            listOf(primarySlot(directUrl = "http://relay/opaque", mimeType = "application/x-mpegURL")),
+        )
+
+        listenerSlot.captured.onPlayerError(parsingError())
+        advanceTimeBy(3000)
+        runCurrent()
+
+        assertEquals(1, builtSources.size)
+        assertEquals("http://relay/opaque", builtSources[0].url)
+        // HLS was the routed container, so the retry must force PROGRESSIVE.
+        assertEquals(PlaybackContainer.PROGRESSIVE, builtSources[0].container)
+        verify { player.setMediaSource(any()) }
+        assertEquals(0, onAlternateFallbackUrls.size)
+        assertEquals(1, onErrorMessages.size)
+    }
+
+    @Test
+    fun `parsing error on progressive relay forces hls on retry`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(listOf(primarySlot(directUrl = "http://relay/opaque", mimeType = "video/mp2t")))
+
+        listenerSlot.captured.onPlayerError(parsingError())
+        advanceTimeBy(3000)
+        runCurrent()
+
+        assertEquals(1, builtSources.size)
+        assertEquals(PlaybackContainer.HLS, builtSources[0].container)
+    }
+
+    @Test
+    fun `opposite container retry happens only once per url and then moves to alternate`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(
+            listOf(
+                primarySlot(directUrl = "http://relay/primary", mimeType = "application/x-mpegURL"),
+                alternateSlot(directUrl = "http://relay/alt", mimeType = "application/x-mpegURL"),
+            ),
+        )
+
+        // 1st parsing error: opposite-container retry on the same url.
+        listenerSlot.captured.onPlayerError(parsingError())
+        advanceTimeBy(3000)
+        runCurrent()
+        assertEquals(1, builtSources.size)
+
+        // 2nd parsing error: no second flip, ladder moves to the next slot.
+        listenerSlot.captured.onPlayerError(parsingError())
+        advanceTimeBy(3000)
+        runCurrent()
+
+        assertEquals(2, builtSources.size)
+        assertEquals("http://relay/alt", builtSources[1].url)
+        assertNull(builtSources[1].container)
+        assertEquals(listOf("http://relay/alt"), onAlternateFallbackUrls)
+    }
+
+    @Test
+    fun `opposite container retry cannot loop and dead-ends when no fallback remains`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(
+            listOf(primarySlot(directUrl = "http://relay/opaque", mimeType = "application/x-mpegURL")),
+        )
+
+        listenerSlot.captured.onPlayerError(parsingError())
+        advanceTimeBy(3000)
+        runCurrent()
+        assertEquals(1, builtSources.size)
+
+        listenerSlot.captured.onPlayerError(parsingError())
+        runCurrent()
+
+        assertEquals(1, builtSources.size)
+        assertEquals(1, onStreamDeadMessages.size)
+    }
+
+    // ── Proxy-free recovery ladder (D5) ──────────────────────────
+
+    @Test
+    fun `parsing error failover reaches resolver even when proxy url is null`() = runTest {
+        val manager = makeManager(this)
+        val resolvedSlots = mutableListOf<Int>()
+        // Production: ALLOW_DIRECT_PLAYBACK=false means proxyUrl is always null.
+        manager.setStreamSlots(listOf(primarySlot(directUrl = "http://relay/primary")))
+        manager.setFallbackResolver { slot ->
+            resolvedSlots.add(slot)
+            alternateSlot(directUrl = "http://relay/alt-$slot")
+        }
+
+        listenerSlot.captured.onPlayerError(parsingError())
+        advanceTimeBy(3000)
+        runCurrent()
+
+        listenerSlot.captured.onPlayerError(parsingError())
+        advanceTimeBy(3000)
+        runCurrent()
+
+        assertEquals(listOf(1), resolvedSlots)
+        assertEquals("http://relay/alt-1", onAlternateFallbackUrls.last())
+        assertEquals("http://relay/alt-1", builtSources.last().url)
+    }
+
+    // ── Recovery-time source building (D2) ───────────────────────
+
+    @Test
+    fun `proxy switch rebuilds source through the injected builder`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(
+            listOf(primarySlot(proxyUrl = "http://proxy.m3u8", mimeType = "video/mp2t")),
+        )
+
+        // Three direct attempts exhaust the primary direct quota.
+        listenerSlot.captured.onPlayerError(networkError())
+        advanceTimeBy(3000)
+        runCurrent()
+        listenerSlot.captured.onPlayerError(networkError())
+        advanceTimeBy(5000)
+        runCurrent()
+        listenerSlot.captured.onPlayerError(networkError())
+        advanceTimeBy(7000)
+        runCurrent()
+
+        // Fourth error triggers the proxy attempt.
+        listenerSlot.captured.onPlayerError(networkError())
+        advanceTimeBy(9000)
+        runCurrent()
+
+        assert(onProxyFallbackCalled)
+        assertEquals("http://proxy.m3u8", builtSources.last().url)
+        assertEquals("video/mp2t", builtSources.last().mimeType)
+        assertNull(builtSources.last().container)
     }
 }
