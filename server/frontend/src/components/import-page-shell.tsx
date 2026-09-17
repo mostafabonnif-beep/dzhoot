@@ -106,7 +106,8 @@ interface ImportPageShellProps {
 export default function ImportPageShell({ mode }: ImportPageShellProps) {
   const isAdmin = mode === 'admin';
   const { toast } = useToast();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
+  const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPlaylist, setSelectedPlaylist] = useState<string | null>(null);
@@ -190,7 +191,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
     (ch: EnrichedChannel) => {
       playStream(
         {
-          name: ch.channelName || 'Stream Preview',
+          name: ch.channelName || t('sources.streamPreview'),
           url: ch.channelUrl,
           // Raw upstream logo (stream player UI does not render it; never
           // proxy here — an <img> cannot attach the session header).
@@ -199,7 +200,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
         { mode: 'direct-fallback' },
       );
     },
-    [playStream],
+    [playStream, t],
   );
 
   useEffect(() => {
@@ -281,7 +282,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
       }
     } catch (err) {
       if (isSelectCanceled(err)) return;
-      toast('Failed to fetch channels', 'error');
+      toast(L('تعذّر جلب القنوات', 'Impossible de récupérer les chaînes', 'Failed to fetch channels'), 'error');
     } finally {
       if (!controller.signal.aborted) setFetchingChannels(false);
     }
@@ -315,7 +316,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
       }
     } catch (err) {
       if (isSelectCanceled(err)) return;
-      toast('Failed to fetch channels', 'error');
+      toast(L('تعذّر جلب القنوات', 'Impossible de récupérer les chaînes', 'Failed to fetch channels'), 'error');
     } finally {
       if (!controller.signal.aborted) setFetchingChannels(false);
     }
@@ -581,7 +582,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
     try {
       await fetchGroupedChannels(buildGroupedParams(), newPage);
     } catch {
-      toast('Failed to fetch channels', 'error');
+      toast(L('تعذّر جلب القنوات', 'Impossible de récupérer les chaînes', 'Failed to fetch channels'), 'error');
     } finally {
       setFetchingChannels(false);
     }
@@ -595,7 +596,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
       try {
         await fetchGroupedChannels(buildGroupedParams({ search: value }), 1);
       } catch {
-        toast('Failed to fetch channels', 'error');
+        toast(L('تعذّر جلب القنوات', 'Impossible de récupérer les chaînes', 'Failed to fetch channels'), 'error');
       } finally {
         setFetchingChannels(false);
       }
@@ -608,7 +609,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
     try {
       await fetchGroupedChannels(buildGroupedParams({ status: value }), 1);
     } catch {
-      toast('Failed to fetch channels', 'error');
+      toast(L('تعذّر جلب القنوات', 'Impossible de récupérer les chaînes', 'Failed to fetch channels'), 'error');
     } finally {
       setFetchingChannels(false);
     }
@@ -645,9 +646,16 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
       const endpoint = isAdmin ? '/iptv-org/import-grouped' : '/iptv-org/import-grouped-user';
       const payload = isAdmin ? { channels: toImport, replaceExisting } : { channels: toImport };
       const res = await api.post(endpoint, payload);
-      setImportResult(res.data.message || `Imported ${toImport.length} channels with alternates`);
+      setImportResult(
+        res.data.message ||
+          L(
+            `تم استيراد ${toImport.length} قناة مع البدائل`,
+            `${toImport.length} chaînes importées avec alternates`,
+            `Imported ${toImport.length} channels with alternates`,
+          ),
+      );
     } catch {
-      setImportResult('Failed to import channels');
+      setImportResult(L('فشل استيراد القنوات', 'Échec de l’import des chaînes', 'Failed to import channels'));
     } finally {
       setImporting(false);
     }
@@ -763,16 +771,16 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
   // Detail modal fields
   const detailFields: ChannelField[] = detailChannel
     ? [
-        { label: 'Stream URL', value: detailChannel.channelUrl },
+        { label: t('sources.streamUrl'), value: detailChannel.channelUrl },
         ...(isAdmin
           ? [{ label: 'Logo URL', value: detailChannel.tvgLogo || detailChannel.channelImg }]
           : []),
         {
-          label: 'Group / Category',
+          label: L('المجموعة / التصنيف', 'Groupe / Catégorie', 'Group / Category'),
           value: detailChannel.groupTitle || detailChannel.channelCategories?.join(', '),
         },
-        { label: 'Language', value: detailChannel.languages?.join(', ') },
-        { label: 'Country', value: detailChannel.country },
+        { label: t('sources.language'), value: detailChannel.languages?.join(', ') },
+        { label: t('sources.country'), value: detailChannel.country },
         ...(isAdmin
           ? [
               { label: 'Quality', value: detailChannel.streamQuality },
@@ -924,7 +932,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                   value={groupedSearch}
                   onChange={handleGroupedSearchChange}
                   placeholder={t('import.searchPlaceholder')}
-                  ariaLabel="Search grouped channels"
+                  ariaLabel={L('البحث في القنوات المجمّعة', 'Rechercher des chaînes groupées', 'Search grouped channels')}
                   className="flex-1 max-w-full sm:max-w-md w-full"
                 />
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1448,12 +1456,12 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
               {isSelected(detailChannel._uid) ? (
                 <>
                   <CheckSquare className="h-4 w-4 text-primary" />
-                  Selected
+                  {L('محدد', 'Sélectionné', 'Selected')}
                 </>
               ) : (
                 <>
                   <Square className="h-4 w-4" />
-                  Select for Import
+                  {L('تحديد للاستيراد', 'Sélectionner pour l’import', 'Select for Import')}
                 </>
               )}
             </button>

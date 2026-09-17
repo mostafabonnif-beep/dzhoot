@@ -15,10 +15,17 @@ import type { SourceType, WizardChannel, ChannelLiveness } from '../wizard-shell
 const PAGE_SIZE = 50;
 
 const SOURCE_LABELS: Record<string, string> = {
-  all: 'All',
+  all: 'الكل',
   'iptv-org': 'IPTV-org',
   'pluto-tv': 'Pluto TV',
   'samsung-tv-plus': 'Samsung TV+',
+};
+
+const LIVENESS_LABELS: Record<LivenessFilter, string> = {
+  all: 'الكل',
+  alive: 'متاح',
+  dead: 'متوقف',
+  unknown: 'غير معروف',
 };
 
 const LIVENESS_COLORS: Record<string, string> = {
@@ -478,7 +485,7 @@ export function RecommendationsStep({
           <button
             key={status}
             onClick={() => setLivenessFilter(status)}
-            aria-label={`تصفية حسب حالة ${status}`}
+            aria-label={`تصفية حسب حالة ${LIVENESS_LABELS[status]}`}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border transition-colors ${
               livenessFilter === status
                 ? 'border-primary bg-primary/10 text-primary font-medium'
@@ -488,7 +495,7 @@ export function RecommendationsStep({
             {status !== 'all' && (
               <span className={`w-1.5 h-1.5 rounded-full ${LIVENESS_COLORS[status]}`} />
             )}
-            {status.charAt(0).toUpperCase() + status.slice(1)} ({livenessCounts[status]})
+            {LIVENESS_LABELS[status]} ({livenessCounts[status]})
           </button>
         ))}
       </div>

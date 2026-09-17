@@ -4,34 +4,34 @@ import { useState } from 'react';
 
 const CATEGORIES = [
   // Prominent — shown by default
-  { id: 'news', label: 'News' },
-  { id: 'sports', label: 'Sports' },
-  { id: 'entertainment', label: 'Entertainment' },
-  { id: 'movies', label: 'Movies' },
-  { id: 'kids', label: 'Kids' },
-  { id: 'music', label: 'Music' },
-  { id: 'documentary', label: 'Documentary' },
-  { id: 'general', label: 'General' },
+  { id: 'news', label: 'أخبار' },
+  { id: 'sports', label: 'رياضة' },
+  { id: 'entertainment', label: 'ترفيه' },
+  { id: 'movies', label: 'أفلام' },
+  { id: 'kids', label: 'أطفال' },
+  { id: 'music', label: 'موسيقى' },
+  { id: 'documentary', label: 'وثائقيات' },
+  { id: 'general', label: 'عام' },
   // Extended
-  { id: 'animation', label: 'Animation' },
-  { id: 'comedy', label: 'Comedy' },
-  { id: 'cooking', label: 'Cooking' },
-  { id: 'culture', label: 'Culture' },
-  { id: 'education', label: 'Education' },
-  { id: 'family', label: 'Family' },
-  { id: 'lifestyle', label: 'Lifestyle' },
-  { id: 'religious', label: 'Religious' },
-  { id: 'science', label: 'Science' },
-  { id: 'series', label: 'Series' },
-  { id: 'travel', label: 'Travel' },
-  { id: 'weather', label: 'Weather' },
-  { id: 'business', label: 'Business' },
-  { id: 'classic', label: 'Classic' },
-  { id: 'outdoor', label: 'Outdoor' },
-  { id: 'relax', label: 'Relax' },
-  { id: 'shop', label: 'Shopping' },
-  { id: 'auto', label: 'Auto' },
-  { id: 'legislative', label: 'Legislative' },
+  { id: 'animation', label: 'رسوم متحركة' },
+  { id: 'comedy', label: 'كوميديا' },
+  { id: 'cooking', label: 'طبخ' },
+  { id: 'culture', label: 'ثقافة' },
+  { id: 'education', label: 'تعليم' },
+  { id: 'family', label: 'عائلة' },
+  { id: 'lifestyle', label: 'نمط حياة' },
+  { id: 'religious', label: 'دينية' },
+  { id: 'science', label: 'علوم' },
+  { id: 'series', label: 'مسلسلات' },
+  { id: 'travel', label: 'سفر' },
+  { id: 'weather', label: 'طقس' },
+  { id: 'business', label: 'أعمال' },
+  { id: 'classic', label: 'كلاسيكيات' },
+  { id: 'outdoor', label: 'هواء طلق' },
+  { id: 'relax', label: 'استرخاء' },
+  { id: 'shop', label: 'تسوق' },
+  { id: 'auto', label: 'سيارات' },
+  { id: 'legislative', label: 'برلمانية' },
 ];
 
 const PROMINENT_COUNT = 8;
@@ -49,16 +49,16 @@ export function CategoryStep({ selectedCategories, onToggleCategory }: CategoryS
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">Step 4</p>
+        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">الخطوة 4</p>
         <h2 className="text-base font-display font-bold uppercase tracking-[0.08em]">
-          Pick Categories
+          اختر الفئات
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          What kind of channels are you looking for? Skip for all.
+          ما نوع القنوات التي تبحث عنها؟ تخطَّ لعرض الكل.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Category selection">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="اختيار الفئات">
         {displayed.map((cat) => {
           const isSelected = selectedCategories.includes(cat.id);
           return (
@@ -83,14 +83,13 @@ export function CategoryStep({ selectedCategories, onToggleCategory }: CategoryS
           onClick={() => setShowAll(true)}
           className="text-xs text-primary hover:text-primary/80 uppercase tracking-[0.1em] font-medium"
         >
-          Show all categories ({CATEGORIES.length - PROMINENT_COUNT} more)
+          عرض كل الفئات ({CATEGORIES.length - PROMINENT_COUNT} إضافية)
         </button>
       )}
 
       {selectedCategories.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          {selectedCategories.length} categor{selectedCategories.length !== 1 ? 'ies' : 'y'}{' '}
-          selected
+          {selectedCategories.length} فئة محددة
         </p>
       )}
     </div>

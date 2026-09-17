@@ -13,8 +13,8 @@ interface SearchInputProps {
 export default function SearchInput({
   value,
   onChange,
-  placeholder = 'Search...',
-  ariaLabel = 'Search',
+  placeholder = 'بحث...',
+  ariaLabel = 'بحث',
   className = '',
 }: SearchInputProps) {
   return (
