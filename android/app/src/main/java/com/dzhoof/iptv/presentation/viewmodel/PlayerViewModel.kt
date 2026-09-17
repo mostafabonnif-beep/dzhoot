@@ -270,6 +270,7 @@ class PlayerViewModel @Inject constructor(
     private var playbackQoeChannelId: String? = null
     private var playbackQoeStartedAt: Long = 0L
     private var playbackQoeStartupReported = false
+    private var playbackQoeFailureReported = false
     private var playbackQoeFallbackReported = false
     private var playbackQoeRebufferCount = 0
     private var playbackQoeFallbackUsed = false
@@ -289,6 +290,7 @@ class PlayerViewModel @Inject constructor(
         playbackQoeChannelId = channelId
         playbackQoeStartedAt = System.currentTimeMillis()
         playbackQoeStartupReported = false
+        playbackQoeFailureReported = false
         playbackQoeFallbackReported = false
         playbackQoeRebufferCount = 0
         playbackQoeFallbackUsed = false
@@ -1154,9 +1156,14 @@ class PlayerViewModel @Inject constructor(
     // ── Stream Recovery & Dead-Stream Handling ─────────────────────
 
     fun onPlaybackError(error: String) {
-        if (!playbackQoeStartupReported) {
-            reportPlaybackQoe("startup_failure", fallbackSucceeded = false, errorCode = "playback_error")
-        }
+        // Deliberately NO playback-quality event here. This callback also fires
+        // for recoverable errors — a network blip that triggers a reconnect —
+        // so emitting startup_failure here was wrong twice over: it counted one
+        // failed session twice (a generic "playback_error" plus the real code
+        // from onStreamDead, which inflated the production startup-failure rate)
+        // and it reported a failure for sessions that went on to recover.
+        // The terminal outcome is reported once, by onStreamDead, which carries
+        // the authoritative diagnostic code.
         _uiState.update { it.copy(error = error, isPlaying = false) }
     }
 
@@ -1203,7 +1210,8 @@ class PlayerViewModel @Inject constructor(
 
     fun onStreamDead(errorMessage: String, diagnosticCode: String? = null) {
         val channelId = _uiState.value.channel?.id ?: return
-        if (!playbackQoeStartupReported || playbackQoeFallbackUsed) {
+        if (!playbackQoeFailureReported && (!playbackQoeStartupReported || playbackQoeFallbackUsed)) {
+            playbackQoeFailureReported = true
             reportPlaybackQoe(
                 eventType = "startup_failure",
                 fallbackSucceeded = false,
