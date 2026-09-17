@@ -13,6 +13,7 @@ import com.dzhoof.iptv.data.source.remote.ForbiddenException
 import com.dzhoof.iptv.presentation.model.ErrorType
 import com.dzhoof.iptv.data.source.local.dao.ChannelDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
+import com.dzhoof.iptv.data.source.local.dao.getAllHealthResilient
 import com.dzhoof.iptv.data.source.local.dao.FavoriteCategoryDao
 import com.dzhoof.iptv.data.source.local.dao.FavoriteDao
 import com.dzhoof.iptv.data.source.local.dao.PlaybackPositionDao
@@ -144,7 +145,7 @@ class ChannelsViewModel @Inject constructor(
 
             combine(
                 channelFlow,
-                channelHealthDao.getAllHealth()
+                channelHealthDao.getAllHealthResilient()
                     .debounce(HEALTH_SCAN_DEBOUNCE_MS)
                     .onStart { emit(emptyList()) },
                 channelPrefsRepository.observeHiddenIds()
@@ -243,7 +244,7 @@ class ChannelsViewModel @Inject constructor(
                             val empty = emptyList<ChannelUiModel>()
                             flowOf(empty to empty)
                         } else {
-                            channelHealthDao.getAllHealth()
+                            channelHealthDao.getAllHealthResilient()
                                 .debounce(HEALTH_SCAN_DEBOUNCE_MS)
                                 .onStart { emit(emptyList()) }
                                 .map { health ->
@@ -282,7 +283,7 @@ class ChannelsViewModel @Inject constructor(
                     playbackPositionDao.observePopularCategoryIds(POPULAR_CATEGORIES_LIMIT),
                     favoriteCategoryDao.getAllFavoriteCategoryNames(),
                     channelDao.getAllChannels(),
-                    channelHealthDao.getAllHealth()
+                    channelHealthDao.getAllHealthResilient()
                         .debounce(HEALTH_SCAN_DEBOUNCE_MS)
                         .onStart { emit(emptyList()) }
                 ) { popularCatIds, favNames, channelEntities, healthList ->

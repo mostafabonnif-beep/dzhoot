@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -77,7 +78,7 @@ fun HomePortalTiles(
             contentPadding = PaddingValues(horizontal = horizontalPadding),
             horizontalArrangement = Arrangement.spacedBy(Dimens.PortalTileGap)
         ) {
-            items(items = tiles, key = { it.key }) { tile ->
+            itemsIndexed(items = tiles, key = { i, tile -> "$i:${tile.key}" }) { _, tile ->
                 PortalTileCard(
                     tile = tile,
                     width = Dimens.PortalTileWidthMobile,

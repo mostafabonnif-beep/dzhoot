@@ -7,6 +7,7 @@ import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.model.dto.PlaybackTokenRequest
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
+import com.dzhoof.iptv.data.source.local.dao.getAllHealthResilient
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.model.EpgProgram
 import com.dzhoof.iptv.domain.model.PlaybackTarget
@@ -784,7 +785,7 @@ class PlayerViewModel @Inject constructor(
         preloadJob?.cancel()
         preloadJob = viewModelScope.launch {
             val channelFlow = getChannelsUseCase(Unit)
-            channelFlow.combine(channelHealthDao.getAllHealth()) { result, healthList ->
+            channelFlow.combine(channelHealthDao.getAllHealthResilient()) { result, healthList ->
                 result to healthList
             }.collect { (result, healthList) ->
                 when (result) {
@@ -834,7 +835,7 @@ class PlayerViewModel @Inject constructor(
                 getChannelsUseCase(Unit)
             }
 
-            channelFlow.combine(channelHealthDao.getAllHealth()) { result, healthList ->
+            channelFlow.combine(channelHealthDao.getAllHealthResilient()) { result, healthList ->
                 result to healthList
             }.collect { (result, healthList) ->
                 when (result) {

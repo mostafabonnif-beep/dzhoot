@@ -163,7 +163,8 @@ internal fun PopularCategoriesSlider(
             contentPadding = PaddingValues(vertical = if (isCompact) Dimens.Space1 else 12.dp),
             horizontalArrangement = Arrangement.spacedBy(Dimens.CategoryCardGap)
         ) {
-            items(categories, key = { it.name }) { category ->
+            items(categories.size, key = { i -> "$i:${categories[i].name}" }) { i ->
+                val category = categories[i]
                 CategoryCard(
                     // `name` stays raw (it's the LazyRow key + navigation arg);
                     // localize only what the user sees.

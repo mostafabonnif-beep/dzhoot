@@ -4,6 +4,7 @@ import com.dzhoof.iptv.data.model.dto.ChannelDto
 import com.dzhoof.iptv.data.model.dto.ChannelMetadataDto
 import com.dzhoof.iptv.data.source.local.entity.ChannelEntity
 import com.dzhoof.iptv.domain.model.Channel
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -223,5 +224,50 @@ class ChannelMapperTest {
 
         assertEquals("timeshift", entity.catchupType)
         assertEquals(3, entity.catchupDays)
+    }
+
+    /**
+     * `ChannelDto.id` / `name` / `url` are non-null Kotlin types, but Gson writes
+     * through reflection: a payload that omits a field leaves **null** in it. The
+     * NPE then came out of `ChannelEntity`'s constructor inside a bulk
+     * `map { toEntity(it) }`, which failed the entire channel refresh — one bad
+     * entry, no channels. This test produces that exact DTO with Gson rather than
+     * guessing at it.
+     */
+    @Test
+    fun `gson really can leave null in a non-null DTO field`() {
+        val dto: ChannelDto = Gson().fromJson("""{"channelName":"No id, no url"}""", ChannelDto::class.java)
+
+        // Proves the hazard is real and not a theoretical one.
+        assertNull(dto.id)
+        assertNull(dto.url)
+    }
+
+    @Test
+    fun `sanitize drops entries the mapper could not store`() {
+        val gson = Gson()
+        val missingId: ChannelDto = gson.fromJson("""{"channelName":"A","channelUrl":"http://a/x.m3u8"}""", ChannelDto::class.java)
+        val missingUrl: ChannelDto = gson.fromJson("""{"channelId":"b","channelName":"B"}""", ChannelDto::class.java)
+        val blankName: ChannelDto = gson.fromJson("""{"channelId":"c","channelName":"","channelUrl":"http://c/x.m3u8"}""", ChannelDto::class.java)
+        val good: ChannelDto = gson.fromJson(
+            """{"channelId":"d","channelName":"D","channelUrl":"http://d/x.m3u8"}""",
+            ChannelDto::class.java,
+        )
+
+        val kept = mapper.sanitize(listOf(missingId, missingUrl, blankName, good))
+
+        assertEquals(1, kept.size)
+        assertEquals("d", kept.first().id)
+    }
+
+    @Test
+    fun `toEntity does not throw on a DTO Gson under-filled`() {
+        val broken: ChannelDto = Gson().fromJson("""{"channelName":"A"}""", ChannelDto::class.java)
+
+        // Must not raise NPE from the non-null constructor parameters.
+        val entity = mapper.toEntity(broken)
+
+        assertEquals("", entity.id)
+        assertEquals("", entity.streamUrl)
     }
 }

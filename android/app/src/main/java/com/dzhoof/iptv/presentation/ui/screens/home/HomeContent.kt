@@ -399,7 +399,9 @@ fun HomeContent(
 
         itemsIndexed(
             items = categoryEntries,
-            key = { _, entry -> "category_${entry.key}" }
+            // Position-prefixed: two entries can share a category key (the same
+            // group name from two sources), and a repeated lazy key throws.
+            key = { i, entry -> "$i:category_${entry.key}" }
         ) { index, (category, categoryChannels) ->
             val localizedCategory = CategoryLocalizer.localize(category)
 
