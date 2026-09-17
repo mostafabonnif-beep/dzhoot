@@ -193,7 +193,7 @@ function SourceContent({
   onStatsChange: (data: { stats: LivenessStats; inProgress: boolean } | null) => void;
 }) {
   const { toast } = useToast();
-  const { locale } = useLocale();
+  const { t, locale } = useLocale();
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [replaceExisting, setReplaceExisting] = useState(false);
@@ -405,7 +405,7 @@ function SourceContent({
                   onChange={(e) => setReplaceExisting(e.target.checked)}
                   className="accent-primary"
                 />
-                Replace existing
+                {t('import.replaceExisting')}
               </label>
               <button
                 onClick={handleBatchLivenessCheck}
@@ -417,7 +417,7 @@ function SourceContent({
                 ) : (
                   <Zap className="h-4 w-4" />
                 )}
-                {batchTesting ? 'Checking...' : 'Check Liveness'}
+                {batchTesting ? t('import.checking') : t('import.checkLiveness')}
               </button>
             </>
           )}

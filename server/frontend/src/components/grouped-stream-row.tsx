@@ -96,7 +96,7 @@ export default function GroupedStreamRow({
                     }}
                     disabled={isTesting}
                     className="flex items-center justify-center h-5 w-5 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50"
-                    title="Test this stream"
+                    title="اختبار هذا البث"
                   >
                     <Zap className="h-2.5 w-2.5" />
                   </button>

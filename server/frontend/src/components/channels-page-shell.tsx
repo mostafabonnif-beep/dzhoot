@@ -635,7 +635,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       fetchChannels();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setAddError(axiosErr.response?.data?.error || 'Failed to create channel');
+      setAddError(axiosErr.response?.data?.error || L('فشل إنشاء القناة', 'Échec de la création de la chaîne', 'Failed to create channel'));
     } finally {
       setAddLoading(false);
     }
@@ -675,7 +675,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
       fetchChannels();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setEditError(axiosErr.response?.data?.error || 'Failed to update channel');
+      setEditError(axiosErr.response?.data?.error || L('فشل تحديث القناة', 'Échec de la mise à jour de la chaîne', 'Failed to update channel'));
     } finally {
       setEditLoading(false);
     }
@@ -2494,7 +2494,7 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
               }}
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-border uppercase tracking-[0.1em] text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors"
             >
-              Edit
+              {t('common.edit')}
             </button>
           ) : undefined
         }

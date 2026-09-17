@@ -535,11 +535,19 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
       setImportResult(
         body.message ||
           (isAdmin
-            ? `Imported ${body.importedCount || toImport.length} channels to system`
-            : `Added ${body.addedCount} channels`),
+            ? L(
+                `تم استيراد ${body.importedCount || toImport.length} قناة إلى النظام`,
+                `${body.importedCount || toImport.length} chaînes importées dans le système`,
+                `Imported ${body.importedCount || toImport.length} channels to system`,
+              )
+            : L(
+                `أُضيفت ${body.addedCount} قناة`,
+                `${body.addedCount} chaînes ajoutées`,
+                `Added ${body.addedCount} channels`,
+              )),
       );
     } catch {
-      setImportResult('Failed to import channels');
+      setImportResult(L('فشل استيراد القنوات', 'Échec de l’import des chaînes', 'Failed to import channels'));
     } finally {
       setImporting(false);
     }
@@ -750,9 +758,9 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
     try {
       await api.post('/iptv-org/clear-cache');
       if (isAdmin) setLivenessStats(null);
-      toast('Cache cleared', 'success');
+      toast(L('تم مسح الذاكرة المؤقتة', 'Cache vidé', 'Cache cleared'), 'success');
     } catch {
-      toast('Failed to clear cache', 'error');
+      toast(L('فشل مسح الذاكرة المؤقتة', 'Échec du vidage du cache', 'Failed to clear cache'), 'error');
     }
   }
 
@@ -773,7 +781,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
     ? [
         { label: t('sources.streamUrl'), value: detailChannel.channelUrl },
         ...(isAdmin
-          ? [{ label: 'Logo URL', value: detailChannel.tvgLogo || detailChannel.channelImg }]
+          ? [{ label: t('sources.logoUrl'), value: detailChannel.tvgLogo || detailChannel.channelImg }]
           : []),
         {
           label: L('المجموعة / التصنيف', 'Groupe / Catégorie', 'Group / Category'),
@@ -783,13 +791,13 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
         { label: t('sources.country'), value: detailChannel.country },
         ...(isAdmin
           ? [
-              { label: 'Quality', value: detailChannel.streamQuality },
-              { label: 'Network', value: detailChannel.channelNetwork },
-              { label: 'Website', value: detailChannel.channelWebsite },
-              { label: 'User Agent', value: detailChannel.streamUserAgent },
-              { label: 'Referrer', value: detailChannel.streamReferrer },
-              { label: 'NSFW', value: detailChannel.channelIsNsfw ? 'Yes' : undefined },
-              { label: 'Launched', value: detailChannel.channelLaunched },
+              { label: t('channels.quality'), value: detailChannel.streamQuality },
+              { label: t('channels.network'), value: detailChannel.channelNetwork },
+              { label: t('channels.website'), value: detailChannel.channelWebsite },
+              { label: L('وكيل المستخدم', 'Agent utilisateur', 'User Agent'), value: detailChannel.streamUserAgent },
+              { label: L('المُحيل', 'Référent', 'Referrer'), value: detailChannel.streamReferrer },
+              { label: 'NSFW', value: detailChannel.channelIsNsfw ? L('نعم', 'Oui', 'Yes') : undefined },
+              { label: L('تاريخ الإطلاق', 'Lancement', 'Launched'), value: detailChannel.channelLaunched },
             ]
           : []),
       ]
@@ -1197,8 +1205,8 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
           <DataTable<EnrichedChannel>
             data={paginated}
             gridTemplate={gridTemplate}
-            ariaLabel="Import channels table"
-            emptyMessage={search ? 'No channels match your search' : 'No channels found'}
+            ariaLabel={L('جدول استيراد القنوات', 'Tableau d’import des chaînes', 'Import channels table')}
+            emptyMessage={search ? t('sources.noSearchMatch') : t('sources.noChannels')}
             rowKey={(ch) => ch._uid}
             rowClassName={(ch) => (isSelected(ch._uid) ? 'bg-primary/5' : '')}
             columns={
@@ -1258,10 +1266,10 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                   header: (
                     <button
                       onClick={() => handleSort('name')}
-                      aria-label="Sort by name"
+                      aria-label={t('sources.sortName')}
                       className="relative inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors text-left"
                     >
-                      Name <SortIcon field="name" />
+                      {t('sources.name')} <SortIcon field="name" />
                     </button>
                   ),
                   cell: (ch) => (
@@ -1285,10 +1293,10 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                     <div className="relative inline-flex items-center gap-1.5">
                       <button
                         onClick={() => handleSort('category')}
-                        aria-label="Sort by category"
+                        aria-label={t('sources.sortCategory')}
                         className="relative inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors text-left"
                       >
-                        Category <SortIcon field="category" />
+                        {t('sources.category')} <SortIcon field="category" />
                       </button>
                       <ColumnFilter
                         label=""
@@ -1340,10 +1348,10 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                     <div className="relative inline-flex items-center gap-1.5">
                       <button
                         onClick={() => handleSort('language')}
-                        aria-label="Sort by language"
+                        aria-label={L('ترتيب حسب اللغة', 'Trier par langue', 'Sort by language')}
                         className="relative inline-flex items-center gap-1.5 text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium hover:text-foreground transition-colors text-left"
                       >
-                        Language <SortIcon field="language" />
+                        {t('sources.language')} <SortIcon field="language" />
                       </button>
                       <ColumnFilter
                         label=""
@@ -1403,7 +1411,7 @@ export default function ImportPageShell({ mode }: ImportPageShellProps) {
                   headerClassName: 'text-right',
                   header: (
                     <span className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-                      Actions
+                      {t('sources.actions')}
                     </span>
                   ),
                   cell: (ch) => (
