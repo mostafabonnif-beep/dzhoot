@@ -34,6 +34,7 @@ import com.dzhoof.iptv.presentation.model.PlayerUiState
 import com.dzhoof.iptv.presentation.model.TrackPreferenceDecisionRequest
 import androidx.media3.exoplayer.ExoPlayer
 import com.dzhoof.iptv.presentation.ui.player.PlayerFactory
+import com.dzhoof.iptv.presentation.ui.player.PlaybackContainer
 import com.dzhoof.iptv.presentation.ui.player.StreamErrorContext
 import com.dzhoof.iptv.presentation.ui.player.StreamErrorMessageResolver
 import com.dzhoof.iptv.presentation.ui.animation.AUTO_HIDE_DELAY_MS
@@ -133,13 +134,25 @@ class PlayerViewModel @Inject constructor(
     fun createPlayer(): ExoPlayer = playerFactory.create()
 
     /**
-     * Explicit HLS media source for tokenized server playback. See
-     * [PlayerFactory.createHlsMediaSource] — server playback ALWAYS serves an
-     * HLS playlist, so forcing the m3u8 container avoids the progressive-source
-     * fallback that fails with ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
+     * Explicit HLS media source. Kept for callers that know the container is
+     * HLS; general playback should use [createMediaSource] so a null/absent
+     * mimeType is not mistaken for HLS (defect D1).
      */
     fun createHlsMediaSource(url: String): androidx.media3.exoplayer.source.MediaSource =
         playerFactory.createHlsMediaSource(url)
+
+    /**
+     * Single source builder shared by the initial prepare and
+     * [com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager]. See
+     * [PlayerFactory.createMediaSource]: `container` null routes from url +
+     * mimeType, non-null forces that container (opposite-container retry).
+     */
+    fun createMediaSource(
+        url: String,
+        mimeType: String?,
+        container: PlaybackContainer?,
+    ): androidx.media3.exoplayer.source.MediaSource =
+        playerFactory.createMediaSource(url, mimeType, container)
 
     /**
      * Requests a short-lived server-side playback URL. The app sends only the
