@@ -80,23 +80,23 @@ export default function UserDashboard() {
 
   const quickActions = [
     {
-      label: 'Quick Pick',
-      desc: 'Find channels fast with guided setup',
+      label: 'اختيار سريع',
+      desc: 'اعثر على القنوات بسرعة عبر إعداد موجَّه',
       href: '/user/quick-pick',
       icon: Zap,
     },
-    { label: 'My Channels', desc: 'Manage your channel list', href: '/user/channels', icon: Tv },
-    { label: 'Pair Device', desc: 'Connect your TV app', href: '/user/devices', icon: Smartphone },
+    { label: 'قنواتي', desc: 'أدر قائمة قنواتك', href: '/user/channels', icon: Tv },
+    { label: 'ربط الجهاز', desc: 'اربط تطبيق التلفاز', href: '/user/devices', icon: Smartphone },
   ];
 
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
         <h1 className="text-base sm:text-lg font-display font-bold uppercase tracking-[0.1em]">
-          My Dashboard
+          لوحة التحكم
         </h1>
         <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">
-          Welcome back{user?.username ? `, ${user.username}` : ''}
+          مرحباً بعودتك{user?.username ? ` يا ${user.username}` : ''}
         </p>
       </div>
 
@@ -106,15 +106,14 @@ export default function UserDashboard() {
           className="flex flex-wrap items-center justify-between gap-3 border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm"
         >
           <span>
-            We could not load your account details. Your channels and code are unchanged — this
-            is a loading problem.
+            تعذّر تحميل بيانات حسابك. قنواتك وكودك لم يتغيّرا — هذه مشكلة تحميل فقط.
           </span>
           <button
             type="button"
             onClick={() => setReloadKey((key) => key + 1)}
             className="border border-destructive/40 px-3 py-1 text-xs font-semibold uppercase tracking-wide hover:bg-destructive/10"
           >
-            Retry
+            إعادة المحاولة
           </button>
         </div>
       )}
@@ -123,7 +122,7 @@ export default function UserDashboard() {
         <div className="grid grid-cols-3 sm:grid-cols-3">
           <div className="p-2.5 sm:p-4">
             <p className="text-[11px] sm:text-xs uppercase tracking-[0.15em] text-muted-foreground">
-              Channels
+              القنوات
             </p>
             <p className="text-lg sm:text-2xl font-display font-bold mt-0.5 sm:mt-1.5 tabular-nums">
               {channelCount !== null ? channelCount : '\u2014'}
@@ -131,7 +130,7 @@ export default function UserDashboard() {
             <div className="flex items-center gap-1.5 mt-1 sm:mt-2">
               <span className="w-1.5 h-1.5 rounded-full bg-signal-green" aria-hidden="true" />
               <span className="text-[11px] sm:text-xs text-muted-foreground">
-                {channelHealth.working} ok
+                {channelHealth.working} تعمل
               </span>
               {channelHealth.failing > 0 && (
                 <>
@@ -145,7 +144,7 @@ export default function UserDashboard() {
           </div>
           <div className="p-2.5 sm:p-4 border-l border-border">
             <p className="text-[11px] sm:text-xs uppercase tracking-[0.15em] text-muted-foreground">
-              Device
+              الجهاز
             </p>
             <p className="text-lg sm:text-2xl font-display font-bold mt-0.5 sm:mt-1.5 truncate">
               {profile?.metadata?.lastPairedDevice || '\u2014'}
@@ -154,7 +153,7 @@ export default function UserDashboard() {
               {profile?.metadata?.lastPairedDevice ? (
                 <>
                   <span className="w-1.5 h-1.5 rounded-full bg-signal-green" aria-hidden="true" />
-                  <span className="text-[11px] sm:text-xs text-muted-foreground">paired</span>
+                  <span className="text-[11px] sm:text-xs text-muted-foreground">مرتبط</span>
                 </>
               ) : (
                 <>
@@ -162,21 +161,21 @@ export default function UserDashboard() {
                     className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40"
                     aria-hidden="true"
                   />
-                  <span className="text-[11px] sm:text-xs text-muted-foreground">none</span>
+                  <span className="text-[11px] sm:text-xs text-muted-foreground">غير مرتبط</span>
                 </>
               )}
             </div>
           </div>
           <div className="p-2.5 sm:p-4 border-l border-border">
             <p className="text-[11px] sm:text-xs uppercase tracking-[0.15em] text-muted-foreground">
-              Account
+              الحساب
             </p>
             <p className="text-lg sm:text-2xl font-display font-bold mt-0.5 sm:mt-1.5 capitalize">
               {user?.role || '\u2014'}
             </p>
             <div className="flex items-center gap-1.5 mt-1 sm:mt-2">
               <span className="w-1.5 h-1.5 rounded-full bg-signal-green" aria-hidden="true" />
-              <span className="text-[11px] sm:text-xs text-muted-foreground">active</span>
+              <span className="text-[11px] sm:text-xs text-muted-foreground">نشط</span>
             </div>
           </div>
         </div>
@@ -186,20 +185,20 @@ export default function UserDashboard() {
       {channelCount === 0 && (
         <div className="border border-primary/30 bg-primary/5 p-4 sm:p-5">
           <h3 className="text-sm font-display font-bold uppercase tracking-[0.1em]">
-            Getting Started
+            خطوات البدء
           </h3>
           <ol className="mt-3 space-y-2.5 text-sm text-muted-foreground">
             <li className="flex items-start gap-2.5">
               <Zap className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-              <span>Add channels — browse sources or import an M3U playlist</span>
+              <span>أضف قنوات — تصفّح المصادر أو استورد قائمة M3U</span>
             </li>
             <li className="flex items-start gap-2.5">
               <Smartphone className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-              <span>Pair your TV — open the Dzhoof app and enter the PIN shown on screen</span>
+              <span>اربط تلفازك — افتح تطبيق Dzhoof وأدخل رمز PIN الظاهر على الشاشة</span>
             </li>
             <li className="flex items-start gap-2.5">
               <Play className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-              <span>Watch — your channels appear on TV automatically</span>
+              <span>شاهد — ستظهر قنواتك على التلفاز تلقائياً</span>
             </li>
           </ol>
           <div className="flex flex-wrap gap-3 mt-4">
@@ -207,13 +206,13 @@ export default function UserDashboard() {
               href="/user/quick-pick"
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-primary text-primary-foreground uppercase tracking-[0.1em] transition-colors hover:bg-primary/90"
             >
-              <Zap className="h-3.5 w-3.5" /> Add Channels
+              <Zap className="h-3.5 w-3.5" /> إضافة قنوات
             </Link>
             <Link
               href="/user/devices"
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium border border-border uppercase tracking-[0.1em] transition-colors hover:bg-muted"
             >
-              <Smartphone className="h-3.5 w-3.5" /> Pair TV
+              <Smartphone className="h-3.5 w-3.5" /> ربط التلفاز
             </Link>
           </div>
         </div>
@@ -222,7 +221,7 @@ export default function UserDashboard() {
       {/* Playlist Link */}
       <div>
         <h2 className="text-[11px] sm:text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 sm:mb-3">
-          Playlist Link
+          رابط قائمة التشغيل
         </h2>
         <div className="border border-border p-3 sm:p-4">
           {playlistUrl ? (
@@ -238,20 +237,20 @@ export default function UserDashboard() {
                   className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium uppercase tracking-[0.15em] border border-border transition-colors hover:bg-muted"
                 >
                   <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                  Open M3U
+                  فتح M3U
                 </a>
                 <button
                   onClick={handleCopy}
-                  aria-label="Copy to clipboard"
+                  aria-label="نسخ إلى الحافظة"
                   className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-medium uppercase tracking-[0.15em] border border-border transition-colors hover:bg-muted"
                 >
                   {copied ? (
                     <>
-                      <Check className="h-3.5 w-3.5 text-signal-green" /> Copied
+                      <Check className="h-3.5 w-3.5 text-signal-green" /> تم النسخ
                     </>
                   ) : (
                     <>
-                      <Copy className="h-3.5 w-3.5" /> Copy
+                      <Copy className="h-3.5 w-3.5" /> نسخ
                     </>
                   )}
                 </button>
@@ -259,7 +258,7 @@ export default function UserDashboard() {
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No playlist available. Add channels to your list first.
+              لا توجد قائمة تشغيل بعد. أضف قنوات إلى قائمتك أولاً.
             </p>
           )}
         </div>
@@ -268,7 +267,7 @@ export default function UserDashboard() {
       {/* Quick Actions */}
       <div>
         <h2 className="text-[11px] sm:text-xs uppercase tracking-[0.2em] text-muted-foreground mb-2 sm:mb-3">
-          Quick Actions
+          إجراءات سريعة
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
           {quickActions.map((action) => {

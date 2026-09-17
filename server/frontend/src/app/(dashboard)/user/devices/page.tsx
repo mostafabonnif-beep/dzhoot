@@ -36,7 +36,7 @@ export default function PairDevicePage() {
       if (data.metadata?.lastPairedDevice) {
         setPairedDevice({
           name: data.metadata.lastPairedDevice,
-          model: data.metadata.deviceModel || 'Unknown',
+          model: data.metadata.deviceModel || 'غير معروف',
           pairedAt: data.metadata.pairedAt || '',
         });
       }
@@ -56,7 +56,7 @@ export default function PairDevicePage() {
     try {
       const res = await api.post('/tv/pairing/confirm', { pin });
       const body = res.data;
-      setResult({ success: true, message: body.message || 'Device paired successfully!' });
+      setResult({ success: true, message: body.message || 'تم ربط الجهاز بنجاح!' });
       if (body.device) {
         setPairedDevice({
           name: body.device.name,
@@ -71,7 +71,7 @@ export default function PairDevicePage() {
         success: false,
         message:
           axiosErr.response?.data?.error ||
-          'Failed to confirm pairing. Check the PIN and try again.',
+          'فشل تأكيد الربط. تحقق من رمز PIN وحاول مرة أخرى.',
       });
     } finally {
       setConfirming(false);
@@ -104,31 +104,31 @@ export default function PairDevicePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">
-          Pair TV Device
+          ربط جهاز تلفاز
         </h1>
-        <p className="text-sm text-muted-foreground mt-1">Connect your Fire TV or Android TV app</p>
+        <p className="text-sm text-muted-foreground mt-1">اربط تطبيق Fire TV أو Android TV</p>
       </div>
 
       {/* PIN Confirmation */}
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border">
           <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Enter TV PIN
+            أدخل رمز PIN الظاهر على التلفاز
           </p>
         </div>
         <div className="p-5">
           <div className="text-sm text-muted-foreground mb-4 space-y-1.5">
             <p>
-              <strong className="text-foreground">Step 1:</strong> Install and open the Dzhoof
-              app on your Fire TV or Android TV
+              <strong className="text-foreground">الخطوة 1:</strong> ثبّت تطبيق Dzhoof على جهاز
+              Fire TV أو Android TV وافتحه
             </p>
             <p>
-              <strong className="text-foreground">Step 2:</strong> A 6-digit PIN will appear on your
-              TV screen
+              <strong className="text-foreground">الخطوة 2:</strong> سيظهر رمز PIN مكوّن من 6 أرقام
+              على شاشة التلفاز
             </p>
             <p>
-              <strong className="text-foreground">Step 3:</strong> Enter the PIN below to link your
-              TV
+              <strong className="text-foreground">الخطوة 3:</strong> أدخل الرمز أدناه لربط
+              تلفازك
             </p>
           </div>
           <form onSubmit={handleConfirmPin} className="flex items-end gap-3 flex-wrap">
@@ -137,7 +137,7 @@ export default function PairDevicePage() {
                 htmlFor="pairing-pin"
                 className="text-xs font-medium uppercase tracking-[0.15em] text-muted-foreground"
               >
-                PIN Code
+                رمز PIN
               </label>
               <input
                 id="pairing-pin"
@@ -158,11 +158,11 @@ export default function PairDevicePage() {
             >
               {confirming ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" /> Pairing...
+                  <Loader2 className="h-4 w-4 animate-spin" /> جارٍ الربط...
                 </>
               ) : (
                 <>
-                  <Wifi className="h-4 w-4" /> Pair Device
+                  <Wifi className="h-4 w-4" /> ربط الجهاز
                 </>
               )}
             </button>
@@ -171,7 +171,7 @@ export default function PairDevicePage() {
               onClick={() => setScannerOpen(true)}
               className="inline-flex items-center gap-2 h-12 px-6 text-sm font-medium border border-border uppercase tracking-[0.1em] transition-colors hover:bg-muted"
             >
-              <Camera className="h-4 w-4" /> Scan QR
+              <Camera className="h-4 w-4" /> مسح QR
             </button>
           </form>
 
@@ -190,7 +190,7 @@ export default function PairDevicePage() {
                   const body = res.data;
                   setResult({
                     success: true,
-                    message: body.message || 'Device paired successfully!',
+                    message: body.message || 'تم ربط الجهاز بنجاح!',
                   });
                   if (body.device) {
                     setPairedDevice({
@@ -207,7 +207,7 @@ export default function PairDevicePage() {
                     success: false,
                     message:
                       axiosErr.response?.data?.error ||
-                      'Failed to confirm pairing. Check the PIN and try again.',
+                      'فشل تأكيد الربط. تحقق من رمز PIN وحاول مرة أخرى.',
                   });
                 })
                 .finally(() => setConfirming(false));
@@ -229,7 +229,7 @@ export default function PairDevicePage() {
           )}
 
           <p className="mt-4 text-xs text-muted-foreground/70">
-            Don&apos;t see a PIN? Make sure the Dzhoof app is installed and open on your TV.
+            لا يظهر لك رمز؟ تأكد أن تطبيق Dzhoof مثبّت ومفتوح على تلفازك.
           </p>
         </div>
       </div>
@@ -238,13 +238,13 @@ export default function PairDevicePage() {
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border">
           <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Your Channel List Code
+            كود قائمة القنوات الخاص بك
           </p>
         </div>
         <div className="p-5">
           <p className="text-sm text-muted-foreground mb-3">
-            This code uniquely identifies your playlist. Enter it in the TV app&apos;s Settings to
-            load your channels without re-pairing.
+            هذا الكود يعرّف قائمة تشغيلك بشكل فريد. أدخله في إعدادات تطبيق التلفاز لتحميل قنواتك
+            دون إعادة الربط.
           </p>
           <div className="flex items-center gap-3">
             <code className="text-2xl font-mono font-bold bg-muted px-4 py-2 tracking-[0.3em]">
@@ -254,15 +254,15 @@ export default function PairDevicePage() {
               <button
                 onClick={handleCopyCode}
                 className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-                aria-label="Copy to clipboard"
+                aria-label="نسخ إلى الحافظة"
               >
                 {copiedCode ? (
                   <>
-                    <Check className="h-4 w-4 text-signal-green" /> Copied
+                    <Check className="h-4 w-4 text-signal-green" /> تم النسخ
                   </>
                 ) : (
                   <>
-                    <Copy className="h-4 w-4" /> Copy
+                    <Copy className="h-4 w-4" /> نسخ
                   </>
                 )}
               </button>
@@ -272,7 +272,7 @@ export default function PairDevicePage() {
           {user?.channelListCode && origin && (
             <div className="mt-4 pt-4 border-t border-border">
               <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium mb-2">
-                M3U Playlist URL
+                رابط قائمة M3U
               </p>
               <div className="flex items-center gap-3">
                 <code className="flex-1 text-xs text-muted-foreground bg-muted px-3 py-2 truncate border border-border">
@@ -281,15 +281,15 @@ export default function PairDevicePage() {
                 <button
                   onClick={handleCopyUrl}
                   className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                  aria-label="Copy to clipboard"
+                  aria-label="نسخ إلى الحافظة"
                 >
                   {copiedUrl ? (
                     <>
-                      <Check className="h-4 w-4 text-signal-green" /> Copied
+                      <Check className="h-4 w-4 text-signal-green" /> تم النسخ
                     </>
                   ) : (
                     <>
-                      <Copy className="h-4 w-4" /> Copy
+                      <Copy className="h-4 w-4" /> نسخ
                     </>
                   )}
                 </button>
@@ -303,7 +303,7 @@ export default function PairDevicePage() {
       <div className="border border-border">
         <div className="px-4 py-2 bg-muted/50 border-b border-border">
           <p className="text-xs uppercase tracking-[0.15em] text-muted-foreground font-medium">
-            Last Paired Device
+            آخر جهاز مرتبط
           </p>
         </div>
         <div className="p-5">
@@ -317,14 +317,14 @@ export default function PairDevicePage() {
                 <p className="text-xs text-muted-foreground">{pairedDevice.model}</p>
                 {pairedDevice.pairedAt && (
                   <p className="text-xs text-muted-foreground">
-                    Paired {new Date(pairedDevice.pairedAt).toLocaleString()}
+                    رُبط في {new Date(pairedDevice.pairedAt).toLocaleString()}
                   </p>
                 )}
               </div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
-              No paired devices yet. Open Dzhoof on your Android TV to start pairing.
+              لا توجد أجهزة مرتبطة بعد. افتح Dzhoof على Android TV لبدء الربط.
             </p>
           )}
         </div>
