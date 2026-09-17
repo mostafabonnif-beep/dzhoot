@@ -480,6 +480,56 @@ class PlayerViewModelTest {
     }
 
     @Test
+    fun `a failed playback session reports exactly one startup_failure carrying the terminal code`() =
+        runTest {
+            val channel = createChannel()
+            every { getChannelByIdUseCase("ch1") } returns flowOf(Result.Success(channel))
+            every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(channel)))
+
+            viewModel.loadChannel("ch1")
+            advanceUntilIdle()
+
+            // A transient, recoverable error first. This used to emit its own
+            // generic "playback_error" failure event for the same session,
+            // inflating the startup-failure rate in production telemetry.
+            viewModel.onPlaybackError("انقطع اتصال الشبكة")
+            runCurrent()
+
+            // Then the terminal declaration, which carries the real diagnostic code.
+            viewModel.onStreamDead("البث غير متاح", "ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED")
+            runCurrent()
+
+            coVerify(exactly = 1) {
+                reportPlaybackQoeUseCase(match { it.eventType == "startup_failure" })
+            }
+            coVerify {
+                reportPlaybackQoeUseCase(
+                    match {
+                        it.eventType == "startup_failure" &&
+                            it.errorCode == "ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED"
+                    }
+                )
+            }
+        }
+
+    @Test
+    fun `onPlaybackError alone does not report a playback failure`() = runTest {
+        val channel = createChannel()
+        every { getChannelByIdUseCase("ch1") } returns flowOf(Result.Success(channel))
+        every { getChannelsUseCase(Unit) } returns flowOf(Result.Success(listOf(channel)))
+
+        viewModel.loadChannel("ch1")
+        advanceUntilIdle()
+
+        viewModel.onPlaybackError("خطأ مؤقت")
+        runCurrent()
+
+        coVerify(exactly = 0) {
+            reportPlaybackQoeUseCase(match { it.eventType == "startup_failure" })
+        }
+    }
+
+    @Test
     fun `cancelDeadStreamCountdown stops countdown`() = runTest {
         viewModel.cancelDeadStreamCountdown()
 
