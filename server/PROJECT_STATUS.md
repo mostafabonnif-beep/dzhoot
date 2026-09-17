@@ -51,13 +51,29 @@ Measured on the VPS and against the repository, not copied forward:
   release manifest with a verified `sha256` (`checksumSource: manifest`).
 - **Ops spot-check**: fail2ban `sshd` + `dzhoof-http` active (1 currently banned),
   0 failed systemd units, disk 76% used.
+- **Android fixes shipped and verified (v1.3.3, 2026-09-17).** The tag was pushed
+  (`git push origin refs/tags/v1.3.3`), the release workflow produced a signed APK, and the
+  artifacts were verified on the build host rather than trusted from a green run:
+  the `.sha256` asset matches the APK bytes recomputed locally, `apksigner verify` passes
+  with the production certificate (`5938049a…`, the same one v1.3.2 was signed with),
+  `aapt dump badging` reports `com.dzhoof.iptv` / `1.3.3` / `10303`, the release manifest's
+  `commit` is the merge with the fixes, and
+  `GET /api/v1/app/version?currentVersion=10302` returns `updateAvailable: true` with a
+  `manifest`-sourced checksum and no `updateBlockedReason`. The pass itself was driven by the
+  app's own telemetry: the `crashreports` collection (7 reports, two classes) and
+  `playbackevents` (816 events — the largest error bucket had already stopped on 2026-08-26,
+  so it was left alone; start-up failure rate fell from 30% in August to 4.8% in September).
 - **Still open, needs a human**: email alerts are unconfigured
   (`/health?details=true` → `notifications.email: missing_credentials`; Telegram is
   `ok`, so alerts are deliverable); the reseller portal requires a fresh login after every
   page reload because the reseller JWT is deliberately kept out of browser storage (F11) —
-  that is a product/security trade-off, not a bug to fix silently; no signed APK release
-  has been produced from these Android fixes yet; and real-device/Android-TV validation
-  remains environmental.
+  that is a product/security trade-off, not a bug to fix silently; `UPSTREAM_PROXY_HOSTS` is
+  now deployment configuration instead of a provider default in the code, so the operator
+  must keep it set in `.env.production` (it is, explicitly, since 2026-09-17); real-device /
+  Android-TV validation remains environmental; and several customer-facing pages under
+  `(dashboard)` and `buy/` are still written in English while the localization system and
+  `AGENTS.md` both ask for Arabic-first user-visible text — a translation pass, not a fix to
+  slip in beside a bug fix.
 
 ## Re-verified 2026-09-15
 
