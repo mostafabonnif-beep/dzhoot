@@ -539,22 +539,44 @@ class PlayerViewModel @Inject constructor(
     private fun loadSchedule(tvgId: String?) {
         scheduleJob?.cancel()
         if (tvgId.isNullOrBlank()) {
-            _uiState.update { it.copy(schedulePrograms = emptyList(), scheduleLoading = false) }
+            _uiState.update {
+                it.copy(
+                    schedulePrograms = emptyList(),
+                    scheduleLoading = false,
+                    scheduleLoadFailed = false
+                )
+            }
             return
         }
         scheduleJob = viewModelScope.launch {
-            _uiState.update { it.copy(scheduleLoading = true) }
+            _uiState.update { it.copy(scheduleLoading = true, scheduleLoadFailed = false) }
             val zone = java.time.ZoneId.systemDefault()
             val startOfDay = java.time.LocalDate.now(zone).atStartOfDay(zone).toInstant()
             val endOfDay = startOfDay.plus(java.time.Duration.ofDays(1))
             val programs = try {
                 getGuideProgramsUseCase(GetGuideProgramsUseCase.Params(listOf(tvgId), startOfDay, endOfDay))
                     .values.firstOrNull().orEmpty()
-            } catch (_: Exception) {
-                emptyList()
+            } catch (e: Exception) {
+                // Distinguish "the guide could not be read" from "this channel has
+                // no guide". Swallowing this made the Schedule tab claim the
+                // channel has no EPG data on any network failure — a false
+                // statement the user could not act on.
+                android.util.Log.w(PLAYER_LOG_TAG, "schedule load failed for tvgId=$tvgId", e)
+                null
             }
-            _uiState.update { it.copy(schedulePrograms = programs, scheduleLoading = false) }
+            _uiState.update {
+                it.copy(
+                    schedulePrograms = programs.orEmpty(),
+                    scheduleLoading = false,
+                    scheduleLoadFailed = programs == null
+                )
+            }
         }
+    }
+
+    /** Retry the portrait Schedule tab after a failed guide load. */
+    fun retrySchedule() {
+        loadSchedule(_uiState.value.channel?.tvgId)
     }
 
     fun updatePlaybackState(isPlaying: Boolean, position: Long, duration: Long) {

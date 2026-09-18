@@ -455,7 +455,8 @@ fun PlayerScreen(
                         onCycleAspect = onCycleAspect,
                         onCycleSleepTimer = onCycleSleepTimer,
                         onEnterPip = onEnterPip,
-                        onZapTo = { viewModel.switchChannel(it) }
+                        onZapTo = { viewModel.switchChannel(it) },
+                        onRetrySchedule = { viewModel.retrySchedule() }
                     ),
                     modifier = Modifier.weight(1f)
                 )
