@@ -71,6 +71,9 @@ okhttp-logging-interceptor = { group = "com.squareup.okhttp3", name = "logging-i
 # Coil Image Loading
 coil = { group = "io.coil-kt", name = "coil", version.ref = "coil" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+# IPTV providers routinely serve SVG channel logos. Without this decoder Coil
+# silently falls back to the placeholder, so those logos never render.
+coil-svg = { group = "io.coil-kt", name = "coil-svg", version.ref = "coil" }
 
 # Kotlin Coroutines
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }

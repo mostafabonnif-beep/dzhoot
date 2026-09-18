@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -63,6 +65,7 @@ internal fun PortraitTabs(
     uiState: PlayerUiState,
     zapChannels: List<ChannelUiModel>,
     onZapTo: (String) -> Unit,
+    onRetrySchedule: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
@@ -101,6 +104,8 @@ internal fun PortraitTabs(
                 programs = uiState.schedulePrograms,
                 isLoading = uiState.scheduleLoading,
                 hasEpgId = !uiState.channel?.tvgId.isNullOrBlank(),
+                loadFailed = uiState.scheduleLoadFailed,
+                onRetry = onRetrySchedule,
                 nowMillis = nowMillis
             )
             else -> ChannelsZapTab(
@@ -207,6 +212,8 @@ private fun ScheduleTab(
     programs: List<EpgProgram>,
     isLoading: Boolean,
     hasEpgId: Boolean,
+    loadFailed: Boolean,
+    onRetry: () -> Unit,
     nowMillis: Long
 ) {
     when {
@@ -223,6 +230,17 @@ private fun ScheduleTab(
                     modifier = Modifier.size(Dimens.IconLarge)
                 )
             }
+            return
+        }
+        // Checked BEFORE the plain-empty branch: a failed load must never be
+        // reported as "this channel has no guide", because that is simply false
+        // and leaves the user nothing to do about it.
+        programs.isEmpty() && loadFailed -> {
+            TabEmptyState(
+                message = "تعذّر تحميل دليل البرامج",
+                actionLabel = "إعادة المحاولة",
+                onAction = onRetry
+            )
             return
         }
         programs.isEmpty() -> {
@@ -293,17 +311,34 @@ private fun ScheduleTab(
 }
 
 @Composable
-private fun TabEmptyState(message: String) {
+private fun TabEmptyState(
+    message: String,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .padding(Dimens.Space5),
         contentAlignment = Alignment.TopCenter
     ) {
-        Text(
-            text = message,
-            style = MaterialTheme.typography.labelMedium,
-            color = TextSecondary
-        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.labelMedium,
+                color = TextSecondary
+            )
+            if (actionLabel != null && onAction != null) {
+                Spacer(modifier = Modifier.height(Dimens.Space3))
+                Text(
+                    text = actionLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = DzGreen300,
+                    modifier = Modifier
+                        .clickable { onAction() }
+                        .padding(Dimens.Space2)
+                )
+            }
+        }
     }
 }
