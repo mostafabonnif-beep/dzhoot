@@ -32,6 +32,7 @@ class ErrorRecoveryManagerTest {
     private val onRecoveringAttempts = mutableListOf<Int>()
     private var onRecoveredCalled = false
     private val onStreamDeadMessages = mutableListOf<String>()
+    private val onStreamDeadCodes = mutableListOf<String?>()
     private var onStreamUnresponsiveCalled = false
     private var onProxyFallbackCalled = false
     private val onAlternateFallbackUrls = mutableListOf<String>()
@@ -45,12 +46,16 @@ class ErrorRecoveryManagerTest {
         onRecoveringAttempts.clear()
         onRecoveredCalled = false
         onStreamDeadMessages.clear()
+        onStreamDeadCodes.clear()
         onStreamUnresponsiveCalled = false
         onProxyFallbackCalled = false
         onAlternateFallbackUrls.clear()
     }
 
-    private fun makeManager(scope: kotlinx.coroutines.CoroutineScope): ErrorRecoveryManager {
+    private fun makeManager(
+        scope: kotlinx.coroutines.CoroutineScope,
+        probeEmptyPlaylist: (suspend (String) -> Boolean)? = null,
+    ): ErrorRecoveryManager {
         return ErrorRecoveryManager(
             player = player,
             scope = scope,
@@ -61,10 +66,14 @@ class ErrorRecoveryManagerTest {
             onError = { onErrorMessages.add(it) },
             onRecovering = { onRecoveringAttempts.add(it) },
             onRecovered = { onRecoveredCalled = true },
-            onStreamDead = { message, _ -> onStreamDeadMessages.add(message) },
+            onStreamDead = { message, code ->
+                onStreamDeadMessages.add(message)
+                onStreamDeadCodes.add(code)
+            },
             onStreamUnresponsive = { onStreamUnresponsiveCalled = true },
             onProxyFallback = { onProxyFallbackCalled = true },
-            onAlternateFallback = { onAlternateFallbackUrls.add(it) }
+            onAlternateFallback = { onAlternateFallbackUrls.add(it) },
+            probeEmptyPlaylist = probeEmptyPlaylist,
         )
     }
 
@@ -134,6 +143,49 @@ class ErrorRecoveryManagerTest {
 
         assertEquals(1, onStreamDeadMessages.size)
         assertEquals(0, onErrorMessages.size)
+    }
+
+    // ── Empty-playlist (no broadcast right now) probe ────────────
+
+    @Test
+    fun `empty playlist probe reports no content instead of unavailable`() = runTest {
+        val probedUrls = mutableListOf<String>()
+        val manager = makeManager(this, probeEmptyPlaylist = { url ->
+            probedUrls.add(url)
+            true
+        })
+        manager.setStreamSlots(listOf(primarySlot(directUrl = "http://event.m3u8")))
+
+        listenerSlot.captured.onPlayerError(nonNetworkError())
+        runCurrent()
+
+        assertEquals(listOf("http://event.m3u8"), probedUrls)
+        assertEquals(listOf(ErrorRecoveryManager.NO_CONTENT_MESSAGE), onStreamDeadMessages)
+        assertEquals(listOf(ErrorRecoveryManager.NO_CONTENT_CODE), onStreamDeadCodes)
+    }
+
+    @Test
+    fun `non-empty playlist probe keeps the original dead-stream outcome`() = runTest {
+        val manager = makeManager(this, probeEmptyPlaylist = { false })
+        manager.setStreamSlots(listOf(primarySlot()))
+
+        listenerSlot.captured.onPlayerError(nonNetworkError())
+        runCurrent()
+
+        assertEquals(listOf("خطأ في التشغيل: Decode error"), onStreamDeadMessages)
+        assertEquals(listOf("ERROR_CODE_UNSPECIFIED"), onStreamDeadCodes)
+    }
+
+    @Test
+    fun `null probe preserves previous dead-stream behaviour`() = runTest {
+        val manager = makeManager(this)
+        manager.setStreamSlots(listOf(primarySlot()))
+
+        listenerSlot.captured.onPlayerError(nonNetworkError())
+        runCurrent()
+
+        assertEquals(listOf("خطأ في التشغيل: Decode error"), onStreamDeadMessages)
+        assertEquals(listOf("ERROR_CODE_UNSPECIFIED"), onStreamDeadCodes)
     }
 
     // ── Max retries ──────────────────────────────────────────────

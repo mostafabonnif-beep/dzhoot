@@ -30,6 +30,11 @@ object StreamErrorMessageResolver {
         }
 
         val (title, explanation) = when {
+            (context.errorMessage.contains(ErrorRecoveryManager.NO_CONTENT_MESSAGE) ||
+                    context.errorMessage.contains("no_content_now")) ->
+                "لا يوجد بث حاليًا" to
+                        "هذه القناة تبثّ عند وجود حدث أو مباراة فقط، ولا يوجد بث في هذه اللحظة. جرّب قناة أخرى."
+
             (context.errorMessage.contains("انقطع اتصال الشبكة") ||
                     context.errorMessage.contains("Network connection", ignoreCase = true)) ->
                 "انقطع الاتصال" to

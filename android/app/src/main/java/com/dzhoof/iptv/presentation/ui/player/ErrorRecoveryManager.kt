@@ -42,7 +42,13 @@ class ErrorRecoveryManager(
     private val onStreamDead: (errorMessage: String, diagnosticCode: String?) -> Unit,
     private val onStreamUnresponsive: (() -> Unit)? = null,
     private val onProxyFallback: (() -> Unit)? = null,
-    private val onAlternateFallback: ((streamUrl: String) -> Unit)? = null
+    private val onAlternateFallback: ((streamUrl: String) -> Unit)? = null,
+    /**
+     * Probes the currently failing URL to decide whether the manifest is a
+     * valid but EMPTY playlist (event channel with no broadcast right now).
+     * Null disables the probe and preserves the previous behaviour.
+     */
+    private val probeEmptyPlaylist: (suspend (String) -> Boolean)? = null,
 ) {
     data class StreamSlot(
         val directUrl: String,
@@ -192,17 +198,44 @@ class ErrorRecoveryManager(
                     skipToFallback()
                     return
                 }
-                onStreamDead(errorMessage, error.errorCodeName)
+                declareStreamDead(errorMessage, error.errorCodeName)
             }
             isNetworkError(error) -> {
                 if (totalAttempts >= maxTotalAttempts) {
-                    onStreamDead(errorMessage, error.errorCodeName)
+                    declareStreamDead(errorMessage, error.errorCodeName)
                     return
                 }
                 onError(errorMessage)
                 attemptReconnect()
             }
-            else -> onStreamDead(errorMessage, error.errorCodeName)
+            else -> declareStreamDead(errorMessage, error.errorCodeName)
+        }
+    }
+
+    /**
+     * Terminal outcome. Before declaring the stream dead we ask whether the
+     * manifest was a valid-but-empty playlist: an event channel with no
+     * broadcast right now is NOT a broken channel, and telling the user
+     * "channel unavailable" for it is wrong.
+     */
+    private fun declareStreamDead(errorMessage: String, diagnosticCode: String?) {
+        val probe = probeEmptyPlaylist
+        val url = currentUrl()
+        if (probe == null || url == null) {
+            onStreamDead(errorMessage, diagnosticCode)
+            return
+        }
+        scope.launch {
+            val empty = try {
+                probe(url)
+            } catch (e: Exception) {
+                false
+            }
+            if (empty) {
+                onStreamDead(NO_CONTENT_MESSAGE, NO_CONTENT_CODE)
+            } else {
+                onStreamDead(errorMessage, diagnosticCode)
+            }
         }
     }
 
@@ -295,7 +328,7 @@ class ErrorRecoveryManager(
                 }
 
                 if (currentSlotIndex >= streamSlots.size) {
-                    onStreamDead("استُنفدت جميع مصادر البث", "recovery_exhausted")
+                    declareStreamDead("استُنفدت جميع مصادر البث", "recovery_exhausted")
                     return@launch
                 }
 
@@ -360,6 +393,10 @@ class ErrorRecoveryManager(
 
     companion object {
         private const val MAX_FALLBACK_SLOTS = 4
+
+        /** Message + diagnostic code for a channel with no broadcast right now. */
+        const val NO_CONTENT_MESSAGE = "لا يوجد بث حاليًا لهذه القناة"
+        const val NO_CONTENT_CODE = "no_content_now"
     }
 
     fun release() {

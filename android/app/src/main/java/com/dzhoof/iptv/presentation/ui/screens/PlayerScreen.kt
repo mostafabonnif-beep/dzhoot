@@ -38,7 +38,9 @@ import com.dzhoof.iptv.data.ads.AdsAvailability
 import com.dzhoof.iptv.presentation.ui.ads.rememberAdsManager
 import com.dzhoof.iptv.presentation.ui.components.ChannelOverlay
 import com.dzhoof.iptv.presentation.ui.components.ParentalPinDialog
+import com.dzhoof.iptv.presentation.ui.player.EmptyPlaylistProbe
 import com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager
+import com.dzhoof.iptv.presentation.ui.player.StreamManifestFetcher
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.screens.player.ASPECT_MODES
 import com.dzhoof.iptv.presentation.ui.screens.player.DisplayModeMatchEffect
@@ -62,6 +64,8 @@ import com.dzhoof.iptv.presentation.ui.screens.player.prepareChannelStream
 import com.dzhoof.iptv.presentation.ui.screens.player.rememberPlayerOrientationController
 import com.dzhoof.iptv.presentation.ui.screens.player.rememberPlayerOverlayState
 import com.dzhoof.iptv.presentation.viewmodel.PlayerViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.res.stringResource
 import com.dzhoof.iptv.R
 
@@ -159,6 +163,10 @@ fun PlayerScreen(
         if (uiState.sleepTimerExpired) exoPlayer.pause()
     }
 
+    // Terminal-failure probe: distinguishes an event channel with no broadcast
+    // right now (valid but empty playlist) from a genuinely broken stream.
+    val manifestFetcher = remember { StreamManifestFetcher() }
+
     // Wire ErrorRecoveryManager with proxy and alternate fallback
     val errorRecoveryManager = remember(exoPlayer) {
         ErrorRecoveryManager(
@@ -171,7 +179,10 @@ fun PlayerScreen(
             onStreamDead = { message, diagnosticCode -> viewModel.onStreamDead(message, diagnosticCode) },
             onStreamUnresponsive = { viewModel.onStreamUnresponsive() },
             onProxyFallback = { viewModel.onProxyFallback() },
-            onAlternateFallback = { streamUrl -> viewModel.onAlternateFallback(streamUrl) }
+            onAlternateFallback = { streamUrl -> viewModel.onAlternateFallback(streamUrl) },
+            probeEmptyPlaylist = { url ->
+                withContext(Dispatchers.IO) { EmptyPlaylistProbe.isPlaylistEmpty(manifestFetcher.fetch(url)) }
+            },
         )
     }
 
