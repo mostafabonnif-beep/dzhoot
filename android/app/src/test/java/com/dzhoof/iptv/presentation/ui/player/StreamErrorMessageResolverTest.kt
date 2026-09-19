@@ -49,6 +49,17 @@ class StreamErrorMessageResolverTest {
     fun `the verdict needs three checked channels`() {
         assertTrue(StreamErrorMessageResolver.isCategoryWideOutage(scannedCount = 3, offlineCount = 2))
         assertFalse(StreamErrorMessageResolver.isCategoryWideOutage(scannedCount = 3, offlineCount = 1))
+        assertFalse(StreamErrorMessageResolver.isCategoryWideOutage(scannedCount = 3, offlineCount = 0))
+    }
+
+    @Test
+    fun `the bar is a true half, not integer division`() {
+        // `offlineCount >= scannedCount / 2` made the bar 1 of 3 (integer division), so one
+        // unlucky channel announced a provider outage. Pin the corrected rule.
+        assertFalse(StreamErrorMessageResolver.isCategoryWideOutage(scannedCount = 3, offlineCount = 1))
+        assertFalse(StreamErrorMessageResolver.isCategoryWideOutage(scannedCount = 5, offlineCount = 2))
+        assertTrue(StreamErrorMessageResolver.isCategoryWideOutage(scannedCount = 5, offlineCount = 3))
+        assertTrue(StreamErrorMessageResolver.isCategoryWideOutage(scannedCount = 6, offlineCount = 3))
     }
 
     @Test

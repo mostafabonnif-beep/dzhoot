@@ -32,11 +32,14 @@ object StreamErrorMessageResolver {
     /**
      * The category-wide verdict: is this a source-provider problem rather than one bad channel?
      *
-     * Pure so the rule is unit-tested in isolation. The caller must pass counts that cover the
-     * SAME recent window — see [RECENT_WINDOW_MS] and ChannelHealthDao.
+     * Pure so the rule is unit-tested in isolation, and a *true* half on purpose: the previous
+     * `offlineCount >= scannedCount / 2` used integer division, so with 3 checked channels the bar
+     * was 1 — a single zapped channel that happened to fail announced "the provider is down".
+     * The caller must pass counts that cover the SAME recent window — see [RECENT_WINDOW_MS]
+     * and ChannelHealthDao.
      */
     fun isCategoryWideOutage(scannedCount: Int, offlineCount: Int): Boolean =
-        scannedCount >= MIN_CATEGORY_SAMPLE && offlineCount >= scannedCount / 2
+        scannedCount >= MIN_CATEGORY_SAMPLE && offlineCount * 2 >= scannedCount
 
     fun resolve(context: StreamErrorContext): StreamErrorMessage {
         // Category-wide outage check
