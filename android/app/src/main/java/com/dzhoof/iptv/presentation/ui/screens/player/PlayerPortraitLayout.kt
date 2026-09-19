@@ -64,7 +64,8 @@ internal class PortraitSectionActions(
     val onCycleAspect: () -> Unit,
     val onCycleSleepTimer: (Int?) -> Unit,
     val onEnterPip: () -> Unit,
-    val onZapTo: (String) -> Unit
+    val onZapTo: (String) -> Unit,
+    val onRetrySchedule: () -> Unit
 )
 
 /**
@@ -94,6 +95,7 @@ internal fun PlayerPortraitSections(
             uiState = uiState,
             zapChannels = zapChannels,
             onZapTo = actions.onZapTo,
+            onRetrySchedule = actions.onRetrySchedule,
             modifier = Modifier.weight(1f)
         )
     }

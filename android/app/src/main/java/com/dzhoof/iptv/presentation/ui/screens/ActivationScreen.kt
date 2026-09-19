@@ -24,10 +24,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -43,7 +45,7 @@ fun ActivationScreen(
     viewModel: SubscriptionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var code by remember { mutableStateOf("") }
+    var codeField by remember { mutableStateOf(TextFieldValue("")) }
     var activationAttempted by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.redeemSuccess) {
@@ -82,9 +84,25 @@ fun ActivationScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // The field holds a TextFieldValue rather than a plain String so the
+            // caret can be pinned to the end. normalizeActivationCodeInput
+            // rewrites the WHOLE string (it inserts dashes), and with a plain
+            // String Compose carries the previous selection offset across that
+            // length change — which lands the caret inside the text, so the next
+            // character is committed BEFORE the previous one. On a real Android TV
+            // that turned a valid code into a transposed, non-existent one
+            // (DZHF-K4TT-SPC6-KXXG displayed as DZHF-K4TT-SPC6-XKXG) and the server
+            // correctly rejected it as "invalid" — a valid code reported as
+            // invalid, with nothing the user could do about it.
             OutlinedTextField(
-                value = code,
-                onValueChange = { code = normalizeActivationCodeInput(it) },
+                value = codeField,
+                onValueChange = { newValue ->
+                    val formatted = normalizeActivationCodeInput(newValue.text)
+                    codeField = TextFieldValue(
+                        text = formatted,
+                        selection = TextRange(formatted.length),
+                    )
+                },
                 label = { Text(stringResource(R.string.activation_code_label)) },
                 placeholder = { Text(stringResource(R.string.activation_code_placeholder)) },
                 singleLine = true,
@@ -100,9 +118,9 @@ fun ActivationScreen(
             Button(
                 onClick = {
                     activationAttempted = true
-                    viewModel.clientRedeem(code)
+                    viewModel.clientRedeem(codeField.text)
                 },
-                enabled = code.isNotBlank() && !uiState.isRedeeming,
+                enabled = codeField.text.isNotBlank() && !uiState.isRedeeming,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 18.dp)

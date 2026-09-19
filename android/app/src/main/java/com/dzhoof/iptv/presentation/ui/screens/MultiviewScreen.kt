@@ -277,8 +277,8 @@ private fun MultiviewPane(
             // contract as the main player) and fall back to the direct URL
             // when tokenization is unavailable.
             val serverUrl = AppPreferences.getServerUrl(context).trimEnd('/')
-            val tvCode = AppPreferences.getTvCode(context)
-            val url = if (serverUrl.isNotBlank() && tvCode.isNotEmpty()) {
+            // Accept either credential the server takes (TV code or session).
+            val url = if (serverUrl.isNotBlank() && AppPreferences.hasManagedPlaybackCredential(context)) {
                 viewModel.resolvePlaybackUrl(channel.id)
                     ?: channel.streamUrl?.let { StreamUrlTemplate.resolve(context, it) }
             } else {

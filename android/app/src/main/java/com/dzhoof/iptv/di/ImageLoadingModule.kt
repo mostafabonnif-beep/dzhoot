@@ -2,6 +2,7 @@ package com.dzhoof.iptv.di
 
 import android.content.Context
 import coil.ImageLoader
+import coil.decode.SvgDecoder
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
@@ -25,6 +26,12 @@ object ImageLoadingModule {
         @ApplicationContext context: Context
     ): ImageLoader {
         return ImageLoader.Builder(context)
+            // Many IPTV providers serve channel logos as SVG. Coil has no SVG
+            // support unless this decoder is registered, and without it those
+            // logos fail silently and the card falls back to a placeholder.
+            .components {
+                add(SvgDecoder.Factory())
+            }
             .memoryCache {
                 MemoryCache.Builder(context)
                     .maxSizePercent(0.25)
