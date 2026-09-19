@@ -193,7 +193,7 @@ function SourceContent({
   onStatsChange: (data: { stats: LivenessStats; inProgress: boolean } | null) => void;
 }) {
   const { toast } = useToast();
-  const { locale } = useLocale();
+  const { t, locale } = useLocale();
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
   const [replaceExisting, setReplaceExisting] = useState(false);
@@ -298,13 +298,19 @@ function SourceContent({
           fetchLivenessStats();
         } else {
           toast(
-            result.status === 'alive' ? 'Stream is alive' : `Stream is ${result.status}`,
+            result.status === 'alive'
+              ? L('البث يعمل', 'Le flux est actif', 'Stream is alive')
+              : L(
+                  `البث ${result.status === 'dead' ? 'متوقف' : 'غير معروف'}`,
+                  `Le flux est ${result.status}`,
+                  `Stream is ${result.status}`,
+                ),
             result.status === 'alive' ? 'success' : 'error',
           );
         }
       }
     } catch {
-      toast('Failed to test stream', 'error');
+      toast(L('فشل اختبار البث', 'Échec du test du flux', 'Failed to test stream'), 'error');
     }
   }
 
@@ -333,11 +339,19 @@ function SourceContent({
       setImportResult(
         body.message ||
           (isAdmin
-            ? `Imported ${body.importedCount || toImport.length} channels to system`
-            : `Added ${body.addedCount || toImport.length} channels to your list`),
+            ? L(
+                `تم استيراد ${body.importedCount || toImport.length} قناة إلى النظام`,
+                `${body.importedCount || toImport.length} chaînes importées dans le système`,
+                `Imported ${body.importedCount || toImport.length} channels to system`,
+              )
+            : L(
+                `أُضيفت ${body.addedCount || toImport.length} قناة إلى قائمتك`,
+                `${body.addedCount || toImport.length} chaînes ajoutées à votre liste`,
+                `Added ${body.addedCount || toImport.length} channels to your list`,
+              )),
       );
     } catch {
-      setImportResult('Failed to import channels');
+      setImportResult(L('فشل استيراد القنوات', 'Échec de l’import des chaînes', 'Failed to import channels'));
     } finally {
       setImporting(false);
     }
@@ -391,7 +405,7 @@ function SourceContent({
                   onChange={(e) => setReplaceExisting(e.target.checked)}
                   className="accent-primary"
                 />
-                Replace existing
+                {t('import.replaceExisting')}
               </label>
               <button
                 onClick={handleBatchLivenessCheck}
@@ -403,7 +417,7 @@ function SourceContent({
                 ) : (
                   <Zap className="h-4 w-4" />
                 )}
-                {batchTesting ? 'Checking...' : 'Check Liveness'}
+                {batchTesting ? t('import.checking') : t('import.checkLiveness')}
               </button>
             </>
           )}
@@ -414,8 +428,12 @@ function SourceContent({
           >
             <Download className="h-4 w-4" />
             {importing
-              ? 'Importing...'
-              : `Import ${selection.count} to ${isAdmin ? 'System' : 'My List'}`}
+              ? L('جارٍ الاستيراد…', 'Importation…', 'Importing...')
+              : L(
+                  `استيراد ${selection.count} إلى ${isAdmin ? 'النظام' : 'قائمتي'}`,
+                  `Importer ${selection.count} vers ${isAdmin ? 'le système' : 'ma liste'}`,
+                  `Import ${selection.count} to ${isAdmin ? 'System' : 'My List'}`,
+                )}
           </button>
         </>
       }

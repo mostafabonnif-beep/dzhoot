@@ -291,10 +291,10 @@ export default function ChannelDetailModal({
                   onClick={() => withLoading('unflag-primary', onUnflagPrimary)}
                   disabled={pendingAction === 'unflag-primary'}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-signal-red/30 text-signal-red uppercase tracking-[0.1em] hover:bg-signal-red/10 transition-colors disabled:opacity-50"
-                  aria-label="Clear flag on primary stream"
+                  aria-label={L('إلغاء الإشارة عن البث الأساسي', 'Retirer le signalement du flux principal', 'Clear flag on primary stream')}
                 >
                   <Flag className="h-4 w-4" />
-                  Clear Flag
+                  {L('إلغاء الإشارة', 'Retirer le signalement', 'Clear Flag')}
                 </button>
               )
             : onFlagPrimary && (
@@ -302,10 +302,10 @@ export default function ChannelDetailModal({
                   onClick={() => withLoading('flag-primary', onFlagPrimary)}
                   disabled={pendingAction === 'flag-primary'}
                   className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-border text-muted-foreground uppercase tracking-[0.1em] hover:text-signal-red hover:border-signal-red/30 transition-colors disabled:opacity-50"
-                  aria-label="Flag primary stream as bad"
+                  aria-label={L('الإشارة إلى البث الأساسي كمتوقف', 'Signaler le flux principal comme défectueux', 'Flag primary stream as bad')}
                 >
                   <Flag className="h-4 w-4" />
-                  Flag Bad Stream
+                  {L('الإشارة إلى بث متوقف', 'Signaler un flux défectueux', 'Flag Bad Stream')}
                 </button>
               )}
           {actions}

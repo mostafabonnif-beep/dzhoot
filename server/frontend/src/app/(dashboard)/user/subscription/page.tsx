@@ -48,7 +48,7 @@ export default function SubscriptionPage() {
       setData(res.data?.data ?? null);
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      toast(axiosErr.response?.data?.error || 'Failed to load subscription', 'error');
+      toast(axiosErr.response?.data?.error || 'فشل تحميل الاشتراك', 'error');
     } finally {
       setLoading(false);
     }
@@ -67,9 +67,9 @@ export default function SubscriptionPage() {
       const res = await api.post('/activation/redeem', { code: code.trim() });
       const d = res.data?.data;
       setSuccessMsg(
-        `Subscription activated${d?.plan?.name ? ` — ${d.plan.name}` : ''}${
+        `تم تفعيل الاشتراك${d?.plan?.name ? ` — ${d.plan.name}` : ''}${
           d?.subscription?.expiresAt
-            ? `, expires ${new Date(d.subscription.expiresAt).toLocaleDateString()}`
+            ? `، ينتهي في ${new Date(d.subscription.expiresAt).toLocaleDateString()}`
             : ''
         }`,
       );
@@ -77,7 +77,7 @@ export default function SubscriptionPage() {
       fetchData();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setRedeemError(axiosErr.response?.data?.error || 'Failed to redeem code');
+      setRedeemError(axiosErr.response?.data?.error || 'فشل تفعيل الكود');
     } finally {
       setRedeeming(false);
     }
@@ -90,7 +90,7 @@ export default function SubscriptionPage() {
       fetchData();
     } catch (err: unknown) {
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      toast(axiosErr.response?.data?.error || 'Failed to remove device', 'error');
+      toast(axiosErr.response?.data?.error || 'فشلت إزالة الجهاز', 'error');
     }
   }
 
@@ -110,9 +110,9 @@ export default function SubscriptionPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">Subscription</h1>
+        <h1 className="text-lg font-display font-bold uppercase tracking-[0.1em]">الاشتراك</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Redeem your activation code and manage your devices.
+          فعّل كود الاشتراك وأدر أجهزتك.
         </p>
       </div>
 
@@ -121,7 +121,7 @@ export default function SubscriptionPage() {
         <div className="flex items-center gap-2">
           <KeyRound className="h-4 w-4 text-muted-foreground" />
           <h2 className="text-sm font-medium uppercase tracking-[0.15em]">
-            Activate code
+            تفعيل الكود
           </h2>
         </div>
         {successMsg && (
@@ -148,12 +148,12 @@ export default function SubscriptionPage() {
             disabled={redeeming || !code.trim()}
             className="inline-flex items-center justify-center px-6 py-2.5 text-sm font-medium uppercase tracking-[0.1em] bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:pointer-events-none sm:w-auto"
           >
-            {redeeming ? 'Activating...' : 'Activate'}
+            {redeeming ? 'جارٍ التفعيل...' : 'تفعيل'}
           </button>
         </div>
         <p className="text-xs text-muted-foreground">
-          The subscription duration starts when the code is activated. Redeeming another code
-          before expiry extends your current subscription.
+          تبدأ مدة الاشتراك عند تفعيل الكود. تفعيل كود آخر قبل انتهاء الاشتراك يمدّد اشتراكك
+          الحالي.
         </p>
       </div>
 
@@ -164,43 +164,43 @@ export default function SubscriptionPage() {
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="text-sm text-muted-foreground uppercase tracking-[0.15em]">
-                  Current plan
+                  الباقة الحالية
                 </div>
                 <div className="text-xl font-bold">{data!.plan?.name ?? '—'}</div>
               </div>
               <span className="inline-flex items-center gap-1.5 text-xs px-2 py-1 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                ACTIVE
+                نشط
               </span>
             </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <div className="text-muted-foreground">Expires</div>
+                <div className="text-muted-foreground">ينتهي في</div>
                 <div className="font-medium">
                   {new Date(data!.subscription!.expiresAt).toLocaleDateString()}
                 </div>
               </div>
               <div>
-                <div className="text-muted-foreground">Days left</div>
+                <div className="text-muted-foreground">الأيام المتبقية</div>
                 <div className="font-medium">{daysLeft}</div>
               </div>
               <div>
-                <div className="text-muted-foreground">Devices</div>
+                <div className="text-muted-foreground">الأجهزة</div>
                 <div className="font-medium">
                   {data!.devicesUsed} / {data!.maxDevices}
                 </div>
               </div>
               <div>
-                <div className="text-muted-foreground">Plan duration</div>
-                <div className="font-medium">{data!.plan?.durationDays} days</div>
+                <div className="text-muted-foreground">مدة الباقة</div>
+                <div className="font-medium">{data!.plan?.durationDays} يوم</div>
               </div>
             </div>
           </div>
         ) : (
           <div className="text-center py-6">
-            <div className="text-sm font-medium">No active subscription</div>
+            <div className="text-sm font-medium">لا يوجد اشتراك نشط</div>
             <p className="text-sm text-muted-foreground mt-1">
-              Enter an activation code above to get started.
+              أدخل كود التفعيل أعلاه للبدء.
             </p>
           </div>
         )}
@@ -210,12 +210,11 @@ export default function SubscriptionPage() {
       <div className="border border-border bg-card p-5 space-y-3">
         <div className="flex items-center gap-2">
           <Smartphone className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-medium uppercase tracking-[0.15em]">Devices</h2>
+          <h2 className="text-sm font-medium uppercase tracking-[0.15em]">الأجهزة</h2>
         </div>
         {data?.devices.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No devices registered yet. Devices register when you activate a code or start
-            watching.
+            لا توجد أجهزة مسجلة بعد. تُسجَّل الأجهزة عند تفعيل كود أو بدء المشاهدة.
           </p>
         ) : (
           <ul className="divide-y divide-border">
@@ -226,13 +225,13 @@ export default function SubscriptionPage() {
                     {d.name || d.deviceId}
                   </div>
                   <div className="text-xs text-muted-foreground truncate">
-                    {d.platform || 'device'} · {d.deviceId}
+                    {d.platform || 'جهاز'} · {d.deviceId}
                   </div>
                 </div>
                 <button
                   onClick={() => handleRemoveDevice(d.deviceId)}
                   className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                  title="Remove device"
+                  title="إزالة الجهاز"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>

@@ -82,9 +82,9 @@ async function fetchTokenizedUrl(channelId: string, slot: number): Promise<Token
         directHlsUrl: d.data?.directHlsUrl || undefined,
       };
     }
-    return { error: d?.error || 'Failed to issue playback token' };
+    return { error: d?.error || 'تعذّر إصدار رمز التشغيل' };
   } catch (e: any) {
-    return { error: e?.response?.data?.error || e?.message || 'Playback token request failed' };
+    return { error: e?.response?.data?.error || e?.message || 'فشل طلب رمز التشغيل' };
   }
 }
 
