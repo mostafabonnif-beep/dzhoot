@@ -110,10 +110,15 @@ class DzhoofTvInputService : TvInputService() {
             player = exoPlayer
 
             val serverUrl = AppPreferences.getServerUrl(ctx).trimEnd('/')
-            val tvCode = AppPreferences.getTvCode(ctx)
-            val paired = serverUrl.isNotBlank() && tvCode.isNotEmpty() && channelMeta.channelId.isNotEmpty()
-            if (paired) {
-                // Paired mode: request a short-lived server playback token. The
+            // A TV code is not the only way in: an account session authorizes the
+            // same server playback token, so accept either credential. Requiring a
+            // TV code here sent signed-in users to `channelUrl`, which the server
+            // intentionally leaves empty — the channel tuned but never played.
+            val serverAuthorized = serverUrl.isNotBlank() &&
+                AppPreferences.hasManagedPlaybackCredential(ctx) &&
+                channelMeta.channelId.isNotEmpty()
+            if (serverAuthorized) {
+                // Server-authorized mode: request a short-lived playback token. The
                 // direct upstream URL is intentionally absent for TV clients.
                 tuneScope.launch {
                     try {
@@ -136,8 +141,11 @@ class DzhoofTvInputService : TvInputService() {
                 }
             } else {
                 val streamUrl = channelMeta.channelUrl
-                if (streamUrl == null) {
-                    Log.e(TAG, "No stream URL for unpaired channel: $channelUri")
+                if (streamUrl.isNullOrBlank()) {
+                    // No server credential and no local URL: this is a managed channel
+                    // the device cannot authorize (server-synced channels carry no raw
+                    // URL by design). Report it as unavailable instead of tuning to "".
+                    Log.e(TAG, "No playable URL for channel (no server credential, no local URL): $channelUri")
                     notifyVideoUnavailable(TvInputManager.VIDEO_UNAVAILABLE_REASON_UNKNOWN)
                 } else {
                     exoPlayer.setMediaItem(MediaItem.fromUri(StreamUrlTemplate.resolve(ctx, streamUrl)))

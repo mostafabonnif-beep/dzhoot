@@ -72,8 +72,11 @@ internal suspend fun prepareChannelStream(
 ): Boolean {
     errorRecoveryManager.reset()
     val serverUrl = AppPreferences.getServerUrl(context).trimEnd('/')
-    val tvCode = AppPreferences.getTvCode(context)
-    val useTokenizedServerPlayback = serverUrl.isNotBlank() && tvCode.isNotEmpty()
+    // Either credential the server accepts is enough — a paired TV code OR a
+    // signed-in account session. Gating on the TV code alone sent account-only
+    // users down the raw-URL branch, where the server returns an empty channelUrl.
+    val useTokenizedServerPlayback =
+        serverUrl.isNotBlank() && AppPreferences.hasManagedPlaybackCredential(context)
 
     if (useTokenizedServerPlayback) {
         if (catchupStartMs > 0) {
