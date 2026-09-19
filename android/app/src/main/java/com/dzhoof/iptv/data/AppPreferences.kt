@@ -109,6 +109,27 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
         }
     }
 
+    /**
+     * True when the app holds a credential the server accepts for managed
+     * (server-authorized) playback.
+     *
+     * The server's `requireTvOrSessionAuth` accepts EITHER a paired TV code OR a
+     * signed-in account session, and [com.dzhoof.iptv.di.NetworkModule] sends both
+     * headers on every managed request. Gating tokenized playback on the TV code
+     * alone therefore sent every account-only user down the raw-URL path — where
+     * the server intentionally returns an empty `channelUrl` — so the channel list
+     * was visible but nothing would play.
+     */
+    fun hasManagedPlaybackCredential(context: Context): Boolean =
+        hasManagedPlaybackCredential(getTvCode(context), getSessionId(context))
+
+    /**
+     * Pure form of [hasManagedPlaybackCredential] so the policy can be unit-tested
+     * without Android. Keep the two in sync.
+     */
+    internal fun hasManagedPlaybackCredential(tvCode: String, sessionId: String): Boolean =
+        tvCode.isNotEmpty() || sessionId.isNotEmpty()
+
     /** @return true when the session id was persisted. */
     fun setSessionId(context: Context, sessionId: String): Boolean {
         val securePrefs = secure(context) ?: return false
