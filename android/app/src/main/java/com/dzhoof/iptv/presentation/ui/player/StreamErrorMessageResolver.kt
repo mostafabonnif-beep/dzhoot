@@ -1,5 +1,7 @@
 package com.dzhoof.iptv.presentation.ui.player
 
+import com.dzhoof.iptv.domain.model.HEALTH_EVIDENCE_WINDOW_MS
+
 data class StreamErrorContext(
     val errorMessage: String,
     val lastCheckedAt: Long?,
@@ -15,13 +17,35 @@ data class StreamErrorMessage(
 
 object StreamErrorMessageResolver {
 
-    private const val RECENT_THRESHOLD_MS = 3_600_000L // 1 hour
+    /**
+     * How recent a health result must be to count towards the category-wide verdict, and to
+     * be described as "recently working". Shared with the UI's health display
+     * ([HEALTH_EVIDENCE_WINDOW_MS]) so the two cannot drift apart.
+     */
+    const val RECENT_WINDOW_MS = HEALTH_EVIDENCE_WINDOW_MS
+
+    private const val RECENT_THRESHOLD_MS = RECENT_WINDOW_MS
+
+    /**
+     * Below this many checked channels a "half the group is down" verdict is noise, not signal.
+     */
+    private const val MIN_CATEGORY_SAMPLE = 3
+
+    /**
+     * The category-wide verdict: is this a source-provider problem rather than one bad channel?
+     *
+     * Pure so the rule is unit-tested in isolation, and a *true* half on purpose: the previous
+     * `offlineCount >= scannedCount / 2` used integer division, so with 3 checked channels the bar
+     * was 1 — a single zapped channel that happened to fail announced "the provider is down".
+     * The caller must pass counts that cover the SAME recent window — see [RECENT_WINDOW_MS]
+     * and ChannelHealthDao.
+     */
+    fun isCategoryWideOutage(scannedCount: Int, offlineCount: Int): Boolean =
+        scannedCount >= MIN_CATEGORY_SAMPLE && offlineCount * 2 >= scannedCount
 
     fun resolve(context: StreamErrorContext): StreamErrorMessage {
         // Category-wide outage check
-        if (context.categoryScannedCount >= 3 &&
-            context.categoryOfflineCount >= context.categoryScannedCount / 2
-        ) {
+        if (isCategoryWideOutage(context.categoryScannedCount, context.categoryOfflineCount)) {
             return StreamErrorMessage(
                 title = "مشكلة في مزود المصدر",
                 explanation = "عدة قنوات في هذه المجموعة متوقفة. " +

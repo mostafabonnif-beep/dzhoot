@@ -1296,8 +1296,12 @@ class PlayerViewModel @Inject constructor(
                 )
             )
 
-            val offlineCount = channelHealthDao.getOfflineCountByCategory(category)
-            val scannedCount = channelHealthDao.getScannedCountByCategory(category)
+            // Bound both counts to the SAME recent window: an OFFLINE mark is written on every
+            // playback failure and used to be counted forever, so old unrelated failures could
+            // fabricate a "source provider problem" for a category that is fine right now.
+            val categoryWindowStart = System.currentTimeMillis() - StreamErrorMessageResolver.RECENT_WINDOW_MS
+            val offlineCount = channelHealthDao.getOfflineCountByCategory(category, categoryWindowStart)
+            val scannedCount = channelHealthDao.getScannedCountByCategory(category, categoryWindowStart)
             val resolved = StreamErrorMessageResolver.resolve(
                 StreamErrorContext(
                     errorMessage = errorMessage,

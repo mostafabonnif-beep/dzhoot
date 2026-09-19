@@ -3,6 +3,7 @@ package com.dzhoof.iptv.presentation.mapper
 import com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
+import com.dzhoof.iptv.domain.model.showableHealthStatus
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.util.CategoryLocalizer
 import javax.inject.Inject
@@ -37,17 +38,30 @@ class ChannelUiMapper @Inject constructor() {
         )
     }
 
+    /**
+     * Decorate channels with their stored health, honouring [showableHealthStatus]: a failure
+     * mark only describes the present while it is recent.
+     *
+     * This is the single funnel every channel list goes through (channels, search, favorites,
+     * player overlays), so expiring here also fixes the "البث غير متاح" card badge, the zap order
+     * that skipped dead-marked channels, and the health-based list sorting.
+     *
+     * @param now the moment the statuses are read — injectable so the expiry rule stays testable;
+     *   production callers use the default.
+     */
     fun toUiModelsWithHealth(
         channels: List<Channel>,
-        healthEntities: List<ChannelHealthEntity>
+        healthEntities: List<ChannelHealthEntity>,
+        now: Long = System.currentTimeMillis()
     ): List<ChannelUiModel> {
         val healthMap = healthEntities.associateBy { it.channelId }
         return channels.map { channel ->
             val healthEntity = healthMap[channel.id]
-            val status = healthEntity?.status?.let { s ->
-                try { ChannelHealthStatus.valueOf(s) }
-                catch (_: Exception) { ChannelHealthStatus.UNKNOWN }
-            } ?: ChannelHealthStatus.UNKNOWN
+            val status = showableHealthStatus(
+                rawStatus = healthEntity?.status,
+                lastCheckedAt = healthEntity?.lastCheckedAt ?: 0L,
+                now = now
+            )
             toUiModel(channel, status, healthEntity?.thumbnailPath)
         }
     }
