@@ -58,7 +58,7 @@ internal fun CatalogPosterRow(
             contentPadding = PaddingValues(vertical = if (isCompact) 4.dp else 12.dp),
             horizontalArrangement = Arrangement.spacedBy(cardGap),
         ) {
-            items(items.size, key = { i -> items[i].key }) { i ->
+            items(items.size, key = { i -> "$i:${items[i].key}" }) { i ->
                 val item = items[i]
                 CatalogPosterCard(
                     title = item.title,

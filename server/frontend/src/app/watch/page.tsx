@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Tv, Search, Loader2, KeyRound, LogOut, Star } from 'lucide-react';
 import api from '@/lib/api';
@@ -40,6 +40,8 @@ interface TodayMatch {
 
 export default function WatchPage() {
   const [codeInput, setCodeInput] = useState('');
+  // Monotonic request id: only the newest loadChannels call may commit state.
+  const loadSeqRef = useRef(0);
   const [code, setCode] = useState('');
   const [channels, setChannels] = useState<WatchChannel[]>([]);
   const [loading, setLoading] = useState(false);
@@ -116,13 +118,22 @@ export default function WatchPage() {
   async function loadChannels(c?: string) {
     const finalCode = (c ?? codeInput).trim().toUpperCase();
     if (!finalCode) return;
+    // A late response from a previous code must never repopulate the list: the
+    // header would show code B while the grid still held code A's channels (and
+    // A's ad decision). Only the newest request may commit state.
+    const seq = ++loadSeqRef.current;
+    const isStale = () => seq !== loadSeqRef.current;
     window.localStorage.setItem('watch_tv_code', finalCode);
     setCode(finalCode);
     // Ask the server whether this code is ad-supported (never assume client-side).
     api
       .get('/ads/me')
-      .then((res) => setAds(res.data?.data ?? null))
-      .catch(() => setAds(null));
+      .then((res) => {
+        if (!isStale()) setAds(res.data?.data ?? null);
+      })
+      .catch(() => {
+        if (!isStale()) setAds(null);
+      });
     setLoading(true);
     setError('');
     setChannels([]);
@@ -132,6 +143,7 @@ export default function WatchPage() {
       const pageSize = 5000;
       while (true) {
         const res = await api.get('/channels', { params: { page, pageSize } });
+        if (isStale()) return;
         const data: WatchChannel[] = res.data?.data ?? [];
         all.push(...data);
         if (data.length < pageSize) break;
@@ -143,6 +155,7 @@ export default function WatchPage() {
       }
       setChannels(all);
     } catch (e: any) {
+      if (isStale()) return;
       const status = e?.response?.status;
       setError(
         status === 401
@@ -150,7 +163,7 @@ export default function WatchPage() {
           : e?.response?.data?.error || 'تعذر تحميل القنوات — تحقق من اتصالك وحاول مجدداً.',
       );
     } finally {
-      setLoading(false);
+      if (!isStale()) setLoading(false);
     }
   }
 

@@ -49,7 +49,14 @@ internal fun VideoPlayer(
                 onPlayerViewCreated(this)
             }
         },
-        update = { it.setResizeMode(resizeMode) },
+        // Re-bind on update as well: MultiviewScreen recreates its ExoPlayer per
+        // channel (`remember(channel.id)`) while the AndroidView instance is
+        // reused, so without this the PlayerView keeps painting the released
+        // player and the pane stays black after a channel change.
+        update = {
+            it.setResizeMode(resizeMode)
+            if (it.player !== exoPlayer) it.player = exoPlayer
+        },
         modifier = modifier
     )
 }

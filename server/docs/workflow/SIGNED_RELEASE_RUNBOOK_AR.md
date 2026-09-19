@@ -8,7 +8,7 @@
 | --- | --- |
 | Keystore الإنتاج | `/etc/dzhoot/android-signing/dzhoof-production.jks` (JKS صالح، magic `feedfeed`) |
 | كلمات المرور | `/etc/dzhoot/android-signing/signing.env` (4 قيم مكتملة: KEY_STORE / STORE_PASSWORD / KEY_ALIAS / KEY_PASSWORD) |
-| Workflow تلقائي | `android/.github/workflows/release.yml` — يعمل عند دفع tag بصيغة `v*` |
+| Workflow تلقائي | `.github/workflows/android-release.yml` — يعمل عند دفع tag بصيغة `v*` |
 | Workflow يدوي | `.github/workflows/release-candidate.yml` — تشغيل يدوي مع `version_name` و`api_url` |
 | إعداد التوقيع في Gradle | `android/app/build.gradle.kts` يقرأ `SIGNING_*` من البيئة |
 
@@ -57,7 +57,7 @@ git tag v1.0.7
 git push origin v1.0.7
 ```
 
-`android/.github/workflows/release.yml` سيبني APK موقّعًا ويحمّله كـ GitHub Release artifact (اسم الملف يبدأ بـ `dzhoof-`).
+`.github/workflows/android-release.yml` سيبني APK موقّعًا ويحمّله كـ GitHub Release artifact (اسم الملف يبدأ بـ `dzhoof-`).
 
 **خيار ب — إصدار مرشح (manual):** من تبويب Actions → **Release Candidate** → أدخل `version_name` (مثال `1.0.7-rc.1`) و`api_url` (`https://iptv.ld-11.net/`) → Run workflow. الناتج APK موقّع في Artifacts.
 

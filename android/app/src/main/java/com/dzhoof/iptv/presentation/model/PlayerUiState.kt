@@ -47,6 +47,10 @@ data class PlayerUiState(
     // Current channel's day schedule (mobile portrait Schedule tab)
     val schedulePrograms: List<EpgProgram> = emptyList(),
     val scheduleLoading: Boolean = false,
+    // True when the guide request FAILED, as opposed to the channel simply
+    // having no programmes. The Schedule tab must not tell the user a channel
+    // has no guide when the truth is that we could not read it.
+    val scheduleLoadFailed: Boolean = false,
     // Recently watched channels, most recent first (max 3, never the current one)
     val recentChannels: List<ChannelUiModel> = emptyList(),
     // Navigation preferences

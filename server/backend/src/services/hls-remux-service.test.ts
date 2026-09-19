@@ -135,6 +135,44 @@ describe('upstream egress proxy routing (host allowlist)', () => {
   });
 });
 
+describe('the upstream host allowlist is configuration, not code', () => {
+  it('proxies nothing when UPSTREAM_PROXY_HOSTS is unset', () => {
+    // Which provider needs the residential egress is a deployment fact. The code
+    // used to carry `'business-cloud-neo.com'` as its default, which published
+    // the operator's provider in the repository (AGENTS.md forbids hard-coded
+    // provider URLs) and silently proxied that host anywhere the variable was
+    // forgotten. Empty must mean "direct", never "the provider we know about".
+    const hadProxy = Object.prototype.hasOwnProperty.call(process.env, 'UPSTREAM_HTTP_PROXY');
+    const hadHosts = Object.prototype.hasOwnProperty.call(process.env, 'UPSTREAM_PROXY_HOSTS');
+    const oldProxy = process.env.UPSTREAM_HTTP_PROXY;
+    const oldHosts = process.env.UPSTREAM_PROXY_HOSTS;
+    process.env.UPSTREAM_HTTP_PROXY = RELAY_PROXY;
+    delete process.env.UPSTREAM_PROXY_HOSTS;
+    try {
+      const spawnMock = mockSpawn();
+      remux.startHlsSession('tok-proxy-unset', {
+        streamUrl: 'http://tv.business-cloud-neo.com/live/u/p/101.m3u8',
+      });
+      const args: string[] = spawnMock.mock.calls[0][1];
+      expect(args).not.toContain('-http_proxy');
+      expect(args).not.toContain('-https_proxy');
+    } finally {
+      if (hadProxy) process.env.UPSTREAM_HTTP_PROXY = oldProxy;
+      else delete process.env.UPSTREAM_HTTP_PROXY;
+      if (hadHosts) process.env.UPSTREAM_PROXY_HOSTS = oldHosts;
+      else delete process.env.UPSTREAM_PROXY_HOSTS;
+    }
+  });
+
+  it('still proxies an explicitly configured host', () => {
+    expect(
+      remux.upstreamHostNeedsProxy('http://tv.business-cloud-neo.com/live/u/p/101.m3u8', [
+        'business-cloud-neo.com',
+      ]),
+    ).toBe(true);
+  });
+});
+
 
 describe('hls-remux shared sessions (D1)', () => {
   it('spawns ONE ffmpeg for many viewers of the same stream', () => {

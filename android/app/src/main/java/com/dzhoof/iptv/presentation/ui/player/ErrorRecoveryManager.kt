@@ -1,9 +1,9 @@
 package com.dzhoof.iptv.presentation.ui.player
 
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.MediaSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -13,15 +13,29 @@ import kotlinx.coroutines.launch
  * Manages error recovery for playback with automatic reconnection,
  * proxy fallback, and alternate stream fallback.
  *
- * Recovery strategy:
- * 1. Primary direct URL: up to 3 attempts with exponential backoff
- * 2. Primary proxy URL: 1 attempt (if proxy available)
- * 3. For each alternate (up to 3): 1 direct attempt, then 1 proxy attempt
- * 4. If all retries exhausted, signal the stream as dead
+ * Recovery ladder:
+ * 1. On a parsing/container error, retry the SAME url once with the OPPOSITE
+ *    media source type (HLS <-> progressive); this costs no extra upstream
+ *    session (D4).
+ * 2. Then the current slot's proxy URL, when one exists (1 attempt).
+ * 3. Then each already-known alternate slot, then slots the fallback resolver
+ *    can still provide (up to [MAX_FALLBACK_SLOTS] total).
+ * 4. Network/IO errors retry the current URL with backoff up to the slot quota.
+ * 5. If all retries are exhausted, signal the stream as dead.
+ *
+ * Every media source is built through [buildMediaSource], the same entry point
+ * the initial prepare uses, so explicit HLS/progressive decisions survive a
+ * retry instead of falling back to Media3's extension inference (D2).
  */
 class ErrorRecoveryManager(
     private val player: ExoPlayer,
     private val scope: CoroutineScope,
+    /**
+     * Builds sources exactly like the initial prepare. [container] non-null
+     * forces that container (opposite-container retry); null routes from
+     * url + mimeType via [PlaybackSourceRouting].
+     */
+    private val buildMediaSource: (url: String, mimeType: String?, container: PlaybackContainer?) -> MediaSource,
     private val onError: (String) -> Unit,
     private val onRecovering: (attempt: Int) -> Unit,
     private val onRecovered: () -> Unit,
@@ -46,6 +60,12 @@ class ErrorRecoveryManager(
     private var currentSlotIndex = 0
     private var attemptInSlot = 0
     private var totalAttempts = 0
+
+    /** Container forced for the current URL after an opposite-container retry. */
+    private var containerOverride: PlaybackContainer? = null
+
+    /** Guards the one-shot opposite-container retry against repeating. */
+    private var oppositeContainerTried = false
 
     private val reconnectDelayMs = 2000L
     private val unresponsiveThresholdMs = 30_000L
@@ -130,6 +150,8 @@ class ErrorRecoveryManager(
         currentSlotIndex = 0
         attemptInSlot = 0
         totalAttempts = 0
+        containerOverride = null
+        oppositeContainerTried = false
     }
 
     fun setFallbackResolver(resolver: (suspend (slot: Int) -> StreamSlot?)?) {
@@ -154,26 +176,64 @@ class ErrorRecoveryManager(
             }
         }
 
-        if (totalAttempts >= maxTotalAttempts) {
-            onStreamDead(errorMessage, error.errorCodeName)
-            return
-        }
         when {
+            isParsingError(error) -> {
+                // A parsing error means the bytes we got are unusable under the
+                // container we guessed. Before giving up on the URL, retry it
+                // ONCE with the opposite container (D4) — the relay's guess may
+                // simply be wrong. Only then fall through to the proxy / next
+                // slot ladder, and finally to dead.
+                if (retryWithOppositeContainer()) {
+                    onError(errorMessage)
+                    return
+                }
+                if (totalAttempts < maxTotalAttempts && hasFallbackRemaining()) {
+                    onError(errorMessage)
+                    skipToFallback()
+                    return
+                }
+                onStreamDead(errorMessage, error.errorCodeName)
+            }
             isNetworkError(error) -> {
+                if (totalAttempts >= maxTotalAttempts) {
+                    onStreamDead(errorMessage, error.errorCodeName)
+                    return
+                }
                 onError(errorMessage)
                 attemptReconnect()
             }
-            isParsingError(error) && hasFallbackRemaining() -> {
-                // A parsing error means the bytes we got are unusable — retrying
-                // the SAME URL just re-fetches the same bytes. Skip directly to
-                // the proxy (which normalizes the container) or the next slot.
-                onError(errorMessage)
-                skipToFallback()
-            }
-            else -> {
-                onStreamDead(errorMessage, error.errorCodeName)
-            }
+            else -> onStreamDead(errorMessage, error.errorCodeName)
         }
+    }
+
+    /**
+     * Retry the URL currently loaded with the opposite container, once per URL.
+     *
+     * Does not consume a slot attempt, so a wrong guess followed by a fatal
+     * error can never loop: [oppositeContainerTried] flips true and only resets
+     * when the URL changes (next slot or proxy switch).
+     *
+     * @return true when a retry was scheduled.
+     */
+    private fun retryWithOppositeContainer(): Boolean {
+        if (oppositeContainerTried) return false
+        val slot = streamSlots.getOrNull(currentSlotIndex) ?: return false
+        val url = currentUrl() ?: return false
+        val currentContainer = containerOverride
+            ?: PlaybackSourceRouting.containerFor(url, slot.mimeType)
+        val opposite = PlaybackSourceRouting.opposite(currentContainer)
+        containerOverride = opposite
+        oppositeContainerTried = true
+        reconnectJob?.cancel()
+        isRecoveringState = true
+        reconnectJob = scope.launch {
+            player.setMediaSource(buildMediaSource(url, slot.mimeType, opposite))
+            onRecovering(totalAttempts + 1)
+            delay(reconnectDelayMs)
+            player.prepare()
+            player.play()
+        }
+        return true
     }
 
     private fun isNetworkError(error: PlaybackException): Boolean {
@@ -189,12 +249,19 @@ class ErrorRecoveryManager(
                 error.errorCode == PlaybackException.ERROR_CODE_PARSING_MANIFEST_UNSUPPORTED
     }
 
-    /** True when another URL (proxy for this slot, or a later slot) is still untried. */
+    /**
+     * True when another URL is still untried: this slot's proxy (only when one
+     * exists), an already-known later slot, or a slot the resolver can provide.
+     *
+     * Deliberately does NOT require [StreamSlot.proxyUrl]: production runs with
+     * ALLOW_DIRECT_PLAYBACK=false so proxyUrl is always null, and a proxy-only
+     * gate silently disabled the whole ladder (D5).
+     */
     private fun hasFallbackRemaining(): Boolean {
         val slot = streamSlots.getOrNull(currentSlotIndex)
         if (slot != null && !isProxyAttempt() && slot.proxyUrl != null) return true
-        return currentSlotIndex < streamSlots.size - 1 ||
-            (fallbackResolver != null && currentSlotIndex < MAX_FALLBACK_SLOTS - 1)
+        if (currentSlotIndex < streamSlots.size - 1) return true
+        return fallbackResolver != null && currentSlotIndex < MAX_FALLBACK_SLOTS - 1
     }
 
     /**
@@ -235,23 +302,23 @@ class ErrorRecoveryManager(
                 val newSlot = streamSlots[currentSlotIndex]
                 onAlternateFallback?.invoke(newSlot.directUrl)
 
-                val mediaItemBuilder = MediaItem.Builder()
-                    .setUri(newSlot.directUrl)
-                if (!newSlot.mimeType.isNullOrBlank()) {
-                    mediaItemBuilder.setMimeType(newSlot.mimeType)
-                }
-                player.setMediaItem(mediaItemBuilder.build())
+                // A new URL earns its own one-shot opposite-container retry, and
+                // any container forced for the previous URL no longer applies.
+                containerOverride = null
+                oppositeContainerTried = false
+                player.setMediaSource(
+                    buildMediaSource(newSlot.directUrl, newSlot.mimeType, null),
+                )
             } else if (isProxyAttempt()) {
                 // Switch to proxy for current slot
                 val slot = streamSlots[currentSlotIndex]
                 val proxyUrl = slot.proxyUrl!!
                 onProxyFallback?.invoke()
-                val mediaItemBuilder = MediaItem.Builder()
-                    .setUri(proxyUrl)
-                if (!slot.mimeType.isNullOrBlank()) {
-                    mediaItemBuilder.setMimeType(slot.mimeType)
-                }
-                player.setMediaItem(mediaItemBuilder.build())
+                containerOverride = null
+                oppositeContainerTried = false
+                player.setMediaSource(
+                    buildMediaSource(proxyUrl, slot.mimeType, null),
+                )
             }
 
             val delayTime = reconnectDelayMs * attemptInSlot
@@ -270,6 +337,8 @@ class ErrorRecoveryManager(
         currentSlotIndex = 0
         attemptInSlot = 0
         totalAttempts = 0
+        containerOverride = null
+        oppositeContainerTried = false
         isRecoveringState = false
         reconnectJob?.cancel()
         bufferWatchJob?.cancel()
@@ -280,6 +349,8 @@ class ErrorRecoveryManager(
         currentSlotIndex = 0
         attemptInSlot = 0
         totalAttempts = 0
+        containerOverride = null
+        oppositeContainerTried = false
         isRecoveringState = true
         player.prepare()
         player.play()

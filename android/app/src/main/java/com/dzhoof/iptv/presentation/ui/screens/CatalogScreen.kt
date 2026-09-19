@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -466,7 +467,13 @@ private fun <T> PosterGrid(
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        items(items, key = keyOf) { item -> posterContent(item) }
+        // `keyOf` is the content id, which is not guaranteed unique in a paged
+        // grid: the server can return an item on two pages when the catalog
+        // shifts under an offset query, and a repeated key throws. The position
+        // keeps the key unique without changing what is displayed.
+        itemsIndexed(items, key = { index, item -> "$index:${keyOf(item)}" }) { _, item ->
+            posterContent(item)
+        }
         if (items.size < totalCount) {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 OutlinedButton(onClick = onLoadMore, modifier = Modifier.fillMaxWidth()) {

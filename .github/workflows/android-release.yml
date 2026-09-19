@@ -184,7 +184,16 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The release upload is the one step that has actually failed in
+      # production: on 2026-09-17 `softprops/action-gh-release` aborted with
+      # "Error creating asset temp dir" after uploading only the `.sha256` and
+      # the manifest, leaving the release a draft with no APK. The action has no
+      # internal retry, so it gets one here, followed by a fail-closed check that
+      # the published release really carries all three assets. A partial release
+      # must fail the job rather than look like a success.
       - name: Create GitHub Release and upload APK
+        id: create_release
+        continue-on-error: true
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
         with:
           tag_name: v${{ env.VERSION }}
@@ -194,6 +203,42 @@ jobs:
             android/dzhoof-tv-v${{ env.VERSION }}-official.apk
             android/dzhoof-tv-v${{ env.VERSION }}-official.apk.sha256
             android/dzhoof-tv-v${{ env.VERSION }}-official.release.json
+
+      - name: Retry the release upload after a transient failure
+        if: steps.create_release.outcome == 'failure'
+        continue-on-error: true
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: DZ HOOF v${{ env.VERSION }}
+          generate_release_notes: true
+          files: |
+            android/dzhoof-tv-v${{ env.VERSION }}-official.apk
+            android/dzhoof-tv-v${{ env.VERSION }}-official.apk.sha256
+            android/dzhoof-tv-v${{ env.VERSION }}-official.release.json
+
+      - name: Verify the published release carries the APK, its checksum and the manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ env.VERSION }}
+        run: |
+          set -euo pipefail
+          apk="dzhoof-tv-v${VERSION}-official.apk"
+          for attempt in $(seq 1 10); do
+            draft=$(gh release view "v${VERSION}" --json isDraft --jq '.isDraft' 2>/dev/null || echo unknown)
+            names=$(gh release view "v${VERSION}" --json assets --jq '.assets[].name' 2>/dev/null || true)
+            if [ "$draft" = "false" ] \
+              && grep -qxF "$apk" <<<"$names" \
+              && grep -qxF "$apk.sha256" <<<"$names" \
+              && grep -qxF "dzhoof-tv-v${VERSION}-official.release.json" <<<"$names"; then
+              echo "release v${VERSION} is published with the APK, its checksum and the manifest"
+              exit 0
+            fi
+            echo "release v${VERSION} is not complete yet (attempt ${attempt}/10, draft=${draft})"
+            sleep 15
+          done
+          echo "::error title=Release incomplete::v${VERSION} is missing the APK, its checksum or the manifest"
+          exit 1
 
       - name: Remove signing material
         if: always()

@@ -119,7 +119,14 @@ router.post('/notifications/:id/read', async (req, res) => {
   try {
     const Notification = require('../models/Notification');
     const UserNotification = require('../models/UserNotification');
-    const notification = await Notification.findById(req.params.id).lean();
+    // Only a notification this user can actually see may be marked as read:
+    // broadcasts (targetUserId null) or one addressed to them. Without this the
+    // endpoint created read rows for other users' targeted messages.
+    const notification = await Notification.findOne({
+      _id: req.params.id,
+      status: 'SENT',
+      $or: [{ targetUserId: null }, { targetUserId: req.user.id }],
+    }).lean();
     if (!notification) return res.status(404).json({ success: false, error: 'Notification not found' });
 
     await UserNotification.findOneAndUpdate(

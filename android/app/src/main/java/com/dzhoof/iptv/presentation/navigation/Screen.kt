@@ -22,8 +22,12 @@ sealed class Screen(val route: String) {
     }
     object Guide : Screen("guide")
     object Multiview : Screen("multiview?channelId={channelId}") {
+        // Channel ids for bring-your-own playlists are derived from the display
+        // name, so they can contain '&', '#' or '/' — the query value must be
+        // encoded or the route parses into the wrong destination/arguments.
         fun createRoute(channelId: String? = null) =
-            if (channelId.isNullOrBlank()) "multiview" else "multiview?channelId=$channelId"
+            if (channelId.isNullOrBlank()) "multiview"
+            else "multiview?channelId=${URLEncoder.encode(channelId, "UTF-8")}"
     }
     object Search : Screen("search")
     object Favorites : Screen("favorites")
@@ -39,11 +43,15 @@ sealed class Screen(val route: String) {
             "vod_player/${URLEncoder.encode(contentType, "UTF-8")}/${URLEncoder.encode(contentId, "UTF-8")}?title=${URLEncoder.encode(title, "UTF-8")}"
     }
     object Player : Screen("player/{channelId}?catchupStart={catchupStart}&catchupDur={catchupDur}") {
-        fun createRoute(channelId: String) = "player/$channelId"
+        // Encoded like the other id-carrying routes below: a channel id such as
+        // "m3u-3-24/7 HD" (BYO playlists derive the id from the channel name when
+        // there is no tvg-id) would otherwise add a path segment, match no
+        // destination and throw from Navigation.
+        fun createRoute(channelId: String) = "player/${URLEncoder.encode(channelId, "UTF-8")}"
 
         /** Catch-up playback of a past program (Xtream timeshift). */
         fun createCatchupRoute(channelId: String, startMillis: Long, durationMinutes: Int) =
-            "player/$channelId?catchupStart=$startMillis&catchupDur=$durationMinutes"
+            "player/${URLEncoder.encode(channelId, "UTF-8")}?catchupStart=$startMillis&catchupDur=$durationMinutes"
     }
     object ChannelsByCategory : Screen("channels/category/{categoryId}") {
         fun createRoute(categoryId: String): String {

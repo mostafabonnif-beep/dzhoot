@@ -1,17 +1,23 @@
 package com.dzhoof.iptv.data.repository
 
 import android.app.Application
+import android.content.pm.PackageManager
+import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.data.model.Result
+import com.dzhoof.iptv.data.model.dto.PlaybackQoeReport
 import com.dzhoof.iptv.data.source.local.dao.StreamMetricsDao
 import com.dzhoof.iptv.data.source.local.entity.StreamMetricsEntity
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
 import com.dzhoof.iptv.domain.repository.HealthSyncEntry
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -137,5 +143,64 @@ class StreamMetricsRepositoryImplTest {
         )
 
         assertTrue(result is Result.Success)
+    }
+
+    // ── Playback QoE payload ─────────────────────────────────────
+    // Production playback events all carried appVersion = null and a
+    // hardcoded platform = "android_tv", so playback quality could never be
+    // attributed to a build or a form factor. These tests keep that fixed.
+
+    private fun stubLeanback(isTv: Boolean) {
+        val packageManager = mockk<PackageManager>(relaxed = true)
+        every { application.packageManager } returns packageManager
+        every { packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK) } returns isTv
+    }
+
+    @Test
+    fun `reportPlaybackQoe labels a leanback device as android_tv`() = runTest {
+        stubLeanback(isTv = true)
+
+        val repo = createRepo()
+        repo.reportPlaybackQoe(
+            channelId = "ch1",
+            eventType = "startup_failure",
+            startupMs = 1234L,
+            rebufferCount = 0,
+            fallbackUsed = false,
+            fallbackSucceeded = null,
+            errorCode = "ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED"
+        )
+
+        val report = slot<PlaybackQoeReport>()
+        coVerify { apiService.reportPlaybackQoe("ch1", capture(report)) }
+
+        assertEquals("android_tv", report.captured.platform)
+        assertEquals(BuildConfig.VERSION_NAME, report.captured.appVersion)
+        assertEquals(
+            "ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED",
+            report.captured.errorCode
+        )
+    }
+
+    @Test
+    fun `reportPlaybackQoe does not label a phone as a tv`() = runTest {
+        stubLeanback(isTv = false)
+
+        val repo = createRepo()
+        repo.reportPlaybackQoe(
+            channelId = "ch1",
+            eventType = "startup_success",
+            startupMs = 900L,
+            rebufferCount = 0,
+            fallbackUsed = false,
+            fallbackSucceeded = false,
+            errorCode = null
+        )
+
+        val report = slot<PlaybackQoeReport>()
+        coVerify { apiService.reportPlaybackQoe("ch1", capture(report)) }
+
+        assertEquals("android_mobile", report.captured.platform)
+        assertEquals(BuildConfig.VERSION_NAME, report.captured.appVersion)
     }
 }

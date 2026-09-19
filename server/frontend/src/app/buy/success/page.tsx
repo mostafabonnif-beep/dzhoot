@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Tv, Check, Loader2, AlertCircle, Copy, CopyCheck } from 'lucide-react';
 
-type StatusState = 'loading' | 'pending' | 'paid' | 'failed' | 'canceled' | 'not-found';
+type StatusState = 'loading' | 'pending' | 'paid' | 'failed' | 'canceled' | 'not-found' | 'timeout';
 
 type StatusData = {
   status: string;
@@ -27,6 +27,11 @@ function SuccessContent() {
   const [copied, setCopied] = useState(false);
   const startedAt = useRef<number>(Date.now());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const withinPollBudget = useCallback(
+    () => Date.now() - startedAt.current < MAX_POLL_MS,
+    [],
+  );
 
   const poll = useCallback(async () => {
     if (!token) {
@@ -56,16 +61,22 @@ function SuccessContent() {
         setState(d.status);
         return; // stop polling
       }
-      setState('pending');
-      if (Date.now() - startedAt.current < MAX_POLL_MS) {
+      // Reaching the budget must surface a state instead of silently stopping:
+      // the page used to sit on "لا تغلق هذه الصفحة" forever, even when the
+      // payment had already landed and the code was issued.
+      setState(withinPollBudget() ? 'pending' : 'timeout');
+      if (withinPollBudget()) {
         timerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
       }
     } catch {
-      if (Date.now() - startedAt.current < MAX_POLL_MS) {
+      setState((prev) => (prev === 'loading' ? 'pending' : prev));
+      if (withinPollBudget()) {
         timerRef.current = setTimeout(poll, POLL_INTERVAL_MS);
+      } else {
+        setState((prev) => (prev === 'pending' ? 'timeout' : prev));
       }
     }
-  }, [token]);
+  }, [token, withinPollBudget]);
 
   useEffect(() => {
     poll();
@@ -117,6 +128,40 @@ function SuccessContent() {
             'قد تستغرق العملية بضع ثوانٍ، لا تغلق هذه الصفحة.'
           )}
         </p>
+      </div>
+    );
+  }
+
+  if (state === 'timeout') {
+    return (
+      <div className="text-center space-y-4 max-w-sm">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
+          <AlertCircle className="h-6 w-6 text-primary" aria-hidden="true" />
+        </div>
+        <h1 className="text-lg font-bold">لم نتأكد من الدفع بعد</h1>
+        <p className="text-sm text-muted-foreground">
+          قد يتأخر تأكيد الدفع من مزوّد الخدمة. إن خُصم المبلغ فسيصلك كود التفعيل تلقائياً على
+          بريدك أو هاتفك، ويمكنك أيضاً مراجعة صفحة الاشتراك في حسابك.
+        </p>
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <button
+            type="button"
+            onClick={() => {
+              startedAt.current = Date.now();
+              setState('loading');
+              poll();
+            }}
+            className="rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/20"
+          >
+            إعادة المحاولة
+          </button>
+          <Link
+            href="/login"
+            className="rounded-xl border border-border px-4 py-2 text-sm font-semibold transition hover:border-primary/50"
+          >
+            الدخول إلى حسابي
+          </Link>
+        </div>
       </div>
     );
   }

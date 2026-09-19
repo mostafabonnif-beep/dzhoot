@@ -1,4 +1,5 @@
 const express = require('express');
+const { issueOAuthState, consumeOAuthState } = require('../utils/oauth-state');
 const router = express.Router();
 const User = require('../models/User');
 const { signAccessToken, signRefreshToken, persistRefreshToken } = require('../utils/jwtUtil');
@@ -55,25 +56,17 @@ async function ensureUserAndPlaylist(findCriteria, baseProfile) {
 }
 
 // --- Google OAuth ---
-router.get('/google/start', (req, res) => {
+router.get('/google/start', async (req, res) => {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
     return res.status(500).json({ success: false, error: 'Google OAuth not configured' });
   }
-  const crypto = require('crypto');
-  const state = crypto.randomBytes(16).toString('hex');
-  if (!global._oauthStates) global._oauthStates = new Map();
-  // Purge expired entries first
-  const expired = Array.from(global._oauthStates.entries()).filter(
-    ([, v]) => v.expiresAt < Date.now(),
-  );
-  for (const [k] of expired) global._oauthStates.delete(k);
-  if (global._oauthStates.size >= 1000) {
+  const state = await issueOAuthState();
+  if (!state) {
     return res.status(503).json({
       success: false,
       error: 'Too many pending OAuth requests. Please try again shortly.',
     });
   }
-  global._oauthStates.set(state, { expiresAt: Date.now() + 10 * 60 * 1000 });
   const scope = encodeURIComponent('openid email profile');
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(GOOGLE_REDIRECT_URI)}&response_type=code&scope=${scope}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
   return res.redirect(authUrl);
@@ -95,14 +88,14 @@ router.get('/google/callback', async (req, res) => {
   if (!code) {
     return res.status(400).json({ success: false, error: 'Missing authorization code' });
   }
-  // Validate CSRF state parameter
-  if (!state || !global._oauthStates || !global._oauthStates.has(state)) {
-    return res.status(400).json({ success: false, error: 'Invalid or missing state parameter' });
-  }
-  const stateEntry = global._oauthStates.get(state);
-  global._oauthStates.delete(state); // one-time use
-  if (stateEntry.expiresAt < Date.now()) {
-    return res.status(400).json({ success: false, error: 'State parameter expired' });
+  // Validate CSRF state parameter (Redis-backed; survives a restart between the
+  // redirect and the callback — see utils/oauth-state.js).
+  const stateResult = await consumeOAuthState(state);
+  if (!stateResult.ok) {
+    return res.status(400).json({
+      success: false,
+      error: stateResult.expired ? 'State parameter expired' : 'Invalid or missing state parameter',
+    });
   }
   try {
     // Validate that the callback URI matches the configured redirect URI exactly
@@ -187,25 +180,17 @@ router.get('/google/callback', async (req, res) => {
 });
 
 // --- GitHub OAuth ---
-router.get('/github/start', (req, res) => {
+router.get('/github/start', async (req, res) => {
   if (!GITHUB_CLIENT_ID || !GITHUB_REDIRECT_URI) {
     return res.status(500).json({ success: false, error: 'GitHub OAuth not configured' });
   }
-  const crypto = require('crypto');
-  const state = crypto.randomBytes(16).toString('hex');
-  if (!global._oauthStates) global._oauthStates = new Map();
-  // Purge expired entries first
-  const ghExpired = Array.from(global._oauthStates.entries()).filter(
-    ([, v]) => v.expiresAt < Date.now(),
-  );
-  for (const [k] of ghExpired) global._oauthStates.delete(k);
-  if (global._oauthStates.size >= 1000) {
+  const state = await issueOAuthState();
+  if (!state) {
     return res.status(503).json({
       success: false,
       error: 'Too many pending OAuth requests. Please try again shortly.',
     });
   }
-  global._oauthStates.set(state, { expiresAt: Date.now() + 10 * 60 * 1000 });
   const scope = 'read:user user:email';
   const authUrl = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(state)}`;
   return res.redirect(authUrl);
@@ -220,14 +205,13 @@ router.get('/github/callback', async (req, res) => {
   if (!code) {
     return res.status(400).json({ success: false, error: 'Missing authorization code' });
   }
-  // Validate CSRF state parameter
-  if (!state || !global._oauthStates || !global._oauthStates.has(state)) {
-    return res.status(400).json({ success: false, error: 'Invalid or missing state parameter' });
-  }
-  const stateEntry = global._oauthStates.get(state);
-  global._oauthStates.delete(state);
-  if (stateEntry.expiresAt < Date.now()) {
-    return res.status(400).json({ success: false, error: 'State parameter expired' });
+  // Validate CSRF state parameter (Redis-backed — see utils/oauth-state.js).
+  const ghStateResult = await consumeOAuthState(state);
+  if (!ghStateResult.ok) {
+    return res.status(400).json({
+      success: false,
+      error: ghStateResult.expired ? 'State parameter expired' : 'Invalid or missing state parameter',
+    });
   }
   try {
     // Validate that the callback URI matches the configured redirect URI exactly

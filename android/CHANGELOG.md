@@ -26,6 +26,78 @@
 - A Google Play installation is no longer offered the app's own sideload path: `UpdateManager` reports `DelegatedToStore` and leaves updating to Play (which governs store installs anyway). The Play In-App Updates flow itself is wired separately, so this is the correct outcome in both cases.
 - Update failure messages now come from the shared error taxonomy (same wording for the same failure everywhere) instead of ad-hoc strings at each call site.
 
+## [1.3.3] - 2026-09-17
+
+Fixes for the errors the app reported about itself. The two crash classes below are the
+only ones present in the production `crashreports` collection (7 reports); every other
+item was found by reading the code against its own contracts.
+
+> Entries for 1.2.1 – 1.3.2 were never written to this file. They are not reconstructed
+> here: the GitHub release notes for those tags are the record.
+
+### Fixed (crashes)
+
+- **Duplicate lazy-list keys took the whole screen down.** Three crash reports from a
+  Samsung SM-S906B carried `IllegalArgumentException: Key "رياضة" was already used`. A
+  channel-group label is not unique (the same group can arrive from two sources), and
+  seven lists keyed on a non-unique value — `{ it.name }`, `{ it.channelId }`,
+  `key = keyOf`, `{ _, channel -> channel.id }`, `{ it.key }`, `{ _, entry -> "category_…" }`.
+  All of them are position-prefixed now, and `LazyListKeyUniquenessTest` fails the build
+  for any new one (the scanner self-checks the shapes that caused the crash).
+- **Writing stream health could kill the player mid-stream.** `channel_health.channelId`
+  is a foreign key into `channels`, so a background sync that dropped the channel made
+  the write raise `SQLiteConstraintException` inside an unguarded `viewModelScope.launch`.
+- **The health scanner could crash the app at every launch.** Its unattended loop ran on
+  a plain `SupervisorJob` scope with no `CoroutineExceptionHandler`, so one SQLite/IO
+  failure escaped to the default handler.
+- **Saving an Xtream source crashed on devices with a broken keystore.**
+  `AppPreferences` let `SecurePreferences`' `SecurityException` escape from the caller's
+  UI-thread coroutine. It now reports failure instead, so the app never switches to a
+  source whose password was not stored.
+- **A malformed channel aborted the entire refresh.** Gson writes null into the non-null
+  `ChannelDto.id/name/url` fields when a payload omits them, and the NPE came out of
+  `ChannelEntity`'s constructor inside a bulk `map { toEntity(it) }` — one bad entry, no
+  channels at all, behind a generic "تعذر تحميل القنوات". Unusable entries are dropped
+  with a logged count.
+- **A Room failure in any list screen crashed the app** over data that only decorates a
+  score badge: `channelHealthDao.getAllHealth()` was combined into the channel flow in
+  eight places with no exception handling.
+
+### Fixed
+
+- **Bring-your-own playlist import never finished.** `AddSourceScreen` compared
+  `playlistResult` to the literal `"Playlist loaded"` while the ViewModel set
+  `"تم تحميل قائمة التشغيل"`, so onboarding never advanced and a success was drawn as a
+  warning. The strings now live in one place.
+- **Tapping a channel whose id contains `/` crashed navigation.** BYO playlists derive
+  the id from the channel name when there is no tvg-id, so `"24/7 HD"` added a path
+  segment and Navigation threw. Ids are encoded like the other id-carrying routes
+  (`ScreenRouteEncodingTest`).
+- **Multiview panes stayed black after a channel change.** `VideoPlayer`'s `AndroidView`
+  bound the player only in `factory`; Multiview recreates its ExoPlayer per channel while
+  reusing the view, so the reused `PlayerView` kept painting a released player.
+- **The exported sync receiver was usable as a denial of service.** "Protected" by
+  `RECEIVE_BOOT_COMPLETED` — a normal permission any installed app can hold — so any app
+  could force a full channel re-sync at will. Senders cannot be authenticated for either
+  action, so the trigger is throttled to one sync per 10 minutes.
+
+### Security
+
+- **Debug HTTP logging leaked credentials.** `HttpLoggingInterceptor(Level.HEADERS)`
+  printed the full URL and every header, redacting only `X-TV-Code`: `X-Session-Id`, the
+  Xtream account inside a BYO URL (`/live/<user>/<pass>/123.ts`,
+  `player_api.php?username=…`) and the managed playback token in the path all reached
+  logcat. Replaced by a logger that prints method, host, path (token-shaped segments
+  masked), status and duration — never the query, never a header (`AGENTS.md` forbids
+  credentials in logs).
+
+### Added
+
+- Crash reports now carry the screen they happened on. The endpoint has always accepted
+  `screen` (100 chars) and the app never filled it, so all seven reports in production
+  arrived with `screen: null` and had to be diagnosed from obfuscated frames. Only the
+  destination *pattern* (`player/{channelId}`) is recorded — never its arguments.
+
 ## [1.2.0] - 2026-09-09
 
 ### Added

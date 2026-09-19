@@ -54,6 +54,23 @@ class SettingsViewModel @Inject constructor(
     companion object {
         private const val TAG = "SettingsViewModel"
         private const val PREFS_NAME = AppPreferences.PREFS_NAME
+
+        /**
+         * Status strings for a bring-your-own-playlist load.
+         *
+         * `AddSourceScreen` both decides whether to advance to Home and picks the
+         * banner colour by comparing `playlistResult` to a literal. The two sides
+         * drifted — the screen tested the English "Playlist loaded" while this
+         * ViewModel set an Arabic sentence — so a successful import never advanced
+         * onboarding and was rendered as a WARNING. One constant, used by both.
+         */
+        const val PLAYLIST_RESULT_LOADED = "تم تحميل قائمة التشغيل"
+        const val PLAYLIST_RESULT_FAILED = "تعذر تحميل قائمة التشغيل"
+        const val PLAYLIST_RESULT_USING_MANAGED = "جارٍ استخدام المصدر المُدار"
+
+        /** The device keystore refused encrypted storage — nothing was saved. */
+        const val PLAYLIST_RESULT_STORAGE_UNAVAILABLE =
+            "تعذّر تخزين بيانات المصدر على هذا الجهاز (التخزين المشفّر غير متاح)"
     }
 
     init {
@@ -329,14 +346,20 @@ class SettingsViewModel @Inject constructor(
     /** Save Xtream Codes credentials as the channel source and load them immediately. */
     fun saveXtreamPlaylist(host: String, username: String, password: String) {
         if (host.isBlank() || username.isBlank()) return
-        AppPreferences.setXtreamSource(application, host, username, password)
+        // The credentials live in EncryptedSharedPreferences. When the device
+        // keystore is unusable nothing is switched, so surface that instead of
+        // reporting a load against a source that has no stored password.
+        if (!AppPreferences.setXtreamSource(application, host, username, password)) {
+            _uiState.update { it.copy(playlistResult = PLAYLIST_RESULT_STORAGE_UNAVAILABLE) }
+            return
+        }
         loadPlaylist()
     }
 
     /** Switch back to the managed (paired) source. */
     fun useManagedSource() {
         AppPreferences.useManagedSource(application)
-        _uiState.update { it.copy(playlistResult = "جارٍ استخدام المصدر المُدار") }
+        _uiState.update { it.copy(playlistResult = PLAYLIST_RESULT_USING_MANAGED) }
     }
 
     private fun loadPlaylist() {
@@ -347,8 +370,8 @@ class SettingsViewModel @Inject constructor(
                 it.copy(
                     isLoadingPlaylist = false,
                     playlistResult = when (result) {
-                        is Result.Success -> "تم تحميل قائمة التشغيل"
-                        is Result.Error -> "تعذر تحميل قائمة التشغيل"
+                        is Result.Success -> PLAYLIST_RESULT_LOADED
+                        is Result.Error -> PLAYLIST_RESULT_FAILED
                     }
                 )
             }

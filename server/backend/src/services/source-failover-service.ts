@@ -1,10 +1,13 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
+import http from 'http';
+import https from 'https';
 import mongoose from 'mongoose';
 import XtreamSource from '../models/XtreamSource';
 import ChannelFailoverMap from '../models/ChannelFailoverMap';
 import Channel from '../models/Channel';
 import { decryptSecret } from '../utils/crypto';
 import { testXtreamConnection, buildXtreamApiUrl } from './xtream-service';
+import { validateUrlForSSRF, createPinnedLookup, isPrivateIP } from '../utils/ssrf-guard';
 import { sendOperationalAlert } from './alert-notifier';
 import { normalizeChannelName } from './channel-identity-service';
 
@@ -458,10 +461,52 @@ async function probeSource(source: any): Promise<{ health: SourceHealth; error: 
  * with "maxContentLength size of 524288 exceeded" on a healthy TS stream and
  * wrongly marks the source degraded every watchdog cycle.
  */
+/**
+ * SSRF-guarded axios GET for operator-configured upstream URLs.
+ *
+ * `serverUrl` / `mirrorServerUrls` come from the admin panel, but the watchdog,
+ * the auto-match helper and the stream probe run unattended — an SSRF guard on
+ * the interactive import paths alone leaves the background ones open. Each hop
+ * is validated and the socket is pinned to the addresses the guard resolved, so
+ * a rebinding DNS answer cannot move the request onto an internal host.
+ */
+async function guardedUpstreamGet(url: string, opts: AxiosRequestConfig = {}) {
+  const validation = await validateUrlForSSRF(url);
+  if (!validation.safe || !validation.resolvedAddresses?.length) {
+    throw new Error(`Upstream URL rejected: ${validation.reason || 'unsafe URL'}`);
+  }
+  const parsed = new URL(url);
+  const lookup = createPinnedLookup(validation.resolvedAddresses, parsed.hostname) as any;
+  const agent =
+    parsed.protocol === 'https:' ? new https.Agent({ lookup }) : new http.Agent({ lookup });
+
+  return axios.get(url, {
+    ...opts,
+    httpAgent: parsed.protocol === 'http:' ? agent : undefined,
+    httpsAgent: parsed.protocol === 'https:' ? agent : undefined,
+    beforeRedirect: async (options: any) => {
+      const hopProtocol = String(options.protocol || '').replace(/:$/, '');
+      if (hopProtocol !== 'http' && hopProtocol !== 'https') {
+        throw new Error('Redirect to a non-http(s) scheme blocked');
+      }
+      const hopHost = String(options.hostname || '').replace(/^\[|\]$/g, '');
+      if (isPrivateIP(hopHost)) {
+        throw new Error('Redirect to private/internal address blocked');
+      }
+      const hopUrl = `${hopProtocol}://${options.hostname}${options.path || ''}`;
+      const hopCheck = await validateUrlForSSRF(hopUrl);
+      if (!hopCheck.safe) throw new Error(`Redirect target blocked: ${hopCheck.reason}`);
+      const hopLookup = createPinnedLookup(hopCheck.resolvedAddresses, hopHost) as any;
+      options.httpAgent = new http.Agent({ lookup: hopLookup });
+      options.httpsAgent = new https.Agent({ lookup: hopLookup });
+    },
+  });
+}
+
 async function probePlaybackUrl(url: string): Promise<{ ok: boolean; error: string | null }> {
   const isTs = /\.ts(?:\?|#|$)/i.test(url) || /[?&]output=ts(?:&|$)/i.test(url);
   try {
-    const res = await axios.get(url, {
+    const res = await guardedUpstreamGet(url, {
       timeout: 6000,
       maxRedirects: 5,
       validateStatus: (s) => s >= 200 && s < 500,
@@ -594,19 +639,31 @@ export async function runSourceWatchdog(): Promise<{
           event: 'xtream-source-down',
           severity: 'critical',
           message: `مصدر ${name} متوقف — ستفشل القنوات المرتبطة به؛ التبديل الاحتياطي نشط للمطابَقة`,
-        }).catch(() => {});
+        }).catch((err) => {
+          // A broken alert channel must be visible, not silent: swallowing this
+          // made "source down" look like a quiet, healthy night.
+          console.error(`[failover] operational alert '${next}' failed to deliver:`, err?.message || err);
+        });
       } else if (next === 'degraded') {
         await sendOperationalAlert({
           event: 'xtream-source-degraded',
           severity: 'warning',
           message: `مصدر ${name} متدهور (البث المباشر لا يستجيب)`,
-        }).catch(() => {});
+        }).catch((err) => {
+          // A broken alert channel must be visible, not silent: swallowing this
+          // made "source down" look like a quiet, healthy night.
+          console.error(`[failover] operational alert '${next}' failed to deliver:`, err?.message || err);
+        });
       } else if (next === 'verified' && prev !== 'verified') {
         await sendOperationalAlert({
           event: 'xtream-source-recovered',
           severity: 'warning',
           message: `مصدر ${name} عاد للعمل — الجلسات الجديدة ستستخدمه من جديد`,
-        }).catch(() => {});
+        }).catch((err) => {
+          // A broken alert channel must be visible, not silent: swallowing this
+          // made "source down" look like a quiet, healthy night.
+          console.error(`[failover] operational alert '${next}' failed to deliver:`, err?.message || err);
+        });
       }
     } else if (next === lastAlerted && next === prev) {
       // keep the alerted state so a recovery after silence still fires
@@ -640,18 +697,25 @@ export async function autoMatchFailoverMaps(
   let streams: any[] = [];
   const wantedCategories = (opts.categories || []).map((c) => String(c).trim().toLowerCase()).filter(Boolean);
   if (wantedCategories.length > 0) {
-    const catRes = await axios.get(buildXtreamApiUrl(creds, 'get_live_categories'), { timeout: 60000 });
+    const catRes = await guardedUpstreamGet(buildXtreamApiUrl(creds, 'get_live_categories'), {
+      timeout: 60000,
+    });
     const cats = Array.isArray(catRes.data) ? catRes.data : [];
     const catIds = cats
       .filter((c: any) => wantedCategories.some((w) => String(c?.category_name || '').toLowerCase().includes(w)))
       .map((c: any) => String(c?.category_id || ''))
       .filter(Boolean);
     for (const catId of catIds) {
-      const sRes = await axios.get(buildXtreamApiUrl(creds, 'get_live_streams', { category_id: catId }), { timeout: 90000 });
+      const sRes = await guardedUpstreamGet(
+        buildXtreamApiUrl(creds, 'get_live_streams', { category_id: catId }),
+        { timeout: 90000 },
+      );
       if (Array.isArray(sRes.data)) streams.push(...sRes.data);
     }
   } else {
-    const res = await axios.get(buildXtreamApiUrl(creds, 'get_live_streams'), { timeout: 120000 });
+    const res = await guardedUpstreamGet(buildXtreamApiUrl(creds, 'get_live_streams'), {
+      timeout: 120000,
+    });
     streams = Array.isArray(res.data) ? res.data : [];
   }
   const limit = Math.min(Math.max(opts.limit || 500, 1), 2000);

@@ -98,17 +98,34 @@ interface ChannelHealthDao {
     @Query("DELETE FROM channel_health WHERE channelId NOT IN (SELECT id FROM channels)")
     suspend fun cleanupOrphaned()
 
+    /**
+     * Channels in [categoryId] whose last recorded status was OFFLINE **within the
+     * window starting at [since]**.
+     *
+     * The window matters: an OFFLINE mark is written on every playback failure and was
+     * previously counted forever, so a burst of unrelated transient failures (flaky free
+     * M3U stream, expired token, concurrent-stream limit, one bad network) accumulated
+     * until half the category looked dead and the player blamed the source provider. Bounding
+     * both counts to the same window makes the verdict describe *now* and self-heal.
+     */
     @Query("""
         SELECT COUNT(*) FROM channel_health h
         INNER JOIN channels c ON c.id = h.channelId
         WHERE c.categoryId = :categoryId AND h.status = 'OFFLINE'
+          AND h.lastCheckedAt >= :since
     """)
-    suspend fun getOfflineCountByCategory(categoryId: String): Int
+    suspend fun getOfflineCountByCategory(categoryId: String, since: Long): Int
 
+    /**
+     * Channels in [categoryId] with a real (non-UNKNOWN) status **within the window
+     * starting at [since]** — the denominator for the category-wide verdict. Must use the
+     * same window as [getOfflineCountByCategory] or the ratio is meaningless.
+     */
     @Query("""
         SELECT COUNT(*) FROM channel_health h
         INNER JOIN channels c ON c.id = h.channelId
         WHERE c.categoryId = :categoryId AND h.status != 'UNKNOWN'
+          AND h.lastCheckedAt >= :since
     """)
-    suspend fun getScannedCountByCategory(categoryId: String): Int
+    suspend fun getScannedCountByCategory(categoryId: String, since: Long): Int
 }

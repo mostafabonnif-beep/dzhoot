@@ -1,6 +1,7 @@
 package com.dzhoof.iptv.data.repository
 
 import android.content.Context
+import android.util.Log
 import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.data.mapper.ChannelMapper
 import com.dzhoof.iptv.data.model.Result
@@ -52,6 +53,10 @@ class ChannelRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     @IoDispatcher private val dispatcher: CoroutineDispatcher
 ) : ChannelRepository {
+
+    private companion object {
+        const val TAG = "ChannelRepository"
+    }
 
     // In-memory cache of alternate stream URLs per channel (populated during sync).
     // Capped to prevent unbounded growth between refreshes.
@@ -177,9 +182,22 @@ class ChannelRepositoryImpl @Inject constructor(
     private suspend fun refreshFromServer(): Result<Unit> {
         return when (val result = remoteDataSource.fetchChannels()) {
             is Result.Success -> {
+                // Drop entries that carry no id/name BEFORE mapping: a DTO with a null
+                // id or name (Gson writes null into a non-null Kotlin field when the
+                // payload omits it) otherwise threw out of the bulk `map { toEntity(it) }`
+                // and failed the entire refresh. A blank channelUrl is NOT malformed —
+                // the TV list strips playback URLs on purpose (tokenized playback).
+                // See ChannelMapper.sanitize.
+                val usable = channelMapper.sanitize(result.data)
+                if (usable.size != result.data.size) {
+                    Log.w(
+                        TAG,
+                        "skipped ${result.data.size - usable.size} malformed channel(s) from the server"
+                    )
+                }
                 // The server should already exclude restricted presentation markers.
                 // Keep this client-side guard for cached data and legacy deployments.
-                val visibleChannels = result.data.filter { CatalogPresentationPolicy.isCustomerVisible(it) }
+                val visibleChannels = usable.filter { CatalogPresentationPolicy.isCustomerVisible(it) }
                 // Build new alternates map and swap atomically
                 val newAlternates = mutableMapOf<String, List<String>>()
                 val newServerMetadata = mutableMapOf<String, ChannelServerMetadata>()
@@ -224,8 +242,15 @@ class ChannelRepositoryImpl @Inject constructor(
         // Always refresh the playlist-derived EPG URL (empty when the new playlist has none),
         // stored separately so it never overwrites the user's manual EPG setting.
         AppPreferences.setPlaylistEpgUrl(context, fetched.epgUrl?.takeIf { it.isNotBlank() } ?: "")
+        val usable = channelMapper.sanitize(fetched.channels)
+        if (usable.size != fetched.channels.size) {
+            Log.w(
+                TAG,
+                "skipped ${fetched.channels.size - usable.size} malformed channel(s) from the playlist"
+            )
+        }
         localDataSource.replaceAllChannels(
-            fetched.channels
+            usable
                 .filter { CatalogPresentationPolicy.isCustomerVisible(it) }
                 .map { channelMapper.toEntity(it) }
         )

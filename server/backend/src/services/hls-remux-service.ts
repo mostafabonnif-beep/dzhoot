@@ -43,6 +43,23 @@ interface HlsSession {
   streamKey: string;
 }
 
+/**
+ * One-shot diagnostic: an egress proxy is configured but no host is listed, so
+ * no upstream will ever use the tunnel. Silence here reads as "the provider
+ * stopped blocking us" when it is really a configuration gap — the fetches just
+ * go out from the datacenter IP again.
+ */
+let warnedMissingProxyHosts = false;
+function warnIfProxyHostsMissing(proxy: string, hosts: string[]): void {
+  if (warnedMissingProxyHosts || !proxy || hosts.length > 0) return;
+  warnedMissingProxyHosts = true;
+  console.warn(
+    '[hls-remux] UPSTREAM_HTTP_PROXY is set but UPSTREAM_PROXY_HOSTS is empty — no upstream ' +
+      'will be routed through the proxy. Set UPSTREAM_PROXY_HOSTS to the comma-separated hosts ' +
+      'that need the residential egress.',
+  );
+}
+
 const sessions = new Map<string, HlsSession>();
 const streamMembers = new Map<string, Set<string>>();
 
@@ -214,12 +231,15 @@ export function startHlsSession(
   // IPs (UPSTREAM_PROXY_HOSTS, comma-separated host suffixes) so sessions that
   // work direct (e.g. the https mirror panel) don't depend on the home tunnel.
   const upstreamProxy = String(process.env.UPSTREAM_HTTP_PROXY || '').trim();
-  const proxyHostSuffixes = String(
-    process.env.UPSTREAM_PROXY_HOSTS || 'business-cloud-neo.com',
-  )
+  // Which provider needs a residential egress is deployment configuration, not
+  // code: naming it here published that fact in the repository (AGENTS.md — do
+  // not hard-code provider URLs). An empty list means "proxy nothing", which is
+  // the safe default, and the warning below says so once.
+  const proxyHostSuffixes = String(process.env.UPSTREAM_PROXY_HOSTS || '')
     .split(',')
     .map((host) => host.trim().toLowerCase())
     .filter(Boolean);
+  warnIfProxyHostsMissing(upstreamProxy, proxyHostSuffixes);
   if (upstreamProxy && upstreamHostNeedsProxy(opts.streamUrl, proxyHostSuffixes)) {
     args.push('-http_proxy', upstreamProxy);
   }

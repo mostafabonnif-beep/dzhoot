@@ -3,6 +3,7 @@ package com.dzhoof.iptv.presentation.navigation
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -10,11 +11,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.dzhoof.iptv.crash.CurrentScreenTracker
 import com.dzhoof.iptv.presentation.viewmodel.CatalogTab
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
 import com.dzhoof.iptv.presentation.ui.animation.DURATION_ENTRANCE
@@ -57,6 +60,18 @@ fun DzhoofNavGraph(
 ) {
     val reduceMotion = LocalPerfProfile.current.reduceMotion
     val enterSlideOffsetPx = with(LocalDensity.current) { 16.dp.roundToPx() }
+
+    // Record the current destination for crash reports. `destination.route` is the
+    // PATTERN ("player/{channelId}"), never the filled arguments, so no channel id
+    // or playback code can reach a report. AddOnDestinationChangedListener (rather
+    // than currentBackStackEntryFlow) keeps this working on navigation 2.7.
+    DisposableEffect(navController) {
+        val listener = NavController.OnDestinationChangedListener { _, destination, _ ->
+            CurrentScreenTracker.onDestinationChanged(destination.route)
+        }
+        navController.addOnDestinationChangedListener(listener)
+        onDispose { navController.removeOnDestinationChangedListener(listener) }
+    }
 
     NavHost(
         navController = navController,
