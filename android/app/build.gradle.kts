@@ -183,6 +183,7 @@ dependencies {
     // Coil for modern image loading
     implementation(libs.coil)
     implementation(libs.coil.compose)
+    implementation(libs.coil.svg)
 
     // Firebase - using BoM for version management
     implementation(platform("com.google.firebase:firebase-bom:33.1.0"))

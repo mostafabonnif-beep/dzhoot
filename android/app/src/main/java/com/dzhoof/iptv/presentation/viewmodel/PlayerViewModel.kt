@@ -34,6 +34,7 @@ import com.dzhoof.iptv.presentation.model.PlayerUiState
 import com.dzhoof.iptv.presentation.model.TrackPreferenceDecisionRequest
 import androidx.media3.exoplayer.ExoPlayer
 import com.dzhoof.iptv.presentation.ui.player.PlayerFactory
+import com.dzhoof.iptv.presentation.ui.player.PlaybackContainer
 import com.dzhoof.iptv.presentation.ui.player.StreamErrorContext
 import com.dzhoof.iptv.presentation.ui.player.StreamErrorMessageResolver
 import com.dzhoof.iptv.presentation.ui.animation.AUTO_HIDE_DELAY_MS
@@ -133,13 +134,25 @@ class PlayerViewModel @Inject constructor(
     fun createPlayer(): ExoPlayer = playerFactory.create()
 
     /**
-     * Explicit HLS media source for tokenized server playback. See
-     * [PlayerFactory.createHlsMediaSource] — server playback ALWAYS serves an
-     * HLS playlist, so forcing the m3u8 container avoids the progressive-source
-     * fallback that fails with ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED.
+     * Explicit HLS media source. Kept for callers that know the container is
+     * HLS; general playback should use [createMediaSource] so a null/absent
+     * mimeType is not mistaken for HLS (defect D1).
      */
     fun createHlsMediaSource(url: String): androidx.media3.exoplayer.source.MediaSource =
         playerFactory.createHlsMediaSource(url)
+
+    /**
+     * Single source builder shared by the initial prepare and
+     * [com.dzhoof.iptv.presentation.ui.player.ErrorRecoveryManager]. See
+     * [PlayerFactory.createMediaSource]: `container` null routes from url +
+     * mimeType, non-null forces that container (opposite-container retry).
+     */
+    fun createMediaSource(
+        url: String,
+        mimeType: String?,
+        container: PlaybackContainer?,
+    ): androidx.media3.exoplayer.source.MediaSource =
+        playerFactory.createMediaSource(url, mimeType, container)
 
     /**
      * Requests a short-lived server-side playback URL. The app sends only the
@@ -257,6 +270,7 @@ class PlayerViewModel @Inject constructor(
     private var playbackQoeChannelId: String? = null
     private var playbackQoeStartedAt: Long = 0L
     private var playbackQoeStartupReported = false
+    private var playbackQoeFailureReported = false
     private var playbackQoeFallbackReported = false
     private var playbackQoeRebufferCount = 0
     private var playbackQoeFallbackUsed = false
@@ -276,6 +290,7 @@ class PlayerViewModel @Inject constructor(
         playbackQoeChannelId = channelId
         playbackQoeStartedAt = System.currentTimeMillis()
         playbackQoeStartupReported = false
+        playbackQoeFailureReported = false
         playbackQoeFallbackReported = false
         playbackQoeRebufferCount = 0
         playbackQoeFallbackUsed = false
@@ -524,22 +539,44 @@ class PlayerViewModel @Inject constructor(
     private fun loadSchedule(tvgId: String?) {
         scheduleJob?.cancel()
         if (tvgId.isNullOrBlank()) {
-            _uiState.update { it.copy(schedulePrograms = emptyList(), scheduleLoading = false) }
+            _uiState.update {
+                it.copy(
+                    schedulePrograms = emptyList(),
+                    scheduleLoading = false,
+                    scheduleLoadFailed = false
+                )
+            }
             return
         }
         scheduleJob = viewModelScope.launch {
-            _uiState.update { it.copy(scheduleLoading = true) }
+            _uiState.update { it.copy(scheduleLoading = true, scheduleLoadFailed = false) }
             val zone = java.time.ZoneId.systemDefault()
             val startOfDay = java.time.LocalDate.now(zone).atStartOfDay(zone).toInstant()
             val endOfDay = startOfDay.plus(java.time.Duration.ofDays(1))
             val programs = try {
                 getGuideProgramsUseCase(GetGuideProgramsUseCase.Params(listOf(tvgId), startOfDay, endOfDay))
                     .values.firstOrNull().orEmpty()
-            } catch (_: Exception) {
-                emptyList()
+            } catch (e: Exception) {
+                // Distinguish "the guide could not be read" from "this channel has
+                // no guide". Swallowing this made the Schedule tab claim the
+                // channel has no EPG data on any network failure — a false
+                // statement the user could not act on.
+                android.util.Log.w(PLAYER_LOG_TAG, "schedule load failed for tvgId=$tvgId", e)
+                null
             }
-            _uiState.update { it.copy(schedulePrograms = programs, scheduleLoading = false) }
+            _uiState.update {
+                it.copy(
+                    schedulePrograms = programs.orEmpty(),
+                    scheduleLoading = false,
+                    scheduleLoadFailed = programs == null
+                )
+            }
         }
+    }
+
+    /** Retry the portrait Schedule tab after a failed guide load. */
+    fun retrySchedule() {
+        loadSchedule(_uiState.value.channel?.tvgId)
     }
 
     fun updatePlaybackState(isPlaying: Boolean, position: Long, duration: Long) {
@@ -1141,9 +1178,14 @@ class PlayerViewModel @Inject constructor(
     // ── Stream Recovery & Dead-Stream Handling ─────────────────────
 
     fun onPlaybackError(error: String) {
-        if (!playbackQoeStartupReported) {
-            reportPlaybackQoe("startup_failure", fallbackSucceeded = false, errorCode = "playback_error")
-        }
+        // Deliberately NO playback-quality event here. This callback also fires
+        // for recoverable errors — a network blip that triggers a reconnect —
+        // so emitting startup_failure here was wrong twice over: it counted one
+        // failed session twice (a generic "playback_error" plus the real code
+        // from onStreamDead, which inflated the production startup-failure rate)
+        // and it reported a failure for sessions that went on to recover.
+        // The terminal outcome is reported once, by onStreamDead, which carries
+        // the authoritative diagnostic code.
         _uiState.update { it.copy(error = error, isPlaying = false) }
     }
 
@@ -1190,7 +1232,8 @@ class PlayerViewModel @Inject constructor(
 
     fun onStreamDead(errorMessage: String, diagnosticCode: String? = null) {
         val channelId = _uiState.value.channel?.id ?: return
-        if (!playbackQoeStartupReported || playbackQoeFallbackUsed) {
+        if (!playbackQoeFailureReported && (!playbackQoeStartupReported || playbackQoeFallbackUsed)) {
+            playbackQoeFailureReported = true
             reportPlaybackQoe(
                 eventType = "startup_failure",
                 fallbackSucceeded = false,
@@ -1253,8 +1296,12 @@ class PlayerViewModel @Inject constructor(
                 )
             )
 
-            val offlineCount = channelHealthDao.getOfflineCountByCategory(category)
-            val scannedCount = channelHealthDao.getScannedCountByCategory(category)
+            // Bound both counts to the SAME recent window: an OFFLINE mark is written on every
+            // playback failure and used to be counted forever, so old unrelated failures could
+            // fabricate a "source provider problem" for a category that is fine right now.
+            val categoryWindowStart = System.currentTimeMillis() - StreamErrorMessageResolver.RECENT_WINDOW_MS
+            val offlineCount = channelHealthDao.getOfflineCountByCategory(category, categoryWindowStart)
+            val scannedCount = channelHealthDao.getScannedCountByCategory(category, categoryWindowStart)
             val resolved = StreamErrorMessageResolver.resolve(
                 StreamErrorContext(
                     errorMessage = errorMessage,

@@ -40,19 +40,23 @@ async function resolveUser(req: Request, res: Response, next: NextFunction) {
 
     if (sessionId) {
       const session = (await Session.findOne({ sessionId }).populate('userId')) as PopulatedSession | null;
-      if (!session || !session.isValid()) {
-        return res.status(401).json({ success: false, error: 'Invalid or expired session' });
+      // A stale/expired session must NOT hard-fail the request: clients keep
+      // sending a dead session after a server migration while their paired TV
+      // code (or Bearer token) is still valid. Fall through so those can win.
+      if (session && session.isValid()) {
+        user = session.userId;
+        await session.updateActivity();
       }
-      user = session.userId;
-      await session.updateActivity();
-    } else if (auth.startsWith('Bearer ')) {
+    }
+    if (!user && auth.startsWith('Bearer ')) {
       const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET;
       if (!ACCESS_SECRET) {
         return res.status(500).json({ success: false, error: 'Server configuration error' });
       }
       const payload = jwt.verify(auth.slice(7), ACCESS_SECRET, { algorithms: ['HS256'] }) as jwt.JwtPayload;
       user = (await User.findById(payload.sub).exec()) as ResolvedAuthUser | null;
-    } else if (tvCode) {
+    }
+    if (!user && tvCode) {
       // PIN-paired TV clients authenticate with their channel list code (no
       // session exists until the companion app pairs a device). Same lookup as
       // requireTvOrSessionAuth; demo codes are intentionally NOT accepted here

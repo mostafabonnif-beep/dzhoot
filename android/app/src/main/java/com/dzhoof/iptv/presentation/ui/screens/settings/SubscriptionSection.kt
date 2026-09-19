@@ -20,6 +20,8 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.ui.components.Status
@@ -41,7 +43,7 @@ internal fun SubscriptionSection(
     viewModel: SubscriptionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var code by remember { mutableStateOf("") }
+    var codeField by remember { mutableStateOf(TextFieldValue("")) }
 
     SettingsCard(title = stringResource(R.string.subscription_title), modifier = modifier) {
         val sub = uiState.subscription
@@ -62,9 +64,20 @@ internal fun SubscriptionSection(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                    // TextFieldValue + a caret pinned to the end: see the note in
+                    // ActivationScreen. normalizeActivationCodeInput rewrites the
+                    // whole string, so carrying a stale selection across a length
+                    // change transposes characters and turns a valid code into an
+                    // "invalid" one.
                     OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = normalizeActivationCodeInput(it) },
+                        value = codeField,
+                        onValueChange = { newValue ->
+                            val formatted = normalizeActivationCodeInput(newValue.text)
+                            codeField = TextFieldValue(
+                                text = formatted,
+                                selection = TextRange(formatted.length),
+                            )
+                        },
                         singleLine = true,
                         placeholder = { Text(stringResource(R.string.activation_code_placeholder)) },
                         keyboardOptions = KeyboardOptions(
@@ -78,8 +91,8 @@ internal fun SubscriptionSection(
             action = {
                 FocusAwareOutlinedButton(
                     onClick = {
-                        if (code.isNotBlank() && !uiState.isRedeeming) {
-                            viewModel.redeem(code.trim())
+                        if (codeField.text.isNotBlank() && !uiState.isRedeeming) {
+                            viewModel.redeem(codeField.text.trim())
                         }
                     },
                 ) {

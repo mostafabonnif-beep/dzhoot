@@ -182,10 +182,12 @@ class ChannelRepositoryImpl @Inject constructor(
     private suspend fun refreshFromServer(): Result<Unit> {
         return when (val result = remoteDataSource.fetchChannels()) {
             is Result.Success -> {
-                // Drop unusable entries BEFORE mapping: one DTO with a null id/name/url
-                // (Gson writes null into a non-null Kotlin field when the payload omits
-                // it) otherwise threw out of the bulk `map { toEntity(it) }` and failed
-                // the entire refresh. See ChannelMapper.sanitize.
+                // Drop entries that carry no id/name BEFORE mapping: a DTO with a null
+                // id or name (Gson writes null into a non-null Kotlin field when the
+                // payload omits it) otherwise threw out of the bulk `map { toEntity(it) }`
+                // and failed the entire refresh. A blank channelUrl is NOT malformed —
+                // the TV list strips playback URLs on purpose (tokenized playback).
+                // See ChannelMapper.sanitize.
                 val usable = channelMapper.sanitize(result.data)
                 if (usable.size != result.data.size) {
                     Log.w(
