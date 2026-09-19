@@ -1,5 +1,7 @@
 package com.dzhoof.iptv.presentation.ui.player
 
+import com.dzhoof.iptv.domain.model.HEALTH_EVIDENCE_WINDOW_MS
+
 data class StreamErrorContext(
     val errorMessage: String,
     val lastCheckedAt: Long?,
@@ -17,10 +19,10 @@ object StreamErrorMessageResolver {
 
     /**
      * How recent a health result must be to count towards the category-wide verdict, and to
-     * be described as "recently working". One hour, defined once so the player's counts and
-     * the wording cannot drift apart.
+     * be described as "recently working". Shared with the UI's health display
+     * ([HEALTH_EVIDENCE_WINDOW_MS]) so the two cannot drift apart.
      */
-    const val RECENT_WINDOW_MS = 3_600_000L // 1 hour
+    const val RECENT_WINDOW_MS = HEALTH_EVIDENCE_WINDOW_MS
 
     private const val RECENT_THRESHOLD_MS = RECENT_WINDOW_MS
 
