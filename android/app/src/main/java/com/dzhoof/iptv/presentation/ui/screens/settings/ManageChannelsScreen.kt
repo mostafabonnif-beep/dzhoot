@@ -232,7 +232,8 @@ private fun ManageChannelList(
         ),
         verticalArrangement = Arrangement.spacedBy(Dimens.Space2)
     ) {
-        items(rows, key = { it.channelId }) { row ->
+        items(rows.size, key = { i -> "$i:${rows[i].channelId}" }) { i ->
+            val row = rows[i]
             when (section) {
                 ManageSection.Hide -> ManageToggleRow(
                     row = row,

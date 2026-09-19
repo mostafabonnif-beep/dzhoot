@@ -19,6 +19,39 @@ import javax.inject.Singleton
  */
 @Singleton
 class ChannelMapper @Inject constructor() {
+
+    /**
+     * Drop entries that cannot be mapped at all.
+     *
+     * [ChannelDto.id] and [ChannelDto.name] are required: without them a channel
+     * cannot be identified or displayed, and Gson assigns through reflection, so
+     * a payload that omits them writes **null** into a non-null Kotlin field and
+     * the failure surfaces as an NPE from `ChannelEntity`'s constructor intrinsic
+     * check inside a bulk `map { toEntity(it) }` — where ONE bad entry aborts the
+     * whole refresh.
+     *
+     * [ChannelDto.url] is deliberately **not** required. The TV list endpoint
+     * strips playback URLs on purpose (`tokenizeListForClient` in
+     * `server/backend/src/routes/channels.js`: "Playback URLs are intentionally
+     * NOT embedded") because the app is meant to request a short-lived token per
+     * play via `POST /api/v1/tv/playback-token`. A blank url is therefore the
+     * NORMAL value for every channel the app syncs.
+     *
+     * Requiring it here dropped all ~14,170 synced channels, so the app showed
+     * "لا توجد قنوات متاحة لهذا الحساب" on every device and could not play
+     * anything — a defensive guard that silently disabled the product when the
+     * upstream contract changed. `toEntity` already tolerates a blank url.
+     */
+    fun sanitize(dtos: List<ChannelDto>): List<ChannelDto> = dtos.filterNot { dto ->
+        isMissing(dto.id) || isMissing(dto.name)
+    }
+
+    /**
+     * A nullable-typed read of a field the payload can under-fill. The parameter
+     * type is `String?` on purpose: comparing a non-null Kotlin type against null
+     * is flagged by the compiler, but the value genuinely can be null at runtime.
+     */
+    private fun isMissing(value: String?): Boolean = value.isNullOrBlank()
     
     /**
      * Convert a ChannelEntity to a domain Channel model.
@@ -65,9 +98,11 @@ class ChannelMapper @Inject constructor() {
      */
     fun toEntity(dto: ChannelDto): ChannelEntity {
         return ChannelEntity(
-            id = dto.id,
-            name = dto.name,
-            streamUrl = dto.url,
+            // `orEmpty()` guards the Gson-null case even when a caller skipped
+            // `sanitize`; Room rejects an empty primary key rather than crashing.
+            id = dto.id.orEmpty(),
+            name = dto.name.orEmpty(),
+            streamUrl = dto.url.orEmpty(),
             logoUrl = dto.logoUrl,
             categoryId = dto.groupTitle ?: "uncategorized",
             language = dto.metadata?.language ?: dto.tvgLanguage,

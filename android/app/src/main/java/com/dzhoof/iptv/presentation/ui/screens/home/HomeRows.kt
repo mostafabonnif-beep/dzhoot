@@ -163,7 +163,8 @@ internal fun PopularCategoriesSlider(
             contentPadding = PaddingValues(vertical = if (isCompact) Dimens.Space1 else 12.dp),
             horizontalArrangement = Arrangement.spacedBy(Dimens.CategoryCardGap)
         ) {
-            items(categories, key = { it.name }) { category ->
+            items(categories.size, key = { i -> "$i:${categories[i].name}" }) { i ->
+                val category = categories[i]
                 CategoryCard(
                     // `name` stays raw (it's the LazyRow key + navigation arg);
                     // localize only what the user sees.
@@ -278,7 +279,10 @@ internal fun SportsMatchesRow(
             contentPadding = PaddingValues(vertical = if (isCompact) Dimens.Space1 else 12.dp),
             horizontalArrangement = Arrangement.spacedBy(cardGap)
         ) {
-            items(matches.size, key = { i -> "${matches[i].channelId}:${matches[i].startEpochMs}" }) { i ->
+            // Unique by construction, not by hope: two fixtures for the same
+            // channel kicking off at the same instant used to collide and crash
+            // Compose with 'Key ... was already used'. The index makes it unique.
+            items(matches.size, key = { i -> "$i:${matches[i].channelId}:${matches[i].startEpochMs}" }) { i ->
                 SportsMatchCard(
                     match = matches[i],
                     onClick = { onMatchClick(matches[i].channelId) },

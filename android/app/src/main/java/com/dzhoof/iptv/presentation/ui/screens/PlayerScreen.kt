@@ -164,6 +164,7 @@ fun PlayerScreen(
         ErrorRecoveryManager(
             player = exoPlayer,
             scope = coroutineScope,
+            buildMediaSource = viewModel::createMediaSource,
             onError = { message -> viewModel.onPlaybackError(message) },
             onRecovering = { attempt -> viewModel.onRecovering(attempt) },
             onRecovered = { viewModel.onRecovered() },
@@ -223,7 +224,7 @@ fun PlayerScreen(
                 catchupStartMs = catchupStartMs,
                 catchupDurationMin = catchupDurationMin,
                 resolvePlaybackUrl = viewModel::requestPlaybackUrl,
-                buildHlsMediaSource = viewModel::createHlsMediaSource,
+                buildMediaSource = viewModel::createMediaSource,
             )
             if (!prepared) {
                 viewModel.onStreamDead("Invalid stream URL")
@@ -454,7 +455,8 @@ fun PlayerScreen(
                         onCycleAspect = onCycleAspect,
                         onCycleSleepTimer = onCycleSleepTimer,
                         onEnterPip = onEnterPip,
-                        onZapTo = { viewModel.switchChannel(it) }
+                        onZapTo = { viewModel.switchChannel(it) },
+                        onRetrySchedule = { viewModel.retrySchedule() }
                     ),
                     modifier = Modifier.weight(1f)
                 )

@@ -1033,11 +1033,20 @@ router.get('/demo-code', async (req, res) => {
   // strength/placeholder guard and the live-credential collision check pass.
   // Never fall back to a real Admin/super-admin account's channelListCode —
   // that is a live credential and must not be handed out unauthenticated.
-  const code = await resolvePublicDemoCode(process.env.DEMO_CHANNEL_LIST_CODE);
-  if (!code) {
-    return res.status(404).json({ success: false, error: 'Demo code not configured' });
+  //
+  // The guard resolves through Mongo, so it can reject. Without this try/catch
+  // Express 4 never sees the rejection: the client hangs until its own timeout
+  // and the process logs an unhandledRejection.
+  try {
+    const code = await resolvePublicDemoCode(process.env.DEMO_CHANNEL_LIST_CODE);
+    if (!code) {
+      return res.status(404).json({ success: false, error: 'Demo code not configured' });
+    }
+    return res.json({ code });
+  } catch (error) {
+    console.error('Error resolving the public demo code:', error.message || error);
+    return res.status(503).json({ success: false, error: 'Demo code is temporarily unavailable' });
   }
-  return res.json({ code });
 });
 
 // ---------------------------------------------------------------------------

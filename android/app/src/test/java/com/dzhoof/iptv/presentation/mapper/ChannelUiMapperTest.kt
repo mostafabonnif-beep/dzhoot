@@ -3,6 +3,7 @@ package com.dzhoof.iptv.presentation.mapper
 import com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
+import com.dzhoof.iptv.domain.model.HEALTH_EVIDENCE_WINDOW_MS
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -12,6 +13,9 @@ import org.junit.Test
 class ChannelUiMapperTest {
 
     private lateinit var mapper: ChannelUiMapper
+
+    /** Fixed clock so the health-expiry rule is deterministic. */
+    private val now = 1_700_000_000_000L
 
     @Before
     fun setup() {
@@ -70,17 +74,56 @@ class ChannelUiMapperTest {
             createChannel(id = "ch2", name = "Channel 2")
         )
         val health = listOf(
-            ChannelHealthEntity(channelId = "ch1", status = "ONLINE", thumbnailPath = "/thumb1.jpg"),
-            ChannelHealthEntity(channelId = "ch2", status = "OFFLINE")
+            ChannelHealthEntity(
+                channelId = "ch1", status = "ONLINE", lastCheckedAt = now,
+                thumbnailPath = "/thumb1.jpg"
+            ),
+            ChannelHealthEntity(channelId = "ch2", status = "OFFLINE", lastCheckedAt = now)
         )
 
-        val result = mapper.toUiModelsWithHealth(channels, health)
+        val result = mapper.toUiModelsWithHealth(channels, health, now = now)
 
         assertEquals(2, result.size)
         assertEquals(ChannelHealthStatus.ONLINE, result[0].healthStatus)
         assertEquals("/thumb1.jpg", result[0].thumbnailPath)
         assertEquals(ChannelHealthStatus.OFFLINE, result[1].healthStatus)
         assertNull(result[1].thumbnailPath)
+    }
+
+    @Test
+    fun `toUiModelsWithHealth does not show a failure mark forever`() {
+        // The regression: an OFFLINE row written by a transient playback failure used to be
+        // painted on the card (and skipped while zapping) for the rest of the install's life.
+        val channels = listOf(createChannel(id = "ch1"))
+        val health = listOf(
+            ChannelHealthEntity(
+                channelId = "ch1",
+                status = "OFFLINE",
+                lastCheckedAt = now - HEALTH_EVIDENCE_WINDOW_MS - 1
+            )
+        )
+
+        val result = mapper.toUiModelsWithHealth(channels, health, now = now)
+
+        assertEquals(ChannelHealthStatus.UNKNOWN, result[0].healthStatus)
+        // The row itself is untouched — this is a display rule, not a destructive cleanup.
+        assertEquals("OFFLINE", health[0].status)
+    }
+
+    @Test
+    fun `toUiModelsWithHealth keeps a recent failure mark`() {
+        val channels = listOf(createChannel(id = "ch1"))
+        val health = listOf(
+            ChannelHealthEntity(
+                channelId = "ch1",
+                status = "OFFLINE",
+                lastCheckedAt = now - 60_000L
+            )
+        )
+
+        val result = mapper.toUiModelsWithHealth(channels, health, now = now)
+
+        assertEquals(ChannelHealthStatus.OFFLINE, result[0].healthStatus)
     }
 
     @Test

@@ -95,6 +95,11 @@ class CrashReporter(
             report.put("exceptionMessage", CrashRedactor.redact(throwable.message, MAX_MESSAGE_CHARS))
             report.put("stackTrace", CrashRedactor.redact(stackTraceWithCauses(throwable), MAX_STACK_CHARS))
             report.put("threadName", thread.name)
+            // Where the crash happened. The endpoint has always accepted this field
+            // and the app never sent it, so every report arrived "screen: null" and
+            // had to be diagnosed from obfuscated frames. Only the route pattern is
+            // recorded (never its arguments) — see CurrentScreenTracker.
+            CurrentScreenTracker.current()?.let { report.put("screen", it) }
             return report
         }
 

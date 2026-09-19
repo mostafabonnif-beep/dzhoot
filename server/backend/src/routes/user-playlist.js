@@ -69,6 +69,44 @@ const {
   withChannelCapFilter,
   extractExtinfTitle,
 } = require('../services/import-helpers');
+const { allowedGroupsForUser, groupScopeClause } = require('../services/channel-scope');
+
+/**
+ * The freemium boundary must hold on the *personal selection* endpoints too.
+ *
+ * These routes mint a playback token for every channel they return, so a
+ * group-limited / free-tier code that could put an out-of-scope shared channel
+ * in `user.channels` would get a working stream URL straight out of
+ * `GET /me/channels` — bypassing `/tv/playback-token`, which does apply the
+ * scope. The scope applies to the SHARED catalog; a user's own private imports
+ * (`ownerId = the user`) are always selectable.
+ */
+function privateImportClause(userId) {
+  return { ownerId: userId };
+}
+
+function sharedCatalogClause(scopeClause) {
+  return { ownerId: null, ...(scopeClause || {}) };
+}
+
+/** Mongo clause matching every channel this user is allowed to select. */
+async function selectableChannelClause(user) {
+  const scopeClause = await groupScopeClause(user);
+  return {
+    $or: [privateImportClause(user.id), sharedCatalogClause(scopeClause)],
+  };
+}
+
+/**
+ * In-memory twin of {@link selectableChannelClause} for already-populated docs.
+ * `scopeGroups` is `allowedGroupsForUser` (null = unrestricted).
+ */
+function isSelectableChannel(scopeGroups, userId, channel) {
+  if (!scopeGroups) return true;
+  const ownerId = channel?.ownerId ? String(channel.ownerId) : '';
+  if (ownerId && ownerId === String(userId)) return true;
+  return scopeGroups.includes(String(channel?.channelGroup ?? '').trim());
+}
 
 // Get current user's channels
 router.get('/me/channels', requireAuth, async (req, res) => {
@@ -76,7 +114,7 @@ router.get('/me/channels', requireAuth, async (req, res) => {
     console.log('🔵 GET /me/channels called for user:', req.user.id);
     const user = await User.findById(req.user.id).populate(
       'channels',
-      'channelName channelGroup channelUrl tvgLogo channelImg metadata metrics flaggedBad alternateStreams',
+      'channelName channelGroup channelUrl tvgLogo channelImg ownerId metadata metrics flaggedBad alternateStreams',
     );
     if (!user) {
       console.error('❌ User not found:', req.user.id);
@@ -90,8 +128,13 @@ router.get('/me/channels', requireAuth, async (req, res) => {
       user.channels?.map((ch) => ch._id || ch).slice(0, 3),
     );
     const baseUrl = getPublicBaseUrl(req);
+    // Scope filter: a stale selection (or one written before a plan changed)
+    // must not keep handing out tokens for out-of-scope shared channels.
+    const scopeGroups = await allowedGroupsForUser(user);
     const channels = sortClientCatalogChannels(
-      (user.channels || []).filter((channel) => !hasRestrictedPresentationMarker(channel)),
+      (user.channels || [])
+        .filter((channel) => !hasRestrictedPresentationMarker(channel))
+        .filter((channel) => isSelectableChannel(scopeGroups, user._id, channel)),
     ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
     res.json({ success: true, channels });
   } catch (error) {
@@ -113,17 +156,40 @@ router.put('/me/channels', requireAuth, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid channel ID format' });
     }
 
-    // Validate channel IDs — only catalog channels or the user's own private imports,
-    // so a user can't add another user's private channel to their selection.
+    // Validate channel IDs — only shared catalog channels this user's code is
+    // scoped to, or the user's own private imports, so a user can neither add
+    // another user's private channel nor escape the freemium group boundary by
+    // writing an out-of-scope shared channel into their selection.
+    const scopeClause = await groupScopeClause(req.user);
     const channels = await Channel.find({
       $and: [
         { _id: { $in: channelIds } },
-        { $or: [{ ownerId: null }, { ownerId: req.user.id }] },
+        { $or: [privateImportClause(req.user.id), sharedCatalogClause(scopeClause)] },
         publicCatalogPresentationQuery(),
       ],
-    });
+    }).select('_id');
+
     if (channels.length !== channelIds.length) {
-      return res.status(400).json({ success: false, error: 'Some channel IDs are invalid' });
+      const accepted = new Set(channels.map((c) => c._id.toString()));
+      const rejected = channelIds.filter((id) => !accepted.has(String(id)));
+      // Distinguish "not yours / not public" from "outside your plan's groups"
+      // so the client can show an actionable message.
+      const outOfScope = scopeClause
+        ? await Channel.countDocuments({
+            _id: { $in: rejected },
+            ownerId: null,
+            ...publicCatalogPresentationQuery(),
+            channelGroup: { $nin: scopeClause.channelGroup.$in },
+          })
+        : 0;
+      return res.status(400).json({
+        success: false,
+        error: outOfScope
+          ? 'Some channels are outside your subscription scope'
+          : 'Some channel IDs are invalid',
+        code: outOfScope ? 'CHANNEL_OUT_OF_SCOPE' : 'INVALID_CHANNEL_IDS',
+        rejectedCount: rejected.length,
+      });
     }
 
     const user = await User.findById(req.user.id);
@@ -163,10 +229,11 @@ router.post('/me/channels/add', requireAuth, async (req, res) => {
     if (!user) return res.status(404).json({ success: false, error: 'User not found' });
 
     const existingIds = new Set(user.channels.map((id) => id.toString()));
+    const addScopeClause = await groupScopeClause(req.user);
     const validChannels = await Channel.find({
       $and: [
         { _id: { $in: channelIds } },
-        { $or: [{ ownerId: null }, { ownerId: req.user.id }] },
+        { $or: [privateImportClause(req.user.id), sharedCatalogClause(addScopeClause)] },
         publicCatalogPresentationQuery(),
       ],
     }).select('_id');

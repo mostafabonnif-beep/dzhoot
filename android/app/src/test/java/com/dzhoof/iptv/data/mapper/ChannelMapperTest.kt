@@ -4,6 +4,7 @@ import com.dzhoof.iptv.data.model.dto.ChannelDto
 import com.dzhoof.iptv.data.model.dto.ChannelMetadataDto
 import com.dzhoof.iptv.data.source.local.entity.ChannelEntity
 import com.dzhoof.iptv.domain.model.Channel
+import com.google.gson.Gson
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -223,5 +224,83 @@ class ChannelMapperTest {
 
         assertEquals("timeshift", entity.catchupType)
         assertEquals(3, entity.catchupDays)
+    }
+
+    /**
+     * `ChannelDto.id` / `name` / `url` are non-null Kotlin types, but Gson writes
+     * through reflection: a payload that omits a field leaves **null** in it. The
+     * NPE then came out of `ChannelEntity`'s constructor inside a bulk
+     * `map { toEntity(it) }`, which failed the entire channel refresh — one bad
+     * entry, no channels. This test produces that exact DTO with Gson rather than
+     * guessing at it.
+     */
+    @Test
+    fun `gson really can leave null in a non-null DTO field`() {
+        val dto: ChannelDto = Gson().fromJson("""{"channelName":"No id, no url"}""", ChannelDto::class.java)
+
+        // Proves the hazard is real and not a theoretical one.
+        assertNull(dto.id)
+        assertNull(dto.url)
+    }
+
+    @Test
+    fun `sanitize drops entries the mapper could not store`() {
+        val gson = Gson()
+        val missingId: ChannelDto = gson.fromJson("""{"channelName":"A","channelUrl":"http://a/x.m3u8"}""", ChannelDto::class.java)
+        val missingName: ChannelDto = gson.fromJson("""{"channelId":"b"}""", ChannelDto::class.java)
+        val blankName: ChannelDto = gson.fromJson("""{"channelId":"c","channelName":"","channelUrl":"http://c/x.m3u8"}""", ChannelDto::class.java)
+        val good: ChannelDto = gson.fromJson(
+            """{"channelId":"d","channelName":"D","channelUrl":"http://d/x.m3u8"}""",
+            ChannelDto::class.java,
+        )
+
+        val kept = mapper.sanitize(listOf(missingId, missingName, blankName, good))
+
+        assertEquals(1, kept.size)
+        assertEquals("d", kept.first().id)
+    }
+
+    @Test
+    fun `sanitize keeps a tokenized channel whose playback url was stripped`() {
+        // This is the shape the TV list endpoint actually returns: a complete
+        // channel with channelUrl deliberately blanked, because playback goes
+        // through POST /api/v1/tv/playback-token. Requiring a url here dropped the
+        // entire catalog and left the app with an empty home screen.
+        val tokenized: ChannelDto = Gson().fromJson(
+            """{"channelId":"xt:abc:1","channelName":"RELAX","channelUrl":"","channelGroup":"Relax"}""",
+            ChannelDto::class.java,
+        )
+
+        val kept = mapper.sanitize(listOf(tokenized))
+
+        assertEquals(1, kept.size)
+        assertEquals("xt:abc:1", kept.first().id)
+        assertEquals("RELAX", kept.first().name)
+        assertEquals("", kept.first().url.orEmpty())
+    }
+
+    @Test
+    fun `sanitize keeps a full tokenized catalog`() {
+        // A whole page of URL-less channels must survive: this is the difference
+        // between a working app and an empty one.
+        val page = (1..50).map { index ->
+            Gson().fromJson(
+                """{"channelId":"ch$index","channelName":"Channel $index","channelUrl":"","channelGroup":"GENERAL HD"}""",
+                ChannelDto::class.java,
+            )
+        }
+
+        assertEquals(50, mapper.sanitize(page).size)
+    }
+
+    @Test
+    fun `toEntity does not throw on a DTO Gson under-filled`() {
+        val broken: ChannelDto = Gson().fromJson("""{"channelName":"A"}""", ChannelDto::class.java)
+
+        // Must not raise NPE from the non-null constructor parameters.
+        val entity = mapper.toEntity(broken)
+
+        assertEquals("", entity.id)
+        assertEquals("", entity.streamUrl)
     }
 }

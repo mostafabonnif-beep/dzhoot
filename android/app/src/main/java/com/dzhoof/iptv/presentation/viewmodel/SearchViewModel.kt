@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
+import com.dzhoof.iptv.data.source.local.dao.getAllHealthResilient
 import com.dzhoof.iptv.domain.model.SearchFilter
 import com.dzhoof.iptv.domain.model.UnifiedSearchResults
 import com.dzhoof.iptv.domain.repository.CatalogRepository
@@ -127,7 +128,7 @@ class SearchViewModel @Inject constructor(
             )
             
             searchChannelsUseCase(params)
-                .combine(channelHealthDao.getAllHealth()) { result, healthList ->
+                .combine(channelHealthDao.getAllHealthResilient()) { result, healthList ->
                     result to healthList
                 }
                 .collect { (result, healthList) ->

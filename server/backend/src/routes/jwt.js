@@ -17,9 +17,14 @@ const {
   getRefreshToken,
 } = require('../utils/cookie-auth');
 
+const { securityEnforced } = require('../utils/security-env');
+
 const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
-if (!REFRESH_SECRET && process.env.NODE_ENV === 'production') {
-  throw new Error('JWT_REFRESH_SECRET is required in production');
+// `securityEnforced()` (not NODE_ENV alone) matches server.js and utils/crypto.ts:
+// a real runtime that forgot NODE_ENV=production must not sign refresh tokens
+// with a constant that is published in this repository.
+if (!REFRESH_SECRET && securityEnforced()) {
+  throw new Error('JWT_REFRESH_SECRET is required');
 }
 const effectiveRefreshSecret = REFRESH_SECRET || 'dev-refresh-secret-change-me';
 

@@ -1,8 +1,10 @@
 package com.dzhoof.iptv.data.repository
 
 import android.app.Application
+import android.content.pm.PackageManager
 import android.provider.Settings
 import android.util.Log
+import com.dzhoof.iptv.BuildConfig
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.model.dto.HealthSyncItem
 import com.dzhoof.iptv.data.model.dto.HealthSyncRequest
@@ -30,7 +32,27 @@ class StreamMetricsRepositoryImpl @Inject constructor(
 
     companion object {
         private const val TAG = "StreamMetricsRepo"
+
+        const val PLATFORM_TV = "android_tv"
+        const val PLATFORM_MOBILE = "android_mobile"
     }
+
+    /**
+     * Real device class for telemetry. The DTO used to hardcode "android_tv",
+     * so every phone event was mislabelled and per-form-factor playback quality
+     * could not be measured at all.
+     */
+    private val platform: String
+        get() = if (application.packageManager
+                .hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+        ) PLATFORM_TV else PLATFORM_MOBILE
+
+    /**
+     * Build version that produced the event. Production playback events all had
+     * appVersion = null, so a regression could never be attributed to a release.
+     */
+    private val appVersion: String
+        get() = BuildConfig.VERSION_NAME
 
     override suspend fun reportStreamDead(channelId: String, errorMessage: String?): Result<Unit> =
         withContext(dispatcher) {
@@ -158,7 +180,9 @@ class StreamMetricsRepositoryImpl @Inject constructor(
                         rebufferCount = rebufferCount,
                         fallbackUsed = fallbackUsed,
                         fallbackSucceeded = fallbackSucceeded,
-                        errorCode = errorCode?.take(100)
+                        errorCode = errorCode?.take(100),
+                        platform = platform,
+                        appVersion = appVersion
                     )
                 )
             } catch (e: Exception) {

@@ -30,8 +30,12 @@ function VerifyEmailContent() {
       .post('/auth/verify-email', { token })
       .then(() => {
         setVerified(true);
-        if (user) {
-          setUser({ ...user, emailVerified: true });
+        // Read the CURRENT user from the store: the effect runs once per token
+        // and closes over `user`, which is null until the persisted store
+        // hydrates — so the flag was silently skipped on a fast API response.
+        const current = useAuthStore.getState().user;
+        if (current) {
+          setUser({ ...current, emailVerified: true });
         }
       })
       .catch((err) => {

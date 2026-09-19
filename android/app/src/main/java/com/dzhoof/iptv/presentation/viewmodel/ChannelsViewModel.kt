@@ -13,6 +13,7 @@ import com.dzhoof.iptv.data.source.remote.ForbiddenException
 import com.dzhoof.iptv.presentation.model.ErrorType
 import com.dzhoof.iptv.data.source.local.dao.ChannelDao
 import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
+import com.dzhoof.iptv.data.source.local.dao.getAllHealthResilient
 import com.dzhoof.iptv.data.source.local.dao.FavoriteCategoryDao
 import com.dzhoof.iptv.data.source.local.dao.FavoriteDao
 import com.dzhoof.iptv.data.source.local.dao.PlaybackPositionDao
@@ -59,6 +60,7 @@ private const val POPULAR_CATEGORIES_LIMIT = 10
 private const val FOR_YOU_LIMIT = 12
 private const val HEALTH_SCAN_DEBOUNCE_MS = 500L
 private const val CATEGORY_UPDATE_DEBOUNCE_MS = 1_000L
+private const val CHANNELS_LOG_TAG = "ChannelsViewModel"
 private const val GUIDE_URL = "https://github.com/mostafabonnif-beep/dzhoot/blob/main/android/docs/README.md"
 
 @HiltViewModel
@@ -144,7 +146,7 @@ class ChannelsViewModel @Inject constructor(
 
             combine(
                 channelFlow,
-                channelHealthDao.getAllHealth()
+                channelHealthDao.getAllHealthResilient()
                     .debounce(HEALTH_SCAN_DEBOUNCE_MS)
                     .onStart { emit(emptyList()) },
                 channelPrefsRepository.observeHiddenIds()
@@ -243,7 +245,7 @@ class ChannelsViewModel @Inject constructor(
                             val empty = emptyList<ChannelUiModel>()
                             flowOf(empty to empty)
                         } else {
-                            channelHealthDao.getAllHealth()
+                            channelHealthDao.getAllHealthResilient()
                                 .debounce(HEALTH_SCAN_DEBOUNCE_MS)
                                 .onStart { emit(emptyList()) }
                                 .map { health ->
@@ -270,8 +272,11 @@ class ChannelsViewModel @Inject constructor(
                             )
                         }
                     }
-            } catch (_: Exception) {
-                // Non-critical — HomeScreen will just show defaults
+            } catch (e: Exception) {
+                // Not fatal — the home rows simply stay empty. But swallowing it
+                // silently made a broken API look like "you have no channels",
+                // so record why the rows are missing.
+                android.util.Log.w(CHANNELS_LOG_TAG, "recently-watched rows failed to load", e)
             }
         }
 
@@ -282,7 +287,7 @@ class ChannelsViewModel @Inject constructor(
                     playbackPositionDao.observePopularCategoryIds(POPULAR_CATEGORIES_LIMIT),
                     favoriteCategoryDao.getAllFavoriteCategoryNames(),
                     channelDao.getAllChannels(),
-                    channelHealthDao.getAllHealth()
+                    channelHealthDao.getAllHealthResilient()
                         .debounce(HEALTH_SCAN_DEBOUNCE_MS)
                         .onStart { emit(emptyList()) }
                 ) { popularCatIds, favNames, channelEntities, healthList ->
@@ -315,8 +320,10 @@ class ChannelsViewModel @Inject constructor(
                     .collect { popular ->
                         _uiState.update { it.copy(popularCategories = popular) }
                     }
-            } catch (_: Exception) {
-                // Non-critical
+            } catch (e: Exception) {
+                // Non-fatal, but a silent failure here hides a broken category
+                // endpoint behind an empty home row.
+                android.util.Log.w(CHANNELS_LOG_TAG, "popular categories failed to load", e)
             }
         }
     }
@@ -342,8 +349,10 @@ class ChannelsViewModel @Inject constructor(
                 val seriesItems = (seriesResult as? Result.Success)?.data?.items.orEmpty()
                     .map { CatalogPosterItem(key = it.id, title = it.title, subtitle = it.category, imageUrl = it.poster) }
                 _uiState.update { it.copy(latestMovies = movieItems, latestSeries = seriesItems) }
-            }.onFailure {
-                // Non-critical — rows just stay hidden if the catalog is unavailable
+            }.onFailure { error ->
+                // Non-fatal — the rows stay hidden. Logged so an unavailable
+                // catalog is distinguishable from "no content published".
+                android.util.Log.w(CHANNELS_LOG_TAG, "latest movies/series rows failed to load", error)
             }
         }
     }
@@ -401,7 +410,14 @@ class ChannelsViewModel @Inject constructor(
     private fun loadMatchesToday() {
         matchesTodayJob?.cancel()
         matchesTodayJob = viewModelScope.launch {
-            val matches = runCatching { epgRepository.getMatchesToday() }.getOrDefault(emptyList())
+            val matches = try {
+                epgRepository.getMatchesToday()
+            } catch (e: Exception) {
+                // Best-effort: the row is simply hidden. Logged so a failing
+                // matches endpoint is not mistaken for "no matches today".
+                android.util.Log.w(CHANNELS_LOG_TAG, "matches-today row failed to load", e)
+                emptyList()
+            }
             _uiState.update { it.copy(matchesToday = matches.toUiModels()) }
         }
     }

@@ -1,6 +1,6 @@
 # DZ HOOF Android Release Guide
 
-هذا الدليل يشرح اختبار وإصدار تطبيق DZ HOOF على Android TV وFire TV. الإصدار النهائي يمر عبر workflow `android/.github/workflows/release.yml` بعد دفع tag يبدأ بـ`v`، بينما الإصدار المرشح اليدوي متاح في `.github/workflows/release-candidate.yml`.
+هذا الدليل يشرح اختبار وإصدار تطبيق DZ HOOF على Android TV وFire TV. الإصدار النهائي يمر عبر workflow `.github/workflows/android-release.yml` بعد دفع tag يبدأ بـ`v`، بينما الإصدار المرشح اليدوي متاح في `.github/workflows/release-candidate.yml`.
 
 ## المتطلبات
 

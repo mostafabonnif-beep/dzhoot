@@ -133,6 +133,17 @@ export default function EpgPage() {
 
   const L = (ar: string, fr: string, en: string) => (locale === 'ar' ? ar : locale === 'fr' ? fr : en);
 
+  /** Set by fetchStats (which cannot read `locale`) and translated here. */
+  const EPG_STATS_FAILED = 'epg_stats_failed';
+  const errorText =
+    error === EPG_STATS_FAILED
+      ? L('تعذر تحميل إحصائيات دليل البرامج', 'Impossible de charger les statistiques EPG', 'Failed to load EPG stats')
+      : error;
+
+  // Store a code, not a translated sentence: this callback is memoized with no
+  // deps (it is also the interval callback), so translating inside it froze the
+  // message in the language that was active at mount. The code is turned into
+  // the current language at render time below.
   const fetchStats = useCallback(async () => {
     try {
       const res = await api.get('/epg/status');
@@ -140,9 +151,8 @@ export default function EpgPage() {
         setStats(res.data.data);
       }
     } catch {
-      setError(L('تعذر تحميل إحصائيات دليل البرامج', 'Impossible de charger les statistiques EPG', 'Failed to load EPG stats'));
+      setError(EPG_STATS_FAILED);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchSources = useCallback(async () => {
@@ -322,7 +332,7 @@ export default function EpgPage() {
   if (error && !stats) {
     return (
       <div className="border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-        {error}
+        {errorText}
       </div>
     );
   }
@@ -459,7 +469,7 @@ export default function EpgPage() {
           role="alert"
           className="border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
         >
-          {error}
+          {errorText}
         </div>
       )}
 

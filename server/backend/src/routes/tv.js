@@ -259,7 +259,7 @@ async function resolvePlaybackTarget(payload) {
 
   const Channel = require('../models/Channel');
   const channel = await Channel.findOne({ channelId: payload.channelId, ownerId: null })
-    .select('channelId channelUrl activeUserAgent activeReferrer alternateStreams metadata')
+    .select('channelId channelUrl channelGroup activeUserAgent activeReferrer alternateStreams metadata')
     .lean();
   if (!channel || !channel.channelUrl) return null;
 
@@ -303,7 +303,10 @@ async function resolvePlaybackTarget(payload) {
   }
   // Build the resolved target AFTER the failover/mirror rewrites above —
   // capturing it earlier would cache and return the pre-failover primary URL.
-  const value = { streamUrl, upstreamHeaders };
+  // `channelGroup` rides along so the playback route can re-apply the freemium
+  // scope at consumption time (defence in depth: a token minted before a plan
+  // change, or leaked out of a scoped selection, must not keep playing).
+  const value = { streamUrl, upstreamHeaders, channelGroup: channel.channelGroup ?? '' };
   if (resolvedTargetCache.size > 4000) resolvedTargetCache.clear();
   resolvedTargetCache.set(payload.nonce, { at: Date.now(), value });
   return value;
@@ -1091,6 +1094,23 @@ router.get('/proxy-url/:code', async (req, res) => {
   }
 });
 
+/**
+ * Freemium enforcement at consumption time.
+ *
+ * `/tv/playback-token` and the personal-playlist endpoints already scope what
+ * they mint, but the token itself is the only artifact in a `/playback/:token`
+ * request. Re-check the resolved channel's group here so a token minted before
+ * a plan change (or handed on by a scoped selection) stops working. Returns
+ * true to continue; false after a 403 has been sent.
+ */
+async function enforcePlaybackChannelScope(user, payload, target, res) {
+  if (payload.v !== 2 || target.channelGroup === undefined) return true;
+  const { isGroupAllowedForUser } = require('../services/channel-scope');
+  if (await isGroupAllowedForUser(user, target.channelGroup)) return true;
+  res.status(403).send('Channel is outside your subscription scope');
+  return false;
+}
+
 // Tokenized TV stream proxy. The token carries an encrypted upstream URL and expires quickly.
 // GET /tv/playback/:token/segments/:seq — normalized media-playlist segments
 // addressed by absolute media sequence under the ROOT token (short, stable URLs
@@ -1113,7 +1133,7 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
       channelListCode: payload.channelListCode,
       isActive: true,
       codeRevokedAt: null,
-    }).select('_id channelListCode role');
+    }).select('_id channelListCode role accessGroups freeAccess allCatalog');
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
 
@@ -1121,6 +1141,7 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
     // Channel document (cached briefly); v1 tokens carry it embedded.
     const target = await resolvePlaybackTarget(payload);
     if (!target) return res.status(404).send('Stream not found');
+    if (!(await enforcePlaybackChannelScope(user, payload, target, res))) return;
 
     const rootSessionId = payload.sessionId || token;
     if (!(await isStreamSessionActive(String(user._id), rootSessionId))) {
@@ -1176,7 +1197,7 @@ router.get('/playback/:token', async (req, res) => {
       channelListCode: payload.channelListCode,
       isActive: true,
       codeRevokedAt: null,
-    }).select('_id channelListCode role');
+    }).select('_id channelListCode role accessGroups freeAccess allCatalog');
     if (!user) return res.status(401).send('Playback authorization revoked');
     if (!(await ensurePlaybackSubscription(user, res))) return;
 
@@ -1184,6 +1205,7 @@ router.get('/playback/:token', async (req, res) => {
     // Channel document (cached briefly); v1 tokens carry it embedded.
     const target = await resolvePlaybackTarget(payload);
     if (!target) return res.status(404).send('Stream not found');
+    if (!(await enforcePlaybackChannelScope(user, payload, target, res))) return;
 
     // A valid token is not sufficient by itself: the concurrency session must
     // still be active. This also makes administrative revocation effective.
@@ -1405,7 +1427,7 @@ router.get('/verify/:code', async (req, res) => {
 // Get EPG as XMLTV format by channel list code
 router.get('/epg/:code', async (req, res) => {
   try {
-    const hours = Math.min(parseInt(req.query.hours) || 24, 72);
+    const hours = Math.min(Number.parseInt(req.query.hours, 10) || 24, 72);
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
 
@@ -1455,7 +1477,7 @@ router.get('/epg/:code', async (req, res) => {
 // Get EPG as JSON by channel list code
 router.get('/epg/:code/json', async (req, res) => {
   try {
-    const hours = Math.min(parseInt(req.query.hours) || 24, 72);
+    const hours = Math.min(Number.parseInt(req.query.hours, 10) || 24, 72);
     const user = await findUserByCode(req.params.code, res);
     if (!user) return;
 
@@ -1908,7 +1930,7 @@ router.get('/hls/:token/:file', async (req, res) => {
         channelListCode: payload.channelListCode,
         isActive: true,
         codeRevokedAt: null,
-      }).select('_id channelListCode role');
+      }).select('_id channelListCode role accessGroups freeAccess allCatalog');
       if (!user) return res.status(401).send('Playback authorization revoked');
       if (!(await ensurePlaybackSubscription(user, res))) return;
       if (!(await isStreamSessionActive(String(user._id), payload.sessionId || token))) {

@@ -8,11 +8,33 @@ export function decodeTokenRole(token: string | null | undefined): string | null
   try {
     const payload = token.split('.')[1];
     if (!payload) return null;
-    const json = JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')));
+    // base64url → base64, then pad to a multiple of 4. Browsers are lenient
+    // about missing padding today, but that leniency is not part of the spec:
+    // padding explicitly makes the decode independent of it. A payload that is
+    // still invalid (length ≡ 1 mod 4) throws and returns null below, which is
+    // the correct answer for a corrupt token.
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/').replace(/\s/g, '');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    const json = JSON.parse(decodeBase64UrlText(padded));
     return typeof json?.role === 'string' ? json.role : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Decode base64 text. The payload is UTF-8 (a username can be Arabic), so it is
+ * decoded as UTF-8 when the platform offers `TextDecoder` (every browser we
+ * support, Node 18+). Where it does not — a bare jsdom test environment — the
+ * Latin-1 view is still enough to read an ASCII claim such as `role` out of the
+ * JSON: the mangled characters are never quotes or backslashes, so the document
+ * stays parseable.
+ */
+function decodeBase64UrlText(base64: string): string {
+  const binary = atob(base64);
+  if (typeof TextDecoder === 'undefined') return binary;
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
 
 const api = axios.create({

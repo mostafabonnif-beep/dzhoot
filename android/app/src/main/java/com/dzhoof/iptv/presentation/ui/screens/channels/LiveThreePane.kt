@@ -174,7 +174,11 @@ private fun LiveCategoryPane(
                     focusRequester = focusRequester
                 )
             }
-            itemsIndexed(items = categories, key = { _, name -> name }) { _, name ->
+            // The key MUST carry the position: category labels are not unique
+            // (the same group name can arrive from two sources), and Compose
+            // throws IllegalArgumentException "Key ... was already used" when a
+            // lazy list sees a repeated key — the crash reported from the field.
+            itemsIndexed(items = categories, key = { i, name -> "$i:$name" }) { _, name ->
                 CategoryRow(
                     label = name,
                     count = counts[name] ?: 0,
@@ -224,7 +228,9 @@ private fun LiveChannelListPane(
         contentPadding = PaddingValues(vertical = Dimens.Space2),
         verticalArrangement = Arrangement.spacedBy(Dimens.Space1)
     ) {
-        itemsIndexed(items = channels, key = { _, channel -> channel.id }) { index, channel ->
+        // Position-prefixed for the same reason: a merged catalog can list the
+        // same channel id twice (e.g. two sources exposing one stream).
+        itemsIndexed(items = channels, key = { i, channel -> "$i:${channel.id}" }) { index, channel ->
             LiveChannelRow(
                 number = index + 1,
                 channel = channel,
