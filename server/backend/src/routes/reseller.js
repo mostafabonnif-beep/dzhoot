@@ -55,6 +55,13 @@ function deny(res, key) {
   });
 }
 
+// POST /transfers recipient lookup refusal. An unknown username and an existing
+// but inactive shop MUST be indistinguishable (same status + exact same body),
+// otherwise any reseller can enumerate valid shop usernames and their state.
+// Single shared constant so the two answers can never drift apart.
+const RECIPIENT_NOT_FOUND = { success: false, error: 'Recipient reseller not found' };
+const RECIPIENT_NOT_FOUND_STATUS = 404;
+
 function parseId(id) {
   return mongoose.isValidObjectId(id) ? id : null;
 }
@@ -424,10 +431,21 @@ router.post('/codes/generate', async (req, res) => {
   // Credit rollback state — must live at the handler level so the outer catch
   // can restore the reseller's credit if anything throws after the deduction.
   let creditDeducted = false;
+  let creditRefunded = false; // single-shot: one failure refunds exactly once
+  let codesCommitted = false; // codes minted → credit legitimately spent, never refund
   let planId = null;
   let qty = 0;
-  const rollbackCredit = () =>
-    Reseller.updateOne({ _id: req.reseller._id, 'credit.planId': planId }, { $inc: { 'credit.$.quantity': qty } }).exec();
+  // Idempotent refund: a failure path may call it more than once (inner catch
+  // re-throws into the outer catch), and a generation that already minted codes
+  // must never be refunded — that is how free codes are minted.
+  const rollbackCredit = async () => {
+    if (!creditDeducted || creditRefunded || codesCommitted) return;
+    creditRefunded = true;
+    await Reseller.updateOne(
+      { _id: req.reseller._id, 'credit.planId': planId },
+      { $inc: { 'credit.$.quantity': qty } },
+    ).exec();
+  };
   try {
     const body = req.body || {};
     planId = body.planId ?? null;
@@ -515,6 +533,13 @@ router.post('/codes/generate', async (req, res) => {
         }
       }
     } catch (err) {
+      // No batch was delivered: refund the credit if it was not already
+      // refunded inside the loop (rollbackCredit is idempotent).
+      try {
+        await rollbackCredit();
+      } catch (rollbackErr) {
+        console.error('[reseller] generate credit rollback failed:', rollbackErr);
+      }
       console.error('[reseller] batch create error:', err);
       return res.status(500).json({ success: false, error: 'Internal Server Error' });
     }
@@ -542,6 +567,9 @@ router.post('/codes/generate', async (req, res) => {
       ]);
       return res.status(400).json({ success: false, error: result.error });
     }
+
+    // Codes exist and the batch is delivered: the credit is spent.
+    codesCommitted = true;
 
     const remainingCredit = (updated.credit || []).find((c) => String(c.planId) === String(planId));
     await recordCreditTx({
@@ -571,12 +599,11 @@ router.post('/codes/generate', async (req, res) => {
   } catch (err) {
     // Any throw after the credit deduction (e.g. generateCodes failing) must
     // restore the reseller's credit — never let them pay for codes they don't get.
+    // rollbackCredit() is idempotent, so an inner catch that already refunded
+    // (and re-threw) cannot turn one failure into a double refund.
     if (creditDeducted) {
       try {
-        await Reseller.updateOne(
-          { _id: req.reseller._id, 'credit.planId': planId },
-          { $inc: { 'credit.$.quantity': qty } },
-        ).exec();
+        await rollbackCredit();
       } catch (rollbackErr) {
         console.error('[reseller] generate credit rollback failed:', rollbackErr);
       }
@@ -634,7 +661,9 @@ router.get('/batches', async (req, res) => {
 
 // GET /batches/:id/codes — PLAINTEXT codes of one of their batches (they sell these).
 // Activated codes also expose the subscription window (the days the customer got).
+// Full code inventory = viewHistory capability (same flag as GET /codes/:id).
 router.get('/batches/:id/codes', async (req, res) => {
+  if (!hasPerm(req.reseller, 'viewHistory')) return deny(res, 'viewHistory');
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
@@ -685,7 +714,10 @@ router.get('/batches/:id/codes', async (req, res) => {
 });
 
 // GET /batches/:id/export — printable sheet of one of their batches
+// Printable (customer details + plaintext codes) = exportM3U capability,
+// the same flag that guards the per-code playlist export.
 router.get('/batches/:id/export', async (req, res) => {
+  if (!hasPerm(req.reseller, 'exportM3U')) return deny(res, 'exportM3U');
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid id' });
@@ -805,7 +837,7 @@ router.post('/transfers', async (req, res) => {
     const usernames = await Reseller.distinct('username').exec();
     const usernameIdx = usernames.indexOf(toUser);
     if (usernameIdx === -1) {
-      return res.status(404).json({ success: false, error: 'Recipient reseller not found' });
+      return res.status(RECIPIENT_NOT_FOUND_STATUS).json(RECIPIENT_NOT_FOUND);
     }
     const recipientUsername = usernames[usernameIdx]; // value from the DB, not the client
 
@@ -815,9 +847,10 @@ router.post('/transfers', async (req, res) => {
       // the query never receives raw client text.
       Plan.findOne({ _id: new mongoose.Types.ObjectId(planId) }).select('name durationDays status').lean().exec(),
     ]);
-    if (!recipient) return res.status(404).json({ success: false, error: 'Recipient reseller not found' });
-    if (recipient.status !== 'Active') {
-      return res.status(400).json({ success: false, error: 'Recipient reseller is inactive' });
+    // Unknown username and inactive shop answer with the identical refusal —
+    // otherwise this endpoint enumerates valid shop usernames + their state.
+    if (!recipient || recipient.status !== 'Active') {
+      return res.status(RECIPIENT_NOT_FOUND_STATUS).json(RECIPIENT_NOT_FOUND);
     }
     if (!plan || plan.status !== 'Active') {
       return res.status(400).json({ success: false, error: 'Plan not found or inactive' });
@@ -1737,12 +1770,20 @@ router.get('/sub-resellers', requireResellerOrApiKeyForReads, async (req, res) =
 router.post('/sub-resellers', async (req, res) => {
   if (!requireSubResellerPerm(req, res)) return;
   let creditDeducted = false;
+  let creditRefunded = false; // single-shot: one failure refunds exactly once
+  let creditCommitted = false; // sub created → credit legitimately allocated, never refund
   let planObjId = null;
   let qty = 0;
-  const rollback = () =>
-    planObjId
-      ? Reseller.updateOne({ _id: req.reseller._id, 'credit.planId': planObjId }, { $inc: { 'credit.$.quantity': qty } }).exec()
-      : Promise.resolve();
+  // Idempotent refund: the create-failure path refunds and re-throws into the
+  // outer catch, which must not refund the parent a second time.
+  const rollback = async () => {
+    if (!creditDeducted || creditRefunded || creditCommitted || !planObjId) return;
+    creditRefunded = true;
+    await Reseller.updateOne(
+      { _id: req.reseller._id, 'credit.planId': planObjId },
+      { $inc: { 'credit.$.quantity': qty } },
+    ).exec();
+  };
   try {
     const { planId: bodyPlanId, credit } = req.body || {};
     const cleanName = String((req.body || {}).name || '').trim();
@@ -1821,6 +1862,9 @@ router.post('/sub-resellers', async (req, res) => {
       throw err;
     }
 
+    // The sub-reseller exists with its allocated credit — the deduction is final.
+    creditCommitted = true;
+
     if (planObjId) {
       try {
         await recordCreditTx({
@@ -1857,7 +1901,13 @@ router.post('/sub-resellers', async (req, res) => {
       },
     });
   } catch (err) {
-    if (creditDeducted) await rollback();
+    if (creditDeducted) {
+      try {
+        await rollback();
+      } catch (rollbackErr) {
+        console.error('[reseller] sub-reseller credit rollback failed:', rollbackErr);
+      }
+    }
     console.error('[reseller] sub-reseller create error:', err);
     res.status(500).json({ success: false, error: 'Internal Server Error' });
   }
