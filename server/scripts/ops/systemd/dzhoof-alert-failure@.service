@@ -1,0 +1,10 @@
+[Unit]
+Description=DZ HOOF failure notifier for %i
+# Referenced from each dzhoof unit that must not fail silently:
+#   OnFailure=dzhoof-alert-failure@%n.service
+# The instance (%i) is the failed unit's name, and it is passed to the notifier so the
+# alert says which unit failed — the previous notifier never received it.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/dzhoof-failure-notify %i
