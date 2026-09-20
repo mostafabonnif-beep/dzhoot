@@ -89,6 +89,25 @@ describe('POST /api/v1/app/crash-report — no secrets reach storage', () => {
     expect(stored.appVersionCode).toBe(10301);
   });
 
+  it('redacts the thread name too, because the device sends it as free text', async () => {
+    const response = await post({
+      deviceId: 'device-1',
+      appVersion: '1.3.1',
+      exceptionMessage: 'boom',
+      threadName: `OkHttp Dispatcher ${USERINFO_URL}`,
+    });
+
+    expect(response.status).toBe(201);
+    const stored = await CrashReport.findById(response.body.id).lean();
+    expect(stored).not.toBeNull();
+
+    expect(stored.threadName).not.toContain('SuperSecret1');
+    expect(stored.threadName).not.toContain('dz-user');
+    expect(stored.threadName).toContain('[redacted');
+    // Still useful for triage: the thread that failed survives.
+    expect(stored.threadName).toContain('OkHttp Dispatcher');
+  });
+
   it('keeps the report identifiable when the payload carries only the token', async () => {
     const response = await post({
       appVersion: '1.3.1',

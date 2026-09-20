@@ -32,6 +32,9 @@ sealed class Screen(val route: String) {
     object Search : Screen("search")
     object Favorites : Screen("favorites")
     object Settings : Screen("settings")
+
+    /** «إبلاغ عن مشكلة» — the customer report form. */
+    object ReportProblem : Screen("report_problem")
     object Diagnostics : Screen("diagnostics")
     object AddSource : Screen("add_source")
     object ManageChannels : Screen("manage_channels")
