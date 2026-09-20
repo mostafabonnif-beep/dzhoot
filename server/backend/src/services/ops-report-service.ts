@@ -4,11 +4,51 @@ import Subscription from '../models/Subscription';
 import ActivationCode from '../models/ActivationCode';
 import Reseller from '../models/Reseller';
 import Plan from '../models/Plan';
+import Channel from '../models/Channel';
+import XtreamSource from '../models/XtreamSource';
+import { verifiedXtreamChannelQuery } from '../utils/verified-channel-query';
 import { sendEmail } from './email';
 import { sendOperationalAlert } from './alert-notifier';
 import { sendNotificationToDevices } from './fcm-service';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Catalog health, as four numbers an operator can act on.
+ *
+ * Why it lives in the daily report: on 2026-09-20 the primary provider account had been
+ * expired for five days and 13,409 channels belonged to a source that no longer existed
+ * at all. Nothing said so — the report listed activations and subscriptions, all healthy,
+ * while the catalog the customer actually opens had shrunk to ~2.8k playable channels.
+ * Those two failure modes need different fixes (renew the provider vs. drop/re-import the
+ * orphans), so they are counted separately. A source-level error string cannot express it:
+ * the leaked channels answer HTTP 200 with a `black.ts` placeholder.
+ */
+async function buildCatalogHealth(): Promise<{ block: string; stats: Record<string, number> }> {
+  const sourceIds = (await XtreamSource.find({}).distinct('_id')).map((id) => String(id));
+  const [active, dead, orphaned, visible] = await Promise.all([
+    Channel.countDocuments({ isActive: { $ne: false } }),
+    Channel.countDocuments({ isActive: { $ne: false }, 'metadata.isWorking': false }),
+    Channel.countDocuments({
+      isActive: { $ne: false },
+      'metadata.source': 'xtream',
+      'metadata.xtreamSourceId': { $nin: sourceIds },
+    }),
+    Channel.countDocuments(await verifiedXtreamChannelQuery({ ownerId: null }, { dedup: true })),
+  ]);
+
+  const stats = { catalogActive: active, catalogVisible: visible, catalogDead: dead, catalogOrphaned: orphaned };
+  const lines = [
+    `• قنوات نشطة: ${active}`,
+    `• مرئية للعميل الآن: ${visible}`,
+    `• ميتة (تُعيد شاشة سوداء): ${dead}`,
+    `• يتيمة (مصدرها لم يعد موجودًا): ${orphaned}`,
+  ];
+  if (dead > 0 || orphaned > 0) {
+    lines.push('  ↳ لا تروّج للكتالوج قبل معالجة هذا — راجع المصادر في اللوحة.');
+  }
+  return { block: lines.join('\n'), stats };
+}
 
 /**
  * Daily operations report — emailed to every Admin each morning:
@@ -57,6 +97,7 @@ export async function sendDailyOpsReport(): Promise<{
       .join('\n');
 
     const dateStr = yesterdayStart.toISOString().slice(0, 10);
+    const catalogHealth = await buildCatalogHealth();
     const subject = `تقرير DZ HOOF اليومي — ${dateStr}`;
     const variables: Record<string, string> = {
       date: dateStr,
@@ -64,6 +105,7 @@ export async function sendDailyOpsReport(): Promise<{
       perReseller: perResellerLines || 'لا توجد تفعيلات لمحلات أمس.',
       newUsers: String(newUsers),
       activeSubs: String(activeSubs),
+      catalogHealth: catalogHealth.block,
     };
 
     // Count what was actually delivered. The previous version discarded the result
@@ -97,6 +139,9 @@ export async function sendDailyOpsReport(): Promise<{
         `• مستخدمون جدد: ${newUsers}`,
         `• اشتراكات نشطة: ${activeSubs}`,
         '',
+        'صحة الكتالوج:',
+        catalogHealth.block,
+        '',
         'وصل عبر قنوات التنبيه لأن قناة البريد غير قابلة للتسليم.',
       ]
         .filter((line) => line !== undefined && line !== null && line !== '')
@@ -107,7 +152,7 @@ export async function sendDailyOpsReport(): Promise<{
         event: `ops-report:${dateStr}`,
         severity: 'warning',
         message: summary,
-        details: { activated: activatedYesterday, newUsers, activeSubs },
+        details: { activated: activatedYesterday, newUsers, activeSubs, ...catalogHealth.stats },
       });
       if (alerted) {
         console.warn(

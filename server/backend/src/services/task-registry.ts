@@ -798,7 +798,7 @@ const tasks: TaskDefinition[] = [
   {
     name: 'daily-report',
     displayName: 'Daily Operations Report',
-    description: 'Email admins a daily summary: codes activated per reseller, new users, active subscriptions',
+    description: 'Email admins a daily summary: codes activated per reseller, new users, active subscriptions, catalog health',
     intervalMs: OPS_REPORT_INTERVAL,
     handler: dailyReportHandler,
   },
