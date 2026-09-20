@@ -9,9 +9,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
 import com.dzhoof.iptv.R
 import com.dzhoof.iptv.presentation.model.UpdateInfo
 import com.dzhoof.iptv.presentation.ui.components.AppSpinner
@@ -35,6 +38,8 @@ internal fun AboutSection(
     onUpdateNow: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onOpenReportProblem: () -> Unit,
+    /** Operator support channel (Telegram today). Blank hides the entry entirely. */
+    supportUrl: String = "",
     modifier: Modifier = Modifier
 ) {
     val busy = isChecking || isDownloading
@@ -135,6 +140,43 @@ internal fun AboutSection(
                 }
             }
         )
+
+        // Support/contact channel. Rendered only when the operator configured one: with no
+        // working email channel, this is the customer's route for account recovery, and a
+        // link that opens nothing would be worse than no link at all.
+        if (supportUrl.isNotBlank()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            HorizontalDivider(color = subtleBorder)
+            Spacer(modifier = Modifier.height(10.dp))
+            val context = LocalContext.current
+            SettingRowLayout(
+                text = {
+                    Text(
+                        text = "الدعم والتواصل",
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = "استعادة كلمة المرور أو أي استفسار — تفتح قناة الدعم الرسمية",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                },
+                action = {
+                    FocusAwareOutlinedButton(onClick = {
+                        // A device with no app able to open the link must not crash the
+                        // settings screen; the URL is operator-supplied.
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(supportUrl)))
+                        }
+                    }) {
+                        Text(text = "الدعم  ▸", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            )
+        }
     }
 }
 
