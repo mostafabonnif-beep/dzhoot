@@ -840,6 +840,18 @@ export default function SettingsPage() {
                 ? 'L\'URL du webhook (Discord/Slack…) reçoit chaque alerte opérationnelle. Les identifiants Brevo activent l\'e-mail (rapports quotidiens, alertes d\'expiration).'
                 : 'Webhook URL (Discord/Slack…) receives every operational alert. Brevo credentials enable email (daily reports, expiry alerts).'}
           </p>
+          {/* The mail channel is off by design on this platform. Say so where the operator
+              looks for it, so "why did nobody get the reminder?" has an answer on the page
+              instead of in a log: Telegram + the in-app inbox + Push carry those alerts. */}
+          {!brevoConfigured && (
+            <p className="text-xs leading-relaxed border-s-2 border-signal-amber/60 ps-2 text-muted-foreground">
+              {locale === 'ar'
+                ? 'البريد غير مفعَّل على هذه المنصة (مقصود): تنبيهاتك التشغيلية تصل عبر Telegram، وتذكيرات العملاء عبر صندوق التطبيق و Push. حقول Brevo هنا تبقى للتفعيل لاحقًا فقط — وما لم تُملأ، لن يُرسَل أي بريد ولن يعمل زر الاختبار.'
+                : locale === 'fr'
+                  ? 'L\'e-mail est désactivé sur cette plateforme (choix assumé) : les alertes passent par Telegram, et les rappels clients par la boîte in-app et le push. Les champs Brevo servent uniquement à le réactiver plus tard.'
+                  : 'Email is disabled on this platform by design: alerts go to Telegram, customer reminders go to the in-app inbox and push. The Brevo fields are only for re-enabling it later.'}
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5 sm:col-span-2">
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Webhook URL</label>
@@ -967,6 +979,9 @@ export default function SettingsPage() {
               {alertTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <BellRing className="h-4 w-4" />}
               {locale === 'ar' ? 'إرسال تنبيه تجريبي' : locale === 'fr' ? 'Alerte test' : 'Send test alert'}
             </button>
+            {/* Hidden until credentials exist: the endpoint can only fail with "not
+                configured", and a button that always errors reads as a broken platform. */}
+            {brevoConfigured && (
             <button
               onClick={async () => {
                 setEmailTesting(true);
@@ -985,6 +1000,7 @@ export default function SettingsPage() {
               {emailTesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
               {locale === 'ar' ? 'إرسال بريد تجريبي' : locale === 'fr' ? 'E-mail test' : 'Send test email'}
             </button>
+            )}
           </div>
         </div>
       </div>
