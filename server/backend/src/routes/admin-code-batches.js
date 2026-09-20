@@ -100,23 +100,39 @@ router.post('/', async (req, res) => {
 
     // Sequential batch number per reseller: دفعة 1، دفعة 2، …
     const lastBatch = await CodeBatch.findOne({ resellerId }).sort({ batchNumber: -1 }).select('batchNumber').lean().exec();
-    const batchNumber = (lastBatch?.batchNumber || 0) + 1;
+    let batchNumber = (lastBatch?.batchNumber || 0) + 1;
 
     const receipt = receiptDate ? new Date(receiptDate) : new Date();
     if (Number.isNaN(receipt.getTime())) return res.status(400).json({ success: false, error: 'Invalid receiptDate' });
 
-    const batch = await CodeBatch.create({
-      resellerId,
-      planId,
-      batchNumber,
-      quantity: qty,
-      wholesalePrice: wholesalePrice !== null ? wholesalePrice : null,
-      wholesaleTotal: wholesaleTotal !== null ? wholesaleTotal : null,
-      receiptDate: receipt,
-      notes: String(notes || '').trim(),
-      status: 'delivered',
-      createdBy: req.user?.id || null,
-    });
+    // batchNumber is unique per { resellerId, batchNumber }: two admins delivering
+    // to the same shop concurrently read the same "last" number, so the loser's
+    // create hits E11000. Mirror the reseller portal (routes/reseller.js): retry
+    // with the next number instead of turning a race into a 500.
+    let batch = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        batch = await CodeBatch.create({
+          resellerId,
+          planId,
+          batchNumber,
+          quantity: qty,
+          wholesalePrice: wholesalePrice !== null ? wholesalePrice : null,
+          wholesaleTotal: wholesaleTotal !== null ? wholesaleTotal : null,
+          receiptDate: receipt,
+          notes: String(notes || '').trim(),
+          status: 'delivered',
+          createdBy: req.user?.id || null,
+        });
+        break;
+      } catch (batchErr) {
+        if (batchErr?.code === 11000 && attempt < 2) {
+          batchNumber += 1;
+          continue;
+        }
+        throw batchErr;
+      }
+    }
 
     // Match the reseller-portal behaviour: codes expire after code_expiry_days
     // so the daily task can expire stale codes and return their credit.

@@ -438,5 +438,74 @@ describe('CinetPay payment routes', () => {
       expect(typeof res.body.data.code).toBe('string');
       expect(await ActivationCode.countDocuments({ planId: plan._id })).toBe(1);
     });
+
+    describe('money validation (P-4)', () => {
+      it('refuses to fulfil when the verified transaction reports a different amount', async () => {
+        const plan = await Plan.create({ name: 'سنوي', durationDays: 365, price: 4500, currency: 'DZD', maxDevices: 2, maxConcurrentStreams: 2 });
+        const payment = await Payment.create({
+          provider: 'cinetpay',
+          publicToken: 'tok_cinetpay_mismatch_amount',
+          checkoutId: 'tok_cinetpay_mismatch_amount',
+          status: 'pending',
+          planId: plan._id,
+          amount: 4500,
+          currency: 'DZD',
+        });
+        cinetpayService.checkCinetpayTransaction.mockResolvedValue({
+          status: 'ACCEPTED',
+          amount: 500,
+          currency: 'XOF',
+        });
+
+        const res = await request(buildApp())
+          .post('/api/v1/payments/cinetpay/webhook')
+          .type('form')
+          .send({ cpm_trans_id: 'tok_cinetpay_mismatch_amount' });
+
+        // Non-2xx so CinetPay (and its delivery log) surfaces the mismatch to operators.
+        expect(res.status).toBe(500);
+
+        const saved = await Payment.findById(payment._id).select('+codeEnc').exec();
+        expect(saved!.status).toBe('pending');
+        expect(saved!.activationCodeId).toBeFalsy();
+        expect(saved!.codeEnc).toBeFalsy();
+        expect(saved!.failureReason).toMatch(/amount gateway=500 payment=4500/);
+        expect(saved!.failureReason).toMatch(/currency gateway=xof payment=dzd/);
+        expect(await ActivationCode.countDocuments({ planId: plan._id })).toBe(0);
+        expect(subscriptionService.generateCodes).not.toHaveBeenCalled();
+      });
+
+      it('still fulfils when the verified amount and currency agree (no false positive)', async () => {
+        const plan = await Plan.create({ name: 'سنوي', durationDays: 365, price: 4500, currency: 'DZD', maxDevices: 2, maxConcurrentStreams: 2 });
+        const payment = await Payment.create({
+          provider: 'cinetpay',
+          publicToken: 'tok_cinetpay_match',
+          checkoutId: 'tok_cinetpay_match',
+          status: 'pending',
+          planId: plan._id,
+          amount: 4500,
+          currency: 'DZD',
+        });
+        cinetpayService.checkCinetpayTransaction.mockResolvedValue({
+          status: 'ACCEPTED',
+          amount: 4500,
+          currency: 'DZD',
+          transaction_id: 'tok_cinetpay_match',
+          payment_method: 'MTN_CI',
+        });
+
+        const res = await request(buildApp())
+          .post('/api/v1/payments/cinetpay/webhook')
+          .type('form')
+          .send({ cpm_trans_id: 'tok_cinetpay_match' });
+
+        expect(res.status).toBe(200);
+        const saved = await Payment.findById(payment._id).select('+codeEnc').exec();
+        expect(saved!.status).toBe('paid');
+        expect(saved!.activationCodeId).toBeTruthy();
+        expect(saved!.failureReason).toBeFalsy();
+        expect(await ActivationCode.countDocuments({ planId: plan._id })).toBe(1);
+      });
+    });
   });
 });

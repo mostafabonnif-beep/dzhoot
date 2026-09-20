@@ -332,6 +332,153 @@ describe('Chargily payment routes', () => {
       expect(updated!.status).toBe('failed');
     });
 
+    describe('money validation (P-4)', () => {
+      it('refuses to fulfil when the paid checkout reports a lower amount (P-4)', async () => {
+        chargilyService.verifyWebhookSignature.mockReturnValue(true);
+        const plan = await Plan.create({ name: 'شهري', durationDays: 30, price: 500, currency: 'DZD', maxDevices: 1, maxConcurrentStreams: 1 });
+        const payment = await Payment.create({
+          provider: 'chargily',
+          publicToken: 'tok_mismatch_amount',
+          checkoutId: 'chk_mismatch_amount',
+          status: 'pending',
+          planId: plan._id,
+          amount: 500,
+          currency: 'dzd',
+        });
+
+        const res = await request(buildApp())
+          .post('/api/v1/payments/chargily/webhook')
+          .set('signature', 'valid')
+          .set('Content-Type', 'application/json')
+          .send(
+            rawBodyOf({
+              type: 'checkout.paid',
+              data: { id: 'chk_mismatch_amount', amount: 100, currency: 'dzd', payment_method: 'edahabia' },
+            }),
+          );
+
+        // Non-2xx: the gateway must not be silently ACKed for money we did not validate.
+        expect(res.status).toBe(500);
+
+        const updated = await Payment.findById(payment._id).select('+codeEnc').exec();
+        expect(updated!.status).toBe('pending');
+        expect(updated!.activationCodeId).toBeFalsy();
+        expect(updated!.codeEnc).toBeFalsy();
+        expect(updated!.failureReason).toMatch(/mismatch/i);
+        expect(updated!.failureReason).toMatch(/amount gateway=100 payment=500/);
+        expect(await ActivationCode.countDocuments({ planId: plan._id })).toBe(0);
+        expect(subscriptionService.generateCodes).not.toHaveBeenCalled();
+      });
+
+      it('refuses to fulfil when the checkout reports a different currency (P-4)', async () => {
+        chargilyService.verifyWebhookSignature.mockReturnValue(true);
+        const plan = await Plan.create({ name: 'شهري', durationDays: 30, price: 500, currency: 'DZD', maxDevices: 1, maxConcurrentStreams: 1 });
+        const payment = await Payment.create({
+          provider: 'chargily',
+          publicToken: 'tok_mismatch_currency',
+          checkoutId: 'chk_mismatch_currency',
+          status: 'pending',
+          planId: plan._id,
+          amount: 500,
+          currency: 'dzd',
+        });
+
+        const res = await request(buildApp())
+          .post('/api/v1/payments/chargily/webhook')
+          .set('signature', 'valid')
+          .set('Content-Type', 'application/json')
+          .send(
+            rawBodyOf({
+              type: 'checkout.paid',
+              data: { id: 'chk_mismatch_currency', amount: 500, currency: 'eur' },
+            }),
+          );
+
+        expect(res.status).toBe(500);
+        const updated = await Payment.findById(payment._id).select('+codeEnc').exec();
+        expect(updated!.status).toBe('pending');
+        expect(updated!.codeEnc).toBeFalsy();
+        expect(updated!.failureReason).toMatch(/currency gateway=eur payment=dzd/);
+        expect(await ActivationCode.countDocuments({ planId: plan._id })).toBe(0);
+      });
+
+      it('refuses to fulfil when the checkout echoes a different payment token (P-4)', async () => {
+        chargilyService.verifyWebhookSignature.mockReturnValue(true);
+        const plan = await Plan.create({ name: 'شهري', durationDays: 30, price: 500, currency: 'DZD', maxDevices: 1, maxConcurrentStreams: 1 });
+        const payment = await Payment.create({
+          provider: 'chargily',
+          publicToken: 'tok_mismatch_token',
+          checkoutId: 'chk_mismatch_token',
+          status: 'pending',
+          planId: plan._id,
+          amount: 500,
+          currency: 'dzd',
+        });
+
+        const res = await request(buildApp())
+          .post('/api/v1/payments/chargily/webhook')
+          .set('signature', 'valid')
+          .set('Content-Type', 'application/json')
+          .send(
+            rawBodyOf({
+              type: 'checkout.paid',
+              // Chargily echoes our creation metadata as an array of single-key objects.
+              data: {
+                id: 'chk_mismatch_token',
+                amount: 500,
+                currency: 'dzd',
+                metadata: [{ paymentToken: 'someone-elses-token' }, { planId: String(plan._id) }],
+              },
+            }),
+          );
+
+        expect(res.status).toBe(500);
+        const updated = await Payment.findById(payment._id).select('+codeEnc').exec();
+        expect(updated!.status).toBe('pending');
+        expect(updated!.codeEnc).toBeFalsy();
+        expect(updated!.failureReason).toMatch(/token gateway=someone-elses-token/);
+        expect(await ActivationCode.countDocuments({ planId: plan._id })).toBe(0);
+      });
+
+      it('still fulfils when amount, currency and echoed metadata all agree (no false positive)', async () => {
+        chargilyService.verifyWebhookSignature.mockReturnValue(true);
+        const plan = await Plan.create({ name: 'شهري', durationDays: 30, price: 500, currency: 'DZD', maxDevices: 1, maxConcurrentStreams: 1 });
+        const payment = await Payment.create({
+          provider: 'chargily',
+          publicToken: 'tok_match_all',
+          checkoutId: 'chk_match_all',
+          status: 'pending',
+          planId: plan._id,
+          amount: 500,
+          currency: 'dzd',
+        });
+
+        const res = await request(buildApp())
+          .post('/api/v1/payments/chargily/webhook')
+          .set('signature', 'valid')
+          .set('Content-Type', 'application/json')
+          .send(
+            rawBodyOf({
+              type: 'checkout.paid',
+              data: {
+                id: 'chk_match_all',
+                amount: 500,
+                currency: 'DZD',
+                payment_method: 'edahabia',
+                metadata: [{ paymentToken: 'tok_match_all' }, { planId: String(plan._id) }],
+              },
+            }),
+          );
+
+        expect(res.status).toBe(200);
+        const updated = await Payment.findById(payment._id).select('+codeEnc').exec();
+        expect(updated!.status).toBe('paid');
+        expect(updated!.activationCodeId).toBeTruthy();
+        expect(updated!.failureReason).toBeFalsy();
+        expect(await ActivationCode.countDocuments({ planId: plan._id })).toBe(1);
+      });
+    });
+
     /** Backdate a field through the driver so the schema's timestamps plugin
      * cannot rewrite it (needed to reach the poll's >15s reconciliation window
      * and the stale-claim takeover). */

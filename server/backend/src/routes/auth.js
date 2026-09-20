@@ -1125,11 +1125,14 @@ router.get('/google', (req, res) => {
     `${req.protocol}://${req.get('host')}/api/v1/auth/google/callback`;
 
   if (!googleClientId || googleClientId === 'your-google-client-id') {
-    return res
-      .status(500)
-      .send(
-        'Google OAuth is not configured. Please set GOOGLE_CLIENT_ID in environment variables.',
-      );
+    // Unconfigured feature, not a server fault: answer 503 with a stable code
+    // (same shape as /api/v1/payments' PAYMENTS_NOT_CONFIGURED) instead of a
+    // plain-text 500 that looks like an unhandled error to scanners/clients.
+    return res.status(503).json({
+      success: false,
+      error: 'Google OAuth is not configured',
+      code: 'OAUTH_NOT_CONFIGURED',
+    });
   }
 
   // Generate CSRF state parameter
@@ -1293,11 +1296,12 @@ router.get('/github', (req, res) => {
     `${req.protocol}://${req.get('host')}/api/v1/auth/github/callback`;
 
   if (!githubClientId || githubClientId === 'your-github-client-id') {
-    return res
-      .status(500)
-      .send(
-        'GitHub OAuth is not configured. Please set GH_OAUTH_CLIENT_ID in environment variables.',
-      );
+    // Same shape as the Google branch above — see the note there.
+    return res.status(503).json({
+      success: false,
+      error: 'GitHub OAuth is not configured',
+      code: 'OAUTH_NOT_CONFIGURED',
+    });
   }
 
   // Generate CSRF state parameter

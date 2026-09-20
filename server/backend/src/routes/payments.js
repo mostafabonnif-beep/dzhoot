@@ -74,9 +74,89 @@ function isAwaitingFulfillment(status) {
   return status === 'pending' || status === 'processing';
 }
 
-/** Fulfilment outcomes the gateway must NOT be ACKed for, so it retries. */
+/** Fulfilment outcomes the gateway must NOT be ACKed for: 'in-flight'/'retry'
+ * are transient and a retry can finish the fulfilment; 'mismatch' is permanent
+ * but a non-2xx is exactly what keeps it visible to operators (and to the
+ * gateway's delivery log) instead of silently ACKing money we never validated. */
 function mustRetryFulfillment(outcome) {
-  return outcome === 'in-flight' || outcome === 'retry';
+  return outcome === 'in-flight' || outcome === 'retry' || outcome === 'mismatch';
+}
+
+/* ── Money validation (defense in depth, P-4) ────────────────────────────────
+ * A gateway payload is only allowed to fulfil a payment when the money it
+ * reports agrees with the amount/currency we recorded at checkout creation.
+ * Both webhooks (and the status-poll reconciliation) funnel through
+ * fulfillPayment, so the check lives there rather than in each handler.
+ *
+ * Only fields the payload actually carries are compared — Chargily webhooks in
+ * particular can arrive without amount/currency and must keep working. The
+ * payment token is cross-checked when present: Chargily echoes the metadata we
+ * sent at creation ([{ paymentToken }, { planId }]), CinetPay's /payment/check
+ * answers with transaction_id (our publicToken).
+ */
+
+/** Chargily returns metadata as an array of single-key objects; CinetPay may
+ * echo it as a JSON string. Normalize all of those to a plain object — an
+ * unknown/unparseable shape yields {} (no token to check, never a false alarm). */
+function normalizeGatewayMetadata(metadata) {
+  let value = metadata;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  if (Array.isArray(value)) {
+    const merged = {};
+    for (const entry of value) {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) Object.assign(merged, entry);
+    }
+    return merged;
+  }
+  return value && typeof value === 'object' ? value : {};
+}
+
+/**
+ * Compare a gateway payload against the payment we recorded. Returns a
+ * human-readable description of every disagreement, or null when consistent
+ * (or when the payload carries nothing to compare — see above).
+ */
+function gatewayPaymentMismatch(payment, gatewayData) {
+  if (!gatewayData || typeof gatewayData !== 'object') return null;
+  const problems = [];
+
+  const rawAmount = gatewayData.amount;
+  if (rawAmount !== undefined && rawAmount !== null && rawAmount !== '') {
+    const gatewayAmount = Number(rawAmount);
+    const expectedAmount = Number(payment.amount);
+    if (!Number.isFinite(gatewayAmount)) {
+      problems.push(`amount unparseable (gateway=${String(rawAmount)})`);
+    } else if (gatewayAmount !== expectedAmount) {
+      problems.push(`amount gateway=${gatewayAmount} payment=${expectedAmount}`);
+    }
+  }
+
+  const rawCurrency = gatewayData.currency;
+  if (rawCurrency !== undefined && rawCurrency !== null && String(rawCurrency).trim() !== '') {
+    const gatewayCurrency = String(rawCurrency).trim().toLowerCase();
+    const expectedCurrency = String(payment.currency || '').trim().toLowerCase();
+    if (gatewayCurrency !== expectedCurrency) {
+      problems.push(`currency gateway=${gatewayCurrency} payment=${expectedCurrency}`);
+    }
+  }
+
+  const metadata = normalizeGatewayMetadata(gatewayData.metadata);
+  const rawToken = metadata.paymentToken ?? metadata.payment_token ?? gatewayData.transaction_id;
+  if (rawToken !== undefined && rawToken !== null && String(rawToken).trim() !== '') {
+    const gatewayToken = String(rawToken).trim();
+    const expectedToken = String(payment.publicToken || '').trim();
+    if (gatewayToken !== expectedToken) {
+      problems.push(`token gateway=${gatewayToken} payment=${expectedToken}`);
+    }
+  }
+
+  return problems.length ? problems.join('; ') : null;
 }
 
 // GET /api/v1/payments/status/:token — provider-agnostic polling for the
@@ -556,6 +636,20 @@ async function releaseFulfillmentClaim(paymentId, claimToken, reason) {
 }
 
 /**
+ * Mark a payment whose gateway payload failed the money check, without ever
+ * minting a code and without inventing a second state machine: claim it through
+ * claimFulfillment and immediately hand the claim back via
+ * releaseFulfillmentClaim, so the row ends up 'pending' with the mismatch in
+ * failureReason — visible for reconciliation, never 'failed' (the money may
+ * well be captured) and never stuck in 'processing'.
+ */
+async function recordFulfillmentMismatch(payment, reason) {
+  const claim = await claimFulfillment(payment._id);
+  if (!claim) return; // Already settled, or another trigger holds the claim.
+  await releaseFulfillmentClaim(claim._id, claim.updatedAt, reason);
+}
+
+/**
  * Turn a confirmed online payment (Chargily or CinetPay) into exactly one
  * activation code — the same hashed/encrypted-at-rest code mechanism resellers
  * and admins already use.
@@ -571,11 +665,24 @@ async function releaseFulfillmentClaim(paymentId, claimToken, reason) {
  *   'settled'   — already fulfilled or terminally failed: nothing to do, ACK;
  *   'in-flight' — another trigger holds a live claim: don't ACK, retry later;
  *   'retry'     — we claimed it but code generation failed and the claim was
- *                 released back to 'pending': don't ACK, retry later (P-2).
+ *                 released back to 'pending': don't ACK, retry later (P-2);
+ *   'mismatch'  — the gateway payload disagrees with the payment's amount,
+ *                 currency or token (P-4): do NOT fulfil, do NOT ACK, leave the
+ *                 row 'pending' with the reason recorded for reconciliation.
  * Code-generation failures never throw; only an unexpected write failure while
  * releasing the claim can, and the callers keep their own try/catch for that.
  */
 async function fulfillPayment(payment, checkoutData) {
+  const mismatch = gatewayPaymentMismatch(payment, checkoutData);
+  if (mismatch) {
+    const reason = `Gateway/payment mismatch: ${mismatch}`;
+    console.error(
+      `[payments][MONEY-MISMATCH] provider=${payment.provider} payment=${payment._id} checkout=${payment.checkoutId} — ${mismatch}; refusing to fulfil`,
+    );
+    await recordFulfillmentMismatch(payment, reason);
+    return { outcome: 'mismatch' };
+  }
+
   const claim = await claimFulfillment(payment._id);
   if (!claim) {
     // Loser: write nothing — the winner's fields (code, status) stay untouched.
