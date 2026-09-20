@@ -26,14 +26,21 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     const { groupScopeClause } = require('../services/channel-scope');
     const scopeClause = await groupScopeClause(req.user);
     const scopeMatch = scopeClause || {};
-    const scopeFilter = catalogView
-      ? { ownerId: null, ...publicCatalogHideQuery(), ...dedupMatch, ...scopeMatch }
-      : {
-          _id: { $in: (req.user.channels || []).filter(Boolean) },
-          ...publicCatalogHideQuery(),
-          ...dedupMatch,
-          ...scopeMatch,
-        };
+    // The caller-specific restriction is applied LAST, after the shared filters, and that
+    // order is load-bearing: `publicCatalogDedupQuery()` returns `{ _id: { $nin: [...] } }`
+    // whenever the catalog has duplicates to hide (i.e. in production, always), and an
+    // object spread of that over a selection `_id` silently REPLACES it. That is how a user
+    // with zero channels kept reading the whole catalog's group structure — measured live on
+    // 2026-09-20: 192 groups for an account whose `GET /channels` returned count 0.
+    const selectionFilter = catalogView
+      ? { ownerId: null }
+      : { _id: { $in: (req.user.channels || []).filter(Boolean) } };
+    const scopeFilter = {
+      ...publicCatalogHideQuery(),
+      ...dedupMatch,
+      ...scopeMatch,
+      ...selectionFilter,
+    };
     // The health gate belongs here too: without it the rail advertised groups whose
     // channels the list endpoint refuses to serve, so the counts could not line up with
     // GET /channels (which this endpoint's own comment promises) and the customer could
