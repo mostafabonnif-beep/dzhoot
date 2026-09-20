@@ -29,11 +29,34 @@ function PairContent() {
     urlPin ||
     (typeof window !== 'undefined' ? sessionStorage.getItem('dzhoof-pairing-pin') : null);
 
-  // Wait for Zustand hydration
+  // Wait for Zustand hydration.
+  //
+  // Subscribing to `onFinishHydration` alone is not enough: if the store has
+  // already finished hydrating before this effect subscribes (or if the
+  // hydration event never fires), the callback never runs and the page stays
+  // on the loading branch forever — the pairing screen was unreachable. Mirror
+  // the defensive sequence used by `useRequireAuth` (hasHydrated → rehydrate →
+  // give up) so the page always settles into a real state.
   useEffect(() => {
-    const unsub = useAuthStore.persist.onFinishHydration(() => setHydrated(true));
-    if (useAuthStore.persist.hasHydrated()) setHydrated(true);
-    return unsub;
+    let active = true;
+    const finishHydration = () => {
+      if (active) setHydrated(true);
+    };
+    const persistApi = useAuthStore.persist;
+    const unsub = persistApi?.onFinishHydration?.(finishHydration);
+
+    if (persistApi?.hasHydrated?.()) {
+      finishHydration();
+    } else if (persistApi?.rehydrate) {
+      void Promise.resolve(persistApi.rehydrate()).then(finishHydration, finishHydration);
+    } else {
+      finishHydration();
+    }
+
+    return () => {
+      active = false;
+      unsub?.();
+    };
   }, []);
 
   const attemptPairing = useCallback((pinToUse: string) => {

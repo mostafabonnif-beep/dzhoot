@@ -2,19 +2,23 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const ProblemReport = require('../models/ProblemReport');
+const { optionalAuth } = require('../middleware/resolveUser');
 const { sendOperationalAlert } = require('../services/alert-notifier');
 const { validateReport, generateReportId, MESSAGE_MAX } = require('../services/problem-report-service');
 
 // Customer problem reports from the Android app: POST /api/v1/app/report-problem
 //
-// Mounted with every other route, behind the global `csrfProtection`. It is unauthenticated
-// by design (the report that matters most comes from a customer who cannot sign in), so it
-// reads no cookie — but it still gets the origin check, and its own limiter bounds volume.
+// Mounted with every other route, behind the global `csrfProtection`. A report must
+// always be accepted — the one that matters most comes from a customer who cannot sign
+// in, and a device that just failed to start has no session — so authentication is
+// OPTIONAL (`optionalAuth`): credentials are read when the client has them, and a
+// credential-less client is never rejected. Without it `req.user` was never populated,
+// so every report the code deliberately attributes to a signed-in customer was stored
+// with `userId: null`.
 //
-// Public on purpose: the most valuable report is the one sent by a customer who cannot
-// sign in, and a device that just failed to start has no session. A report therefore
-// carries no credentials by construction — everything it contains is redacted on the way
-// in (`services/problem-report-service`) and the diagnostic shape is a closed list.
+// Public on purpose: a report therefore carries no credentials by construction —
+// everything it contains is redacted on the way in (`services/problem-report-service`)
+// and the diagnostic shape is a closed list.
 //
 // This is the customer-facing sibling of `POST /app/crash-report`: a crash report is
 // written automatically by the app, a problem report is written deliberately by the
@@ -77,7 +81,7 @@ async function alertOnRepeat(report, count) {
   }
 }
 
-router.post('/report-problem', reportLimiter, async (req, res) => {
+router.post('/report-problem', optionalAuth, reportLimiter, async (req, res) => {
   try {
     const verdict = validateReport(req.body);
     if (!verdict.ok) {

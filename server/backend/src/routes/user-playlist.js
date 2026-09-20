@@ -17,14 +17,26 @@ function tokenizeUserChannel(channel, user, baseUrl) {
   const source = channel.toObject ? channel.toObject() : channel;
   const safe = { ...source, channelUrl: '' };
   if (!user.channelListCode) return presentChannelForClient(safe);
+  // v2 (channel-reference) tokens are re-resolved AND scope-re-checked by
+  // `/tv/playback/:token`; v1 tokens embed the upstream URL and are only checked
+  // where they are minted. Mint v2 whenever the reference can resolve: the
+  // SHARED catalog is looked up as `{ ownerId: null, channelId }`, and the
+  // unique `(ownerId, channelId)` index makes that unambiguous. A channel the
+  // user imported themselves must keep v1 — `/tv/playback` never resolves refs
+  // against private imports, so its channelId would either 404 or, worse, hit
+  // an unrelated shared channel that happens to share the tvg-id.
+  const candidateChannelId = source.ownerId ? '' : String(source.channelId || '').trim();
+  // `issuePlaybackToken` refuses a channel reference longer than 200 chars;
+  // such a channel falls back to the v1 embedded-URL token rather than failing
+  // the whole list (the scope filter has already cleared it).
+  const sharedChannelId = candidateChannelId.length <= 200 ? candidateChannelId : '';
   if (source.channelUrl) {
-    const channelId = String(source.channelId || '').trim();
     const { token } = issuePlaybackToken(
-      channelId
+      sharedChannelId
         ? {
             userId: String(user._id),
             channelListCode: user.channelListCode,
-            channelRef: { channelId, hls: true },
+            channelRef: { channelId: sharedChannelId, hls: true },
           }
         : {
             userId: String(user._id),
@@ -39,14 +51,13 @@ function tokenizeUserChannel(channel, user, baseUrl) {
     .slice(0, 10)
     .map((alternate) => {
       if (!alternate.streamUrl) return { ...alternate, streamUrl: '' };
-      const channelId = String(source.channelId || '').trim();
       const { token } = issuePlaybackToken(
-        channelId
+        sharedChannelId
           ? {
               userId: String(user._id),
               channelListCode: user.channelListCode,
               channelRef: {
-                channelId,
+                channelId: sharedChannelId,
                 altUrlHash: altStreamHash(alternate.streamUrl),
                 hls: true,
               },
@@ -108,13 +119,41 @@ function isSelectableChannel(scopeGroups, userId, channel) {
   return scopeGroups.includes(String(channel?.channelGroup ?? '').trim());
 }
 
+/**
+ * Populate projection shared by BOTH personal-playlist read endpoints.
+ * `ownerId` is what the freemium scope filter keys on and `channelId` is what
+ * lets {@link tokenizeUserChannel} mint a re-checkable v2 token; a handler with
+ * its own (narrower) projection silently loses one of the two — which is how
+ * `GET /me/channels-with-fallbacks` came to hand out playable URLs for
+ * out-of-scope channels while `GET /me/channels` did not.
+ */
+const USER_CHANNEL_POPULATE_FIELDS =
+  'channelName channelGroup channelUrl channelId tvgLogo channelImg ownerId metadata metrics flaggedBad alternateStreams';
+
+/**
+ * Presentation- and scope-filtered, tokenized channel list — the single
+ * implementation behind `GET /me/channels` and
+ * `GET /me/channels-with-fallbacks`, so the two can no longer disagree about
+ * what the freemium boundary is.
+ */
+async function scopedTokenizedChannels(user, baseUrl) {
+  // Scope filter: a stale selection (or one written before a plan changed) must
+  // not keep handing out tokens for out-of-scope shared channels.
+  const scopeGroups = await allowedGroupsForUser(user);
+  return sortClientCatalogChannels(
+    (user.channels || [])
+      .filter((channel) => !hasRestrictedPresentationMarker(channel))
+      .filter((channel) => isSelectableChannel(scopeGroups, user._id, channel)),
+  ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+}
+
 // Get current user's channels
 router.get('/me/channels', requireAuth, async (req, res) => {
   try {
     console.log('🔵 GET /me/channels called for user:', req.user.id);
     const user = await User.findById(req.user.id).populate(
       'channels',
-      'channelName channelGroup channelUrl tvgLogo channelImg ownerId metadata metrics flaggedBad alternateStreams',
+      USER_CHANNEL_POPULATE_FIELDS,
     );
     if (!user) {
       console.error('❌ User not found:', req.user.id);
@@ -127,15 +166,7 @@ router.get('/me/channels', requireAuth, async (req, res) => {
       '📋 Channel IDs in user.channels:',
       user.channels?.map((ch) => ch._id || ch).slice(0, 3),
     );
-    const baseUrl = getPublicBaseUrl(req);
-    // Scope filter: a stale selection (or one written before a plan changed)
-    // must not keep handing out tokens for out-of-scope shared channels.
-    const scopeGroups = await allowedGroupsForUser(user);
-    const channels = sortClientCatalogChannels(
-      (user.channels || [])
-        .filter((channel) => !hasRestrictedPresentationMarker(channel))
-        .filter((channel) => isSelectableChannel(scopeGroups, user._id, channel)),
-    ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    const channels = await scopedTokenizedChannels(user, getPublicBaseUrl(req));
     res.json({ success: true, channels });
   } catch (error) {
     console.error('❌ Get my channels error:', error);
@@ -330,16 +361,17 @@ router.get('/me/channels-with-fallbacks', requireAuth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id).populate(
       'channels',
-      'channelName channelGroup channelUrl tvgLogo channelImg metadata flaggedBad alternateStreams',
+      USER_CHANNEL_POPULATE_FIELDS,
     );
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    const baseUrl = getPublicBaseUrl(req);
-    const channels = sortClientCatalogChannels(
-      (user.channels || []).filter((channel) => !hasRestrictedPresentationMarker(channel)),
-    ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
+    // Same filter + tokenization as GET /me/channels (see
+    // `scopedTokenizedChannels`): this endpoint mints a playback token for every
+    // channel it returns, so it must apply the freemium scope too — otherwise a
+    // stale selection keeps a working stream URL for out-of-scope channels.
+    const channels = await scopedTokenizedChannels(user, getPublicBaseUrl(req));
     res.json({ success: true, channels });
   } catch (error) {
     console.error('Get channels with fallbacks error:', error);

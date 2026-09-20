@@ -6,6 +6,9 @@ const { redeemCode, getUserSubscription, registerDevice } = require('../services
 const User = require('../models/User');
 const Session = require('../models/Session');
 const ActivationCode = require('../models/ActivationCode');
+const ActivationRedemption = require('../models/ActivationRedemption');
+const Subscription = require('../models/Subscription');
+const Device = require('../models/Device');
 const Plan = require('../models/Plan');
 const { hashActivationCode, normalizeActivationCode } = require('../utils/code-generator');
 const { computeClientRedeemSessionExpiry } = require('../utils/client-redeem-session');
@@ -31,6 +34,142 @@ const redeemCleanupTimer = setInterval(() => {
   }
 }, REDEEM_WINDOW_MS);
 redeemCleanupTimer.unref?.();
+
+/**
+ * Symmetric compensation for a failed /client-redeem.
+ *
+ * This endpoint mints a throwaway User and then hands it to redeemCode(), which
+ * writes to four collections while it works (in this order):
+ *   1. ActivationCode — atomic claim UNUSED -> ACTIVATING (findOneAndUpdate at
+ *      the top of redeemCode). Its own failure branches for PLAN_UNAVAILABLE and
+ *      DEVICE_LIMIT_REACHED release the claim back to UNUSED, and its catch block
+ *      releases a still-ACTIVATING claim before rethrowing — so a *returned*
+ *      failure normally leaves the code UNUSED/EXPIRED.
+ *   2. Device — registerDevice(userId, ...) creates/updates a row for the user.
+ *   3. Subscription — created (or an existing ACTIVE row extended) for the user.
+ *   4. ActivationCode flips to ACTIVATED with activatedAt/activatedBy=<user>.
+ *   5. ActivationRedemption — SUCCESS (and, on every failure path, FAILURE) rows
+ *      carrying this userId.
+ * Steps 3-5 can all be reached before redeemCode reports a failure or throws:
+ * the Subscription is written *before* the code is flipped to ACTIVATED, and
+ * `redeemCode` rethrows (rather than returning) for anything that breaks after
+ * the claim — e.g. the device lock being busy, or a write error in step 4/5.
+ * The old compensation deleted only the User, leaving the code ACTIVATED with
+ * activatedBy pointing at a now-deleted account: the replay branch above then
+ * finds no user and answers 401 ACCOUNT_INACTIVE forever, i.e. a paid code is
+ * burned while an orphan Subscription row keeps a phantom subscriber. The
+ * FAILURE ledger rows and the Device row were orphaned the same way.
+ *
+ * Ordering and invariants:
+ *  - The code claim is released FIRST and only when it is ACTIVATED by *this*
+ *    throwaway user, so a concurrent redemption won by another account can
+ *    never be clobbered. The guarded write is verified with a read-back because
+ *    an updateOne matching zero documents is not an error.
+ *  - `revokeCode()` is deliberately NOT used: it refuses ACTIVATED codes and
+ *    REVOKED is terminal, so it would permanently burn the very code we are
+ *    handing back.
+ *  - The throwaway account is deleted LAST, and only once every earlier step
+ *    succeeded. If anything failed, the account and its rows are kept: the code
+ *    stays ACTIVATED by a live account, so the replay branch finishes the
+ *    activation on the customer's retry. A dangling activatedBy (the permanent
+ *    401) is therefore impossible; the worst case is an inert orphan account
+ *    plus a loud log for ops.
+ *
+ * The HTTP contract is untouched — callers still get 400/403 with
+ * {success, error, code}; the compensation result only drives logging.
+ *
+ * @param {{ _id: any }} user the throwaway account created by this request
+ * @param {string} codeHash hashActivationCode() of the code being redeemed
+ * @returns {Promise<{ ok: boolean, failures: string[] }>}
+ */
+async function compensateFailedClientRedeem(user, codeHash) {
+  const failures = [];
+
+  // 1. Give the customer's code back. Guarded on activatedBy so an activation
+  //    owned by another account (lost claim race) is left untouched.
+  try {
+    await ActivationCode.updateOne(
+      { codeHash, status: 'ACTIVATED', activatedBy: user._id },
+      { $set: { status: 'UNUSED', activatedAt: null, activatedBy: null } },
+    ).exec();
+  } catch (err) {
+    failures.push('code-release');
+    console.error('[activation] client-redeem: failed to release activation code claim:', err);
+  }
+
+  // Read back rather than trusting the write: this is the one state that can
+  // strand a paid code forever, so verify it explicitly.
+  let claimStillOwned = false;
+  try {
+    claimStillOwned = Boolean(
+      await ActivationCode.findOne({ codeHash, status: 'ACTIVATED', activatedBy: user._id }).select('_id').lean().exec(),
+    );
+  } catch (err) {
+    claimStillOwned = true; // cannot verify -> assume the worst and keep the account
+    failures.push('code-verify');
+    console.error('[activation] client-redeem: failed to verify activation code release:', err);
+  }
+
+  if (claimStillOwned) {
+    // Keep the account AND its rows: the code is ACTIVATED by a live account, so
+    // the replay branch can still complete this activation on a retry. Deleting
+    // the user here is exactly the bug this helper exists to prevent.
+    console.error(
+      `[activation] client-redeem: compensation incomplete for ${user._id} (${failures.join(', ')}); account kept so the code stays redeemable through the replay path`,
+    );
+    return { ok: false, failures };
+  }
+
+  // 2. Revert the rows redeemCode() wrote for the throwaway user. The account was
+  //    created by this very request, so every row carrying its userId is ours.
+  const revertRows = async (label, remove) => {
+    try {
+      await remove();
+    } catch (err) {
+      failures.push(label);
+      console.error(`[activation] client-redeem: failed to remove ${label} rows:`, err);
+    }
+  };
+  await revertRows('subscription', () => Subscription.deleteMany({ userId: user._id }).exec());
+  await revertRows('device', () => Device.deleteMany({ userId: user._id }).exec());
+  await revertRows('redemption-ledger', () => ActivationRedemption.deleteMany({ userId: user._id }).exec());
+
+  if (failures.length > 0) {
+    // Keep the account so no surviving row is left pointing at a deleted userId.
+    // The code is already UNUSED, so the customer can simply redeem again.
+    console.error(
+      `[activation] client-redeem: compensation incomplete for ${user._id} (${failures.join(', ')}); account kept to avoid orphaned rows`,
+    );
+    return { ok: false, failures };
+  }
+
+  // 3. Everything is reverted — the throwaway account can go.
+  try {
+    await User.deleteOne({ _id: user._id }).exec();
+  } catch (err) {
+    // Code, subscription, device and ledger are already clean; a surviving empty
+    // account is inert (random password, never handed a session). Log, but do
+    // not turn an already-clean failure into an error the client must interpret.
+    console.error('[activation] client-redeem: failed to delete throwaway account:', err);
+  }
+
+  return { ok: true, failures: [] };
+}
+
+/**
+ * Never throws: a problem inside the compensation must not change the HTTP
+ * contract — a failed redeem still answers 400/403 with {success, error, code}.
+ * (`compensateFailedClientRedeem` is defensive, this is the belt-and-braces
+ * guard for e.g. a driver-level failure while it is cleaning up.)
+ */
+async function safeCompensateFailedClientRedeem(user, codeHash) {
+  try {
+    return await compensateFailedClientRedeem(user, codeHash);
+  } catch (err) {
+    console.error('[activation] client-redeem: compensation crashed:', err);
+    return { ok: false, failures: ['compensation-crashed'] };
+  }
+}
 
 // Customer bootstrap: the installed client receives only an activation code. The
 // code is a bearer credential, so this endpoint is deliberately rate-limited and
@@ -64,7 +203,8 @@ router.post('/client-redeem', async (req, res) => {
     }
     redeemAttempts.set(ipRateLimitKey, [...recentIpAttempts, Date.now()]);
 
-    const activation = await ActivationCode.findOne({ codeHash: hashActivationCode(normalized) }).exec();
+    const codeHash = hashActivationCode(normalized);
+    const activation = await ActivationCode.findOne({ codeHash }).exec();
     if (!activation) return res.status(400).json({ success: false, error: 'Invalid code', code: 'INVALID_CODE' });
 
     let user;
@@ -94,14 +234,28 @@ router.post('/client-redeem', async (req, res) => {
         isActive: true,
         emailVerified: true,
       });
-      const result = await redeemCode(user._id.toString(), normalized, {
-        deviceId: normalizedDeviceId,
-        name: deviceName,
-        platform,
-        appVersion,
-      }, req.ip);
+      let result;
+      try {
+        result = await redeemCode(user._id.toString(), normalized, {
+          deviceId: normalizedDeviceId,
+          name: deviceName,
+          platform,
+          appVersion,
+        }, req.ip);
+      } catch (err) {
+        // redeemCode rethrows after releasing a still-ACTIVATING claim, but it may
+        // already have written a Device/Subscription/ledger row for this account
+        // and (when the error happens after the subscription write) flipped the
+        // code to ACTIVATED. Revert symmetrically before surfacing the 500 —
+        // otherwise the throwaway account is left holding the customer's code.
+        await safeCompensateFailedClientRedeem(user, codeHash);
+        throw err;
+      }
       if (!result.success) {
-        await User.deleteOne({ _id: user._id }).exec();
+        // Compensate for every collection redeemCode may have touched: deleting
+        // only the user left an ACTIVATED code pointing at a deleted account
+        // (permanent 401 on retry) plus orphan Subscription/Device/ledger rows.
+        await safeCompensateFailedClientRedeem(user, codeHash);
         return res.status(result.code === 'DEVICE_LIMIT_REACHED' ? 403 : 400).json({ success: false, error: result.error, code: result.code });
       }
     }

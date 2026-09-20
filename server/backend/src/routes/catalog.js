@@ -9,6 +9,7 @@ const EpgProgram = require('../models/EpgProgram');
 const { optionalAuth } = require('../middleware/resolveUser');
 const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
 const { escapeRegex } = require('../utils/escapeRegex');
+const { MAX_PAGE_SIZE: MAX_PAGE_LIMIT } = require('./catalog-helpers');
 const { ensureSeriesSeasons, ensureSeasonEpisodes } = require('../services/xtream-service');
 const { cleanVodTitle, cleanDisplayText } = require('../utils/catalog-presentation');
 
@@ -62,9 +63,26 @@ function parseId(id) {
   return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null;
 }
 
+// Same pagination conventions as `catalog-helpers.parsePagination` (which backs
+// /movies, /series and the admin lists): limit capped at MAX_PAGE_SIZE and page
+// at 10 000 — an uncapped page reaches Mongo as an unbounded `(page - 1) * limit`
+// skip. The default stays 30 here (this router's published default).
+//
+// Anything missing, non-numeric, fractional, zero or negative falls back to the
+// default instead of reaching the query: `Number(query.limit) || 30` used to
+// hand Mongo `-5` (mongoose reads a negative limit as an absolute value) and
+// `Number(query.page) || 1` an unbounded `page=1e9`.
+const DEFAULT_PAGE_LIMIT = 30;
+const MAX_PAGE_NUMBER = 10000;
+
+function positiveIntOr(raw, fallback) {
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function paginate(query) {
-  const page = Math.max(1, Number(query.page) || 1);
-  const limit = Math.min(100, Math.max(1, Number(query.limit) || 30));
+  const page = Math.min(positiveIntOr(query.page, 1), MAX_PAGE_NUMBER);
+  const limit = Math.min(positiveIntOr(query.limit, DEFAULT_PAGE_LIMIT), MAX_PAGE_LIMIT);
   return { page, limit, skip: (page - 1) * limit };
 }
 
@@ -327,3 +345,4 @@ router.get('/search', async (req, res) => {
 });
 
 module.exports = router;
+module.exports._private = { paginate };

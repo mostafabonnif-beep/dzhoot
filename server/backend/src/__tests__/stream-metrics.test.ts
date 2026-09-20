@@ -11,9 +11,16 @@ import mongoose from 'mongoose';
 import Channel from '../models/Channel';
 import PlaybackEvent from '../models/PlaybackEvent';
 
-// Pass-through auth middleware
+// Auth middleware: these cases are about metrics accounting, not authorization, so
+// every request is made as one ordinary authenticated client. `report-status` now
+// authorizes the target channel (and throttles per principal), so the harness must
+// provide the `req.user` that the real middleware always sets.
+const TEST_USER = { id: 'test-user', role: 'User', channels: [], channelListCode: 'TEST01' };
 jest.mock('../middleware/requireTvOrSessionAuth', () => ({
-  requireTvOrSessionAuth: (_req: any, _res: any, next: any) => next(),
+  requireTvOrSessionAuth: (req: any, _res: any, next: any) => {
+    req.user = { ...TEST_USER };
+    next();
+  },
 }));
 jest.mock('../routes/auth', () => ({
   requireAuth: (_req: any, _res: any, next: any) => next(),

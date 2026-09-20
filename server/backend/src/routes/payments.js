@@ -41,6 +41,124 @@ function frontendOrigin() {
   return String(process.env.APP_URL || 'http://localhost:3000').trim().replace(/\/+$/, '');
 }
 
+/* ── Fulfilment state machine ────────────────────────────────────────────────
+ *
+ *   pending ──claim──▶ processing ──code persisted──▶ paid
+ *      ▲                  │
+ *      └── code gen failed┘          (money is captured: NEVER a terminal
+ *                                     'failed' — see P-2 below)
+ *
+ *   pending ──gateway reported failed/canceled──▶ failed | canceled | expired
+ *
+ * 'processing' is the in-flight claim. Only the trigger that atomically moved
+ * the document into 'processing' (from 'pending', or from a stale 'processing')
+ * may mint a code, so the three independent triggers — Chargily webhook,
+ * GET /status/:token and GET /chargily/status/:token — can no longer each issue
+ * one for the same payment. 'paid' is only ever written together with
+ * activationCodeId/codeEnc in the same update.
+ *
+ * Crash handling: a claim whose document has not been written for longer than
+ * FULFILLMENT_STALE_MS is taken over by the next trigger. Trade-off: a worker
+ * that is alive but stalled for more than 5 minutes inside a sub-second
+ * operation would have its claim stolen and a second code minted — but the
+ * fenced finalize means the stalled worker cannot clobber the new owner's fields
+ * and it deletes the orphan code it generated. The alternative (a permanent
+ * 'processing' dead end where a captured payment never gets a code) is strictly
+ * worse than a rare duplicate code.
+ */
+const FULFILLMENT_STALE_MS = 5 * 60_000;
+
+/** A payment still waiting for its activation code: 'pending', or 'processing'
+ * while a claim is in flight (possibly stale after a crash). */
+function isAwaitingFulfillment(status) {
+  return status === 'pending' || status === 'processing';
+}
+
+/** Fulfilment outcomes the gateway must NOT be ACKed for: 'in-flight'/'retry'
+ * are transient and a retry can finish the fulfilment; 'mismatch' is permanent
+ * but a non-2xx is exactly what keeps it visible to operators (and to the
+ * gateway's delivery log) instead of silently ACKing money we never validated. */
+function mustRetryFulfillment(outcome) {
+  return outcome === 'in-flight' || outcome === 'retry' || outcome === 'mismatch';
+}
+
+/* ── Money validation (defense in depth, P-4) ────────────────────────────────
+ * A gateway payload is only allowed to fulfil a payment when the money it
+ * reports agrees with the amount/currency we recorded at checkout creation.
+ * Both webhooks (and the status-poll reconciliation) funnel through
+ * fulfillPayment, so the check lives there rather than in each handler.
+ *
+ * Only fields the payload actually carries are compared — Chargily webhooks in
+ * particular can arrive without amount/currency and must keep working. The
+ * payment token is cross-checked when present: Chargily echoes the metadata we
+ * sent at creation ([{ paymentToken }, { planId }]), CinetPay's /payment/check
+ * answers with transaction_id (our publicToken).
+ */
+
+/** Chargily returns metadata as an array of single-key objects; CinetPay may
+ * echo it as a JSON string. Normalize all of those to a plain object — an
+ * unknown/unparseable shape yields {} (no token to check, never a false alarm). */
+function normalizeGatewayMetadata(metadata) {
+  let value = metadata;
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return {};
+    }
+  }
+  if (Array.isArray(value)) {
+    const merged = {};
+    for (const entry of value) {
+      if (entry && typeof entry === 'object' && !Array.isArray(entry)) Object.assign(merged, entry);
+    }
+    return merged;
+  }
+  return value && typeof value === 'object' ? value : {};
+}
+
+/**
+ * Compare a gateway payload against the payment we recorded. Returns a
+ * human-readable description of every disagreement, or null when consistent
+ * (or when the payload carries nothing to compare — see above).
+ */
+function gatewayPaymentMismatch(payment, gatewayData) {
+  if (!gatewayData || typeof gatewayData !== 'object') return null;
+  const problems = [];
+
+  const rawAmount = gatewayData.amount;
+  if (rawAmount !== undefined && rawAmount !== null && rawAmount !== '') {
+    const gatewayAmount = Number(rawAmount);
+    const expectedAmount = Number(payment.amount);
+    if (!Number.isFinite(gatewayAmount)) {
+      problems.push(`amount unparseable (gateway=${String(rawAmount)})`);
+    } else if (gatewayAmount !== expectedAmount) {
+      problems.push(`amount gateway=${gatewayAmount} payment=${expectedAmount}`);
+    }
+  }
+
+  const rawCurrency = gatewayData.currency;
+  if (rawCurrency !== undefined && rawCurrency !== null && String(rawCurrency).trim() !== '') {
+    const gatewayCurrency = String(rawCurrency).trim().toLowerCase();
+    const expectedCurrency = String(payment.currency || '').trim().toLowerCase();
+    if (gatewayCurrency !== expectedCurrency) {
+      problems.push(`currency gateway=${gatewayCurrency} payment=${expectedCurrency}`);
+    }
+  }
+
+  const metadata = normalizeGatewayMetadata(gatewayData.metadata);
+  const rawToken = metadata.paymentToken ?? metadata.payment_token ?? gatewayData.transaction_id;
+  if (rawToken !== undefined && rawToken !== null && String(rawToken).trim() !== '') {
+    const gatewayToken = String(rawToken).trim();
+    const expectedToken = String(payment.publicToken || '').trim();
+    if (gatewayToken !== expectedToken) {
+      problems.push(`token gateway=${gatewayToken} payment=${expectedToken}`);
+    }
+  }
+
+  return problems.length ? problems.join('; ') : null;
+}
+
 // GET /api/v1/payments/status/:token — provider-agnostic polling for the
 // success/failure page. Dispatches reconciliation to the right gateway.
 router.get('/status/:token', async (req, res) => {
@@ -51,34 +169,9 @@ router.get('/status/:token', async (req, res) => {
     const payment = await Payment.findOne({ publicToken: token }).select('+codeEnc').exec();
     if (!payment) return res.status(404).json({ success: false, error: 'Payment not found' });
 
-    const ageMs = Date.now() - payment.createdAt.getTime();
-    if (payment.status === 'pending' && ageMs > 15_000 && payment.checkoutId) {
-      try {
-        if (payment.provider === 'chargily') {
-          const remote = await retrieveCheckout(payment.checkoutId);
-          if (remote.status === 'paid' && payment.status !== 'paid') {
-            await fulfillPayment(payment, remote);
-          } else if ((remote.status === 'failed' || remote.status === 'canceled') && payment.status === 'pending') {
-            payment.status = remote.status;
-            await payment.save();
-          }
-        } else if (payment.provider === 'cinetpay') {
-          const remote = await checkCinetpayTransaction(payment.checkoutId);
-          const mapped = mapCinetpayStatus(remote.status);
-          if (mapped === 'paid' && payment.status !== 'paid') {
-            await fulfillPayment(payment, remote);
-          } else if (mapped && mapped !== 'paid' && payment.status === 'pending') {
-            payment.status = mapped;
-            payment.failureReason = `CinetPay reported ${remote.status}`;
-            await payment.save();
-          }
-        }
-      } catch {
-        // Best-effort reconciliation only — the webhook remains the source of truth.
-      }
-    }
+    const refreshed = await reconcilePayment(payment);
 
-    return res.json({ success: true, data: await paymentStatusData(payment) });
+    return res.json({ success: true, data: await paymentStatusData(refreshed) });
   } catch (err) {
     console.error('[payments] generic status error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
@@ -153,7 +246,10 @@ router.post('/chargily/checkout', async (req, res) => {
 
     payment.checkoutId = checkout.id;
     payment.checkoutUrl = checkout.checkout_url;
-    payment.status = checkout.status === 'paid' ? 'paid' : 'pending';
+    // Never trust the creation response as settlement, whatever it says: a
+    // payment may only become terminally 'paid' together with its code, which
+    // happens in fulfillPayment (webhook or status reconciliation) — not here.
+    payment.status = 'pending';
     await payment.save();
 
     return res.status(201).json({
@@ -183,22 +279,9 @@ router.get('/chargily/status/:token', async (req, res) => {
 
     // Reconcile with Chargily if the webhook hasn't landed yet after a few seconds —
     // covers the case where our webhook endpoint was briefly unreachable.
-    const ageMs = Date.now() - payment.createdAt.getTime();
-    if (payment.status === 'pending' && ageMs > 15_000 && payment.checkoutId) {
-      try {
-        const remote = await retrieveCheckout(payment.checkoutId);
-        if (remote.status === 'paid' && payment.status !== 'paid') {
-          await fulfillPayment(payment, remote);
-        } else if ((remote.status === 'failed' || remote.status === 'canceled') && payment.status === 'pending') {
-          payment.status = remote.status;
-          await payment.save();
-        }
-      } catch {
-        // Best-effort reconciliation only — the webhook remains the source of truth.
-      }
-    }
+    const refreshed = await reconcilePayment(payment);
 
-    return res.json({ success: true, data: await paymentStatusData(payment) });
+    return res.json({ success: true, data: await paymentStatusData(refreshed) });
   } catch (err) {
     console.error('[payments] status error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
@@ -240,8 +323,12 @@ router.post('/chargily/webhook', async (req, res) => {
     }
 
     if (event.type === 'checkout.paid') {
-      if (payment.status !== 'paid') {
-        await fulfillPayment(payment, checkout);
+      const result = await fulfillPayment(payment, checkout);
+      if (mustRetryFulfillment(result.outcome)) {
+        // No ACK on purpose: Chargily retries, and that retry either observes the
+        // winner's 'paid' or re-claims the payment we released. ACKing here would
+        // silently strand a captured payment with no code (P-2).
+        return res.sendStatus(500);
       }
     } else if (event.type === 'checkout.failed' || event.type === 'checkout.canceled') {
       if (payment.status !== 'paid') {
@@ -258,6 +345,52 @@ router.post('/chargily/webhook', async (req, res) => {
     return res.sendStatus(500);
   }
 });
+
+/**
+ * Best-effort reconciliation for the polling endpoints: when the webhook hasn't
+ * landed after a few seconds (or died mid-fulfilment), ask the gateway directly.
+ * Covered states are exactly the ones that can still change — 'pending' and a
+ * (possibly stale) 'processing' claim.
+ *
+ * Never throws: reconciliation is a safety net, the webhook remains the trigger.
+ * @returns the document the response should be built from — a fresh one when this
+ *          call itself fulfilled the payment, otherwise the one passed in.
+ */
+async function reconcilePayment(payment) {
+  const ageMs = Date.now() - payment.createdAt.getTime();
+  if (!isAwaitingFulfillment(payment.status) || ageMs <= 15_000 || !payment.checkoutId) {
+    return payment;
+  }
+
+  try {
+    if (payment.provider === 'chargily') {
+      const remote = await retrieveCheckout(payment.checkoutId);
+      if (remote.status === 'paid') {
+        const result = await fulfillPayment(payment, remote);
+        return result.payment || payment;
+      }
+      if ((remote.status === 'failed' || remote.status === 'canceled') && payment.status === 'pending') {
+        payment.status = remote.status;
+        await payment.save();
+      }
+    } else if (payment.provider === 'cinetpay') {
+      const remote = await checkCinetpayTransaction(payment.checkoutId);
+      const mapped = mapCinetpayStatus(remote.status);
+      if (mapped === 'paid') {
+        const result = await fulfillPayment(payment, remote);
+        return result.payment || payment;
+      }
+      if (mapped && mapped !== 'paid' && payment.status === 'pending') {
+        payment.status = mapped;
+        payment.failureReason = `CinetPay reported ${remote.status}`;
+        await payment.save();
+      }
+    }
+  } catch {
+    // Best-effort only — the webhook remains the source of truth.
+  }
+  return payment;
+}
 
 /** Shared status payload for the success/failure page (provider-agnostic). */
 async function paymentStatusData(payment) {
@@ -349,7 +482,15 @@ router.post('/cinetpay/checkout', async (req, res) => {
     // CinetPay's check/webhook APIs key off transaction_id (our public token).
     payment.checkoutId = publicToken;
     payment.checkoutUrl = checkout.payment_url;
-    payment.status = checkout.status === 'ACCEPTED' ? 'paid' : 'pending';
+    // ASSUMPTION: CinetPay's POST /v2/payment (creation) response is not a
+    // settlement signal. The transaction status only becomes authoritative via
+    // POST /v2/payment/check — which both the webhook and the status poll go
+    // through — where ACCEPTED means funds captured; a create-time 'ACCEPTED'
+    // also shows up on throwaway/duplicate checkouts. So we always start
+    // 'pending': a payment may only become terminally 'paid' together with its
+    // code, in fulfillPayment. (Before this fix such a row was stored 'paid'
+    // with no code and every path early-returned forever.)
+    payment.status = 'pending';
     await payment.save();
 
     return res.status(201).json({
@@ -379,24 +520,9 @@ router.get('/cinetpay/status/:token', async (req, res) => {
 
     // Reconcile via CinetPay's check endpoint while pending — the notification
     // webhook is only a trigger, the check is the source of truth.
-    const ageMs = Date.now() - payment.createdAt.getTime();
-    if (payment.status === 'pending' && ageMs > 15_000 && payment.checkoutId) {
-      try {
-        const remote = await checkCinetpayTransaction(payment.checkoutId);
-        const mapped = mapCinetpayStatus(remote.status);
-        if (mapped === 'paid' && payment.status !== 'paid') {
-          await fulfillPayment(payment, remote);
-        } else if (mapped && mapped !== 'paid' && payment.status === 'pending') {
-          payment.status = mapped;
-          payment.failureReason = `CinetPay reported ${remote.status}`;
-          await payment.save();
-        }
-      } catch {
-        // Best-effort reconciliation only — the webhook remains the trigger.
-      }
-    }
+    const refreshed = await reconcilePayment(payment);
 
-    return res.json({ success: true, data: await paymentStatusData(payment) });
+    return res.json({ success: true, data: await paymentStatusData(refreshed) });
   } catch (err) {
     console.error('[payments] cinetpay status error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
@@ -414,7 +540,10 @@ router.post('/cinetpay/webhook', async (req, res) => {
     const payment = await Payment.findOne({ checkoutId: transactionId }).select('+codeEnc').exec();
     if (!payment) return res.sendStatus(200); // Unknown transaction — ack so retries stop.
 
-    if (payment.status === 'paid') return res.sendStatus(200);
+    // Settled means paid AND carrying its code. A 'paid' row without one is a
+    // legacy pre-fix record (create-time ACCEPTED) — fall through so the check
+    // below can fulfil it instead of early-returning forever.
+    if (payment.status === 'paid' && payment.activationCodeId) return res.sendStatus(200);
 
     let remote;
     try {
@@ -426,7 +555,12 @@ router.post('/cinetpay/webhook', async (req, res) => {
 
     const mapped = mapCinetpayStatus(remote.status);
     if (mapped === 'paid') {
-      await fulfillPayment(payment, remote);
+      const result = await fulfillPayment(payment, remote);
+      if (mustRetryFulfillment(result.outcome)) {
+        // No ACK: CinetPay retries and a later attempt (or the status poll) can
+        // still finish the fulfilment of this captured payment (P-2).
+        return res.sendStatus(500);
+      }
     } else if (mapped && payment.status === 'pending') {
       payment.status = mapped;
       payment.failureReason = `CinetPay reported ${remote.status}`;
@@ -441,48 +575,178 @@ router.post('/cinetpay/webhook', async (req, res) => {
 });
 
 /**
+ * Atomically claim the right to fulfil a payment — the single arbiter of code
+ * issuance, decided by MongoDB rather than by process memory. Returns the
+ * claimed document, or null when the payment is already settled/terminal or
+ * another trigger holds a live claim (losers write nothing at all).
+ *
+ * The claim token is the document's own `updatedAt`, which every write bumps:
+ * the Payment schema has no dedicated claim-id column (and is out of scope
+ * here), so the update timestamp doubles as the monotonic claim token that
+ * `finalizeFulfillment` fences on.
+ */
+async function claimFulfillment(paymentId) {
+  const staleBefore = new Date(Date.now() - FULFILLMENT_STALE_MS);
+  return Payment.findOneAndUpdate(
+    {
+      _id: paymentId,
+      $or: [
+        { status: 'pending' },
+        // Pre-fix rows stored 'paid' without ever receiving a code (create-time
+        // CinetPay ACCEPTED): fulfilable again on the next trigger.
+        { status: 'paid', activationCodeId: null, codeEnc: null },
+        // Winner crashed mid-fulfilment: `processing` untouched for longer than
+        // FULFILLMENT_STALE_MS is taken over instead of leaving the payment
+        // stuck forever.
+        { status: 'processing', updatedAt: { $lt: staleBefore } },
+      ],
+    },
+    { $set: { status: 'processing' } },
+    { new: true },
+  ).exec();
+}
+
+/**
+ * Persist the outcome of a held claim, fenced on the claim token: if the claim
+ * was taken over (or the payment moved to a terminal status) while we were
+ * generating, the write is a no-op so we never clobber the new owner's fields.
+ * @returns the updated document (with codeEnc, so the poll can reveal the code),
+ *          or null when this trigger no longer owned the claim.
+ */
+async function finalizeFulfillment(paymentId, claimToken, fields) {
+  return Payment.findOneAndUpdate(
+    { _id: paymentId, status: 'processing', updatedAt: claimToken },
+    { $set: fields },
+    { new: true },
+  )
+    .select('+codeEnc')
+    .exec();
+}
+
+/**
+ * Hand a claim back after a failed attempt so a later trigger can retry. Goes
+ * back to 'pending' — NEVER 'failed': the gateway already reported the money as
+ * captured, so a terminal failure here is exactly what strands the customer.
+ */
+async function releaseFulfillmentClaim(paymentId, claimToken, reason) {
+  await Payment.findOneAndUpdate(
+    { _id: paymentId, status: 'processing', updatedAt: claimToken },
+    { $set: { status: 'pending', failureReason: String(reason).slice(0, 500) } },
+  ).exec();
+}
+
+/**
+ * Mark a payment whose gateway payload failed the money check, without ever
+ * minting a code and without inventing a second state machine: claim it through
+ * claimFulfillment and immediately hand the claim back via
+ * releaseFulfillmentClaim, so the row ends up 'pending' with the mismatch in
+ * failureReason — visible for reconciliation, never 'failed' (the money may
+ * well be captured) and never stuck in 'processing'.
+ */
+async function recordFulfillmentMismatch(payment, reason) {
+  const claim = await claimFulfillment(payment._id);
+  if (!claim) return; // Already settled, or another trigger holds the claim.
+  await releaseFulfillmentClaim(claim._id, claim.updatedAt, reason);
+}
+
+/**
  * Turn a confirmed online payment (Chargily or CinetPay) into exactly one
  * activation code — the same hashed/encrypted-at-rest code mechanism resellers
  * and admins already use.
- * Idempotent: a `paid` payment already carrying an activationCodeId is a no-op.
+ *
+ * Idempotent by construction: the atomic claim means a second (or third)
+ * concurrent trigger is a no-op, and 'paid' is written in the same update as
+ * the code.
+ *
+ * Returns the outcome the caller turns into a gateway response:
+ *   'fulfilled' — this trigger won the claim and stored a fresh code (the
+ *                 written document is returned as `payment` so a status poll can
+ *                 answer with the code immediately);
+ *   'settled'   — already fulfilled or terminally failed: nothing to do, ACK;
+ *   'in-flight' — another trigger holds a live claim: don't ACK, retry later;
+ *   'retry'     — we claimed it but code generation failed and the claim was
+ *                 released back to 'pending': don't ACK, retry later (P-2);
+ *   'mismatch'  — the gateway payload disagrees with the payment's amount,
+ *                 currency or token (P-4): do NOT fulfil, do NOT ACK, leave the
+ *                 row 'pending' with the reason recorded for reconciliation.
+ * Code-generation failures never throw; only an unexpected write failure while
+ * releasing the claim can, and the callers keep their own try/catch for that.
  */
 async function fulfillPayment(payment, checkoutData) {
-  if (payment.status === 'paid' && payment.activationCodeId) return;
-
-  const codeExpiryDays = await getCodeExpiryDays();
-  const result = await generateCodes({
-    planId: String(payment.planId),
-    quantity: 1,
-    prefix: 'DZPAY',
-    codeExpiresInDays: codeExpiryDays,
-    resellerId: payment.resellerId ? String(payment.resellerId) : null,
-    customerPhone: payment.customerPhone || null,
-  });
-
-  if (!result.ok) {
-    payment.status = 'failed';
-    payment.failureReason = `Code generation failed: ${result.error}`;
-    await payment.save();
-    return;
+  const mismatch = gatewayPaymentMismatch(payment, checkoutData);
+  if (mismatch) {
+    const reason = `Gateway/payment mismatch: ${mismatch}`;
+    console.error(
+      `[payments][MONEY-MISMATCH] provider=${payment.provider} payment=${payment._id} checkout=${payment.checkoutId} — ${mismatch}; refusing to fulfil`,
+    );
+    await recordFulfillmentMismatch(payment, reason);
+    return { outcome: 'mismatch' };
   }
 
-  const plainCode = result.codes[0];
-  const hash = hashActivationCode(normalizeActivationCode(plainCode));
-  const codeDoc = await ActivationCode.findOne({ codeHash: hash }).select('_id').exec();
+  const claim = await claimFulfillment(payment._id);
+  if (!claim) {
+    // Loser: write nothing — the winner's fields (code, status) stay untouched.
+    // The document we came in with is stale by now, so the CURRENT status decides
+    // whether the gateway should retry ('processing': someone is fulfilling right
+    // now) or may be ACKed (already 'paid'/terminal).
+    const current = await Payment.findById(payment._id).select('status').lean().exec();
+    return { outcome: current?.status === 'processing' ? 'in-flight' : 'settled' };
+  }
 
-  payment.status = 'paid';
-  payment.paymentMethod = checkoutData?.payment_method || checkoutData?.payment_method_ref || payment.paymentMethod || null;
-  payment.activationCodeId = codeDoc?._id || null;
-  payment.codeEnc = encryptSecret(plainCode);
-  payment.fulfilledAt = new Date();
-  await payment.save();
+  const claimToken = claim.updatedAt;
+  try {
+    const codeExpiryDays = await getCodeExpiryDays();
+    const result = await generateCodes({
+      planId: String(claim.planId),
+      quantity: 1,
+      prefix: 'DZPAY',
+      codeExpiresInDays: codeExpiryDays,
+      resellerId: claim.resellerId ? String(claim.resellerId) : null,
+      customerPhone: claim.customerPhone || null,
+    });
 
-  // Fire-and-forget audit entry. AuditLog.userId is a User ref; there is no
-  // signed-in user for a webhook-driven fulfillment, so we log via console
-  // instead of forcing an invalid/misleading ObjectId into the audit trail.
-  console.log(
-    `[payments] ${payment.provider} payment fulfilled: payment=${payment._id} plan=${payment.planId} amount=${payment.amount}${payment.currency}`,
-  );
+    if (!result.ok) {
+      await releaseFulfillmentClaim(claim._id, claimToken, `Code generation failed: ${result.error}`);
+      console.error(`[payments] code generation failed for payment=${claim._id} (${claim.provider}): ${result.error}`);
+      return { outcome: 'retry' };
+    }
+
+    const plainCode = result.codes[0];
+    const hash = hashActivationCode(normalizeActivationCode(plainCode));
+    const codeDoc = await ActivationCode.findOne({ codeHash: hash }).select('_id').exec();
+
+    const finalized = await finalizeFulfillment(claim._id, claimToken, {
+      status: 'paid',
+      paymentMethod: checkoutData?.payment_method || checkoutData?.payment_method_ref || claim.paymentMethod || null,
+      activationCodeId: codeDoc?._id || null,
+      codeEnc: encryptSecret(plainCode),
+      fulfilledAt: new Date(),
+      failureReason: null,
+    });
+
+    if (!finalized) {
+      // Our claim was taken over while we were generating. codeHash is unique,
+      // so codeDoc is the code WE minted — drop it rather than leave an orphan
+      // activation code that belongs to no payment.
+      if (codeDoc?._id) await ActivationCode.findByIdAndDelete(codeDoc._id).exec();
+      console.warn(`[payments] lost the fulfilment race for payment=${claim._id} — discarded its generated code`);
+      return { outcome: 'in-flight' };
+    }
+
+    // Fire-and-forget audit entry. AuditLog.userId is a User ref; there is no
+    // signed-in user for a webhook-driven fulfillment, so we log via console
+    // instead of forcing an invalid/misleading ObjectId into the audit trail.
+    console.log(
+      `[payments] ${claim.provider} payment fulfilled: payment=${claim._id} plan=${claim.planId} amount=${claim.amount}${claim.currency}`,
+    );
+    return { outcome: 'fulfilled', payment: finalized };
+  } catch (err) {
+    // Unexpected throw (Mongo, crypto, …): release the claim so a later trigger
+    // can retry instead of the payment sitting in 'processing' forever.
+    await releaseFulfillmentClaim(claim._id, claimToken, 'Code generation failed');
+    console.error(`[payments] fulfillment error for payment=${claim._id}:`, err);
+    return { outcome: 'retry' };
+  }
 }
 
 
