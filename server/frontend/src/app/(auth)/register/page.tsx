@@ -31,6 +31,10 @@ function RegisterContent() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [recaptchaSiteKey, setRecaptchaSiteKey] = useState<string | null>(null);
   const [registrationEnabled, setRegistrationEnabled] = useState<boolean | null>(null);
+  // Whether the platform can actually send mail. Drives the post-signup message: telling a
+  // customer to "check your email" when no mail channel exists sends them to wait for a
+  // message that never arrives (and login is not gated on verification anyway).
+  const [mailConfigured, setMailConfigured] = useState(true);
   const [oauthEnabled, setOauthEnabled] = useState({ google: false, github: false });
   const recaptchaLoaded = useRef(false);
 
@@ -44,6 +48,8 @@ function RegisterContent() {
         // Default to enabled when the flag is absent (older backends) so the
         // page never breaks; the server remains the source of truth.
         setRegistrationEnabled(data?.registrationEnabled ?? true);
+        // Absent flag = older backend: keep the email wording rather than promise less.
+        setMailConfigured(data?.mailConfigured ?? true);
         setOauthEnabled({
           google: Boolean(data?.googleOAuthEnabled),
           github: Boolean(data?.githubOAuthEnabled),
@@ -80,7 +86,11 @@ function RegisterContent() {
       await api.post('/auth/register', { username, email, password, recaptchaToken });
       const loginUrl =
         '/login?message=' +
-        encodeURIComponent('تم إنشاء الحساب! تحقق من بريدك الإلكتروني قبل تسجيل الدخول.') +
+        encodeURIComponent(
+          mailConfigured
+            ? 'تم إنشاء الحساب! تحقق من بريدك الإلكتروني قبل تسجيل الدخول.'
+            : 'تم إنشاء الحساب! يمكنك تسجيل الدخول الآن.'
+        ) +
         (redirect ? '&redirect=' + encodeURIComponent(redirect) : '');
       router.push(loginUrl);
     } catch (err: unknown) {
