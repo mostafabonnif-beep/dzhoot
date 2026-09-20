@@ -159,6 +159,31 @@ export async function probeStream(url: string, options: ProbeOptions = {}): Prom
       segmentCount: (manifest.match(/#EXTINF/g) || []).length,
     };
 
+    // Provider placeholder: an expired (or off-air) source answers with a valid manifest
+    // whose only segment is a short black clip. The URL is not dead — the *subscription*
+    // is, and naming that on the channel is the difference between "renew the account"
+    // and "spend a day debugging probes" (measured 2026-09-20: 16,707 of 31,868 channels
+    // served `black.ts` from a provider whose account expired on 2026-09-15, and every
+    // one of them was reported as a generic all-sources-dead channel).
+    const placeholderOnly =
+      // The line ends with a newline inside the manifest, so the terminator is whitespace,
+      // a query string or the end of the document — not just a query/end-of-string.
+      /(^|\/)(black|black[_-]?out|no[_-]?signal)\.(ts|mp4|m4s)([?#\s]|$)/i.test(manifest) &&
+      !manifestInfo.isLive;
+    if (placeholderOnly) {
+      return {
+        status: 'dead',
+        responseTimeMs,
+        statusCode,
+        error: 'Placeholder segment (black.ts) — provider account expired or channel off-air',
+        manifestValid,
+        // The manifest was parsed, not probed: the placeholder path returns before the
+        // deep segment check runs, so there is no segment verdict to report.
+        segmentReachable: null,
+        manifestInfo,
+      };
+    }
+
     // Deep probe: try to reach the first segment
     let segmentReachable: boolean | null = null;
     const segmentUrl = extractFirstSegmentUrl(manifest, url);
@@ -167,15 +192,12 @@ export async function probeStream(url: string, options: ProbeOptions = {}): Prom
       const segSsrf = await validateUrlForSSRF(segmentUrl);
       if (segSsrf.safe) {
         try {
-          const segRes = await axios.head(segmentUrl, {
-            timeout: cascadeTimeout,
-            maxRedirects: 5,
-            validateStatus: (s) => s >= 200 && s < 500,
+          segmentReachable = await segmentIsReachable(segmentUrl, {
             headers,
+            timeout: cascadeTimeout,
             beforeRedirect,
             signal: probeAbort.signal,
           });
-          segmentReachable = segRes.status >= 200 && segRes.status < 400;
         } catch {
           segmentReachable = false;
         }
@@ -218,15 +240,12 @@ export async function probeStream(url: string, options: ProbeOptions = {}): Prom
                 const varSegSsrf = await validateUrlForSSRF(varSegUrl);
                 if (varSegSsrf.safe) {
                   try {
-                    const segRes2 = await axios.head(varSegUrl, {
-                      timeout: cascadeTimeout,
-                      maxRedirects: 5,
-                      validateStatus: (s) => s >= 200 && s < 500,
+                    segmentReachable = await segmentIsReachable(varSegUrl, {
                       headers,
+                      timeout: cascadeTimeout,
                       beforeRedirect,
                       signal: probeAbort.signal,
                     });
-                    segmentReachable = segRes2.status >= 200 && segRes2.status < 400;
                   } catch {
                     segmentReachable = false;
                   }
@@ -307,8 +326,68 @@ export async function probeStream(url: string, options: ProbeOptions = {}): Prom
 /**
  * Extract the first .ts/.aac/.mp4 segment URL from an HLS manifest.
  */
-function extractFirstSegmentUrl(manifest: string, manifestUrl: string): string | null {
-  const lines = manifest.split('\n');
+/**
+ * Is the segment actually fetchable?
+ *
+ * `HEAD` is not a reliable probe for media segments: plenty of CDNs answer it with
+ * 405/403 (or not at all) while serving the very same URL to a ranged GET. Treating that
+ * as "unreachable" declared *healthy* channels dead, and a dead primary is hidden from
+ * customers by the health pipeline (measured 2026-09-20: a segment that returns 200 with
+ * MPEG-TS data from a plain GET was reported `segmentReachable=false`).
+ *
+ * Keep HEAD as the cheap first try, then fall back to a single-byte ranged GET before
+ * concluding the segment is unreachable.
+ */
+async function segmentIsReachable(
+  segmentUrl: string,
+  request: {
+    headers: Record<string, string>;
+    timeout: number;
+    beforeRedirect: (options: any) => void;
+    signal: AbortSignal;
+  },
+): Promise<boolean> {
+  const release = (response: any) => {
+    const socket = response?.request?.socket || response?.request?.res?.socket;
+    if (socket && typeof socket.destroy === 'function' && !socket.destroyed) socket.destroy();
+    const data = response?.data;
+    if (data && typeof data.destroy === 'function') data.destroy();
+  };
+
+  try {
+    const head = await axios.head(segmentUrl, {
+      timeout: request.timeout,
+      maxRedirects: 5,
+      validateStatus: (s) => s >= 200 && s < 500,
+      headers: request.headers,
+      beforeRedirect: request.beforeRedirect,
+      signal: request.signal,
+    });
+    if (head.status >= 200 && head.status < 400) return true;
+  } catch {
+    // fall through to the ranged GET
+  }
+
+  try {
+    const ranged = await axios.get(segmentUrl, {
+      timeout: request.timeout,
+      maxRedirects: 5,
+      validateStatus: (s) => s >= 200 && s < 500,
+      headers: { ...request.headers, Range: 'bytes=0-0' },
+      responseType: 'stream',
+      beforeRedirect: request.beforeRedirect,
+      signal: request.signal,
+    });
+    const ok = ranged.status >= 200 && ranged.status < 400;
+    // Only the status line was needed — never leave a media body open.
+    release(ranged);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function extractFirstSegmentUrl(manifest: string, manifestUrl: string): string | null {  const lines = manifest.split('\n');
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].startsWith('#EXTINF:')) {
       const next = lines[i + 1]?.trim();
