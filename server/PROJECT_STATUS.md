@@ -1,7 +1,66 @@
 # DZ HOOF — Server Project Status
 
-_Last verified: 2026-09-16 (production VPS + CI). The newest section is
-"Re-verified 2026-09-16" below; the older sections are kept for their measured history._
+_Last verified: 2026-09-20 (production VPS + CI). The newest section is
+"Re-verified 2026-09-20" below; the older sections are kept for their measured history._
+
+## Re-verified 2026-09-20 (operations hardening pass)
+
+Measured on the production host, 2026-09-20. Production was **39 commits behind `main`**
+when this pass started; it now runs the tip of `main` (`c9464985`), and the controls that
+were supposed to catch the next failure were repaired — **three of them were "running"
+while unable to tell anyone anything**.
+
+### Shipped
+
+- **Deployed** `9281006` → `c9464985` in three atomic deploys (each with a verified
+  mongodump, `smoke 15/15`/`17/17`, and a rollback point under `/opt/dzhoot.previous-*`).
+  The deploy failures of 2026-09-19 were caused by a missing `COMPOSE_PROJECT_NAME=dzhoot`
+  (compose ran from `/opt/dzhoot/server`, i.e. a different project, and collided on the
+  explicit `container_name`s) — recorded in `docs/ops` history and in the deploy notes.
+- **Customer problem reports** (PR #305): in-app "report a problem", the public ingest
+  endpoint `POST /api/v1/app/report-problem`, and the admin triage view over customer
+  reports plus automatically captured crashes. Unauthenticated by design (the report that
+  matters most comes from a device that cannot sign in), with a closed diagnostic shape,
+  field-level redaction on ingest, its own rate limiter, and `requireAuth`+`requireAdmin`
+  on the admin routes. **Verified live**: empty body → `400 REPORT_CONTENT_REQUIRED`;
+  a real report → `201` with a quotable `DZR-…` id.
+- **Arabic customer surface** (PR #318) and the **hardening pass** (PR #317: repo cleanup,
+  no raw `err.message` in API responses, AdMob test-ID fallback, disk-usage alert) are
+  deployed.
+
+### Controls repaired (each verified on the host)
+
+| Control | What it was doing | Now |
+|---|---|---|
+| Monthly **restore drill** | Failing every month **silently**: authenticated as `dzhoof-admin` (a user that does not exist; the instance has one user, `dzhoof`), swallowed the `Authentication failed` line inside a `grep`, and alerted through an empty webhook | Reads `MONGODB_URI` (the credential the backups are taken with), prints the real error, alerts on success **and** failure: `1,519,308 documents across 45 collections` |
+| Nightly **off-site backup** | Marked `FAILED` every night *after* writing its snapshot: `ProtectHome=true` made restic's cache read-only (so every run re-fetched all metadata over rclone → Drive rate limits), and a held lock aborted `forget --prune` | `CacheDirectory=dzhoof-restic` + `--retry-lock 15m`: `Off-site backup completed successfully`, 0 failed units |
+| **systemd failure notifier** | Ran, reported "Deactivated successfully", and told nobody — it read `ALERT_WEBHOOK_URL` (empty) into a variable named `UNIT` and never learned which unit failed | `dzhoof-failure-notify` takes the unit name, alerts through `dzhoof-alert.sh` (the path proven to deliver), logs every failure to `/var/log/dzhoof-failures.log` |
+| **Disk-usage alert** | Died with `exit 127` before measuring anything (`source /etc/dzhoot/.env.production` executed an unquoted value) | Reads only the two variables it needs; installed with a 30-minute cron and exercised |
+| **Daily operations report** | Lost every day: the email channel has no credentials, and the report had no other channel | Falls back to the alert channels (Telegram) when email reaches nobody; `channel` is recorded in the task history |
+| **Automatic security updates** | Disabled at the APT level (`APT::Periodic::* = "0"`) while the service still reported `active` — 205 security updates pending, log frozen since 2024-04-26 | Restored and applied (363 → 0 pending); verified |
+| **`grub-pc`** | Left half-configured by the upgrade: its `install_devices` pointed at `/dev/vda`, which does not exist on this host (`/dev/sda`) | Pointed at the real disk, MBR backed up to `/var/backups/dzhoot/mbr-*.bin`, `dpkg --audit` clean, boot entry for `6.8.0-139` present |
+
+### Open, with the owner
+
+- **Email credentials**: `BREVO_USER`/`BREVO_PASSWORD` are empty, so password reset and
+  subscription-expiry mail to customers cannot be delivered. Set them in
+  `/admin/settings` or `/etc/dzhoot/.env.production`. The daily report already survives
+  this (Telegram fallback).
+- **CodeQL exclusion not wired**: `js/missing-token-validation` is a documented false
+  positive (the server uses `middleware/csrfProtection`, which the query cannot see).
+  `.github/codeql/codeql-config.yml` records the exclusion, but the analysis is never told
+  to read it — `codeql.yml` has no `config-file:` input. Wiring it (or dismissing the
+  alert in the Security tab) needs a permission this agent does not hold.
+- **Kernel reboot**: `6.8.0-139` and `libc6` are installed and the host still runs
+  `6.8.0-31`; a one-shot timer (`dzhoof-planned-reboot.timer`) reboots at 02:00 UTC on
+  2026-09-21 with a verification pass 20 minutes later.
+- **Secrets to rotate**: root passwords exposed in a chat transcript, the historical
+  `dzhoof-admin-key` in the repository history, and the admin password written in
+  `reports/HANDOVER_REPORT_2026-08-25_FINAL_AR.md`.
+- **Android dependency majors** (media3, navigation, firebase-bom, gradle-wrapper) need a
+  real-device pass; CI cannot cover them. `codeql-action` (#280 + #283) must be merged
+  **together** — each alone leaves `init` and `analyze` on different versions.
+
 
 ## Re-verified 2026-09-16 (audit hardening pass)
 
