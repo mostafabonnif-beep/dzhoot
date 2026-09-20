@@ -379,6 +379,7 @@ private fun SectionContent(
             onUpdateNow = actions.onUpdateNow,
             onOpenDiagnostics = actions.onNavigateToDiagnostics,
             onOpenReportProblem = actions.onNavigateToReportProblem,
+            supportUrl = BuildConfig.SUPPORT_URL,
             modifier = modifier
         )
     }

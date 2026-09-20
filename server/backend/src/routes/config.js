@@ -82,6 +82,14 @@ router.get('/defaults', async (req, res) => {
       recaptchaConfigured: recaptchaConfigured(),
       googleOAuthEnabled: googleOAuthConfigured(),
       githubOAuthEnabled: githubOAuthConfigured(),
+      // Customer-facing support channel (Telegram today). Exposed so any UI can offer
+      // the operator's real contact route — with the email channel deliberately
+      // unconfigured, this is how an account is recovered. Only http(s) is served, so
+      // an env value can never inject a `javascript:`/`data:` URL into a client.
+      supportUrl: (() => {
+        const raw = String(process.env.SUPPORT_URL || process.env.SUPPORT_TELEGRAM_URL || '').trim();
+        return /^https?:\/\//i.test(raw) ? raw : null;
+      })(),
     };
 
     res.json({

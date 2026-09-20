@@ -56,6 +56,8 @@ function LoginContent() {
     googleOAuthEnabled: false,
     githubOAuthEnabled: false,
     registrationEnabled: false,
+    // Operator support channel. Empty when unconfigured, and then no link is rendered.
+    supportUrl: '',
   });
   const message = searchParams.get('message');
   const redirect = searchParams.get('redirect');
@@ -72,6 +74,7 @@ function LoginContent() {
           googleOAuthEnabled: Boolean(data.googleOAuthEnabled),
           githubOAuthEnabled: Boolean(data.githubOAuthEnabled),
           registrationEnabled: Boolean(data.registrationEnabled),
+          supportUrl: typeof data.supportUrl === 'string' ? data.supportUrl : '',
         });
       })
       .catch(() => {});
@@ -441,6 +444,22 @@ function LoginContent() {
           >
             إنشاء حساب
           </Link>
+        </p>
+      )}
+
+      {/* Account recovery goes through the operator's support channel: the mail channel
+          is deliberately unconfigured, so a self-service reset link would be a dead end. */}
+      {capabilities.supportUrl && (
+        <p className="mt-4 text-sm text-muted-foreground">
+          نسيت كلمة المرور؟{' '}
+          <a
+            href={capabilities.supportUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-foreground hover:text-primary transition-colors"
+          >
+            تواصل مع الدعم
+          </a>
         </p>
       )}
     </div>

@@ -68,6 +68,16 @@ android {
         // Firebase is optional for local/debug builds because the real
         // google-services.json is intentionally supplied only by CI/release.
         buildConfigField("String", "API_BASE_URL", "\"$configuredApiUrl\"")
+        // Support / contact URL (the operator's Telegram channel today). Optional on
+        // purpose: an empty value hides the support entry in Settings instead of showing
+        // a button that opens nothing. Injected at build time via `-PdzhoofSupportUrl=`
+        // or DZHOOF_SUPPORT_URL, so it needs no server round-trip and no app config API.
+        val configuredSupportUrl = providers.gradleProperty("dzhoofSupportUrl")
+            .orElse(providers.environmentVariable("DZHOOF_SUPPORT_URL"))
+            .orNull
+            ?.trim()
+            .orEmpty()
+        buildConfigField("String", "SUPPORT_URL", "\"$configuredSupportUrl\"")
         buildConfigField("Boolean", "FIREBASE_ENABLED", googleServicesAvailable.toString())
         // AdMob: the APPLICATION_ID must live in the manifest at build time.
         // Real IDs are injected in CI/release from the ADMOB_APP_ID /

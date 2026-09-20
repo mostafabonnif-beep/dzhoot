@@ -105,6 +105,11 @@ async function expiryAlertHandler(): Promise<TaskResult> {
       result: {
         sent: result.sent,
         inApp: result.inApp || 0,
+        // Push is the channel that actually reaches the phone without email; an
+        // operator needs to see it separate from the in-app inbox count.
+        pushed: result.pushed || 0,
+        pushFailed: result.pushFailed || 0,
+        pushUnreachable: result.pushUnreachable || 0,
         emailDisabled: result.emailDisabled || 0,
         emailFailed: result.emailFailed || 0,
       },
