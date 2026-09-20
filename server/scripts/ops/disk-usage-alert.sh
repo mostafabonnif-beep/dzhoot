@@ -21,12 +21,24 @@ STATE_FILE="${DISK_ALERT_STATE:-/var/run/dzhoof-disk-alert.last}"
 REPEAT_AFTER_SEC=21600 # re-alert at most every 6h while above threshold
 
 ENV_FILE="${DZHOOF_ENV_FILE:-/etc/dzhoot/.env.production}"
-if [ -f "$ENV_FILE" ]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$ENV_FILE"
-  set +a
-fi
+
+# Read one variable out of the env file WITHOUT sourcing it.
+#
+# The script used to `set -a; . "$ENV_FILE"`, which executes the file as shell code.
+# This env file legitimately holds values with unquoted spaces and commas —
+# `MIRROR_DOMAIN=, iptv.5-196-51-152.sslip.io` — so sourcing it tried to run
+# `iptv.5-196-51-152.sslip.io` as a command and the whole script died with exit 127
+# before it ever looked at the disk (measured 2026-09-20 on the production host: the
+# cron entry was installed and the alert could never fire). Two variables are all this
+# script needs, so extract exactly those and leave the rest of the file alone.
+env_value() {
+  [ -f "$ENV_FILE" ] || return 0
+  sed -n "s/^${1}=//p" "$ENV_FILE" | tail -n 1 \
+    | sed -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//"
+}
+
+ALERT_TELEGRAM_BOT_TOKEN="${ALERT_TELEGRAM_BOT_TOKEN:-$(env_value ALERT_TELEGRAM_BOT_TOKEN)}"
+ALERT_CHAT_ID="${ALERT_CHAT_ID:-$(env_value ALERT_CHAT_ID)}"
 
 USAGE_PCT="$(df -P "$WATCH_PATH" | awk 'NR==2 {gsub(/%/,"",$5); print $5}')"
 [ -n "${USAGE_PCT:-}" ] || { echo '[disk-alert][ABORT] could not read df usage' >&2; exit 1; }
