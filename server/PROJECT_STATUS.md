@@ -100,7 +100,7 @@ Measured on the VPS and against the live API, not copied forward:
 ## Production deployment (verified 2026-08-21)
 
 - **Live at**: `https://iptv.ld-11.net` (HTTPS, Let's Encrypt, valid until 2026-11-16).
-- **Stack**: `dzhoof-api`, `dzhoof-scheduler`, `dzhoof-frontend`, `dzhoof-mongodb`, `dzhoof-redis`, `dzhoof-caddy` — all healthy on the VPS (`5.135.79.221`).
+- **Stack**: `dzhoof-api`, `dzhoof-scheduler`, `dzhoof-frontend`, `dzhoof-mongodb`, `dzhoof-redis`, `dzhoof-caddy` — all healthy on the VPS (`5.196.51.152`).
 - **Health**: `/health` → `{"status":"ok","version":"1.0.1"}`; scheduler syncs IPTV-org catalog (14k+ channels).
 - **Deploy model**: pinned-commit staged releases (`/opt/dzhoot-releases/<sha>`) with atomic swap and automatic rollback; see `server/scripts/deploy/atomic-deploy.sh`. There is no `.github/workflows/deploy.yml` (this line used to imply one) — deploys are run on the host by an operator after CI is green, and `atomic-deploy.sh` now refuses a commit whose required workflows are not green.
 - **Secrets**: `/etc/dzhoot/.env.production` (mode 600) on the server only; nothing secret is committed.

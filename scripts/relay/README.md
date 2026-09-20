@@ -8,7 +8,7 @@ Cloudflare front (104.18.22.66/23.66) verify and stream normally.
 ## Architecture
 
 ```
-Home machine                    VPS (5.135.79.221)
+Home machine                    VPS (5.196.51.152)
 ┌──────────────┐   ssh -R       ┌─────────────────────────────────────┐
 │ relay-client │ 127.0.0.1:9000 │ sshd :9000  ← reverse tunnel        │
 │ SOCKS5 :9001 │ ◄────────────► │        │                            │
