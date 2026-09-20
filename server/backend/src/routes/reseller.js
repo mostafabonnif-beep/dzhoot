@@ -434,15 +434,21 @@ router.post('/codes/generate', async (req, res) => {
   let creditRefunded = false; // single-shot: one failure refunds exactly once
   let codesCommitted = false; // codes minted → credit legitimately spent, never refund
   let planId = null;
+  // Typed, validated form of `planId`. Every query below uses THIS value, never the
+  // raw request field: a string straight from `req.body` reaching a Mongo filter is
+  // both a NoSQL-operator injection surface (`planId: {$ne: null}` would match every
+  // credit row) and what CodeQL reports as "database query built from user-controlled
+  // sources".
+  let planObjId = null;
   let qty = 0;
   // Idempotent refund: a failure path may call it more than once (inner catch
   // re-throws into the outer catch), and a generation that already minted codes
   // must never be refunded — that is how free codes are minted.
   const rollbackCredit = async () => {
-    if (!creditDeducted || creditRefunded || codesCommitted) return;
+    if (!creditDeducted || creditRefunded || codesCommitted || !planObjId) return;
     creditRefunded = true;
     await Reseller.updateOne(
-      { _id: req.reseller._id, 'credit.planId': planId },
+      { _id: req.reseller._id, 'credit.planId': planObjId },
       { $inc: { 'credit.$.quantity': qty } },
     ).exec();
   };
@@ -453,7 +459,8 @@ router.post('/codes/generate', async (req, res) => {
     if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
       return res.status(400).json({ success: false, error: 'quantity must be an integer between 1 and 50' });
     }
-    if (!parseId(planId)) return res.status(400).json({ success: false, error: 'planId is required' });
+    planObjId = parseId(planId) ? new mongoose.Types.ObjectId(String(planId)) : null;
+    if (!planObjId) return res.status(400).json({ success: false, error: 'planId is required' });
 
     // Optional customer details captured at generation time (backup tier B-style).
     const customerName =
@@ -476,7 +483,7 @@ router.post('/codes/generate', async (req, res) => {
       customDurationDays = days;
     }
 
-    const plan = await Plan.findById(planId).lean().exec();
+    const plan = await Plan.findById(planObjId).lean().exec();
     if (!plan || plan.status !== 'Active') {
       return res.status(400).json({ success: false, error: 'Plan not found or inactive' });
     }
@@ -488,7 +495,7 @@ router.post('/codes/generate', async (req, res) => {
 
     // Atomic credit deduction: only succeeds if enough credit remains for this plan.
     const updated = await Reseller.findOneAndUpdate(
-      { _id: req.reseller._id, credit: { $elemMatch: { planId, quantity: { $gte: qty } } } },
+      { _id: req.reseller._id, credit: { $elemMatch: { planId: planObjId, quantity: { $gte: qty } } } },
       { $inc: { 'credit.$.quantity': -qty } },
       { new: true },
     )
