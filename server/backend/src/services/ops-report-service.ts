@@ -5,6 +5,7 @@ import ActivationCode from '../models/ActivationCode';
 import Reseller from '../models/Reseller';
 import Plan from '../models/Plan';
 import { sendEmail } from './email';
+import { sendOperationalAlert } from './alert-notifier';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -18,6 +19,9 @@ export async function sendDailyOpsReport(): Promise<{
   recipients: number;
   /** Recipients the SMTP path actually accepted. `ok` is false when this is 0. */
   delivered?: number;
+  /** Where the report actually arrived. 'alert-channels' = the email channel could not
+   * deliver it and the operational channels (Telegram/webhook) carried it instead. */
+  channel?: 'email' | 'alert-channels';
   error?: string;
 }> {
   try {
@@ -78,6 +82,39 @@ export async function sendDailyOpsReport(): Promise<{
       const reason = failed.length
         ? `${failed.length} recipient(s) rejected by the email channel`
         : 'no recipients configured';
+
+      // Fall back to the operational channels instead of losing the report. The email
+      // channel being unconfigured is a known state (production ran with empty Brevo
+      // credentials, so every daily report and expiry alert was silently dropped), and
+      // the one channel that demonstrably works there is Telegram. sendOperationalAlert
+      // tries webhook → email → Telegram and returns true only if one of them accepted
+      // it, so a report that arrives is never reported as lost.
+      const summary = [
+        `تقرير DZ HOOF اليومي — ${dateStr}`,
+        `• تفعيلات أمس: ${activatedYesterday}`,
+        perResellerLines,
+        `• مستخدمون جدد: ${newUsers}`,
+        `• اشتراكات نشطة: ${activeSubs}`,
+        '',
+        'وصل عبر قنوات التنبيه لأن قناة البريد غير قابلة للتسليم.',
+      ]
+        .filter((line) => line !== undefined && line !== null && line !== '')
+        .join('\n');
+      const alerted = await sendOperationalAlert({
+        // The date is part of the event key so the notifier's cooldown can never
+        // swallow a later day's report.
+        event: `ops-report:${dateStr}`,
+        severity: 'warning',
+        message: summary,
+        details: { activated: activatedYesterday, newUsers, activeSubs },
+      });
+      if (alerted) {
+        console.warn(
+          `[ops-report] email channel accepted 0/${recipients.length} recipients — report delivered through the alert channels instead`,
+        );
+        return { ok: true, recipients: recipients.length, delivered: 0, channel: 'alert-channels' };
+      }
+
       console.error(
         `[ops-report] daily report was NOT delivered to ${recipients.length} recipient(s): ${reason}`,
       );
@@ -86,7 +123,7 @@ export async function sendDailyOpsReport(): Promise<{
     if (failed.length) {
       console.warn(`[ops-report] daily report partially delivered: ${delivered.length}/${recipients.length}`);
     }
-    return { ok: true, recipients: recipients.length, delivered: delivered.length };
+    return { ok: true, recipients: recipients.length, delivered: delivered.length, channel: 'email' };
   } catch (err: any) {
     console.error('[ops-report] daily report error:', err);
     return { ok: false, recipients: 0, delivered: 0, error: err?.message || String(err) };

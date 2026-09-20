@@ -77,12 +77,20 @@ async function dailyReportHandler(): Promise<TaskResult> {
       durationMs: Date.now() - start,
       // `delivered` is what the SMTP path accepted; `recipients` is who was meant to
       // receive it. Reporting the first as the second is how a total delivery
-      // failure was logged as success (2026-09-15).
-      result: { recipients: result.recipients, delivered: result.delivered ?? 0 },
+      // failure was logged as success (2026-09-15). `channel` says where the report
+      // actually arrived when the email channel could not deliver it.
+      result: {
+        recipients: result.recipients,
+        delivered: result.delivered ?? 0,
+        channel: result.channel ?? 'none',
+      },
       error: result.error || undefined,
     },
   ];
-  return { summary: { ok: result.ok, recipients: result.recipients }, subtasks };
+  return {
+    summary: { ok: result.ok, recipients: result.recipients, channel: result.channel ?? 'none' },
+    subtasks,
+  };
 }
 
 /** Subscription expiry reminders (ACTIVE subs expiring within 3 days). */
