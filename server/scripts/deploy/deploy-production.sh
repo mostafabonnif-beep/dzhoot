@@ -2,7 +2,7 @@
 # DZ HOOF production deploy (audit-remediation-v1) — THE PRECISE PLAN.
 #
 # This script is the exact, reviewable deploy procedure for the production
-# server (5.135.79.221). It is intentionally SAFE-BY-DEFAULT:
+# server (5.196.51.152). It is intentionally SAFE-BY-DEFAULT:
 #   - dry-run mode by default (prints every step, changes nothing)
 #   - requires the operator flag --apply to actually change anything
 #   - takes a verified backup before touching containers
