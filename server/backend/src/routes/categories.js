@@ -6,12 +6,16 @@ const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth
 // Get all categories (derived from distinct channelGroup values)
 router.get('/', requireTvOrSessionAuth, async (req, res) => {
   try {
-    // Scope to what the caller can actually see: admin/demo → shared catalog (ownerId:null);
-    // a user → their own selection. Mirrors GET /channels so counts line up.
-    // TV clients (channelListCode) are served the shared catalog by /channels —
-    // their personal `channels` array is empty, so categories must mirror the
-    // catalog for them too, otherwise the category list comes back empty.
-    const isAdmin = req.user.role === 'Admin' || req.user.allCatalog === true || Boolean(req.user.channelListCode);
+    // Scope to what the caller can actually see: admin/allCatalog → shared catalog
+    // (ownerId:null); every other caller → their own selection. This mirrors
+    // GET /channels so counts line up.
+    //
+    // `channelListCode` is deliberately NOT part of the condition: it is a field on
+    // every user document (models/User.ts marks it required), so testing it treated
+    // every authenticated session as a catalog viewer — a user with zero channels
+    // received the full group structure (383 groups observed in production) while
+    // GET /channels correctly returned an empty selection.
+    const catalogView = req.user.role === 'Admin' || req.user.allCatalog === true;
     const { publicCatalogHideQuery, publicCatalogDedupQuery, cleanDisplayText } = require('../utils/catalog-presentation');
     const dedupMatch = req.user.role !== 'Admin' ? await publicCatalogDedupQuery() : {};
     // Plan/free-tier group scope (freemium): a code limited to a set of groups
@@ -20,7 +24,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     const { groupScopeClause } = require('../services/channel-scope');
     const scopeClause = await groupScopeClause(req.user);
     const scopeMatch = scopeClause || {};
-    const match = isAdmin
+    const match = catalogView
       ? { isActive: { $ne: false }, ownerId: null, ...publicCatalogHideQuery(), ...dedupMatch, ...scopeMatch }
       : {
           isActive: { $ne: false },

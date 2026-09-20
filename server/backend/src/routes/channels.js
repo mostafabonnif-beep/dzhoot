@@ -1268,6 +1268,22 @@ function getStreamScore(stream) {
 
 // Report stream status (dead/alive/unresponsive) — TV or session auth
 // Rate limit: 1 per channel per device per 5 minutes
+// Can this caller legitimately report liveness for this channel?
+//
+// Unlike `canReportChannel` (dashboard users, /flag), this route is also served
+// to TV clients authenticated by a channel list code, whose personal `channels`
+// array is empty while the shared catalog is still legitimately theirs to watch.
+// So the shared-catalog branch is decided by the freemium group scope instead of
+// by list membership. Private (ownerId-bearing) channels stay owner-only.
+async function canReportChannelStatus(user, channel) {
+  if (!user || !channel) return false;
+  if (user.role === 'Admin' || user.allCatalog === true) return true;
+  if (channel.ownerId) return String(channel.ownerId) === String(user.id);
+  if (hasRestrictedPresentationMarker(channel)) return false;
+  const { isChannelAllowedForUser } = require('../services/channel-scope');
+  return isChannelAllowedForUser(user, channel);
+}
+
 router.post('/:id/report-status', requireTvOrSessionAuth, async (req, res) => {
   try {
     const { status, deviceId } = req.body;
@@ -1285,13 +1301,24 @@ router.post('/:id/report-status', requireTvOrSessionAuth, async (req, res) => {
       });
     }
 
-    // Rate limiting
-    const rateLimitKey = `${req.params.id}:${deviceId}`;
+    // Authorize the target before touching it: `metrics.*` is operator-facing
+    // health data, and without this check any authenticated caller could inflate
+    // the counters of any channel — including another user's private import.
+    const target = await Channel.findOne(channelRouteQuery(req.params.id));
+    if (!target || !(await canReportChannelStatus(req.user, target))) {
+      // Same answer for "does not exist" and "not yours" — do not confirm
+      // existence to callers that cannot see the channel.
+      return res.status(404).json({ success: false, error: 'Channel not found' });
+    }
+
+    // Rate limit keyed on the authenticated principal, not on the client-supplied
+    // deviceId: a caller could otherwise rotate deviceId and write without bound.
+    const rateLimitKey = `${req.user.id}:${String(target._id)}`;
     const lastReport = reportStatusLimits.get(rateLimitKey);
     if (lastReport && Date.now() - lastReport < 5 * 60 * 1000) {
       return res.status(429).json({
         success: false,
-        error: 'Rate limit exceeded. One report per channel per device per 5 minutes.',
+        error: 'Rate limit exceeded. One report per channel per 5 minutes.',
       });
     }
 
@@ -1309,7 +1336,7 @@ router.post('/:id/report-status', requireTvOrSessionAuth, async (req, res) => {
       update.$set = { 'metrics.lastUnresponsiveAt': now };
     }
 
-    const channel = await Channel.findOneAndUpdate(channelRouteQuery(req.params.id), update, { new: true });
+    const channel = await Channel.findByIdAndUpdate(target._id, update, { new: true });
     if (!channel) {
       return res.status(404).json({ success: false, error: 'Channel not found' });
     }
