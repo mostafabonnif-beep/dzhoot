@@ -28,6 +28,7 @@ import Subscription from '../models/Subscription';
 import Reseller from '../models/Reseller';
 import Channel from '../models/Channel';
 import XtreamSource from '../models/XtreamSource';
+import Device from '../models/Device';
 import { sendDailyOpsReport } from '../services/ops-report-service';
 
 const lean = (value: unknown) => ({ select: () => ({ lean: async () => value }) });
@@ -55,7 +56,7 @@ async function seedChannel(
   });
 }
 
-describe('sendDailyOpsReport — catalog health block', () => {
+describe('sendDailyOpsReport — catalog health and delivery reach', () => {
   beforeEach(async () => {
     mockSendEmail.mockReset();
     mockSendOperationalAlert.mockReset();
@@ -92,6 +93,15 @@ describe('sendDailyOpsReport — catalog health block', () => {
     await seedChannel('H ORPHAN ONE', String(goneSourceId), true);
     await seedChannel('H ORPHAN TWO', String(goneSourceId), false);
 
+    await Device.deleteMany({});
+    // 19 devices and only two of them carrying a token: the production shape on 2026-09-20
+    // was 19 devices and ZERO tokens, and this block is what makes that visible daily.
+    await Device.create([
+      { userId: new mongoose.Types.ObjectId(), deviceId: 'dev-1', platform: 'android', pushToken: 'tok-1' },
+      { userId: new mongoose.Types.ObjectId(), deviceId: 'dev-2', platform: 'android', pushToken: 'tok-2' },
+      { userId: new mongoose.Types.ObjectId(), deviceId: 'dev-3', platform: 'android' },
+    ]);
+
     mockSendEmail.mockResolvedValue({ ok: false, skipped: true });
     mockSendOperationalAlert.mockResolvedValue(true);
   });
@@ -113,11 +123,32 @@ describe('sendDailyOpsReport — catalog health block', () => {
     expect(alert.message).toContain('ميتة (تُعيد شاشة سوداء): 2');
     expect(alert.message).toContain('يتيمة (مصدرها لم يعد موجودًا): 2');
 
+    // Delivery reach: how many devices could receive a push at all.
+    expect(alert.message).toContain('قنوات الوصول إلى العميل');
+    expect(alert.message).toContain('أجهزة العملاء: 3');
+    expect(alert.message).toContain('منها يمكن أن يصله Push: 2');
+
     // The structured copy is what a future dashboard/alert rule would read.
+    expect(alert.details.devices).toBe(3);
+    expect(alert.details.devicesPushCapable).toBe(2);
     expect(alert.details.catalogActive).toBe(5);
     expect(alert.details.catalogVisible).toBe(2);
     expect(alert.details.catalogDead).toBe(2);
     expect(alert.details.catalogOrphaned).toBe(2);
+  });
+
+  it('warns when no device can receive a push, so "nothing was sent" cannot pass unnoticed', async () => {
+    await Device.updateMany({}, { $unset: { pushToken: '' } });
+
+    await sendDailyOpsReport();
+    const alert = mockSendOperationalAlert.mock.calls[0][0] as {
+      message: string;
+      details: Record<string, number>;
+    };
+    expect(alert.message).toContain('منها يمكن أن يصله Push: 0');
+    expect(alert.message).toContain('لا جهاز واحد يستقبل Push');
+    expect(alert.message).toContain('GOOGLE_SERVICES_JSON_BASE64');
+    expect(alert.details.devicesPushCapable).toBe(0);
   });
 
   it('passes the same block to the email template when a channel accepts mail', async () => {
@@ -130,5 +161,6 @@ describe('sendDailyOpsReport — catalog health block', () => {
     const variables = (mockSendEmail.mock.calls[0][0] as { variables: Record<string, string> })
       .variables;
     expect(variables.catalogHealth).toContain('يتيمة (مصدرها لم يعد موجودًا): 2');
+    expect(variables.deliveryReach).toContain('منها يمكن أن يصله Push: 2');
   });
 });

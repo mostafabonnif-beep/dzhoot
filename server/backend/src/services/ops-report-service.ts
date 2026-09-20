@@ -6,6 +6,7 @@ import Reseller from '../models/Reseller';
 import Plan from '../models/Plan';
 import Channel from '../models/Channel';
 import XtreamSource from '../models/XtreamSource';
+import Device from '../models/Device';
 import { verifiedXtreamChannelQuery } from '../utils/verified-channel-query';
 import { sendEmail } from './email';
 import { sendOperationalAlert } from './alert-notifier';
@@ -46,6 +47,40 @@ async function buildCatalogHealth(): Promise<{ block: string; stats: Record<stri
   ];
   if (dead > 0 || orphaned > 0) {
     lines.push('  ↳ لا تروّج للكتالوج قبل معالجة هذا — راجع المصادر في اللوحة.');
+  }
+  return { block: lines.join('\n'), stats };
+}
+
+/**
+ * How the platform can actually reach a customer today.
+ *
+ * Renewal reminders have three channels and only one of them requires anything of the
+ * customer: the in-app inbox. Push needs a device token, and a device only has one when the
+ * APK was built with Firebase — production had 19 devices and ZERO tokens while the server's
+ * FCM credentials sat ready, so every push attempt was a no-op nobody could see. The daily
+ * report states the reach plainly, because "we sent a reminder" and "a customer could
+ * receive it" are different facts and only the second one matters.
+ */
+async function buildDeliveryReach(): Promise<{ block: string; stats: Record<string, number> }> {
+  const now = new Date();
+  const horizon = new Date(now.getTime() + 3 * DAY_MS);
+  const [devices, withToken, expiringSoon] = await Promise.all([
+    Device.countDocuments({}),
+    Device.countDocuments({ pushToken: { $exists: true, $nin: [null, ''] } }),
+    Subscription.countDocuments({ status: 'ACTIVE', expiresAt: { $gt: now, $lte: horizon } }),
+  ]);
+
+  const stats = { devices, devicesPushCapable: withToken, expiringWithin3d: expiringSoon };
+  const lines = [
+    `• أجهزة العملاء: ${devices}`,
+    `• منها يمكن أن يصله Push: ${withToken}`,
+    `• اشتراكات تنتهي خلال 3 أيام: ${expiringSoon}`,
+  ];
+  if (withToken === 0) {
+    lines.push(
+      '  ↳ تنبيه: لا جهاز واحد يستقبل Push، فالتذكيرات تصل عبر صندوق التطبيق فقط.',
+      '    السبب المعتاد: نسخة APK بُنيت بدون Firebase (سر GOOGLE_SERVICES_JSON_BASE64).',
+    );
   }
   return { block: lines.join('\n'), stats };
 }
@@ -98,6 +133,7 @@ export async function sendDailyOpsReport(): Promise<{
 
     const dateStr = yesterdayStart.toISOString().slice(0, 10);
     const catalogHealth = await buildCatalogHealth();
+    const deliveryReach = await buildDeliveryReach();
     const subject = `تقرير DZ HOOF اليومي — ${dateStr}`;
     const variables: Record<string, string> = {
       date: dateStr,
@@ -106,6 +142,7 @@ export async function sendDailyOpsReport(): Promise<{
       newUsers: String(newUsers),
       activeSubs: String(activeSubs),
       catalogHealth: catalogHealth.block,
+      deliveryReach: deliveryReach.block,
     };
 
     // Count what was actually delivered. The previous version discarded the result
@@ -142,6 +179,9 @@ export async function sendDailyOpsReport(): Promise<{
         'صحة الكتالوج:',
         catalogHealth.block,
         '',
+        'قنوات الوصول إلى العميل:',
+        deliveryReach.block,
+        '',
         'وصل عبر قنوات التنبيه لأن قناة البريد غير قابلة للتسليم.',
       ]
         .filter((line) => line !== undefined && line !== null && line !== '')
@@ -152,7 +192,7 @@ export async function sendDailyOpsReport(): Promise<{
         event: `ops-report:${dateStr}`,
         severity: 'warning',
         message: summary,
-        details: { activated: activatedYesterday, newUsers, activeSubs, ...catalogHealth.stats },
+        details: { activated: activatedYesterday, newUsers, activeSubs, ...catalogHealth.stats, ...deliveryReach.stats },
       });
       if (alerted) {
         console.warn(
