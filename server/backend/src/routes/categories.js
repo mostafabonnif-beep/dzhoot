@@ -17,6 +17,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     // GET /channels correctly returned an empty selection.
     const catalogView = req.user.role === 'Admin' || req.user.allCatalog === true;
     const { publicCatalogHideQuery, publicCatalogDedupQuery, cleanDisplayText } = require('../utils/catalog-presentation');
+    const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
     const dedupMatch = req.user.role !== 'Admin' ? await publicCatalogDedupQuery() : {};
     // Plan/free-tier group scope (freemium): a code limited to a set of groups
     // must not see the rest of the catalog's structure (which would leak every
@@ -24,15 +25,21 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
     const { groupScopeClause } = require('../services/channel-scope');
     const scopeClause = await groupScopeClause(req.user);
     const scopeMatch = scopeClause || {};
-    const match = catalogView
-      ? { isActive: { $ne: false }, ownerId: null, ...publicCatalogHideQuery(), ...dedupMatch, ...scopeMatch }
+    const scopeFilter = catalogView
+      ? { ownerId: null, ...publicCatalogHideQuery(), ...dedupMatch, ...scopeMatch }
       : {
-          isActive: { $ne: false },
           _id: { $in: (req.user.channels || []).filter(Boolean) },
           ...publicCatalogHideQuery(),
           ...dedupMatch,
           ...scopeMatch,
         };
+    // The health gate belongs here too: without it the rail advertised groups whose
+    // channels the list endpoint refuses to serve, so the counts could not line up with
+    // GET /channels (which this endpoint's own comment promises) and the customer could
+    // open a group only to find dead or unavailable entries in it.
+    const match = await verifiedXtreamChannelQuery(scopeFilter, {
+      dedup: req.user.role !== 'Admin',
+    });
 
     const groups = await Channel.aggregate([
       { $match: match },

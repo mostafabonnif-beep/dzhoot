@@ -7,6 +7,7 @@ const Season = require('../models/Season');
 const Episode = require('../models/Episode');
 const EpgProgram = require('../models/EpgProgram');
 const { optionalAuth } = require('../middleware/resolveUser');
+const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
 const { escapeRegex } = require('../utils/escapeRegex');
 const { MAX_PAGE_SIZE: MAX_PAGE_LIMIT } = require('./catalog-helpers');
 const { ensureSeriesSeasons, ensureSeasonEpisodes } = require('../services/xtream-service');
@@ -269,11 +270,15 @@ router.get('/search', async (req, res) => {
     // grace window makes a just-finished programme searchable for catch-up users.
     const programmeSince = new Date(Date.now() - 2 * 60 * 60 * 1000);
     const [channels, movies, series, programs] = await Promise.all([
-      Channel.find({
-        isActive: { $ne: false },
-        ownerId: null,
-        $or: [{ channelName: regex }, { channelGroup: regex }],
-      })
+      Channel.find(
+        // The live branch of the unified search goes through the same visibility gate as
+        // GET /channels: a dead or unverified xtream channel must not be offered as a
+        // search result (the app jumps straight from a result tap into playback).
+        await verifiedXtreamChannelQuery({
+          ownerId: null,
+          $or: [{ channelName: regex }, { channelGroup: regex }],
+        })
+      )
         .sort({ order: 1 })
         .limit(20)
         .lean(),

@@ -93,6 +93,12 @@ services:
       # Default hides radio streams (filler); set CATALOG_HIDE_GROUPS=none to disable.
       CATALOG_HIDE_GROUPS: ${CATALOG_HIDE_GROUPS:-RADIO}
       EPG_EXTRA_SOURCES: ${EPG_EXTRA_SOURCES:-}
+      # Customer support channel, published to clients through /api/v1/config/defaults
+      # (the login page reads it; the Android build takes its own copy at build time).
+      # With the mail channel deliberately unconfigured, this is how an account is
+      # recovered — empty means "not configured" and every UI hides the entry instead of
+      # showing a link that goes nowhere.
+      SUPPORT_URL: ${SUPPORT_URL:-}
       # MongoDB runs with --auth and Redis with --requirepass (see service
       # definitions below); production MONGODB_URI/REDIS_URL must carry the
       # credentials from .env. Keep both in sync when changing the defaults.

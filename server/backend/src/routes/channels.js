@@ -21,6 +21,7 @@ const {
   presentChannelForClient,
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
+const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
 
 // The shared admin/demo catalog is identical for every admin hit and is the heaviest
 // read. Cache it (10 min TTL via channelCache) and bust it on any catalog mutation.
@@ -29,57 +30,6 @@ function invalidateCatalogCache() {
   return channelCache.deletePattern('catalog:*');
 }
 
-// Xtream channels are customer-visible only when their source has passed a live
-// playback probe. Missing verification is intentionally treated as unavailable.
-// Direct-playback / customer-visible sources are exempt: their isWorking flag
-// reflects the server's datacenter IP (blocked upstream), not the customer's
-// network — the same policy as the playlist routes (tv.js / User.ts).
-async function verifiedXtreamChannelQuery(baseQuery, options = {}) {
-  const verifiedSourceIds = (await XtreamSource.find({
-    $or: [
-      { status: 'Active', verificationStatus: 'verified' },
-      { customerVisible: true },
-      { directPlayback: true },
-    ],
-  }).distinct('_id')).map((id) => String(id));
-  // Channels of operator-curated (customerVisible) or direct-playback sources
-  // stay visible regardless of the server datacenter probe verdict: those
-  // probes hit upstream WAF blocks (HTTP 456/458) that do not reflect what a
-  // customer's own network (or the server relay on their behalf) can play.
-  // Same policy as the watchdog fix (PR #186), extended to proxied sources.
-  const isWorkingExemptSourceIds = (await XtreamSource.find({
-    $or: [{ directPlayback: true }, { customerVisible: true }],
-  }).distinct('_id')).map((id) => String(id));
-  const dedupQuery = options.dedup ? await publicCatalogDedupQuery() : {};
-  return {
-    $and: [
-      baseQuery,
-      {
-        isActive: { $ne: false },
-        'flaggedBad.isFlagged': { $ne: true },
-      },
-      publicCatalogPresentationQuery(),
-      publicCatalogHideQuery(),
-      dedupQuery,
-      {
-        $nor: [
-          // Sources that are neither verified nor operator-visible are hidden.
-          {
-            'metadata.source': 'xtream',
-            'metadata.xtreamSourceId': { $nin: verifiedSourceIds },
-          },
-          // isWorking is measured from the server datacenter IP — exempt
-          // customer-visible and direct-playback sources so their catalog
-          // stays visible (probes cannot judge customer reachability).
-          {
-            'metadata.isWorking': false,
-            'metadata.xtreamSourceId': { $nin: isWorkingExemptSourceIds },
-          },
-        ],
-      },
-    ],
-  };
-}
 
 // Max channels the TV app receives in one sync. DZ HOOF serves the full catalog
 // (~16.6k channels) to subscribers — the cap is a safety valve against pathological
@@ -527,14 +477,12 @@ router.get('/search', requireTvOrSessionAuth, async (req, res) => {
     // Freemium scope: never surface a channel the code may not watch.
     Object.assign(searchFilter, (await require('../services/channel-scope').groupScopeClause(req.user)) || {});
 
-    const channels = await Channel.find({
-      $and: [
-        searchFilter,
-        publicCatalogPresentationQuery(),
-        publicCatalogHideQuery(),
-        ...(req.user.role !== 'Admin' ? [await publicCatalogDedupQuery()] : []),
-      ],
-    })
+    // Same visibility gate as GET /channels. Search used to apply only the presentation and
+    // hide filters, so a customer could search for a channel, get it as a result and watch a
+    // black screen — precisely the channels the list endpoint already refused to show.
+    const channels = await Channel.find(
+      await verifiedXtreamChannelQuery(searchFilter, { dedup: req.user.role !== 'Admin' })
+    )
       .sort({ channelGroup: 1, order: 1 })
       .limit(TV_CHANNELS_MAX)
       .select(CHANNEL_LIST_FIELDS)

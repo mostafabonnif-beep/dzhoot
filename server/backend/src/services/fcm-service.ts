@@ -43,15 +43,24 @@ export async function sendNotificationToDevices(notification: {
   imageUrl?: string;
   deepLink?: string;
   audience: 'ALL' | 'ACTIVE';
+  /**
+   * Restrict the send to these users' devices. Used by per-customer messages such as
+   * the subscription-expiry reminder: `audience` alone cannot express "only the people
+   * whose subscription ends this week", and pushing that to every device would tell
+   * every customer about somebody else's renewal.
+   */
+  userIds?: string[];
 }) {
   const config = getConfig();
   if (!config) {
     return { configured: false, attempted: 0, sent: 0, failed: 0, skipped: 'FCM is not configured' };
   }
 
-  const userIds = notification.audience === 'ACTIVE'
-    ? await Subscription.distinct('userId', { status: 'ACTIVE' }).exec()
-    : null;
+  const userIds = notification.userIds?.length
+    ? notification.userIds.map(String)
+    : notification.audience === 'ACTIVE'
+      ? await Subscription.distinct('userId', { status: 'ACTIVE' }).exec()
+      : null;
   const filter: Record<string, unknown> = { pushToken: { $exists: true, $ne: '' } };
   if (userIds) filter.userId = { $in: userIds };
 
