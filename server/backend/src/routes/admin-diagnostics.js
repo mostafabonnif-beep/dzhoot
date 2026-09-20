@@ -62,6 +62,101 @@ function preview(value) {
 
 const NON_PRODUCTION = new Set(['production']);
 
+/**
+ * Why do customers see fewer channels than the database holds?
+ *
+ * This check exists because answering that question on 2026-09-20 took an SSH session and
+ * an hour: the catalog held 31,868 shared channels while customers could see 2,235, and the
+ * gap was entirely explainable — an admin had deleted an upstream source whose 16,706
+ * channels kept pointing at the removed document (hidden by the verified-source gate),
+ * 15,630 channels were deactivated by health verdicts, and the rest simply sat behind a
+ * non-verified source. None of that was visible in any panel: the catalog just looked small.
+ *
+ * The counts are computed the same way the customer-facing reads compute them, so the
+ * numbers here match what a customer receives. Read-only; a few aggregate counts over the
+ * catalog, only ever served to an authenticated admin on the diagnostics page.
+ */
+async function catalogVisibilityCheck() {
+  const startedAt = Date.now();
+  try {
+    const Channel = require('../models/Channel');
+    const XtreamSource = require('../models/XtreamSource');
+    const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
+
+    const shared = { ownerId: null };
+    const allSources = await XtreamSource.find({})
+      .select('name status verificationStatus customerVisible directPlayback')
+      .lean();
+    const sourceIds = allSources.map((s) => String(s._id));
+    const verifiedIds = allSources
+      .filter(
+        (s) =>
+          (s.status === 'Active' && s.verificationStatus === 'verified') ||
+          s.customerVisible === true ||
+          s.directPlayback === true,
+      )
+      .map((s) => String(s._id));
+    const unverifiedIds = sourceIds.filter((id) => !verifiedIds.includes(id));
+
+    const [total, visible, inactive, orphaned, fromUnverified] = await Promise.all([
+      Channel.countDocuments(shared),
+      Channel.countDocuments(await verifiedXtreamChannelQuery(shared, { dedup: true })),
+      Channel.countDocuments({ ...shared, isActive: false }),
+      Channel.countDocuments({
+        ...shared,
+        'metadata.source': 'xtream',
+        'metadata.xtreamSourceId': { $nin: sourceIds },
+      }),
+      unverifiedIds.length
+        ? Channel.countDocuments({ ...shared, 'metadata.xtreamSourceId': { $in: unverifiedIds } })
+        : Promise.resolve(0),
+    ]);
+
+    const hidden = Math.max(0, total - visible);
+    // The buckets overlap (an orphaned channel can also be deactivated), so they are listed
+    // as contributing reasons rather than as a disjoint partition.
+    const detail =
+      `كتالوج مشترك ${total} قناة — يراها العميل ${visible}` +
+      ` (مخفية ${hidden}؛ منها ${inactive} معطّلة بفحص الصحة، ${orphaned} تشير إلى مصدر محذوف، ${fromUnverified} من مصدر غير موثّق).`;
+
+    if (total === 0) {
+      // A warning, not a failure: a fresh install legitimately has an empty catalog, and
+      // FAIL here would turn the endpoint's overall verdict red for reasons unrelated to
+      // the infrastructure this page is meant to judge.
+      return check('catalog_visibility', 'ما يراه العميل من الكتالوج', WARN, 'لا توجد قنوات مشتركة في قاعدة البيانات — استورد مصدرًا أولًا.');
+    }
+    if (visible === 0) {
+      return check(
+        'catalog_visibility',
+        'ما يراه العميل من الكتالوج',
+        FAIL,
+        `${detail} المخفي الكامل يعني أن بوابة الرؤية ترفض كل قناة — راجع المصادر وحالة الفحص.`,
+      );
+    }
+    // A deleted source that still owns channels is the silent case: nobody sees those
+    // channels, and nothing in the UI says why. Warn even when the rest is healthy.
+    if (orphaned > 0) {
+      return check(
+        'catalog_visibility',
+        'ما يراه العميل من الكتالوج',
+        WARN,
+        `${detail} ${orphaned} قناة تشير إلى مصدر محذوف ولن تظهر لأي عميل — أعد ربطها بمصدر قائم أو احذفها.`,
+      );
+    }
+    if (hidden > 0 && visible * 2 < total) {
+      return check('catalog_visibility', 'ما يراه العميل من الكتالوج', WARN, `${detail} أكثر من نصف الكتالوج مخفي.`);
+    }
+    return check('catalog_visibility', 'ما يراه العميل من الكتالوج', PASS, detail);
+  } catch (error) {
+    return check(
+      'catalog_visibility',
+      'ما يراه العميل من الكتالوج',
+      WARN,
+      `تعذّر حساب رؤية الكتالوج (${(error && error.name) || 'Error'}) — ${Date.now() - startedAt}ms.`,
+    );
+  }
+}
+
 async function mongodbCheck() {
   const connected = mongoose.connection.readyState === 1;
   if (!connected) {
@@ -213,11 +308,12 @@ router.get('/', async (req, res) => {
       builtAt: process.env.RELEASE_BUILT_AT || null,
     };
 
-    const [mongoResult, redisResult, releaseResult, schedulerResult] = await Promise.all([
+    const [mongoResult, redisResult, releaseResult, schedulerResult, catalogResult] = await Promise.all([
       mongodbCheck(),
       redisCheck(),
       releaseChecks(),
       schedulerCheck(),
+      catalogVisibilityCheck(),
     ]);
 
     const checks = [
@@ -227,6 +323,7 @@ router.get('/', async (req, res) => {
       redisResult,
       ...releaseResult.checks,
       schedulerResult,
+      catalogResult,
     ];
 
     const latest = releaseResult.latest;
@@ -270,4 +367,4 @@ router.get('/', async (req, res) => {
 });
 
 module.exports = router;
-module.exports._private = { summarize, preview, hostOf, PASS, WARN, FAIL };
+module.exports._private = { summarize, preview, hostOf, catalogVisibilityCheck, PASS, WARN, FAIL };
