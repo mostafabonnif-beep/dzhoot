@@ -105,7 +105,7 @@ type DiscoverStrings = Record<keyof typeof STR.ar, string>;
 function ChannelCard({ ch, live, t }: { ch: DiscoverChannel; live?: boolean; t: DiscoverStrings }) {
   return (
     <Link
-      href={`/user/channels?focus=${ch._id}`}
+      href={`/user/channels?focus=${ch._id}&focusName=${encodeURIComponent(ch.name)}`}
       className="group relative flex w-40 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card transition hover:border-emerald-500/60 hover:shadow-lg sm:w-44"
     >
       <div className="flex h-24 items-center justify-center bg-muted/40 p-3">

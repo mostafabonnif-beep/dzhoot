@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { Suspense, useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   Loader2,
   Trash2,
@@ -103,6 +104,98 @@ interface ChannelsPageShellProps {
 
 type SortField = 'name' | 'group';
 type SortDir = 'asc' | 'desc';
+
+interface FocusedChannelPlaybackProps {
+  channels: Channel[];
+  loading: boolean;
+  setShowAdd: (open: boolean) => void;
+  setAddPage: (page: number) => void;
+  handleAddSearchChange: (value: string) => void;
+}
+
+/**
+ * User-mode side effect for the Discover "play" CTA: `/user/channels?focus=<id>&focusName=<name>`.
+ *
+ * Once the user's own channel list has loaded:
+ * - channel present in the list → start playback with the same payload the table row uses;
+ * - channel absent → open the existing "add from system" panel prefilled with the name and
+ *   say why (the channel has to be added to the personal list first).
+ *
+ * Rendered only for `mode="user"`, and wrapped in a local Suspense boundary by the shell so
+ * `useSearchParams` never runs for the admin page (which must stay untouched).
+ */
+function FocusedChannelPlayback({
+  channels,
+  loading,
+  setShowAdd,
+  setAddPage,
+  handleAddSearchChange,
+}: FocusedChannelPlaybackProps) {
+  const params = useSearchParams();
+  const { playStream } = useStreamPlayer();
+  const { toast } = useToast();
+  const { locale } = useLocale();
+
+  const focusId = params.get('focus');
+  const focusName = (params.get('focusName') || '').trim();
+  const handledFocusRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!focusId || loading) return;
+    // Fire at most once per focused id — no re-play on later re-renders/refetches.
+    if (handledFocusRef.current === focusId) return;
+    handledFocusRef.current = focusId;
+
+    const match = channels.find((c) => c._id === focusId);
+    if (match) {
+      playStream(
+        {
+          name: getName(match),
+          url: getUrl(match),
+          id: match._id,
+          channelId: match.channelId,
+          alternateUrls: match.alternateStreams
+            ?.filter((a) => !a.flaggedBad?.isFlagged)
+            .map((a) => a.streamUrl),
+        },
+        { mode: 'proxy' },
+      );
+      return;
+    }
+
+    // Not in the user's own list yet: reuse the existing "add from system" panel.
+    setShowAdd(true);
+    setAddPage(1);
+    handleAddSearchChange(focusName);
+    toast(
+      focusName
+        ? locale === 'ar'
+          ? `القناة «${focusName}» ليست في قائمتك — أضفها أولًا ثم شغّلها.`
+          : locale === 'fr'
+            ? `La chaîne « ${focusName} » n’est pas dans votre liste — ajoutez-la d’abord.`
+            : `“${focusName}” is not in your list — add it first, then press play.`
+        : locale === 'ar'
+          ? 'هذه القناة ليست في قائمتك — أضفها أولًا ثم شغّلها.'
+          : locale === 'fr'
+            ? 'Cette chaîne n’est pas dans votre liste — ajoutez-la d’abord.'
+            : 'This channel is not in your list — add it first, then press play.',
+      'info',
+    );
+  }, [
+    focusId,
+    focusName,
+    loading,
+    channels,
+    playStream,
+    toast,
+    locale,
+    setShowAdd,
+    setAddPage,
+    handleAddSearchChange,
+  ]);
+
+  return null;
+}
 
 export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
   const isAdmin = mode === 'admin';
@@ -1590,6 +1683,19 @@ export default function ChannelsPageShell({ mode }: ChannelsPageShellProps) {
 
   return (
     <div className="space-y-6">
+      {/* User: honour ?focus=<channelId> from Discover (admin path never renders it) */}
+      {!isAdmin && (
+        <Suspense fallback={null}>
+          <FocusedChannelPlayback
+            channels={channels}
+            loading={loading}
+            setShowAdd={setShowAdd}
+            setAddPage={setAddPage}
+            handleAddSearchChange={handleAddSearchChange}
+          />
+        </Suspense>
+      )}
+
       {/* Header */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
