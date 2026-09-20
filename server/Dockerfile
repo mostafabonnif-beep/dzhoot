@@ -60,6 +60,12 @@ COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY backend/src ./backend/src
 COPY packages/shared/src ./packages/shared/src
 
+# Tests are not part of a runtime image. Both the compiled test output and the test sources
+# were being shipped (the latter only because `src` is copied wholesale — the JS routes and
+# the email templates are read from it at runtime, so it has to stay). Fixtures and specs do
+# not belong in a production container. Nothing at runtime references either path.
+RUN rm -rf backend/dist/__tests__ backend/dist/test backend/src/__tests__ backend/src/test
+
 # Create directories for uploads and APKs
 RUN mkdir -p uploads apks recordings && \
     chmod 775 uploads apks recordings
