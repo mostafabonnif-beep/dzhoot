@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Channel = require('../models/Channel');
+const { channelCache } = require('../services/cache');
 const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 
 // Get all categories (derived from distinct channelGroup values)
@@ -41,6 +42,23 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       dedup: req.user.role !== 'Admin',
     });
 
+    // The rail is the same aggregation over the same ~32k rows for every caller that
+    // sees the whole catalog, and it is not cheap: measured on production 2026-09-20 at
+    // ~91 ms (78-118 ms) per call, on a path every dashboard/discover load hits. Cache it
+    // exactly like the list endpoint does, and only for the shared-catalog view.
+    //
+    // The key carries the dedup dimension because the payload differs with it (admins get
+    // the raw catalog, everyone else the deduplicated one). Sharing one key across both is
+    // how the list cache ended up serving whichever flavour warmed it first — see the
+    // matching fix in routes/channels.js.
+    const dedupApplied = req.user.role !== 'Admin';
+    const cacheable = catalogView && !scopeClause;
+    const cacheKey = `catalog:categories:presentation-v1:${dedupApplied ? 'dedup' : 'raw'}`;
+    if (cacheable) {
+      const cached = await channelCache.get(cacheKey);
+      if (cached) return res.json(cached);
+    }
+
     const groups = await Channel.aggregate([
       { $match: match },
       {
@@ -72,11 +90,17 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       channel_count: meta.channel_count,
     }));
 
-    res.json({
+    const payload = {
       success: true,
       categories,
       total: categories.length,
-    });
+    };
+
+    // Same guard as the read above; `catalog:*` invalidation (channel/xtream mutations,
+    // the health watchdog, admin edits) already clears this key with the other catalog caches.
+    if (cacheable) await channelCache.set(cacheKey, payload);
+
+    res.json(payload);
   } catch (error) {
     console.error('Error fetching categories:', error);
     res.status(500).json({

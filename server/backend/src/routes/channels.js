@@ -257,8 +257,13 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       req.query.page !== undefined || req.query.pageSize !== undefined || searchQ !== '';
 
     // The full-catalog cache is only valid for unscoped, unpaginated requests.
+    //
+    // The key carries the dedup dimension: the payload differs with it (admins get the
+    // raw catalog, everyone else the deduplicated one), so one shared key served whichever
+    // flavour happened to warm it first for the next 10 minutes.
+    const listCacheKey = `catalog:list:presentation-v2:${req.user.role !== 'Admin' ? 'dedup' : 'raw'}`;
     if (!wantsPagination && catalogView && !isTvClient && !isScoped) {
-      const cached = await channelCache.get('catalog:list:presentation-v2');
+      const cached = await channelCache.get(listCacheKey);
       if (cached) return res.json(cached);
     }
 
@@ -336,7 +341,7 @@ router.get('/', requireTvOrSessionAuth, async (req, res) => {
       data,
     };
 
-    if (catalogView && !isTvClient && !isScoped) await channelCache.set('catalog:list:presentation-v2', payload);
+    if (catalogView && !isTvClient && !isScoped) await channelCache.set(listCacheKey, payload);
 
     res.json(payload);
   } catch (error) {
@@ -356,8 +361,14 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
     const scopeClause = await groupScopeClause(req.user);
     const isScoped = Boolean(scopeClause);
 
+    // Same two dimensions as the list cache: the payload differs by dedup (admin vs
+    // everyone else) and a *scoped* caller must never populate it. The write below used to
+    // run for `catalogView` alone while the read required `!isScoped`, so an allCatalog
+    // account with accessGroups wrote its restricted group list into the key every
+    // unscoped reader then consumed for up to 10 minutes.
+    const groupedCacheKey = `catalog:grouped:presentation-v1:${req.user.role !== 'Admin' ? 'dedup' : 'raw'}`;
     if (catalogView && !isScoped) {
-      const cached = await channelCache.get('catalog:grouped:presentation-v1');
+      const cached = await channelCache.get(groupedCacheKey);
       if (cached) return res.json(cached);
     }
 
@@ -392,7 +403,7 @@ router.get('/grouped', requireTvOrSessionAuth, async (req, res) => {
       data: grouped,
     };
 
-    if (catalogView) await channelCache.set('catalog:grouped:presentation-v1', payload);
+    if (catalogView && !isScoped) await channelCache.set(groupedCacheKey, payload);
 
     res.json(payload);
   } catch (error) {
