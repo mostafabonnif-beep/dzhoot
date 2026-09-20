@@ -9,6 +9,25 @@ const {
   clearProgress,
 } = require('../services/watch-progress-service');
 
+// Continue-watching list bounds. The service clamps to 50 as well
+// (`watch-progress-service.listContinueWatching`); the route clamps to the same
+// ceiling so the accepted value is the one the query actually uses.
+const DEFAULT_CONTINUE_WATCHING_LIMIT = 20;
+const MAX_CONTINUE_WATCHING_LIMIT = 50;
+
+/**
+ * Bounded, positive-integer query param (same convention as
+ * `routes/admin-error-reports.js` `boundedLimit`). Anything missing,
+ * non-numeric, fractional, zero or negative falls back to the default rather
+ * than reaching the query — `Number(raw) || 20` used to pass `-3` straight to
+ * `limit()` (mongoose reads a negative limit as an absolute value).
+ */
+function boundedLimit(raw, fallback, max) {
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0) return fallback;
+  return Math.min(parsed, max);
+}
+
 // All watch-progress routes require a logged-in user.
 router.use(requireAuth);
 
@@ -47,7 +66,11 @@ router.get('/', async (req, res) => {
   try {
     const userId = req.user?._id?.toString() || req.user?.id;
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
-    const limit = Number(req.query.limit) || 20;
+    const limit = boundedLimit(
+      req.query.limit,
+      DEFAULT_CONTINUE_WATCHING_LIMIT,
+      MAX_CONTINUE_WATCHING_LIMIT,
+    );
     const items = await listContinueWatching(userId, limit);
     return res.json({ success: true, data: items });
   } catch (err) {
@@ -105,3 +128,4 @@ router.delete('/', async (req, res) => {
 });
 
 module.exports = router;
+module.exports._private = { boundedLimit, MAX_CONTINUE_WATCHING_LIMIT };
