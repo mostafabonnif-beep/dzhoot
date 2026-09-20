@@ -41,6 +41,17 @@ fi
 command -v restic >/dev/null 2>&1 || die 'restic is not installed.'
 command -v docker >/dev/null 2>&1 || die 'docker is not installed.'
 
+# A lock held by another process (or another host sharing the repository) used to fail
+# the whole job right after a successful backup, and systemd marked the unit failed even
+# though the snapshot had been saved. Wait for the lock instead.
+RETRY_LOCK="${OFFSITE_RESTIC_RETRY_LOCK:-15m}"
+
+# Cache: the systemd unit runs with ProtectHome=true, so the default ~/.cache/restic is
+# read-only there ("unable to open cache: mkdir /root/.cache: read-only file system").
+if [ -z "${RESTIC_CACHE_DIR:-}" ] && [ -d /var/cache/dzhoof-restic ]; then
+  export RESTIC_CACHE_DIR=/var/cache/dzhoof-restic
+fi
+
 export RESTIC_REPOSITORY="$OFFSITE_RESTIC_REPOSITORY"
 export RESTIC_PASSWORD_FILE="$OFFSITE_RESTIC_PASSWORD_FILE"
 [ -n "${OFFSITE_RCLONE_CONFIG:-}" ] && export RCLONE_CONFIG="$OFFSITE_RCLONE_CONFIG"
@@ -64,7 +75,7 @@ fi
 
 if [ "$MODE" = '--check' ]; then
   say 'Checking the encrypted off-site repository using a small random data subset.'
-  restic check --read-data-subset=1/20
+  restic check --read-data-subset=1/20 --retry-lock "$RETRY_LOCK"
   say 'Repository check completed successfully.'
   exit 0
 fi
@@ -114,7 +125,7 @@ tar -C "$(dirname "$COMPOSE_DIR")" -czf "$STAGING/recovery/server-source.tar.gz"
 )
 
 say 'Uploading encrypted recovery snapshot to the configured off-site repository.'
-restic backup "$STAGING/recovery" --tag dzhoof --tag production --tag "created-$STAMP"
-restic forget --prune --keep-daily 7 --keep-weekly 4 --keep-monthly 3
-restic snapshots --latest 1 >/dev/null
+restic backup "$STAGING/recovery" --retry-lock "$RETRY_LOCK" --tag dzhoof --tag production --tag "created-$STAMP"
+restic forget --prune --retry-lock "$RETRY_LOCK" --keep-daily 7 --keep-weekly 4 --keep-monthly 3
+restic snapshots --latest 1 --retry-lock "$RETRY_LOCK" >/dev/null
 say 'Off-site backup completed successfully.'

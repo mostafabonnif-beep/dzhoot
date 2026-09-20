@@ -12,3 +12,10 @@ PrivateTmp=true
 ProtectHome=true
 ProtectSystem=full
 ReadWritePaths=/var/backups/dzhoot /etc/dzhoot /opt/dzhoot/server
+# ProtectHome=true makes restic's default cache (~/.cache/restic) read-only, so every
+# run paid the full metadata cost against the rclone remote — the extra API calls are
+# what produced the `rateLimitExceeded` and 500 responses in the journal (2026-09-20).
+# CacheDirectory is created and made writable by systemd regardless of ProtectSystem.
+CacheDirectory=dzhoof-restic
+Environment=RESTIC_CACHE_DIR=/var/cache/dzhoof-restic
+Environment=OFFSITE_RESTIC_RETRY_LOCK=15m
