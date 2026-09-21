@@ -14,6 +14,7 @@ const {
   rollbackSyncSnapshot,
   listSyncSnapshots,
 } = require('../services/sync-snapshot-service');
+const { channelCache, statsCache } = require('../services/cache');
 const { encryptSecret } = require('../utils/crypto');
 
 const router = express.Router();
@@ -282,12 +283,21 @@ router.delete('/:id', async (req, res) => {
     const source = await M3USource.findByIdAndDelete(id);
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
 
-    await require('../models/Channel').updateMany(
+    // Hide the source's channels, and say how many in the response: the operator made this
+    // choice knowing the channels go away, and the number is what tells them the catalog
+    // actually changed (the M3U path has always deactivated instead of orphaning — see the
+    // Xtream delete in routes/admin-xtream-sources.js for the case that did not).
+    const hidden = await require('../models/Channel').updateMany(
       { ownerId: null, 'metadata.m3uSourceId': String(id) },
       { $set: { isActive: false } },
     );
+
+    // The visible catalog is cached (`catalog:*`, 600s): without this the deleted source's
+    // channels keep being served until the TTL expires.
+    await Promise.all([channelCache.deletePattern('catalog:*'), statsCache.deletePattern('chcount:*')]);
+
     audit({ ...reqCtx(req), action: 'M3U_SOURCE_DELETE', resource: 'M3USource', resourceId: String(id) });
-    return res.json({ success: true });
+    return res.json({ success: true, data: { deleted: true, channelsDeactivated: hidden.modifiedCount || 0 } });
   } catch (err) {
     console.error('[m3u] delete error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });

@@ -372,7 +372,24 @@ export default function AdminXtreamSourcesPage() {
       await api.delete(`/admin/xtream-sources/${source._id}`);
       setNotice('تم حذف المصدر.');
       await loadSources();
-    } catch {
+    } catch (err: unknown) {
+      const response = (err as { response?: { status?: number; data?: { channelCount?: number } } })?.response;
+      // 409: the source still feeds channels and the API deleted nothing yet, so the count
+      // can be shown before the destructive step instead of after it. Deleting the source
+      // deactivates those channels — they leave the catalog — and that must be a decision,
+      // not a surprise (an admin who did not know this once cost 16,706 channels).
+      if (response?.status === 409) {
+        const count = Number(response.data?.channelCount || 0);
+        if (!window.confirm(`هذا المصدر يغذّي ${count} قناة، وستُعطَّل كلها وتخرج من الكتالوج. متابعة؟`)) return;
+        try {
+          await api.delete(`/admin/xtream-sources/${source._id}?acknowledgeChannels=1`);
+          setNotice(`تم حذف المصدر وتعطيل ${count} قناة.`);
+          await loadSources();
+        } catch {
+          setError('تعذر حذف المصدر.');
+        }
+        return;
+      }
       setError('تعذر حذف المصدر.');
     }
   }
