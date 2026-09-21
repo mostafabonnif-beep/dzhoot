@@ -6,6 +6,7 @@ const Channel = require('../models/Channel');
 const Movie = require('../models/Movie');
 const Series = require('../models/Series');
 const { optionalAuth } = require('../middleware/resolveUser');
+const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
 
 // Dynamic home: /api/v1/home
 // Sections are configured by the admin through AppSetting 'home':
@@ -23,7 +24,7 @@ router.get('/', async (req, res) => {
 
     const [featuredChannels, featuredMovies, featuredSeries] = await Promise.all([
       channelIds.length
-        ? Channel.find({ _id: { $in: channelIds }, isActive: { $ne: false } }).limit(20).lean()
+        ? Channel.find(await verifiedXtreamChannelQuery({ _id: { $in: channelIds } })).limit(20).lean()
         : [],
       movieIds.length
         ? Movie.find({ _id: { $in: movieIds }, isActive: true }).limit(20).lean()

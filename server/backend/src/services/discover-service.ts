@@ -22,6 +22,7 @@ const PlaybackEvent = require('../models/PlaybackEvent').default || require('../
 const { getRedisClient } = require('./redis');
 const { publicCatalogPresentationQuery, publicCatalogHideQuery, presentationForChannel, cleanDisplayText } =
   require('../utils/catalog-presentation');
+const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
 
 const CACHE_KEY = 'discover:home:v1';
 const CACHE_TTL_SECONDS = 60; // home is hot; 60s keeps it fresh and cheap
@@ -87,16 +88,16 @@ function presentChannel(c: any): DiscoverChannelCard {
   } as DiscoverChannelCard;
 }
 
-/** Public-catalog channel filter (shared admin catalog, visible entries). */
-function publicChannelFilter(extra: Record<string, unknown> = {}) {
-  return {
-    $and: [
-      { ownerId: null, isActive: { $ne: false } },
-      publicCatalogPresentationQuery(),
-      publicCatalogHideQuery(),
-      extra,
-    ],
-  };
+/**
+ * Public-catalog channel filter for the discover rails.
+ *
+ * Delegates to the shared visibility gate instead of repeating the presentation/hide filters:
+ * a rail that ignores the gate offers cards the catalog endpoints refuse to serve — dead
+ * supplier streams and channels from unverified sources — and tapping one fails. The gate also
+ * carries `isActive` and the health rules, so one policy object covers every read.
+ */
+async function publicChannelFilter(extra: Record<string, unknown> = {}) {
+  return verifiedXtreamChannelQuery({ ownerId: null, ...extra });
 }
 
 async function getTrendingChannels(viewersByName: Map<string, number>): Promise<DiscoverChannelCard[]> {
@@ -112,7 +113,7 @@ async function getTrendingChannels(viewersByName: Map<string, number>): Promise<
   if (!ids.length) return [];
   const playsById = new Map<string, number>(top.map((t: any) => [String(t._id), t.plays]));
 
-  const channels = await Channel.find(publicChannelFilter({ _id: { $in: ids } }))
+  const channels = await Channel.find(await publicChannelFilter({ _id: { $in: ids } }))
     .select('channelId channelName channelImg tvgLogo tvgId tvgName channelGroup metadata.isWorking')
     .lean();
 
@@ -134,7 +135,7 @@ async function getLiveNowChannels(viewersByName: Map<string, number>): Promise<D
     .sort((a, b) => b[1] - a[1])
     .slice(0, LIVE_NOW_LIMIT * 2)
     .map(([name]) => name);
-  const channels = await Channel.find(publicChannelFilter({ channelName: { $in: topNames } }))
+  const channels = await Channel.find(await publicChannelFilter({ channelName: { $in: topNames } }))
     .select('channelId channelName channelImg tvgLogo tvgId tvgName channelGroup')
     .lean();
   return channels
@@ -187,7 +188,7 @@ const COLLECTION_RULES: Array<{ key: string; titleAr: string; titleEn: string; m
 
 async function getSmartCollections() {
   const groups = await Channel.aggregate([
-    { $match: publicChannelFilter() },
+    { $match: await publicChannelFilter() },
     { $group: { _id: '$channelGroup', count: { $sum: 1 } } },
   ]).allowDiskUse(true);
   const groupNames: string[] = groups.map((g: any) => g._id || '');
@@ -214,7 +215,7 @@ export async function buildDiscoverHome() {
     Movie.find({ isActive: true }).sort({ createdAt: -1 }).limit(14).select('title poster category createdAt').lean(),
     Series.find({ isActive: true }).sort({ createdAt: -1 }).limit(14).select('title poster category createdAt').lean(),
     getSmartCollections(),
-    Channel.countDocuments(publicChannelFilter()),
+    Channel.countDocuments(await publicChannelFilter()),
   ]);
 
   await attachNowPlaying(trending);

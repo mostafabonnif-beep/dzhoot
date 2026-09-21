@@ -13,6 +13,7 @@ const {
   publicCatalogPresentationQuery,
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
+const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
 function tokenizeUserChannel(channel, user, baseUrl) {
   const source = channel.toObject ? channel.toObject() : channel;
   const safe = { ...source, channelUrl: '' };
@@ -140,10 +141,23 @@ async function scopedTokenizedChannels(user, baseUrl) {
   // Scope filter: a stale selection (or one written before a plan changed) must
   // not keep handing out tokens for out-of-scope shared channels.
   const scopeGroups = await allowedGroupsForUser(user);
+  const selected = (user.channels || [])
+    .filter((channel) => !hasRestrictedPresentationMarker(channel))
+    .filter((channel) => isSelectableChannel(scopeGroups, user._id, channel));
+  // Same visibility gate the catalog uses, applied to the customer's own selection. A
+  // selection outlives the channel's source (a replaced provider, a dead supplier stream) and
+  // this helper hands out playback tokens, so returning a channel that every catalog endpoint
+  // refuses to serve means a listed channel that fails the moment it is tapped.
+  const selectedIds = selected.map((channel) => channel._id).filter(Boolean);
+  const visibleIds = new Set(
+    (
+      await Channel.find(await verifiedXtreamChannelQuery({ _id: { $in: selectedIds } }))
+        .select('_id')
+        .lean()
+    ).map((channel) => String(channel._id)),
+  );
   return sortClientCatalogChannels(
-    (user.channels || [])
-      .filter((channel) => !hasRestrictedPresentationMarker(channel))
-      .filter((channel) => isSelectableChannel(scopeGroups, user._id, channel)),
+    selected.filter((channel) => visibleIds.has(String(channel._id))),
   ).map((channel) => tokenizeUserChannel(channel, user, baseUrl));
 }
 
