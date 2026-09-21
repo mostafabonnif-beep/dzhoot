@@ -40,6 +40,7 @@ jest.mock('../models/UserNotification', () => ({
 }));
 
 import Subscription from '../models/Subscription';
+import mongoose from 'mongoose';
 import User from '../models/User';
 import { sendExpiryAlerts } from '../services/ops-report-service';
 
@@ -131,5 +132,29 @@ describe('sendExpiryAlerts — push delivery', () => {
     expect(result.inApp).toBe(0);
     expect(mockSendNotificationToDevices).not.toHaveBeenCalled();
     expect(mockNotificationCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('expiry scan keeps the stored status honest', () => {
+  it('moves a past-expiry ACTIVE subscription to EXPIRED (and reports how many)', async () => {
+    // Exactly the production state on 2026-09-21: a row still marked ACTIVE whose expiresAt had
+    // passed, which made every count claim more active customers than could actually play.
+    const userId = new mongoose.Types.ObjectId();
+    await Subscription.collection.insertOne({
+      userId,
+      planId: new mongoose.Types.ObjectId(),
+      status: 'ACTIVE',
+      startsAt: new Date(Date.now() - 40 * 864e5),
+      expiresAt: new Date(Date.now() - 5 * 864e5),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    const result = await sendExpiryAlerts(3);
+
+    expect(result.expiredMarked).toBe(1);
+    const row: any = await Subscription.collection.findOne({ userId });
+    expect(row.status).toBe('EXPIRED');
+    expect(await Subscription.countDocuments({ status: 'ACTIVE' })).toBe(0);
   });
 });

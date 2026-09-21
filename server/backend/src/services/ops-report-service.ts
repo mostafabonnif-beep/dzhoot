@@ -217,6 +217,32 @@ export async function sendDailyOpsReport(): Promise<{
 }
 
 /**
+ * Move subscriptions that are past their expiry date out of ACTIVE.
+ *
+ * A row whose `expiresAt` has passed is not active, but nothing ever said so: on 2026-09-21 the
+ * panel and the daily report counted 17 active subscriptions while only 9 could actually play,
+ * and eight customers were shown "your subscription has expired" by the playback path. Renewal
+ * was never blocked by this (redeemCode treats an expired row as new and starts from now), so
+ * the only damage was misleading state — which is exactly the kind of thing that sends an
+ * operator looking for a fault in the wrong place.
+ *
+ * Marked rather than deleted: the row is history, and the audit trail of who held what stays
+ * intact. Runs before the reminder scan, so a row that just expired can never be reported as
+ * "expiring soon".
+ */
+async function markExpiredSubscriptions(now: Date): Promise<number> {
+  const res = await Subscription.updateMany(
+    { status: 'ACTIVE', expiresAt: { $lte: now } },
+    { $set: { status: 'EXPIRED' } },
+  );
+  const marked = res.modifiedCount || 0;
+  if (marked > 0) {
+    console.warn(`[ops-report] marked ${marked} subscription(s) EXPIRED — they were past their expiry date but still ACTIVE`);
+  }
+  return marked;
+}
+
+/**
  * Subscription expiry reminders — tells users whose ACTIVE subscription expires within
  * `withinDays` (default 3) so they can renew before losing access.
  *
@@ -243,13 +269,16 @@ export async function sendExpiryAlerts(
   emailDisabled?: number;
   /** Recipients whose email was attempted and rejected by the SMTP server. */
   emailFailed?: number;
+  /** Subscriptions past their expiry date that this run moved from ACTIVE to EXPIRED. */
+  expiredMarked?: number;
   error?: string;
 }> {
   try {
     const now = new Date();
     const horizon = new Date(now.getTime() + withinDays * DAY_MS);
+    const expiredMarked = await markExpiredSubscriptions(now);
     const subs = await Subscription.find({ status: 'ACTIVE', expiresAt: { $gt: now, $lte: horizon } }).lean();
-    if (subs.length === 0) return { ok: true, sent: 0, inApp: 0 };
+    if (subs.length === 0) return { ok: true, sent: 0, inApp: 0, expiredMarked };
 
     const userIds = [...new Set(subs.map((s) => String(s.userId)))];
     const users = await User.find({ _id: { $in: userIds }, isActive: true }).select('email username').lean();
@@ -364,7 +393,7 @@ export async function sendExpiryAlerts(
           `${pushUnreachable} unreachable (no token or FCM not configured)`,
       );
     }
-    return { ok: true, sent, inApp, pushed, pushFailed, pushUnreachable, emailDisabled, emailFailed };
+    return { ok: true, sent, inApp, pushed, pushFailed, pushUnreachable, emailDisabled, emailFailed, expiredMarked };
   } catch (err: any) {
     console.error('[ops-report] expiry alerts error:', err);
     return { ok: false, sent: 0, error: err?.message || String(err) };

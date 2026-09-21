@@ -500,6 +500,55 @@ function episodeUrl(creds: XtreamCredentials, episodeId: string | number, ext: s
 /** Default timeshift window assumed for Xtream channels (days). */
 const XTREAM_TIMESHIFT_DAYS = Number(process.env.XTREAM_TIMESHIFT_DAYS) || 3;
 
+/**
+ * Take over a channel left pointing at a source row that no longer exists.
+ *
+ * The document is updated in place: `_id`, identities, EPG links, group and order all stay;
+ * only the ownership (channelId + source id + live URL) moves to the source that actually
+ * serves the stream. That is the difference between a hidden channel and a playable one — the
+ * catalog visibility gate hides channels whose xtream source is missing, so without this a
+ * re-registered provider leaves its whole catalog invisible while its panel is perfectly
+ * healthy (16.7k channels in production on 2026-09-21).
+ */
+async function adoptOrphanedChannel(
+  existing: any,
+  sourceId: mongoose.Types.ObjectId,
+  item: any,
+  group: string,
+  creds: XtreamCredentials,
+  playbackFormat: XtreamPlaybackFormat = 'm3u8',
+) {
+  const channelId = `xt:${String(sourceId)}:${item.stream_id}`;
+  const rawName = String(item.name || existing.channelName || `Channel ${item.stream_id}`).trim();
+  const updated = await Channel.findOneAndUpdate(
+    { _id: existing._id },
+    {
+      $set: {
+        channelId,
+        channelName: cleanDisplay(rawName, rawName),
+        channelUrl: resolvedLiveUrl(creds, item, playbackFormat),
+        channelImg: iconUrl(item.stream_icon),
+        channelGroup: cleanDisplay(group),
+        'metadata.providerName': rawName,
+        'metadata.source': 'xtream',
+        'metadata.xtreamSourceId': String(sourceId),
+        'metadata.xtreamStreamId': Number(item.stream_id),
+        isActive: true,
+        'catchup.type': 'timeshift',
+        'catchup.days': XTREAM_TIMESHIFT_DAYS,
+      },
+    },
+    { new: true },
+  ).exec();
+  // Same EPG rule as upsertChannel: fill a blank tvgId, never overwrite the operator's.
+  const providerTvgId = String(item.epg_channel_id || '').trim();
+  if (providerTvgId && updated && !String((updated as any).tvgId || '').trim()) {
+    (updated as any).tvgId = providerTvgId;
+    await (updated as any).save();
+  }
+  return updated;
+}
+
 async function upsertChannel(sourceId: mongoose.Types.ObjectId, item: any, group: string, creds: XtreamCredentials, playbackFormat: XtreamPlaybackFormat = 'm3u8') {
   const channelId = `xt:${String(sourceId)}:${item.stream_id}`;
   const rawName = String(item.name || `Channel ${item.stream_id}`).trim();
@@ -858,22 +907,56 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
             'metadata.source': 'xtream',
             'metadata.xtreamSourceId': { $ne: String(id) },
           })
-            .select('_id channelId channelName')
+            // Both metadata fields: the projection of a nested path returns only what is
+            // asked for, so selecting just the id made `metadata.source` undefined and the
+            // adoption check below silently never fired (caught by the adoption test).
+            .select('_id channelId channelName metadata.source metadata.xtreamSourceId')
             .lean()
             .exec(),
         )
       : null;
+    // Sources that still exist. A channel pointing at an id NOT in this set was orphaned when
+    // its source row was replaced — see the adoption branch in the loop.
+    const liveSourceIds = new Set(
+      (await XtreamSource.find({}).distinct('_id')).map((sid) => String(sid)),
+    );
     const mergePriority = Number(source.failoverPriority) || 20;
     // Stability proof: fingerprint the customer-facing list BEFORE the sync.
     // mergeCatalog syncs must never reshuffle it — new channels may be added,
     // matched streams become failover backups, nothing is moved or edited.
     const catalogBefore = source.mergeCatalog === true ? await snapshotCatalogFingerprint() : null;
     let mergeMatched = 0;
+    let adopted = 0;
     for (const item of Array.isArray(liveStreams) ? liveStreams : []) {
       const group = liveCatMap.get(String(item.category_id)) || 'Uncategorized';
       if (mergeIndex) {
         const existing = matchCatalogChannel(item, mergeIndex);
         if (existing) {
+          // Adoption, not a failover map, when the matched channel's source is GONE. The
+          // visibility gate treats a channel whose xtream source no longer exists as
+          // unverified and hides it, so mapping a live stream onto such a channel produced a
+          // channel nobody could see: the provider was healthy while the customer's catalog
+          // stayed empty (2026-09-21: 16.7k channels hidden this way after the provider was
+          // re-registered). Taking the channel over keeps its _id, identities, EPG links and
+          // order, and makes it visible on the source that actually serves it.
+          const existingSourceId = String(existing.metadata?.xtreamSourceId || '');
+          const orphanedCanonical =
+            existing.metadata?.source === 'xtream' &&
+            existingSourceId.length > 0 &&
+            !liveSourceIds.has(existingSourceId);
+          if (orphanedCanonical) {
+            await adoptOrphanedChannel(existing, id, item, group, creds, source.playbackFormat || 'm3u8');
+            // The channel id moves to this source's scheme, so any failover row keyed on the
+            // retired id is dead weight — the stream is now the channel's own URL.
+            await ChannelFailoverMap.deleteMany({
+              channelRef: String(existing.channelId),
+              backupSourceId: id,
+            }).exec();
+            liveIds.add(`xt:${String(id)}:${item.stream_id}`);
+            channels += 1;
+            adopted += 1;
+            continue;
+          }
           await upsertMergeFailoverMap(existing, id, item, mergePriority);
           liveIds.add(`xt:${String(id)}:${item.stream_id}`);
           channels += 1;
@@ -959,7 +1042,15 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
     if (catalogOnly) source.catalogOnlyImportedAt = new Date();
     await source.save();
 
-    return { ok: true, stats: source.stats, identity, catalogOnly, stabilityReport: source.stabilityReport ?? null };
+    return {
+      ok: true,
+      stats: source.stats,
+      identity,
+      catalogOnly,
+      // Channels that used to point at a replaced source and were taken over by this one.
+      adopted,
+      stabilityReport: source.stabilityReport ?? null,
+    };
   } catch (err: any) {
     source.syncStatus = 'error';
     source.lastError = redactSensitiveText(err);
