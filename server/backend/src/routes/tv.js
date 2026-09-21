@@ -781,6 +781,48 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       const demoIdQuery = { _id: channelRef, isActive: { $ne: false }, ...scopeClause };
       channel = await Channel.findOne(demoIdQuery).lean();
     }
+    // Re-registering a provider source changes the `xt:<sourceId>:<streamId>` prefix while the
+    // stream itself is untouched, so every client that cached its channel list keeps sending
+    // the retired id and each tap answers 404 "Channel not found" — the channel reads as broken
+    // until that app refreshes its list. The stream id is the stable half, so resolve on it,
+    // preferring a source the catalog actually serves (verified / customer-visible /
+    // direct-playback) over an inactive or unverified copy of the same stream.
+    if (!channel) {
+      const refTail = /^xt:[0-9a-fA-F]{24}:(\d+)$/.exec(channelRef);
+      if (refTail) {
+        const candidates = await Channel.find({
+          channelId: { $regex: `:${refTail[1]}$` },
+          isActive: { $ne: false },
+          ...scopeClause,
+        }).limit(5).lean();
+        if (candidates.length === 1) {
+          channel = candidates[0];
+        } else if (candidates.length > 1) {
+          const candidateSourceIds = candidates
+            .map((c) => String(c.metadata?.xtreamSourceId || ''))
+            .filter(Boolean);
+          const playableSourceIds = (
+            await XtreamSource.find({
+              _id: { $in: candidateSourceIds },
+              $or: [
+                { status: 'Active', verificationStatus: 'verified' },
+                { customerVisible: true },
+                { directPlayback: true },
+              ],
+            }).distinct('_id')
+          ).map(String);
+          const playable = new Set(playableSourceIds);
+          channel =
+            candidates.find((c) => playable.has(String(c.metadata?.xtreamSourceId || ''))) ||
+            candidates[0];
+        }
+        if (channel) {
+          console.warn(
+            `[tv] resolved a stale channelId by stream id (${refTail[1]}) — the client should refresh its channel list`,
+          );
+        }
+      }
+    }
     if (!channel) return res.status(404).json({ success: false, error: 'Channel not found' });
 
     let xtreamDirectPlayback = false;
