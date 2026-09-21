@@ -75,6 +75,7 @@ function publicShape(src) {
     mergeCatalog: src.mergeCatalog === true,
     failoverPriority: Number(src.failoverPriority) || 20,
     lastError: src.lastError,
+    lastWarning: src.lastWarning,
     lastDiagnosticsAt: src.lastDiagnosticsAt,
     verifiedAt: src.verifiedAt,
     stats: src.stats,

@@ -133,6 +133,32 @@ describe('xtream-service', () => {
     expect(refreshed!.verificationStatus).toBe('verified');
   });
 
+  it('reports a working source without the provider M3U export as verified, with a warning and no error', async () => {
+    // The production shape on 2026-09-21: live playback perfect, the panel's M3U endpoint
+    // answering 884. Writing that into `lastError` made the operator report a healthy source as
+    // "not working" — the panel shows the field next to a status the customer never sees.
+    const source = await XtreamSource.create({
+      name: 'No-M3U Panel',
+      serverUrl: SERVER,
+      usernameEncrypted: encryptSecret(USER),
+      passwordEncrypted: encryptSecret(PASS),
+      status: 'Inactive',
+      verificationStatus: 'pending',
+    });
+
+    mockedProbeStream
+      .mockResolvedValueOnce({ status: 'dead', statusCode: 884, error: 'HTTP 884', responseTimeMs: 20, manifestValid: null, segmentReachable: null, manifestInfo: null })
+      .mockResolvedValueOnce({ status: 'alive', statusCode: 200, error: null, responseTimeMs: 40, manifestValid: null, segmentReachable: null, manifestInfo: null });
+
+    await verifyXtreamSource(String(source._id), 1);
+
+    const refreshed = await XtreamSource.findById(source._id).lean();
+    expect(refreshed!.verificationStatus).toBe('verified');
+    expect(refreshed!.status).toBe('Active');
+    expect(refreshed!.lastError).toBeNull();
+    expect(String(refreshed!.lastWarning || '')).toContain('M3U');
+  });
+
   it('uses a provider-supplied direct_source after it passes live verification', async () => {
     const source = await XtreamSource.create({
       name: 'Direct-source Panel',

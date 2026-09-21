@@ -22,6 +22,13 @@ export interface IXtreamSourceDocument extends Document {
   /** Failover tier for channels auto-mapped from a mergeCatalog source. */
   failoverPriority?: number;
   lastError?: string | null;
+  /**
+   * A non-fatal observation about the source. Kept apart from `lastError` on purpose: an
+   * operator reading "error" on a working source looks for a fault that is not there (the
+   * provider's M3U export returning 884 while live playback is perfect is the case that
+   * produced this field).
+   */
+  lastWarning?: string | null;
   lastDiagnosticsAt?: Date | null;
   verifiedAt?: Date | null;
   lastDiagnostics?: Record<string, unknown> | null;
@@ -75,6 +82,7 @@ const xtreamSourceSchema = new Schema<IXtreamSourceDocument>(
     mergeCatalog: { type: Boolean, default: false },
     failoverPriority: { type: Number, default: 20, min: 1 },
     lastError: { type: String, default: null },
+    lastWarning: { type: String, default: null },
     lastDiagnosticsAt: { type: Date, default: null },
     verifiedAt: { type: Date, default: null },
     lastDiagnostics: { type: Schema.Types.Mixed, default: null },
