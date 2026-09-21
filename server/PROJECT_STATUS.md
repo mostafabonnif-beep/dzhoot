@@ -1,7 +1,44 @@
 # DZ HOOF — Server Project Status
 
-_Last verified: 2026-09-21 (production VPS + CI). The newest section is "Re-verified
-2026-09-21" below; the older sections are kept for their measured history._
+_Last verified: 2026-09-21 (production VPS + CI). The newest sections are below; the older ones are
+kept for their measured history._
+
+## Re-verified 2026-09-21 (admin panel reported a release outage that did not exist)
+
+**What the panel said:** `GET /api/v1/admin/diagnostics` returned `overall: fail` with
+`release_published: fail` — «لا يوجد أي إصدار مُفعَّل — كل الأجهزة ستحصل على «لا يوجد تحديث»» — and every
+`release.*` field `null`.
+
+**What was actually true:** the update path was healthy. `GET /api/v1/app/version?currentVersion=10001`
+answered `updateAvailable: true` for **1.3.10 (10310)** with a verified `sha256`
+(`checksumSource: manifest`) served straight from GitHub Releases.
+
+**Root cause — two truths, one of them stale.** `resolvePublishedRelease()` (in
+`routes/app-update.js`, documented in-file as *the single source of truth for "what is published, and
+may it be advertised?"*) builds its candidates from **both** the active `AppVersion` row **and** the
+latest GitHub release, then advertises the highest `versionCode`. The diagnostics probe never called
+it: it read `AppVersion.findOne({ isActive: true })` directly. Production's table holds 26 rows, every
+one `isActive: false`, newest `1.2.2` — the pipeline publishes through GitHub tags and stopped writing
+rows after 1.2.2. So the panel reported a total release outage for a fleet that was updating fine.
+
+This is the failure mode the in-file comment on `resolvePublishedRelease` was written to prevent: the
+two paths drifted apart, and the drift was invisible because nothing asserted they agreed.
+
+**Fix shipped:**
+
+| Fix | Root |
+|---|---|
+| `admin-diagnostics.js` resolves through `resolvePublishedRelease(req)` (now exported via `_private`) instead of reading the table | the probe re-derived "what is published" and re-derived it differently |
+| a resolution failure is caught and reported as the `fail` it is, never a 500 | diagnostics is a health probe: a provider outage with no database fallback is the finding, not a crash |
+| `fetchLatestRelease()` gets an 8s axios timeout | the call had none, so a stalled `api.github.com` connection could hang `/version` — and, newly, the diagnostics probe — until the client gave up |
+| `release_published` now names its source (`GitHub Releases` / `سجل قاعدة البيانات`) | an operator could not tell which of the two sources answered |
+
+**Measured:** 4 regression tests added (GitHub-only source passes; provider outage with no active row
+fails; an unreadable `.sha256` fails the artifact check; the newer of the two sources wins).
+Backend suite 1052 tests / 121 suites green, `typecheck`, `lint` (0 errors) and `build:backend` green.
+
+**Not changed here (deliberately):** the 26 stale rows, 19 of which carry `sha256: null`. They are not
+what devices read, and rewriting release history is an operator decision, not a diagnostics fix.
 
 ## Re-verified 2026-09-21 (primary provider incident — the conclusion was wrong)
 

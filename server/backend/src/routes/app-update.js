@@ -320,7 +320,12 @@ async function fetchLatestRelease() {
     headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
   }
 
-  const response = await axios.get(url, { headers });
+  // No unbounded wait on an external provider: /version, /latest and the admin
+  // diagnostics endpoint all resolve through here, and a stalled connection to
+  // api.github.com would otherwise hang a point-in-time health probe until the
+  // client gives up. The 10-minute cache means this timeout is only ever paid on
+  // a cold lookup.
+  const response = await axios.get(url, { headers, timeout: 8000 });
   await ghReleaseCache.set('latest', response.data);
   return response.data;
 }
@@ -1197,4 +1202,8 @@ module.exports._private = {
   CHECKSUM_CACHE_VERSION,
   invalidateReleaseCaches,
   GITHUB_ASSET_HOSTS,
+  // The single "what is published, and may it be advertised?" resolver. Exported so
+  // the admin diagnostics endpoint reports what a device actually sees instead of
+  // re-deriving it from one source (which is how the two drifted apart before).
+  resolvePublishedRelease,
 };
