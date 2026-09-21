@@ -18,7 +18,17 @@ const {
 } = require('../services/sync-snapshot-service');
 const ChannelFailoverMap = require('../models/ChannelFailoverMap');
 const Channel = require('../models/Channel');
+const { channelCache, statsCache } = require('../services/cache');
 const { autoMatchFailoverMaps, getSourceHealth, runSourceWatchdog } = require('../services/source-failover-service');
+
+/**
+ * Drop the cached catalog views (the same keys routes/admin.js and routes/channels.js bust).
+ * Source changes alter which channels are visible — the verified-source gate reads the
+ * source collection — so a stale `catalog:*` entry serves the old catalog for its whole TTL.
+ */
+function invalidateCatalogCache() {
+  return Promise.all([channelCache.deletePattern('catalog:*'), statsCache.deletePattern('chcount:*')]);
+}
 
 // Admin-only Xtream source management: /api/v1/admin/xtream-sources
 router.use(requireAuth);
@@ -450,14 +460,105 @@ router.patch('/:id', async (req, res) => {
 });
 
 // DELETE /:id
+//
+// Deleting a source is destructive for everything imported from it, and on 2026-09-20 that
+// destruction was silent: an admin deleted a source at 13:02 and its 16,706 channels stayed
+// in the catalog pointing at a document that no longer existed. They were hidden by the
+// verified-source gate, but nothing said so — the catalog simply looked small, which is
+// indistinguishable from a provider outage, and it took an SSH session to explain.
+//
+// So this handler refuses to do that silently, and mirrors what the M3U delete already does
+// (routes/admin-m3u-sources.js deactivates the source's channels):
+//   ?acknowledgeChannels=1  required while the source still owns channels — without it the
+//                           request is rejected with a 409 carrying the count, so the panel
+//                           can ask "this source feeds N channels, continue?"
+//   ?reassignTo=<sourceId>  re-link the channels to another source instead of deactivating
+//                           them (the target must exist; a channel cannot be moved to the
+//                           source being deleted)
+// Shared channels (ownerId: null) are deactivated with provenance in metadata.orphanedAt /
+// metadata.orphanedSourceName; a user's private copies are left to the visibility gate, which
+// already hides them while the source is gone and revives them if it comes back.
+// The response reports exactly what happened, so the operator is never guessing.
 router.delete('/:id', async (req, res) => {
   try {
     const id = parseId(req.params.id);
     if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
-    const source = await XtreamSource.findByIdAndDelete(id).exec();
+
+    const source = await XtreamSource.findById(id).lean().exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
+
+    const refQuery = { 'metadata.xtreamSourceId': String(id) };
+    const sharedQuery = { ownerId: null, ...refQuery };
+    const [channelCount, sharedChannelCount] = await Promise.all([
+      Channel.countDocuments(refQuery),
+      Channel.countDocuments(sharedQuery),
+    ]);
+
+    const acknowledgeRaw = req.query.acknowledgeChannels ?? (req.body && req.body.acknowledgeChannels);
+    const acknowledge = acknowledgeRaw === true || acknowledgeRaw === 1 || acknowledgeRaw === '1' || acknowledgeRaw === 'true';
+    const reassignRaw = req.query.reassignTo || (req.body && req.body.reassignTo);
+
+    let reassignTo = null;
+    if (reassignRaw) {
+      if (!mongoose.Types.ObjectId.isValid(String(reassignRaw))) {
+        return res.status(400).json({ success: false, error: 'Invalid reassign target' });
+      }
+      reassignTo = parseId(reassignRaw);
+      if (!reassignTo || String(reassignTo) === String(id)) {
+        return res.status(400).json({ success: false, error: 'Invalid reassign target' });
+      }
+      const target = await XtreamSource.findById(reassignTo).select('_id').lean().exec();
+      if (!target) return res.status(400).json({ success: false, error: 'Reassign target not found' });
+    }
+
+    if (channelCount > 0 && !acknowledge && !reassignTo) {
+      return res.status(409).json({
+        success: false,
+        requiresConfirmation: true,
+        channelCount,
+        sharedChannelCount,
+        error: `هذا المصدر يغذّي ${channelCount} قناة (${sharedChannelCount} مشتركة). حذفه يعطّلها كلها — أعد الإرسال مع acknowledgeChannels=1 للتأكيد، أو reassignTo=<sourceId> لنقلها إلى مصدر آخر.`,
+      });
+    }
+
+    await XtreamSource.findByIdAndDelete(id).exec();
+
+    let channelsDeactivated = 0;
+    let channelsReassigned = 0;
+    if (reassignTo) {
+      const result = await Channel.updateMany(refQuery, {
+        $set: { 'metadata.xtreamSourceId': String(reassignTo) },
+        $unset: { 'metadata.orphanedAt': 1, 'metadata.orphanedSourceName': 1 },
+      });
+      channelsReassigned = result.modifiedCount || 0;
+    } else {
+      const result = await Channel.updateMany(sharedQuery, {
+        $set: {
+          isActive: false,
+          'metadata.orphanedAt': new Date(),
+          'metadata.orphanedSourceName': source.name,
+        },
+      });
+      channelsDeactivated = result.modifiedCount || 0;
+    }
+
+    // Failover maps name this source as their backup; left behind they are inert references
+    // to a document that no longer exists, and the next auto-match would rebuild them anyway.
+    let failoverMapsRemoved = 0;
+    try {
+      const maps = await ChannelFailoverMap.deleteMany({ backupSourceId: id }).exec();
+      failoverMapsRemoved = maps.deletedCount || 0;
+    } catch (mapErr) {
+      console.error('[xtream] failover map cleanup failed:', redactSensitiveText(mapErr));
+    }
+
+    await invalidateCatalogCache();
+
     audit({ ...reqCtx(req), action: 'XTREAM_SOURCE_DELETE', resource: 'XtreamSource', resourceId: String(id) });
-    return res.json({ success: true });
+    return res.json({
+      success: true,
+      data: { deleted: true, channelCount, sharedChannelCount, channelsDeactivated, channelsReassigned, failoverMapsRemoved },
+    });
   } catch (err) {
     console.error('[xtream] delete error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });

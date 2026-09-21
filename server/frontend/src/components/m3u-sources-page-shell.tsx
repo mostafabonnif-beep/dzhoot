@@ -202,8 +202,9 @@ export default function M3USourcesPageShell() {
   async function deleteSource(source: M3USource) {
     if (!window.confirm(`هل تريد حذف المصدر «${source.name}»؟ سيتم إخفاء قنواته.`)) return;
     try {
-      await api.delete(`/admin/m3u-sources/${source._id}`);
-      toast('تم حذف المصدر', 'success');
+      const response = await api.delete(`/admin/m3u-sources/${source._id}`);
+      const hidden = Number(response.data?.data?.channelsDeactivated || 0);
+      toast(hidden > 0 ? `تم حذف المصدر وتعطيل ${hidden} قناة` : 'تم حذف المصدر', 'success');
       await loadSources();
     } catch {
       toast('تعذر حذف المصدر', 'error');

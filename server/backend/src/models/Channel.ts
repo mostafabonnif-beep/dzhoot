@@ -123,6 +123,11 @@ const channelSchema = new Schema<IChannelDocument>(
       m3uSourceId: String,
       xtreamSourceId: String,
       xtreamStreamId: Number,
+      // Set when the upstream source this channel was imported from is deleted: the channel
+      // is deactivated and this records which source took it down and when, so the state is
+      // explainable later (see the DELETE handler in routes/admin-xtream-sources.js).
+      orphanedAt: Date,
+      orphanedSourceName: String,
     },
     flaggedBad: {
       isFlagged: { type: Boolean, default: false },

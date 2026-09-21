@@ -91,7 +91,28 @@ describe('GET /api/v1/admin/diagnostics — catalog visibility', () => {
     const res = await request(buildApp()).get('/api/v1/admin/diagnostics');
     const entry = catalogCheck(res.body);
     expect(entry.status).toBe('warn');
-    expect(entry.detail).toContain('2 قناة تشير إلى مصدر محذوف');
+    expect(entry.detail).toContain('2 قناة فعّالة تشير إلى مصدر محذوف');
+  });
+
+  it('stays quiet once the orphaned channels were deactivated (a deliberate cleanup)', async () => {
+    const live = await makeSource();
+    await makeChannel(live._id);
+    // What deleting a source now leaves behind: deactivated, provenance stamped. It must not
+    // keep this warning alive forever, or operators learn to ignore it.
+    await makeChannel('6a84dce7f6a082630f39a9c3', {
+      isActive: false,
+      metadata: {
+        source: 'xtream',
+        xtreamSourceId: '6a84dce7f6a082630f39a9c3',
+        orphanedAt: new Date(),
+        orphanedSourceName: 'deleted provider',
+      },
+    });
+
+    const res = await request(buildApp()).get('/api/v1/admin/diagnostics');
+    const entry = catalogCheck(res.body);
+    expect(entry.status).toBe('pass');
+    expect(entry.detail).toContain('1 معطّلة بفحص الصحة');
   });
 
   it('counts channels deactivated by health verdicts separately from source problems', async () => {

@@ -102,10 +102,15 @@ async function catalogVisibilityCheck() {
       Channel.countDocuments(shared),
       Channel.countDocuments(await verifiedXtreamChannelQuery(shared, { dedup: true })),
       Channel.countDocuments({ ...shared, isActive: false }),
+      // Only channels that are still active: an orphaned channel that was deactivated is
+      // already reported as deactivated, and counting it twice would keep this warning alive
+      // forever after a deliberate cleanup (the DELETE handler in routes/admin-xtream-sources.js
+      // deactivates a deleted source's channels and stamps metadata.orphanedAt).
       Channel.countDocuments({
         ...shared,
         'metadata.source': 'xtream',
         'metadata.xtreamSourceId': { $nin: sourceIds },
+        isActive: { $ne: false },
       }),
       unverifiedIds.length
         ? Channel.countDocuments({ ...shared, 'metadata.xtreamSourceId': { $in: unverifiedIds } })
@@ -140,7 +145,7 @@ async function catalogVisibilityCheck() {
         'catalog_visibility',
         'ما يراه العميل من الكتالوج',
         WARN,
-        `${detail} ${orphaned} قناة تشير إلى مصدر محذوف ولن تظهر لأي عميل — أعد ربطها بمصدر قائم أو احذفها.`,
+        `${detail} ${orphaned} قناة فعّالة تشير إلى مصدر محذوف ولن تظهر لأي عميل — أعِدها لمصدر قائم أو عطّلها.`,
       );
     }
     if (hidden > 0 && visible * 2 < total) {
