@@ -112,6 +112,9 @@ async function expiryAlertHandler(): Promise<TaskResult> {
         pushUnreachable: result.pushUnreachable || 0,
         emailDisabled: result.emailDisabled || 0,
         emailFailed: result.emailFailed || 0,
+        // Subscriptions this run moved out of ACTIVE because their expiry date had passed —
+        // the count that used to drift (17 "active" while 9 could play).
+        expiredMarked: result.expiredMarked || 0,
       },
       error: result.error || undefined,
     },

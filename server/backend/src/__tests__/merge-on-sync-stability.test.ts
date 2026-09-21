@@ -141,3 +141,57 @@ describe('merge-on-sync stability', () => {
     expect(reloaded!.stabilityHistory!.length).toBe(10);
   });
 });
+
+describe('adoption of channels orphaned by a source re-registration', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('takes over the orphaned channel instead of hiding it behind a failover map', async () => {
+    // 1) The original provider builds the catalog.
+    mockPanel([{ name: 'ENTV', streamId: 101 }, { name: 'Canal Algerie', streamId: 102 }]);
+    const original = await makeSource({ name: 'Original' });
+    await syncXtreamSource(String(original._id));
+    const before = await Channel.countDocuments({ isActive: { $ne: false } });
+    expect(before).toBe(2);
+
+    // 2) The operator replaces that provider: the source row is deleted, but its channels stay
+    //    behind pointing at the retired id — exactly the state that hid 16.7k channels on
+    //    production while the panel itself was healthy.
+    await XtreamSource.deleteOne({ _id: original._id });
+    expect(await XtreamSource.countDocuments({})).toBe(0);
+
+    // 3) The replacement source is a mergeCatalog source with the same channels under new
+    //    stream ids (a re-registered panel renumbers them).
+    mockPanel([{ name: 'AR: ENTV 1 FULL HD', streamId: 901 }, { name: 'Dz| Canal Algerie', streamId: 902 }]);
+    const replacement = await makeSource({ name: 'Replacement', mergeCatalog: true, failoverPriority: 20 });
+    const result = await syncXtreamSource(String(replacement._id));
+
+    // The two channels were taken over, not mapped: no failover rows, and every channel now
+    // belongs to the source that actually serves it (so the visibility gate lets it through).
+    expect(result.adopted).toBe(2);
+    expect(await ChannelFailoverMap.countDocuments({ backupSourceId: replacement._id })).toBe(0);
+    const channels = await Channel.find({ isActive: { $ne: false } }).lean();
+    expect(channels.length).toBe(2);
+    for (const c of channels) {
+      expect(String((c as any).metadata.xtreamSourceId)).toBe(String(replacement._id));
+      expect(String((c as any).channelId)).toMatch(new RegExp(`^xt:${String(replacement._id)}:`));
+      expect(String((c as any).channelUrl)).toContain(`/live/${USER}/${PASS}/`);
+    }
+    // Identities survive: the take-over edits the same documents, it does not create new ones.
+    expect(new Set(channels.map((c: any) => String(c.channelId))).size).toBe(2);
+  });
+
+  it('still maps (does not adopt) when the matched channel belongs to a live source', async () => {
+    mockPanel([{ name: 'ENTV', streamId: 101 }]);
+    const primary = await makeSource({ name: 'Primary' });
+    await syncXtreamSource(String(primary._id));
+
+    mockPanel([{ name: 'ENTV', streamId: 201 }]);
+    const backup = await makeSource({ name: 'Backup', mergeCatalog: true, failoverPriority: 20 });
+    const result = await syncXtreamSource(String(backup._id));
+
+    expect(result.adopted).toBe(0);
+    expect(await ChannelFailoverMap.countDocuments({ backupSourceId: backup._id })).toBe(1);
+  });
+});
