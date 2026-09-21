@@ -1,7 +1,49 @@
 # DZ HOOF — Server Project Status
 
-_Last verified: 2026-09-20 (production VPS + CI). The newest section is
-"Re-verified 2026-09-20" below; the older sections are kept for their measured history._
+_Last verified: 2026-09-21 (production VPS + CI). The newest section is "Re-verified
+2026-09-21" below; the older sections are kept for their measured history._
+
+## Re-verified 2026-09-21 (primary provider incident — the conclusion was wrong)
+
+**What the platform believed:** the primary provider's account had expired on 2026-09-15, ~52% of
+the catalog (16,707 of 31,868 channels) was dead, and the backup source failed to sync (HTTP 503).
+That belief had been carried for five days and had reached the audit and the handover notes.
+
+**What was actually true**, once the provider was probed with the project's own client
+(`testXtreamConnection` / `diagnoseXtreamSource`) instead of inferred from internal symptoms:
+
+- The account is **Active** (valid to ~2026-10-01) and its panel serves live: sampled streams
+  answer `200 video/mp2t` in ~160ms, and the upstream catalog is 16,571 channels / 67,558 movies
+  / 17,175 series.
+- The 16,706 "dead" channels were the provider's own channels left **orphaned** when the source
+  row was replaced during a re-registration. Their primary URLs still carried the retired
+  account's credentials (so they were genuinely unplayable), while the live stream sat attached
+  to them as an **enabled failover backup**. The visibility gate treats "source missing" as
+  unverified, so all of them were hidden: a healthy provider with an invisible catalog.
+- The catalog the customer could open was ~2,821 channels instead of ~16,500.
+
+**Root fixes shipped** (each with tests, CI green, deployed):
+
+| Fix | Root |
+|---|---|
+| `mergeCatalog` sync adopts a matched channel whose source is gone (same `_id`, identities, EPG, order; only ownership moves) | a re-registration used to hide the whole catalog behind failover maps |
+| Sync snapshots chunked into `SyncSnapshotChunk` (2,000 channels/doc) | one document per snapshot hit MongoDB's 16MB cap, so every sync of a large source failed before writing |
+| Playback resolves a retired `channelId` by stream id (playable copy wins) | re-registration renumbers channel ids, and cached clients sent the old ones → 404 on every tap |
+| One shared visibility gate (`utils/verified-channel-query.js`) used by list, search, catalog search, categories, discover rails, home and the user playlist | four endpoints re-implemented the filters by hand and dropped the health clauses |
+| Daily expiry scan marks past-expiry subscriptions `EXPIRED` before scanning renewals | rows stayed `ACTIVE` after expiry: the panel claimed 17 active while 9 could play |
+| Daily report carries catalog health (active/visible/dead/orphaned) and delivery reach (devices / push-capable / expiring) | the report showed healthy activations while the catalog was half invisible |
+
+**Measured after**: dead 16,707 → **1** · orphaned 16,714 → **0** · active channels 16,238 →
+**16,579** · customer playlist 2,821 → **16,190** · sync **succeeds in 137s** · playback verified
+end-to-end (18.8MB MPEG-TS through the relay) · subscriptions 17 (8 expired) → **9 valid**.
+
+**Still owner-side**: renew/replace nothing on the provider (it is fine); the open items are
+payment keys, secrets rotation, FCM (APKs built without Firebase ⇒ 19 devices, 0 push tokens),
+the support channel URL, and the Play distribution decision.
+
+**Lesson for the next reader:** do not conclude "the provider is down" from internal counters.
+Probe the panel with the project's own client first — the internal symptom (dead channels,
+failing sync, hidden catalog) had three different causes, and none of them was the provider.
 
 ## Re-verified 2026-09-20 (operations hardening pass)
 
