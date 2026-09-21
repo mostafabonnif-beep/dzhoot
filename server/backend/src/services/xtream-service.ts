@@ -410,16 +410,23 @@ export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
   const verified = apiAvailable && liveAvailable;
   const verificationStatus = verified ? 'verified' : apiAvailable ? 'degraded' : 'blocked';
   const error = verified
-    ? diagnostics.m3u.status === 'dead'
-      ? 'Live playback is available, but M3U export is unavailable'
-      : null
+    ? null
     : diagnostics.api.error || (diagnostics.live.tested > 0 ? 'No tested live stream is playable' : 'No live stream could be verified');
+  // The provider's M3U export is optional for this platform (we relay live streams ourselves and
+  // never consume the panel's M3U endpoint). Reporting its absence through `lastError` made a
+  // perfectly healthy source read as broken in the panel — measured 2026-09-21, when the operator
+  // reported "the neo 4k source is not working" while live playback answered 200 in ~160ms.
+  const warning =
+    verified && diagnostics.m3u.status === 'dead'
+      ? 'Live playback works; the provider does not expose its M3U export (not used by this platform)'
+      : null;
 
   source.verificationStatus = verificationStatus;
   source.status = verified ? 'Active' : 'Inactive';
   source.lastDiagnosticsAt = now;
   source.lastDiagnostics = diagnostics as unknown as Record<string, unknown>;
   source.lastError = error;
+  source.lastWarning = warning;
   source.playbackFormat = verified && diagnostics.live.playbackFormat !== 'direct'
     ? diagnostics.live.playbackFormat
     : null;

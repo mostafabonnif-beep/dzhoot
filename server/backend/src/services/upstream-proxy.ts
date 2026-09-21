@@ -573,13 +573,43 @@ export async function proxyUpstreamStream(
         .catch(() => undefined);
       for (;;) {
         const upstream = currentResponse.data;
+        // Count what the customer actually gets. An upstream that answers 200 and then sends
+        // nothing is the worst failure mode there is: the app shows a black screen forever
+        // because a valid-looking 200 arrived, and nothing in the logs says anything happened.
+        // Measured 2026-09-21 on a live provider: some streams fell into exactly this state
+        // while the same URL served bytes to a direct probe a moment later.
+        let sawData = false;
+        // First-byte watchdog. A provider that accepts the request and then stays silent is the
+        // worst failure mode there is: the customer gets a 200 immediately and then a black
+        // screen forever, and nothing appears in the logs. Give the upstream a bounded window to
+        // produce its first byte, then treat the silence as death so the existing mid-stream
+        // failover (and finally an error response) takes over. Measured on a live provider
+        // 2026-09-21: some stream URLs stalled exactly like this while a direct probe of the
+        // same URL returned bytes a moment later.
+        const firstByteTimeoutMs = Math.max(
+          2000,
+          Number(process.env.UPSTREAM_FIRST_BYTE_TIMEOUT_MS || 8000),
+        );
+        let firstByteTimer: ReturnType<typeof setTimeout> | null = null;
         const outcome = await new Promise<'end' | 'error' | 'closed'>((resolve) => {
           let done = false;
           const settle = (r: 'end' | 'error' | 'closed') => {
             if (done) return;
             done = true;
+            if (firstByteTimer) clearTimeout(firstByteTimer);
             resolve(r);
           };
+          firstByteTimer = setTimeout(() => {
+            if (done || sawData) return;
+            console.warn(
+              `[upstream-proxy] no upstream data after ${firstByteTimeoutMs}ms — treating the stall as a dead upstream`,
+            );
+            upstream.destroy(new Error('upstream first-byte timeout'));
+          }, firstByteTimeoutMs);
+          upstream.once('data', () => {
+            sawData = true;
+            if (firstByteTimer) clearTimeout(firstByteTimer);
+          });
           // Pass-through meter (no buffering) keeps backpressure intact.
           upstream
             .pipe(createEgressMeter(() => egressTier.current, 'proxy'))
@@ -596,6 +626,19 @@ export async function proxyUpstreamStream(
           });
         });
         if (outcome === 'end') {
+          if (!sawData) {
+            // Never leave the client on a silent empty 200: say so, and let the app use its
+            // own fallbacks (proxyPlaybackUrl / direct URL) instead of waiting forever.
+            console.warn(
+              `[upstream-proxy] upstream ended with 0 bytes — channel=${redactSensitiveText(String(tokenContext?.channelListCode || '-'))} url=${redactSensitiveText(fetchedUrl)}`,
+            );
+            if (!res.headersSent) {
+              res.status(502).send('Upstream produced no data');
+            } else if (!res.destroyed) {
+              res.destroy();
+            }
+            return;
+          }
           res.end();
           return;
         }
