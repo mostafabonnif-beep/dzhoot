@@ -40,10 +40,56 @@ jest.mock('../services/scheduler-service', () => ({
   },
 }));
 
+// The release checks resolve through the same code path `/version` uses, which also
+// consults the latest GitHub release. Both are stubbed so the suite stays hermetic and
+// every source can be exercised deliberately: `githubDown()` reproduces a provider
+// outage (the pre-existing database-only case), `githubUp()` reproduces production,
+// where GitHub Releases is the source of truth and the table is empty.
+jest.mock('axios');
+jest.mock('../utils/ssrf-guard', () => ({
+  validateUrlForSSRF: jest.fn(async () => ({ safe: true, resolvedAddresses: ['140.82.121.4'] })),
+  createPinnedLookup: jest.fn(() => undefined),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const axios = require('axios');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const router = require('../routes/admin-diagnostics');
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const AppVersion = require('../models/AppVersion');
+
+const axiosGet = axios.get as jest.Mock;
+
+const GITHUB_APK_URL =
+  'https://github.com/mostafabonnif-beep/dzhoot/releases/download/v1.5.0/dzhoof-tv-v1.5.0-official.apk';
+
+/** Provider outage: only the database can supply a release, as before this change. */
+function githubDown() {
+  axiosGet.mockRejectedValue(new Error('github unavailable'));
+}
+
+/** A published GitHub release, with the `.sha256` asset the pipeline uploads next to it. */
+function githubUp(sha256Body = `${SHA256}  dzhoof-tv-v1.5.0-official.apk\n`) {
+  axiosGet.mockImplementation(async (url: unknown) => {
+    const href = String(url);
+    if (new URL(href).hostname === 'api.github.com') {
+      return {
+        status: 200,
+        headers: {},
+        data: {
+          tag_name: 'v1.5.0',
+          body: 'إصلاحات وتحسينات',
+          published_at: '2026-09-19T13:18:41Z',
+          assets: [
+            { name: 'dzhoof-tv-v1.5.0-official.apk', size: 26905636, browser_download_url: GITHUB_APK_URL },
+            { name: 'dzhoof-tv-v1.5.0-official.apk.sha256', browser_download_url: `${GITHUB_APK_URL}.sha256` },
+          ],
+        },
+      };
+    }
+    return { status: 200, headers: {}, data: sha256Body };
+  });
+}
 
 const APK_URL =
   'https://github.com/mostafabonnif-beep/dzhoot/releases/download/v1.4.2/dzhoof-tv-v1.4.2-official.apk';
@@ -89,6 +135,7 @@ beforeEach(() => {
   (global as any).__redisReady = true;
   (global as any).__redisPingFails = false;
   (global as any).__schedulerTasks = [];
+  githubDown();
   process.env.APP_VERSION = '1.4.2';
   process.env.RELEASE_COMMIT = 'd34db33fd34db33fd34db33fd34db33fd34db33f';
   process.env.RELEASE_BUILT_AT = '2026-09-13T10:00:00Z';
@@ -222,6 +269,60 @@ describe('GET /api/v1/admin/diagnostics — verdicts', () => {
     delete process.env.RELEASE_COMMIT;
     const response = await fetchDiagnostics();
     expect(statusOf(response.body, 'build_identity')).toBe('warn');
+  });
+});
+
+describe('GET /api/v1/admin/diagnostics — release source', () => {
+  // Regression: production had 26 AppVersion rows, every one `isActive: false`, while
+  // `/api/v1/app/version` advertised 1.3.10 straight from GitHub Releases. Diagnostics
+  // read the table alone, so the whole panel reported `overall: fail` on an update path
+  // that worked — a false negative loud enough to hide the real ones.
+  it('passes when GitHub Releases is the only source and the table is empty', async () => {
+    githubUp();
+
+    const response = await fetchDiagnostics();
+
+    expect(response.status).toBe(200);
+    expect(statusOf(response.body, 'release_published')).toBe('pass');
+    expect(statusOf(response.body, 'release_artifact_complete')).toBe('pass');
+    expect(statusOf(response.body, 'release_download_url')).toBe('pass');
+    expect(response.body.release.versionName).toBe('1.5.0');
+    expect(response.body.release.versionCode).toBe(10500);
+    expect(response.body.release.downloadUrlHost).toBe('github.com');
+    expect(response.body.release.sha256Preview).toBe('f0494df3f964…');
+    expect(response.body.checks.find((item: any) => item.id === 'release_published').detail).toContain(
+      'GitHub Releases'
+    );
+  });
+
+  it('fails when GitHub is unreachable and no release row is active', async () => {
+    githubDown();
+
+    const response = await fetchDiagnostics();
+
+    expect(response.status).toBe(200);
+    expect(statusOf(response.body, 'release_published')).toBe('fail');
+    expect(response.body.release.versionName).toBeNull();
+  });
+
+  it('fails the artifact check when GitHub advertises no checksum', async () => {
+    githubUp('   \n');
+
+    const response = await fetchDiagnostics();
+
+    expect(statusOf(response.body, 'release_published')).toBe('pass');
+    expect(statusOf(response.body, 'release_artifact_complete')).toBe('fail');
+    expect(response.body.overall).toBe('fail');
+  });
+
+  it('prefers the newer of the two sources', async () => {
+    await AppVersion.create(releaseDoc({ isActive: true, versionCode: 10402, versionName: '1.4.2' }));
+    githubUp();
+
+    const response = await fetchDiagnostics();
+
+    expect(response.body.release.versionName).toBe('1.5.0');
+    expect(response.body.release.versionCode).toBe(10500);
   });
 });
 

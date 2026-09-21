@@ -1,9 +1,8 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const AppVersion = require('../models/AppVersion');
 const { requireAuth, requireAdmin } = require('./auth');
 const { isRedisReady, getRedisClient } = require('../services/redis');
-const { isAllowedDownloadUrl, versionNameToCode } = require('./app-update')._private;
+const { isAllowedDownloadUrl, versionNameToCode, resolvePublishedRelease } = require('./app-update')._private;
 
 // Admin diagnostics: /api/v1/admin/diagnostics
 //
@@ -14,8 +13,13 @@ const { isAllowedDownloadUrl, versionNameToCode } = require('./app-update')._pri
 // the error name rather than its text (a driver message can embed the URI).
 //
 // Memory of the release rules it verifies:
-//   - the update API serves the newest active AppVersion by versionCode
-//     (routes/app-update.js), so diagnostics inspects exactly that row;
+//   - the update API advertises the newest candidate across *both* sources it serves
+//     from — an active AppVersion row and the latest GitHub release — so diagnostics
+//     resolves through the same `resolvePublishedRelease()` the device-facing
+//     `/version` uses instead of reading the table itself. Reading only the table was
+//     a false negative: production had 26 rows all `isActive: false` while `/version`
+//     correctly advertised 1.3.10 straight from GitHub Releases, so the panel showed a
+//     permanent red "no release published" on a healthy update path;
 //   - a download URL is discarded unless it is HTTPS on an allowlisted host
 //     (fail-closed), so a bad host silently disables updates;
 //   - clients reject an artifact whose versionCode disagrees with its versionName.
@@ -196,18 +200,49 @@ function buildIdentityCheck(build) {
   return check('build_identity', 'هوية البناء', PASS, `الإصدار ${build.version} مبني من ${String(build.commit).slice(0, 8)}.`);
 }
 
-async function releaseChecks() {
-  const latest = await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean();
+/**
+ * Resolve what devices are actually offered, through the same resolver `/version`
+ * uses, then verify that artifact is installable.
+ *
+ * The source is deliberately not the AppVersion table alone: the update API also
+ * serves straight from the latest GitHub release, and GitHub is where production
+ * actually publishes. Asking the resolver is what stops this probe from reporting a
+ * release outage that no device experiences. A provider failure with no database
+ * fallback throws inside the resolver, so it is caught here and reported as the
+ * failure it is — diagnostics must always answer, never 500.
+ */
+async function releaseChecks(req) {
+  let resolved = null;
+  let resolutionFailed = false;
+  try {
+    resolved = await resolvePublishedRelease(req);
+  } catch {
+    resolutionFailed = true;
+  }
+
+  const latest = (resolved && resolved.latest) || null;
   if (!latest) {
     return {
       latest: null,
-      checks: [check('release_published', 'إصدار منشور', FAIL, 'لا يوجد أي إصدار مُفعَّل — كل الأجهزة ستحصل على «لا يوجد تحديث».')],
+      checks: [
+        check(
+          'release_published',
+          'إصدار منشور',
+          FAIL,
+          resolutionFailed
+            ? 'تعذّر تحديد أي إصدار: لا سجل مُفعَّل في قاعدة البيانات، ومصدر GitHub غير متاح — الأجهزة لن ترى أي تحديث.'
+            : 'لا يوجد أي إصدار منشور — لا سجل مُفعَّل ولا إصدار على GitHub. كل الأجهزة ستحصل على «لا يوجد تحديث».'
+        ),
+      ],
     };
   }
 
   const checks = [];
   const label = `${latest.versionName} (${latest.versionCode})`;
-  checks.push(check('release_published', 'إصدار منشور', PASS, `أحدث إصدار مُفعَّل: ${label} — قناة ${latest.releaseChannel || 'stable'}.`));
+  const source = latest.source === 'github' ? 'GitHub Releases' : 'سجل قاعدة البيانات';
+  checks.push(
+    check('release_published', 'إصدار منشور', PASS, `أحدث إصدار منشور: ${label} — المصدر ${source} — قناة ${latest.releaseChannel || 'stable'}.`)
+  );
 
   const missing = [];
   if (!latest.sha256) missing.push('sha256');
@@ -316,7 +351,7 @@ router.get('/', async (req, res) => {
     const [mongoResult, redisResult, releaseResult, schedulerResult, catalogResult] = await Promise.all([
       mongodbCheck(),
       redisCheck(),
-      releaseChecks(),
+      releaseChecks(req),
       schedulerCheck(),
       catalogVisibilityCheck(),
     ]);
