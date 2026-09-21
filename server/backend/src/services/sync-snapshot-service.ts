@@ -1,7 +1,15 @@
 import mongoose from 'mongoose';
 import SyncSnapshot, { SyncSnapshotChannel, SyncSourceType } from '../models/SyncSnapshot';
+import SyncSnapshotChunk from '../models/SyncSnapshotChunk';
 import Channel from '../models/Channel';
 import { decryptSecret, encryptSecret } from '../utils/crypto';
+
+/**
+ * How many channels go into one snapshot chunk document. A channel entry is roughly 1KB, so
+ * this keeps a chunk near 2MB — an order of magnitude below MongoDB's 16MB document cap even
+ * if entries grow. The count is what made the single-document design fail at 16k channels.
+ */
+const SNAPSHOT_CHUNK_SIZE = 2000;
 
 export interface SyncDiff {
   added: number;
@@ -90,6 +98,23 @@ export async function getCurrentSourceChannels(sourceType: SyncSourceType, sourc
   return channels.map(comparableChannel);
 }
 
+/**
+ * Read a snapshot's channel list, whether it was written before or after chunking.
+ * Legacy snapshots still carry their list in `channels`; new ones keep it in chunk documents
+ * so a catalog of any size can be snapshotted at all.
+ */
+export async function loadSnapshotChannels(snapshot: {
+  _id: unknown;
+  channels?: SyncSnapshotChannel[] | null;
+}): Promise<SyncSnapshotChannel[]> {
+  const inline = snapshot.channels || [];
+  if (inline.length > 0) return inline;
+  const chunks = await SyncSnapshotChunk.find({ snapshotId: snapshot._id })
+    .sort({ index: 1 })
+    .lean();
+  return chunks.flatMap((chunk: any) => chunk.channels || []);
+}
+
 export async function createSyncPreview(input: {
   sourceType: SyncSourceType;
   sourceId: string;
@@ -105,13 +130,23 @@ export async function createSyncPreview(input: {
     sourceType: input.sourceType,
     sourceId: new mongoose.Types.ObjectId(input.sourceId),
     status: 'preview',
-    channels: before,
+    // The list lives in chunks below; this field stays for legacy reads and for callers that
+    // only need the diff. Writing it here is what used to blow the 16MB limit.
+    channels: [],
     channelCount: before.length,
     diff,
     createdBy: input.createdBy && mongoose.Types.ObjectId.isValid(input.createdBy)
       ? new mongoose.Types.ObjectId(input.createdBy)
       : null,
   });
+
+  for (let index = 0; index * SNAPSHOT_CHUNK_SIZE < before.length; index += 1) {
+    const slice = before.slice(index * SNAPSHOT_CHUNK_SIZE, (index + 1) * SNAPSHOT_CHUNK_SIZE);
+    if (!slice.length) break;
+    // Inserted one at a time on purpose: each document is well under the cap, and a failure
+    // names the chunk instead of an opaque bulk error.
+    await SyncSnapshotChunk.create({ snapshotId: snapshot._id, index, channels: slice });
+  }
 
   return {
     snapshotId: String(snapshot._id),
@@ -138,11 +173,12 @@ export async function rollbackSyncSnapshot(snapshotId: string) {
   const sourceFilter = snapshot.sourceType === 'm3u'
     ? { ownerId: null, 'metadata.m3uSourceId': String(snapshot.sourceId) }
     : { ownerId: null, 'metadata.xtreamSourceId': String(snapshot.sourceId) };
-  const channelIds = snapshot.channels.map((channel) => channel.channelId);
+  const beforeChannels = await loadSnapshotChannels(snapshot as any);
+  const channelIds = beforeChannels.map((channel) => channel.channelId);
 
   await Channel.updateMany(sourceFilter, { $set: { isActive: false } }).exec();
-  if (snapshot.channels.length > 0) {
-    const restoreOperations = snapshot.channels.map((channel) => {
+  if (beforeChannels.length > 0) {
+    const restoreOperations = beforeChannels.map((channel) => {
       const restored: any = { ...channel };
       delete restored.channelUrlEncrypted;
       const restoredMetadata = {
@@ -198,6 +234,7 @@ module.exports = {
   calculateSyncDiff,
   getCurrentSourceChannels,
   createSyncPreview,
+  loadSnapshotChannels,
   markSnapshotApplied,
   rollbackSyncSnapshot,
   listSyncSnapshots,
