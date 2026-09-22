@@ -32,8 +32,8 @@ function buildApp() {
   return app;
 }
 
-const ACTIVE_CODE = 'ACT123';
-const REVOKED_CODE = 'REV123';
+const ACTIVE_CODE = 'ACT123'; // secret-guard-allow: unit-test fixture, never a valid device code
+const REVOKED_CODE = 'REV123'; // secret-guard-allow: unit-test fixture, never a valid device code
 
 describe('tv routes: revoked channel-list code', () => {
   beforeEach(async () => {

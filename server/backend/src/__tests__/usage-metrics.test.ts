@@ -129,7 +129,7 @@ describe('tier resolution', () => {
 
   beforeEach(() => {
     clearTierCache();
-    process.env.DEMO_TV_CODE = 'FREEDEMO12345678';
+    process.env.DEMO_TV_CODE = 'FREEDEMO12345678'; // secret-guard-allow: test fixture
   });
 
   afterEach(() => {
@@ -215,7 +215,7 @@ describe('buildUsageConcurrency', () => {
 
   beforeEach(() => {
     clearTierCache();
-    process.env.DEMO_TV_CODE = 'FREEDEMO12345678';
+    process.env.DEMO_TV_CODE = 'FREEDEMO12345678'; // secret-guard-allow: test fixture
   });
 
   afterEach(() => {
