@@ -440,31 +440,53 @@ function selectCatalogDedup(channels) {
 
 /** Mongo condition hiding duplicate copies from customer-facing outputs
  *  ({} when dedup is disabled or nothing to hide). Computed over the shared
- *  catalog and cached; safe to call on every request. */
+ *  catalog and cached; safe to call on every request.
+ *
+ *  Two cache layers protect this: the Redis list `catalog:dedup:ids` (600s,
+ *  shared between processes) and an in-process memo (60s,
+ *  `CHANNEL_GATE_CACHE_TTL_MS`) so a Redis outage / cold start does not put the
+ *  full ~32k-document identity scan on every request from every process. The
+ *  in-process layer is invalidated by `clearChannelGateCache()` from the
+ *  catalog/source mutation paths. */
 async function publicCatalogDedupQuery() {
   if (!dedupEnabled()) return {};
-  try {
-    const channelCache = require('../services/cache').channelCache;
-    let hidden = await channelCache.get('catalog:dedup:ids');
-    if (!hidden) {
-      const Channel = require('../models/Channel').default || require('../models/Channel');
-      const channels = await Channel.find({
-        $and: [
-          { ownerId: null, isActive: { $ne: false } },
-          publicCatalogPresentationQuery(),
-          publicCatalogHideQuery(),
-        ],
-      })
-        .select('channelGroup channelName tvgName order')
-        .lean();
-      hidden = selectCatalogDedup(channels);
-      await channelCache.set('catalog:dedup:ids', hidden, 600);
-    }
-    return hidden.length ? { _id: { $nin: hidden } } : {};
-  } catch (error) {
-    console.error('[catalog] dedup query failed:', error?.message);
-    return {};
-  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { memoChannelGate } = require('../services/channel-gate-cache');
+  // Number of channel documents the current computation scanned — reported in
+  // the slow-computation log line (set by the closure right before it resolves).
+  let scannedChannels = 0;
+  return memoChannelGate(
+    'dedupQuery',
+    async () => {
+      try {
+        const channelCache = require('../services/cache').channelCache;
+        let hidden = await channelCache.get('catalog:dedup:ids');
+        if (!hidden) {
+          const Channel = require('../models/Channel').default || require('../models/Channel');
+          const channels = await Channel.find({
+            $and: [
+              { ownerId: null, isActive: { $ne: false } },
+              publicCatalogPresentationQuery(),
+              publicCatalogHideQuery(),
+            ],
+          })
+            .select('channelGroup channelName tvgName order')
+            .lean();
+          scannedChannels = channels.length;
+          hidden = selectCatalogDedup(channels);
+          await channelCache.set('catalog:dedup:ids', hidden, 600);
+        }
+        return hidden.length ? { _id: { $nin: hidden } } : {};
+      } catch (error) {
+        console.error('[catalog] dedup query failed:', error?.message);
+        return {};
+      }
+    },
+    (query) => ({
+      channels: scannedChannels,
+      identities: Array.isArray(query?._id?.$nin) ? query._id.$nin.length : 0,
+    }),
+  );
 }
 
 function regionFromGroup(group, name = '') {

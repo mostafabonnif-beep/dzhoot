@@ -22,11 +22,16 @@ const {
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
 const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query');
+const {
+  clearChannelGateCache,
+  getDirectPlaybackSourceIds: getCachedDirectPlaybackSourceIds,
+} = require('../services/channel-gate-cache');
 
 // The shared admin/demo catalog is identical for every admin hit and is the heaviest
 // read. Cache it (10 min TTL via channelCache) and bust it on any catalog mutation.
 // Per-user lists are NOT cached here — they change through many assignment paths.
 function invalidateCatalogCache() {
+  clearChannelGateCache();
   return channelCache.deletePattern('catalog:*');
 }
 
@@ -136,9 +141,8 @@ function slimAlternates(channel, directPlaybackSourceIds = new Set()) {
 // Direct-playback source ids — sources whose streams clients fetch from their
 // own networks; the server's datacenter probe cannot judge their liveness.
 async function getDirectPlaybackSourceIds() {
-  return new Set(
-    (await XtreamSource.find({ directPlayback: true }).distinct('_id')).map((id) => String(id)),
-  );
+  // Memoized in-process: identical for every caller (no user input).
+  return new Set(await getCachedDirectPlaybackSourceIds());
 }
 
 // The shared (allCatalog) catalog is identical for every client and every page.

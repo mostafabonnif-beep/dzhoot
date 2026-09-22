@@ -15,12 +15,19 @@
  *   block (HTTP 456/458). Customer-visible and direct-playback sources are exempt, because
  *   that verdict does not describe what the customer's own network can play.
  */
-const XtreamSource = require('../models/XtreamSource');
 const {
   publicCatalogPresentationQuery,
   publicCatalogHideQuery,
   publicCatalogDedupQuery,
 } = require('./catalog-presentation');
+// Source-id sets and the hide/presentation queries are identical for every caller
+// (no user input) yet were re-derived on every request — a full source scan plus
+// the dedup scan per customer request (measured 2.4s/request on production).
+// They are memoized in-process with a short TTL instead.
+const {
+  getVerifiedXtreamSourceIds,
+  getIsWorkingExemptSourceIds,
+} = require('../services/channel-gate-cache');
 
 // Xtream channels are customer-visible only when their source has passed a live
 // playback probe. Missing verification is intentionally treated as unavailable.
@@ -28,21 +35,10 @@ const {
 // reflects the server's datacenter IP (blocked upstream), not the customer's
 // network — the same policy as the playlist routes (tv.js / User.ts).
 async function verifiedXtreamChannelQuery(baseQuery, options = {}) {
-  const verifiedSourceIds = (await XtreamSource.find({
-    $or: [
-      { status: 'Active', verificationStatus: 'verified' },
-      { customerVisible: true },
-      { directPlayback: true },
-    ],
-  }).distinct('_id')).map((id) => String(id));
-  // Channels of operator-curated (customerVisible) or direct-playback sources
-  // stay visible regardless of the server datacenter probe verdict: those
-  // probes hit upstream WAF blocks (HTTP 456/458) that do not reflect what a
-  // customer's own network (or the server relay on their behalf) can play.
-  // Same policy as the watchdog fix (PR #186), extended to proxied sources.
-  const isWorkingExemptSourceIds = (await XtreamSource.find({
-    $or: [{ directPlayback: true }, { customerVisible: true }],
-  }).distinct('_id')).map((id) => String(id));
+  const [verifiedSourceIds, isWorkingExemptSourceIds] = await Promise.all([
+    getVerifiedXtreamSourceIds(),
+    getIsWorkingExemptSourceIds(),
+  ]);
   const dedupQuery = options.dedup ? await publicCatalogDedupQuery() : {};
   return {
     $and: [
