@@ -42,7 +42,7 @@ const {
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
 const { isSourceDown, getFailoverTarget, getHttpsBackupStreamUrl } = require('../services/source-failover-service');
-const { rewriteStreamUrlBase } = require('../services/xtream-service');
+const { rewriteStreamUrlBase, hlsTwinStreamUrl } = require('../services/xtream-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
 const { resolveStreamDeviceHash } = require('../utils/stream-device-hash');
 const {
@@ -302,6 +302,23 @@ async function resolvePlaybackTarget(payload) {
       }
     }
   }
+  // Live Xtream playback resolves to the panel's HLS rendition of the same stream id
+  // (issue #360). This is the live path — v2 tokens re-resolve `channelUrl` from the document
+  // right here and never look at `payload.streamUrl`, so applying the twin only at issue time
+  // would miss every live channel. Measured on production 2026-09-21: `.../297641.ts`
+  // answered 200 with an entirely empty body while `.../297641.m3u8` served a valid media
+  // playlist, and the panel advertises `allowed_output_formats: [m3u8, ts, rtmp]`. A customer
+  // handed the `.ts` URL gets a black screen that never errors, on BOTH paths (the 302 redirect
+  // and the relay below fetch the upstream this URL names).
+  //
+  // Deliberately resolved here rather than inside `upstream-proxy.ts`: the relay's tiered
+  // failover suite is #360's acceptance condition and its first-byte gate must not be
+  // re-purposed as a format switch. `PREFER_HLS_TWIN=false` is the kill switch.
+  if (channel.metadata?.source === 'xtream' && process.env.PREFER_HLS_TWIN !== 'false') {
+    const twin = hlsTwinStreamUrl(streamUrl);
+    if (twin) streamUrl = twin;
+  }
+
   // Build the resolved target AFTER the failover/mirror rewrites above —
   // capturing it earlier would cache and return the pre-failover primary URL.
   // `channelGroup` rides along so the playback route can re-apply the freemium
@@ -950,6 +967,24 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       if (rewritten) streamUrl = rewritten;
     }
     if (!streamUrl) return res.status(404).json({ success: false, error: 'Stream slot not found' });
+
+    // Live Xtream playback resolves to the panel's HLS rendition of the same stream id
+    // (issue #360). The raw `.ts` URL is the container this provider fails on — measured
+    // 2026-09-21: `.../297641.ts` answered 200 with an empty body while `.../297641.m3u8`
+    // served a valid 169-byte playlist — and a customer handed the `.ts` URL gets a black
+    // screen that never errors, because a valid-looking 200 arrives over BOTH paths (the
+    // direct 302 below and the server relay, since both fetch the same upstream).
+    //
+    // This is deliberately resolved here, in the token's upstream URL, and NOT inside
+    // `upstream-proxy.ts`: the relay's tiered failover suite is the acceptance condition in
+    // #360 and its first-byte gate must not be re-purposed for a format switch.
+    //
+    // PREFER_HLS_TWIN=false is the kill switch — it restores the raw container for every
+    // channel with an env change, without a deploy.
+    if (catchupStartMs === 0 && channel.metadata?.source === 'xtream' && process.env.PREFER_HLS_TWIN !== 'false') {
+      const twin = hlsTwinStreamUrl(streamUrl);
+      if (twin) streamUrl = twin;
+    }
 
     const selectedAlternate = slot > 0 ? viableAlternates[slot - 1] : null;
     const rootSessionId = crypto.randomBytes(16).toString('hex');

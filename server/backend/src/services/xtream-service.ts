@@ -245,6 +245,38 @@ export function rewriteStreamUrlBase(streamUrl: string, newBase: string): string
   }
 }
 
+/**
+ * The panel's HLS rendition of the same live stream id.
+ *
+ * An Xtream panel serves one stream id in several containers, and a given id frequently works in
+ * one and fails in the other. Measured on production 2026-09-21 (issue #360):
+ *
+ *   .../live/USER/PASS/297641.ts    -> sometimes HTTP 200 with an entirely empty body
+ *   .../live/USER/PASS/297641.m3u8  -> a valid 169-byte media playlist
+ *
+ * and the panel advertised `allowed_output_formats: [m3u8, ts, rtmp]`. Playback handed the `.ts`
+ * URL to the customer, who got a black screen that never errors: a valid-looking 200 arrived
+ * through the direct redirect AND through the server relay, because both fetch the same upstream.
+ *
+ * Returns null when [streamUrl] is not a `.ts` live URL, so callers can treat "no twin" as
+ * "leave the URL alone". The query string is preserved verbatim — panels keep tokens and output
+ * flags there — by rebuilding the string rather than reparsing it through `URL`.
+ *
+ * The health pipeline's bidirectional `.ts` <-> `.m3u8` swap lives in
+ * `services/stream-health-service.ts` (`siblingStreamUrl`); this one is the one-way playback-side
+ * twin, which is why it is not shared.
+ */
+export function hlsTwinStreamUrl(streamUrl: string | null | undefined): string | null {
+  if (!streamUrl || typeof streamUrl !== 'string') return null;
+
+  const queryIndex = streamUrl.search(/[?#]/);
+  const base = queryIndex === -1 ? streamUrl : streamUrl.slice(0, queryIndex);
+  const suffix = queryIndex === -1 ? '' : streamUrl.slice(queryIndex);
+
+  if (!/\.ts$/i.test(base)) return null;
+  return `${base.slice(0, -3)}.m3u8${suffix}`;
+}
+
 export function buildXtreamApiUrl(
   creds: XtreamCredentials,
   action?: string,
@@ -1086,4 +1118,7 @@ module.exports = {
   decryptSecret,
   buildCatalogMatchIndex,
   matchCatalogChannel,
+  // CommonJS consumers (`require('../services/xtream-service')`, e.g. routes/tv.js) replace the
+  // module exports object wholesale, so every named export has to be listed here too.
+  hlsTwinStreamUrl,
 };
