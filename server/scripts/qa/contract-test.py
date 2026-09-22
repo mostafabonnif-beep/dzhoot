@@ -1,7 +1,17 @@
-import json, urllib.request, sys
+import json, os, sys, urllib.request
 
-BASE = "https://iptv.ld-11.net"
-CODE = "T24VKT"
+BASE = os.environ.get("DZHOOF_BASE_URL", "https://iptv.ld-11.net").rstrip("/")
+# The channel-list code is a bearer credential: whoever holds it can read the catalog, pull EPG
+# and mint playback tokens. It belongs in the environment, never in a tracked file — this script
+# used to carry a live one, which put a working credential in a public repository (the secret
+# guard in `scripts/security/check-secrets.sh` now fails closed on that class).
+CODE = os.environ.get("DZHOOF_TV_CODE", "").strip()
+if not CODE:
+    sys.exit(
+        "DZHOOF_TV_CODE is not set.\n"
+        "Pass the channel-list code of an ACTIVE test device through the environment:\n"
+        "  DZHOOF_TV_CODE=<code> python3 scripts/qa/contract-test.py"
+    )
 results = []
 
 def call(path, method="GET", body=None, code=CODE):
