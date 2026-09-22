@@ -44,6 +44,7 @@ const {
 const { isSourceDown, getFailoverTarget, getHttpsBackupStreamUrl } = require('../services/source-failover-service');
 const { rewriteStreamUrlBase } = require('../services/xtream-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
+const { resolveStreamDeviceHash } = require('../utils/stream-device-hash');
 
 // Demo/free-tier group scoping moved to services/channel-scope (single source of truth).
 const WEB_PLAYBACK_COOKIE = '__Host-dzhoof-playback';
@@ -743,10 +744,16 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
         upstreamHeaders: {},
         sessionId: rootSessionId,
       });
+      // VOD goes through the SAME per-user concurrent stream limit as Live
+      // (the plan's maxConcurrentStreams): it used to be omitted here, so VOD
+      // could quietly exceed the plan cap.
+      const vodPlaybackAccess = await checkPlaybackSubscription(String(user.id), user.role, 'VOD');
       const session = await registerStreamSession({
         userId: String(user.id),
         sessionId: rootSessionId,
         ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
+        maxConcurrentStreams: vodPlaybackAccess.plan?.maxConcurrentStreams,
+        deviceHash: resolveStreamDeviceHash(req),
         metadata: {
           username: user.username,
           channelListCode: user.channelListCode,
@@ -755,6 +762,14 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
           platform: String(req.headers['x-platform'] || req.headers['user-agent'] || '').slice(0, 40),
         },
       });
+      if (!session.allowed) {
+        return res.status(429).json({
+          success: false,
+          code: 'CONCURRENT_STREAM_LIMIT',
+          error: 'This subscription is already streaming on another device. Stop it there, or add a device to your plan.',
+          streamLimit: { max: session.max, active: session.active },
+        });
+      }
       return res.json({
         success: true,
         data: {
@@ -1044,14 +1059,17 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
       }
     }
 
-    // Enforce the per-user concurrent stream limit (oldest session is evicted
-    // when exceeded; no-op when Redis is not configured).
+    // Enforce the per-user concurrent stream limit. Under the strict policy
+    // (STREAM_LIMIT_POLICY=refuse, the default) a session is only replaced when
+    // it belongs to the SAME device — reconnects and Multiview keep working,
+    // while a second device sharing the subscription is refused.
     const playbackAccess = await checkPlaybackSubscription(String(user.id), user.role, 'Live');
     const session = await registerStreamSession({
       userId: String(user.id),
       sessionId: rootSessionId,
       ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
       maxConcurrentStreams: playbackAccess.plan?.maxConcurrentStreams,
+      deviceHash: resolveStreamDeviceHash(req, webBindingHash),
       metadata: {
         username: user.username,
         channelListCode: user.channelListCode,
@@ -1064,8 +1082,8 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     if (!session.allowed) {
       return res.status(429).json({
         success: false,
-        error: 'Concurrent playback limit reached for this subscription',
         code: 'CONCURRENT_STREAM_LIMIT',
+        error: 'This subscription is already streaming on another device. Stop it there, or add a device to your plan.',
         streamLimit: { max: session.max, active: session.active },
       });
     }
@@ -1192,6 +1210,9 @@ router.get('/playback/:token/segments/:seq', async (req, res) => {
         userId: String(user._id),
         sessionId: rootSessionId,
         ttlSec: Math.max(60, Math.round(ttlMs / 1000)),
+        // Same device that minted this token (binding cookie / session header),
+        // so a legitimate resume is never mistaken for a second device.
+        deviceHash: resolveStreamDeviceHash(req, payload.clientBindingHash),
       });
       if (!session.allowed) {
         return res.status(429).send('Playback session could not be registered');
@@ -1264,6 +1285,7 @@ router.get('/playback/:token', async (req, res) => {
         userId: String(user._id),
         sessionId: rootSessionId,
         ttlSec: Math.max(60, Math.round(ttlMs / 1000)),
+        deviceHash: resolveStreamDeviceHash(req, payload.clientBindingHash),
       });
       if (!session.allowed) {
         return res.status(429).send('Playback session could not be registered');
@@ -1981,6 +2003,7 @@ router.get('/hls/:token/:file', async (req, res) => {
           userId: String(user._id),
           sessionId: payload.sessionId || token,
           ttlSec: Math.max(60, Math.round(ttlMs / 1000)),
+          deviceHash: resolveStreamDeviceHash(req, payload.clientBindingHash),
         });
         if (!session.allowed) {
           return res.status(429).send('Playback session could not be registered');

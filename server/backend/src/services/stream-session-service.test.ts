@@ -81,7 +81,7 @@ describe('registerStreamSession', () => {
 
   it('passes the session ID and session-key prefix to the atomic Redis script', async () => {
     const store = new AtomicFakeStore();
-    await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, now, store });
+    await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, now, store, policy: 'refuse' });
 
     expect(store.evalCalls).toEqual([[
       userKeyFor('u1'),
@@ -92,6 +92,9 @@ describe('registerStreamSession', () => {
       600,
       86_400,
       'dz:stream:sess:',
+      '1',
+      // No device identity → the strict policy treats it as an unknown device.
+      '',
       '1',
     ]]);
   });
@@ -105,11 +108,11 @@ describe('registerStreamSession', () => {
     expect(await store.exists(sessionKeyFor('s1'))).toBe(1);
   });
 
-  it('replaces the oldest session when the concurrent limit is reached', async () => {
+  it('replaces the oldest session when the concurrent limit is reached (legacy evict policy)', async () => {
     const store = new FakeStore();
     const max = 2;
-    await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, maxConcurrentStreams: max, now, store });
-    await registerStreamSession({ userId: 'u1', sessionId: 's2', ttlSec: 300, maxConcurrentStreams: max, now: now + 60_000, store });
+    await registerStreamSession({ userId: 'u1', sessionId: 's1', ttlSec: 300, maxConcurrentStreams: max, now, store, policy: 'evict' });
+    await registerStreamSession({ userId: 'u1', sessionId: 's2', ttlSec: 300, maxConcurrentStreams: max, now: now + 60_000, store, policy: 'evict' });
     const result = await registerStreamSession({
       userId: 'u1',
       sessionId: 's3',
@@ -117,6 +120,7 @@ describe('registerStreamSession', () => {
       maxConcurrentStreams: max,
       now: now + 120_000,
       store,
+      policy: 'evict',
     });
     expect(result).toMatchObject({ allowed: true, active: max, evictedSessionId: 's1' });
     expect(await store.exists(sessionKeyFor('s1'))).toBe(0);

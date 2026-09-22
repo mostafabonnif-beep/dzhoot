@@ -38,6 +38,7 @@ class CatalogRepositoryImpl @Inject constructor(
             "CONTENT_NOT_FOUND" -> "هذه القناة غير متاحة ضمن صلاحيات الحساب الحالي"
             "SUBSCRIPTION_EXPIRED" -> "انتهت صلاحية الاشتراك. فعّل رمزاً جديداً للمتابعة"
             "PLAYBACK_DEVICE_REQUIRED" -> "يلزم ربط جهاز مفعّل قبل تشغيل البث"
+            "CONCURRENT_STREAM_LIMIT" -> "اشتراكك يُشاهد الآن على جهاز آخر. أوقف المشاهدة هناك ثم أعد المحاولة، أو أضف جهازًا إلى باقتك."
             "AUTHENTICATION_REQUIRED" -> "انتهت جلسة التطبيق. أعد ربط التطبيق برمز التفعيل"
             else -> payload?.error ?: response.message().ifBlank { "تعذر تفويض تشغيل البث" }
         }

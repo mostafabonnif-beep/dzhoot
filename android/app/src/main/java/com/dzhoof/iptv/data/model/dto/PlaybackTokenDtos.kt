@@ -18,6 +18,8 @@ data class PlaybackTokenResponse(
     val success: Boolean = false,
     @SerializedName("data")
     val data: PlaybackTokenData? = null,
+    @SerializedName("code")
+    val code: String? = null,
     @SerializedName("error")
     val error: String? = null,
 )

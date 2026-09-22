@@ -190,11 +190,15 @@ class PlayerViewModel @Inject constructor(
                 // returns 404 for slots 1..3; that must not replace a working primary
                 // stream with an error banner while the player is preparing it.
                 if (slot == 0) {
+                    // The server reports machine codes in `code` (the Arabic
+                    // message is chosen here); `error` stays as the fallback
+                    // human text for codes this build does not know yet.
                     _uiState.update {
-                        it.copy(error = when (body?.error) {
+                        it.copy(error = when (body?.code ?: body?.error) {
                             "SUBSCRIPTION_EXPIRED" -> "انتهى اشتراكك. فعّل كودًا جديدًا لمتابعة المشاهدة."
                             "PLAYBACK_DEVICE_REQUIRED" -> "سجّل هذا الجهاز قبل بدء التشغيل."
                             "DEVICE_LIMIT_REACHED" -> "تم بلوغ الحد الأقصى للأجهزة في خطتك."
+                            "CONCURRENT_STREAM_LIMIT" -> "اشتراكك يُشاهد الآن على جهاز آخر. أوقف المشاهدة هناك ثم أعد المحاولة، أو أضف جهازًا إلى باقتك."
                             else -> body?.error ?: "تعذر تفويض تشغيل القناة (HTTP ${response.code()})"
                         })
                     }

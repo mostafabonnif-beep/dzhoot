@@ -139,6 +139,7 @@ class SubscriptionViewModel @Inject constructor(
             "SUBSCRIPTION_EXPIRED" -> "انتهى اشتراكك. فعّل كودًا جديدًا للمتابعة."
             "ACTIVATION_RATE_LIMITED" -> "تم تجاوز محاولات التفعيل. حاول بعد قليل."
             "DEVICE_LIMIT_REACHED" -> "تم بلوغ الحد الأقصى للأجهزة في خطتك. احذف جهازًا أولًا."
+            "CONCURRENT_STREAM_LIMIT" -> "اشتراكك يُشاهد الآن على جهاز آخر. أوقف المشاهدة هناك ثم أعد المحاولة، أو أضف جهازًا إلى باقتك."
             "CODE_ALREADY_USED" -> "هذا الكود مستخدم من قبل."
             "CODE_EXPIRED" -> "انتهت صلاحية هذا الكود."
             "PLAN_UNAVAILABLE" -> "الخطة المرتبطة بهذا الكود غير متاحة حاليًا."
