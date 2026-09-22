@@ -23,6 +23,12 @@ interface ProbeOptions {
   timeout?: number;
   userAgent?: string;
   referrer?: string;
+  /**
+   * Require an actual byte from a non-HLS (raw) stream before calling it alive.
+   * Defaults to true; `STREAM_PROBE_REQUIRE_BYTES=false` disables it process-wide
+   * and callers can opt out per probe.
+   */
+  requireBody?: boolean;
 }
 
 /**
@@ -46,6 +52,12 @@ export async function probeStream(url: string, options: ProbeOptions = {}): Prom
   const probeTimer = setTimeout(() => probeAbort.abort(), timeout);
   // Deadline for cascading sub-requests (segment/variant checks)
   const cascadeTimeout = Math.min(8000, Math.max(timeout - 4000, 3000));
+  // How long a raw (non-HLS) stream may stay silent before it counts as dead. Same rule
+  // the customer-facing relay applies (UPSTREAM_FIRST_BYTE_TIMEOUT_MS).
+  const firstByteTimeoutMs = Math.min(
+    Math.max(2000, parseInt(process.env.STREAM_PROBE_FIRST_BYTE_TIMEOUT_MS || '8000', 10)),
+    Math.max(timeout - 1000, 2000),
+  );
 
   // SSRF protection: validate URL before making outbound requests
   const ssrfCheck = await validateUrlForSSRF(url);
@@ -114,11 +126,43 @@ export async function probeStream(url: string, options: ProbeOptions = {}): Prom
       };
     }
 
-    // Non-HLS stream — reachable is enough
+    // Non-HLS stream (raw MPEG-TS / plain HTTP).
+    //
+    // Reachability used to be judged from the status line alone, which is precisely the
+    // black-screen failure mode: the provider answers `200` and then sends nothing, the probe
+    // calls the channel alive, the visibility gate publishes it, and the customer waits
+    // forever on an empty stream. Measured 2026-09-21 on a live provider: `.../live/USER/PASS/
+    // <id>.ts` returned `200` with an empty body (repeatedly, through the relay) while the same
+    // stream id served a 169-byte HLS manifest as `.m3u8`. Require the first byte — the same
+    // rule `upstream-proxy.ts` enforces for customers — and report the silence as death so the
+    // health pipeline can fail the channel over instead of publishing it.
     if (!isHls) {
+      const requireBody =
+        options.requireBody !== false && process.env.STREAM_PROBE_REQUIRE_BYTES !== 'false';
+
+      const gotBytes = requireBody
+        ? await firstByteArrived(response.data, {
+            timeoutMs: firstByteTimeoutMs,
+            signal: probeAbort.signal,
+          })
+        : true;
+
       if (response.data && typeof response.data.destroy === 'function') {
         response.data.destroy();
       }
+
+      if (!gotBytes) {
+        return {
+          status: 'dead',
+          responseTimeMs: Date.now() - startTime,
+          statusCode,
+          error: 'Empty body — upstream sent 0 bytes',
+          manifestValid: null,
+          segmentReachable: null,
+          manifestInfo: null,
+        };
+      }
+
       return {
         status: 'alive',
         responseTimeMs,
@@ -321,6 +365,45 @@ export async function probeStream(url: string, options: ProbeOptions = {}): Prom
     httpAgent.destroy();
     httpsAgent.destroy();
   }
+}
+
+/**
+ * Wait for a raw stream to produce its first byte.
+ *
+ * `true` as soon as any data arrives, `false` when the stream ends, errors, is aborted, or
+ * stays silent for the whole window. The caller destroys the stream afterwards.
+ */
+function firstByteArrived(
+  stream: any,
+  options: { timeoutMs: number; signal?: AbortSignal },
+): Promise<boolean> {
+  if (!stream || typeof stream.once !== 'function') return Promise.resolve(false);
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      stream.removeListener('data', onData);
+      stream.removeListener('end', onEnd);
+      stream.removeListener('error', onEnd);
+      stream.removeListener('close', onEnd);
+      options.signal?.removeEventListener?.('abort', onAbort);
+      resolve(ok);
+    };
+    const onData = () => finish(true);
+    const onEnd = () => finish(false);
+    const onAbort = () => finish(false);
+    // Attaching the listener also puts the stream in flowing mode, which is what makes a
+    // silent-but-open connection observable at all.
+    stream.once('data', onData);
+    stream.once('end', onEnd);
+    stream.once('error', onEnd);
+    stream.once('close', onEnd);
+    options.signal?.addEventListener?.('abort', onAbort);
+    const timer = setTimeout(() => finish(false), options.timeoutMs);
+  });
 }
 
 /**

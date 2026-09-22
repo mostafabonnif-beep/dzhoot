@@ -18,6 +18,37 @@ const PROBE_TIMEOUT_MS = parseInt(process.env.STREAM_PROBE_TIMEOUT_MS || '15000'
 // dead forever unless manually tested. Configurable via
 // STREAM_DEAD_RECHECK_HOURS.
 const DEAD_RECHECK_MS = parseInt(process.env.STREAM_DEAD_RECHECK_HOURS || '6', 10) * 3600000;
+// The alternate array is capped by the Channel schema; keep the demoted primary from
+// overflowing it when a format failover happens on a channel that is already full.
+const MAX_ALTERNATE_STREAMS = 50;
+
+/**
+ * The provider's sibling container format for the same stream id.
+ *
+ * An Xtream panel serves one stream id in several containers, and a given id frequently works
+ * in one and fails in the other. Measured 2026-09-21 on a live provider: `.../live/USER/PASS/
+ * 297641.ts` answered `200` with an empty body (repeatedly, through the relay) while the same
+ * id served a valid 169-byte manifest as `.m3u8`; the panel advertised `allowed_output_formats:
+ * [m3u8, ts, rtmp]`. Swapping the extension is the whole trick, and the relay already knows how
+ * to rewrite an HLS manifest, so an `.m3u8` primary needs no extra playback work.
+ *
+ * The string is rebuilt from the caller's URL with only the extension replaced so provider
+ * credentials and tokens in the query string survive byte-for-byte. Returns null when the URL
+ * carries no swappable `.ts`/`.m3u8` extension.
+ */
+export function siblingStreamUrl(url: string): string | null {
+  if (typeof url !== 'string' || url.length === 0) return null;
+
+  const queryIndex = url.search(/[?#]/);
+  const base = queryIndex === -1 ? url : url.slice(0, queryIndex);
+  const suffix = queryIndex === -1 ? '' : url.slice(queryIndex);
+
+  const match = /\.(ts|m3u8)$/i.exec(base);
+  if (!match) return null;
+
+  const sibling = match[1].toLowerCase() === 'ts' ? 'm3u8' : 'ts';
+  return `${base.slice(0, -match[0].length)}.${sibling}${suffix}`;
+}
 
 interface HealthCheckResult {
   checked: number;
@@ -146,6 +177,10 @@ export class StreamHealthService {
     const staleDeadPrimary =
       primaryDead && !primaryFlagged && Date.now() - lastTested > DEAD_RECHECK_MS;
 
+    // Tracks a primary that was probed and failed *in this run* — the only case where a
+    // sibling-format probe is allowed (a channel skipped by the cooldown is left alone).
+    let primaryProbeFailed = false;
+
     if ((!primaryDead && !primaryFlagged) || staleDeadPrimary) {
       // Primary seems fine (or is a stale-dead candidate) — probe to confirm
       try {
@@ -158,6 +193,7 @@ export class StreamHealthService {
         await channel.save();
 
         if (probeResult.status === 'alive') return 'ok';
+        primaryProbeFailed = true;
       } catch (error: unknown) {
         // A transport/probe exception is also a failed primary. Persist it so
         // customer endpoints can hide the channel immediately.
@@ -166,12 +202,12 @@ export class StreamHealthService {
         channel.metadata.lastTested = new Date();
         (channel.metadata as Record<string, unknown>).testError = redactSensitiveText(error) || 'Probe failed';
         await channel.save();
+        primaryProbeFailed = true;
       }
     }
 
     // Primary is dead/flagged — find best alive, non-flagged alternate
     const alternates = channel.alternateStreams || [];
-    if (alternates.length === 0) return 'all-dead';
 
     // Probe alternates to find a viable one
     let bestAlternate: { index: number; responseTimeMs: number } | null = null;
@@ -213,9 +249,19 @@ export class StreamHealthService {
     }
 
     if (!bestAlternate) {
+      // Last resort before declaring the channel dead: the provider may serve the same stream
+      // id in the sibling container (`.ts` <-> `.m3u8`). The alternate scan above only ever
+      // re-points the channel at a *different* URL; when the whole source is broken in one
+      // container, every alternate fails and the channel would be hidden even though a working
+      // rendition of the very same stream exists one extension away (issue #360, measured
+      // 6/10 channels black-screen on production).
+      if (primaryProbeFailed && (await this.promoteSiblingFormat(channel, alternates))) {
+        return 'promoted';
+      }
+
       // All alternates are dead or flagged — save updated liveness and return
       await channel.save();
-      const allFlagged = alternates.every((a) => a.flaggedBad?.isFlagged);
+      const allFlagged = alternates.length > 0 && alternates.every((a) => a.flaggedBad?.isFlagged);
       return allFlagged ? 'flagged-skipped' : 'all-dead';
     }
 
@@ -270,6 +316,77 @@ export class StreamHealthService {
     return 'promoted';
   }
 
+  /**
+   * Re-point the channel at its sibling container format when that one actually streams.
+   *
+   * Returns true when the URL was switched (and persisted), false when there is nothing to
+   * try or the sibling is just as dead. The previous primary is kept as a demoted alternate so
+   * the operator can see what was replaced — and so a later run can move back if the provider
+   * fixes the original format.
+   */
+  private async promoteSiblingFormat(
+    channel: IChannelDocument,
+    alternates: IChannelDocument['alternateStreams'],
+  ): Promise<boolean> {
+    const sibling = siblingStreamUrl(channel.channelUrl);
+    if (!sibling) return false;
+
+    // Already probed as an alternate in this run — its liveness is fresh, don't pay twice.
+    if ((alternates || []).some((alt) => alt?.streamUrl === sibling)) return false;
+
+    let result;
+    try {
+      result = await probeStream(sibling, { timeout: PROBE_TIMEOUT_MS });
+    } catch {
+      return false;
+    }
+
+    if (result.status !== 'alive') return false;
+
+    const oldPrimaryUrl = channel.channelUrl;
+    channel.channelUrl = sibling;
+    channel.metadata = channel.metadata || {};
+    channel.metadata.isWorking = true;
+    channel.metadata.lastTested = new Date();
+    channel.metadata.responseTime = result.responseTimeMs;
+    // The switch is a new URL: any prior bad flag belonged to the old one.
+    channel.flaggedBad = {
+      isFlagged: false,
+      reason: null,
+      flaggedBy: null,
+      flaggedAt: null,
+    };
+
+    const list = [...(alternates || [])];
+    if (list.length < MAX_ALTERNATE_STREAMS) {
+      list.push({
+        streamUrl: oldPrimaryUrl,
+        quality: channel.metadata?.quality ?? null,
+        liveness: {
+          status: 'dead',
+          lastCheckedAt: new Date(),
+          responseTimeMs: null,
+          error: `Demoted: sibling format .${sibling.endsWith('.m3u8') ? 'm3u8' : 'ts'} served the stream`,
+        },
+        flaggedBad: { isFlagged: false, reason: null, flaggedBy: null, flaggedAt: null },
+        userAgent: null,
+        referrer: null,
+        source: null,
+        promotedAt: null,
+        demotedAt: new Date(),
+      } as (typeof list)[number]);
+    }
+    channel.alternateStreams = list;
+
+    await channel.save();
+
+    console.log(
+      `[stream-health] Switched ${channel.channelId} to the sibling stream format (${oldPrimaryUrl} -> ${sibling})`,
+    );
+
+    return true;
+  }
+
   private async parallelMap<T>(
     items: T[],
     fn: (item: T) => Promise<void>,
@@ -291,4 +408,6 @@ export class StreamHealthService {
 
 export const streamHealthService = new StreamHealthService();
 
-module.exports = { streamHealthService, StreamHealthService };
+// CommonJS consumers (`require('../services/stream-health-service')`) replace the module
+// exports object wholesale, so every named export has to be listed here too.
+module.exports = { streamHealthService, StreamHealthService, siblingStreamUrl };
