@@ -14,11 +14,13 @@
  */
 import Channel from '../models/Channel';
 import EpgProgram from '../models/EpgProgram';
+import EpgChannel from '../models/EpgChannel';
 import {
   resolveEpgIdForChannel,
   epgIdName,
   extractBeinNumber,
   isBeinSportsFeed,
+  canonicalKey,
 } from '../utils/epg-id-resolver';
 
 /** A tvgId pointing at a beIN guide id, e.g. beIN_SPORTS2_DIGITAL_Mono_AR.bein. */
@@ -49,6 +51,38 @@ async function buildGuideIndex() {
     if (!key || key.length < 3) continue;
     const existing = nameToId.get(key);
     if (!existing || /\.tr$/.test(existing)) nameToId.set(key, id);
+  }
+
+  // Also index by the guide's own `<display-name>` aliases (captured at refresh into
+  // EpgChannel). This is what links a catalog channel with no tvgId to a guide id
+  // whose id does NOT canonicalize to its name (e.g. `xyz.123.tr`): the guide's
+  // display-name still matches the channel's name. Guard rails, same exact-only
+  // policy as the resolver:
+  //   - the alias must map to exactly ONE guide id that actually has programmes —
+  //     an ambiguous alias (the same cleaned name on two guide ids) is dropped,
+  //     because a wrong link is worse than no link;
+  //   - a guide-id-derived name already present keeps precedence.
+  const aliasOwners = new Map<string, Set<string>>();
+  const aliasPreferred = new Map<string, string>();
+  const channelDocs = await EpgChannel.find({}, { channelEpgId: 1, displayNames: 1 }).lean();
+  for (const doc of channelDocs as any[]) {
+    const id = String(doc.channelEpgId || '');
+    if (!id || !available.has(id.toLowerCase())) continue;
+    for (const dn of doc.displayNames || []) {
+      const key = canonicalKey(String(dn || ''));
+      if (!key || key.length < 3) continue;
+      const owners = aliasOwners.get(key) || new Set<string>();
+      owners.add(id.toLowerCase());
+      aliasOwners.set(key, owners);
+      const existing = aliasPreferred.get(key);
+      if (!existing || /\.tr$/.test(existing)) aliasPreferred.set(key, id);
+    }
+  }
+  for (const [key, owners] of aliasOwners) {
+    if (owners.size !== 1) continue; // ambiguous alias — never guess
+    if (nameToId.has(key)) continue; // guide-id-derived name already wins
+    const id = aliasPreferred.get(key)!;
+    if (available.has(id.toLowerCase())) nameToId.set(key, id);
   }
 
   return { available, byLower, nameToId };

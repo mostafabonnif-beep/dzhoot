@@ -47,18 +47,21 @@ describe('epg-service refresh resilience (audit-remediation-v1)', () => {
       }
       const channelId = url.match(/(first|second|third)/)?.[1] || 'x';
       const base = Date.now();
-      return [
-        {
-          channelEpgId: `channel-${channelId}`,
-          title: `Program ${channelId}`,
-          description: null,
-          category: [],
-          startTime: new Date(base - 3600000),
-          endTime: new Date(base + 3600000),
-          icon: null,
-          language: null,
-        },
-      ];
+      return {
+        programs: [
+          {
+            channelEpgId: `channel-${channelId}`,
+            title: `Program ${channelId}`,
+            description: null,
+            category: [],
+            startTime: new Date(base - 3600000),
+            endTime: new Date(base + 3600000),
+            icon: null,
+            language: null,
+          },
+        ],
+        channels: [],
+      };
     });
 
     await expect(epgService.refreshEpg()).resolves.toBeUndefined();

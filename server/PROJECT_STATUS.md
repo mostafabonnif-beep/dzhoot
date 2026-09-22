@@ -3,6 +3,35 @@
 _Last verified: 2026-09-22 (production VPS + CI). The newest sections are below; the older ones are
 kept for their measured history._
 
+## Re-verified 2026-09-22 (EPG: name-based matching, the lever behind the 24% coverage)
+
+**Measured on production:** 32,737 catalog channels; **22,530 (69%) carried no `tvgId` at all** and
+2,311 carried a stale one — together the 24,841 "unmatched" (24% coverage). Ingestion was healthy
+(1,016,573 programmes stored); the bottleneck was purely matching, which was id-exact or
+exact-canonical-name against **guide ids** only. A guide id like `xyz.123.tr` never canonicalizes to a
+channel name, so a catalog channel named for it could never match.
+
+**Fix shipped (PR, this commit):** the refresh now also captures each guide's `<channel>`
+`<display-name>` aliases into a new `EpgChannel` collection, and `buildGuideIndex` indexes them as
+additional canonical-name → guide-id entries. The resolver is unchanged; its generic path simply sees a
+richer index.
+
+Guard rails (the resolver's exact-only policy is preserved):
+
+- an alias is used only when it resolves to **exactly one** guide id that actually has programmes — an
+  ambiguous alias (the same cleaned name on two guide ids) is dropped, because a wrong link is worse
+  than no link;
+- a guide-id-derived name keeps precedence over an alias;
+- the parse tree is still dropped immediately after extraction, so the refresh heap profile is
+  unchanged.
+
+Effect is incremental: `EpgChannel` populates on each refresh (6 h) and the re-match runs daily, so
+coverage climbs over the first day rather than instantly. No migration needed.
+
+**Measured:** 4 new end-to-end tests (unambiguous alias matches; ambiguous alias refused; id-derived
+precedence; alias for a programme-less id ignored). Backend suite 122 suites / 1057 tests green,
+`typecheck` and `lint` (0 errors) green.
+
 ## Re-verified 2026-09-22 (deploy pipeline: the two documented gaps are now closed in code)
 
 **What happened:** a routine `atomic-deploy.sh <sha> APPLY=1` aborted at step 4/7 with
