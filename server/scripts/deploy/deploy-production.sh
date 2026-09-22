@@ -23,6 +23,13 @@ export ENV_FILE COMPOSE_FILE
 APPLY=0
 [ "${1:-}" = "--apply" ] && APPLY=1
 
+# Compose project: the running stack was created under `dzhoot`. Derived from the
+# release directory it would be `server`, and the hard-coded `container_name`s then
+# collide (deploy failures of 2026-09-19 and 2026-09-21). Pin it so the project can
+# never again depend on the directory the deploy runs from; an operator can still
+# override it explicitly.
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dzhoot}"
+
 cd "$(dirname "$0")/../.." || exit 1
 
 say() { printf '\033[1;34m[deploy]\033[0m %s\n' "$*"; }
@@ -47,6 +54,17 @@ run() {
     say "[dry-run] $label: $(redact "$*")"
   fi
 }
+
+# Mutual exclusion with atomic-deploy.sh, which already holds this lock and marks
+# it via DZHOOF_DEPLOY_LOCK_HELD=1. Only a standalone invocation takes it; a child
+# must not re-acquire the same lock on a fresh descriptor or it deadlocks its own
+# parent. This is what stops two deploys from interleaving the container swap.
+if [ "$APPLY" -eq 1 ] && [ "${DZHOOF_DEPLOY_LOCK_HELD:-0}" != "1" ]; then
+  DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-/run/lock/dzhoof-deploy.lock}"
+  exec 9>"$DEPLOY_LOCK_FILE"
+  flock -n 9 || die "another deploy already holds $DEPLOY_LOCK_FILE — refusing to start a concurrent deploy"
+  say "deploy lock acquired: $DEPLOY_LOCK_FILE"
+fi
 
 if [ "$APPLY" -eq 0 ]; then
   say "DRY-RUN — printing the exact deploy plan, changing nothing."

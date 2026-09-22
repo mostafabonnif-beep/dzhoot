@@ -1,7 +1,38 @@
 # DZ HOOF — Server Project Status
 
-_Last verified: 2026-09-21 (production VPS + CI). The newest sections are below; the older ones are
+_Last verified: 2026-09-22 (production VPS + CI). The newest sections are below; the older ones are
 kept for their measured history._
+
+## Re-verified 2026-09-22 (deploy pipeline: the two documented gaps are now closed in code)
+
+**What happened:** a routine `atomic-deploy.sh <sha> APPLY=1` aborted at step 4/7 with
+`Conflict. The container name "/dzhoof-api" is already in use`, and the automatic rollback hit the
+same conflict. Production never changed (containers were never replaced; the site stayed 200), but for
+a few minutes the outcome was unknown.
+
+**Root cause 1 — compose project name (documented, never fixed in code).** The running stack is
+labelled project `dzhoot`, but `docker compose` run from `/opt/dzhoot/server` derives the project from
+the directory → `server`. With the hard-coded `container_name: dzhoof-*`, the "wrong" project makes
+compose try to **create** new containers instead of recreating the existing ones → fixed-name
+collision. `server/PROJECT_STATUS.md` had already written on 2026-09-20: *"The deploy failures of
+2026-09-19 were caused by a missing `COMPOSE_PROJECT_NAME=dzhoot`"* — but the fix lived only in that
+sentence, not in any script, env file or compose file. So it recurred, twice.
+
+**Root cause 2 — no deploy lock.** `atomic-deploy.sh` had no mutual exclusion. A second operator/agent
+can stage and deploy mid-flight; two concurrent runs can interleave the `/opt/dzhoot` swap and corrupt
+the active release. On 2026-09-21 two runs did exactly that.
+
+**Fix shipped (all verified against the live host):**
+
+| Fix | Effect |
+|---|---|
+| `docker-compose.production.yml` declares `name: dzhoot` | project name can no longer depend on the CWD; `docker compose` from anywhere adopts the existing stack. Verified: dry-run from a neutral dir shows `Container dzhoof-api Running`, not `Creating`. |
+| `deploy-production.sh` and `atomic-deploy.sh` export `COMPOSE_PROJECT_NAME=dzhoot` | covers every compose call in the deploy path, including the rollback `compose up` — and the `/etc/dzhoot` override file, which replaces the repo compose in production and has no `name:` of its own. |
+| `atomic-deploy.sh` takes an exclusive `flock` on `/run/lock/dzhoof-deploy.lock`; `deploy-production.sh` takes it only when run standalone | two deploys can no longer interleave; the second runner is **refused** immediately (clean rejection, no misleading FAILED row, no rollback noise). Verified: holder 2 → `REFUSED` while holder 1 still holds. |
+
+**Left as an operator decision (deliberately):** the stray `server_dzhoof-network` (empty, left by a
+past project-mismatched deploy) and the 58 accumulated `.env.production.bak-*` files in `/etc/dzhoot`.
+Removing them is housekeeping, not a code change.
 
 ## Re-verified 2026-09-21 (admin panel reported a release outage that did not exist)
 

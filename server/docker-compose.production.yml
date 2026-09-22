@@ -1,3 +1,11 @@
+# Pin the Compose project name. Without this it is derived from the directory the
+# compose file lives in (`server` on the release host), while the production stack
+# was created as `dzhoot`; the hard-coded `container_name`s then collide and the
+# deploy aborts (failures of 2026-09-19 and 2026-09-21). COMPOSE_PROJECT_NAME, which
+# the deploy scripts also export, takes precedence over this value — both point at
+# the same project.
+name: dzhoot
+
 services:
   caddy:
     image: caddy:2.11.4-alpine
