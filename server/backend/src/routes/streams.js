@@ -15,6 +15,7 @@ const { resolveUser } = require('../middleware/resolveUser');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
 const { issuePlaybackToken } = require('../services/playback-token');
 const { registerStreamSession } = require('../services/stream-session-service');
+const { resolveStreamDeviceHash } = require('../utils/stream-device-hash');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { inferPlaybackMimeType, HLS_MIME_TYPE } = require('../utils/playback-mime');
 
@@ -229,18 +230,22 @@ router.post('/authorize', async (req, res) => {
     const suffix = playbackMimeType === HLS_MIME_TYPE ? '.m3u8' : '';
     const playbackUrl = `${getPublicBaseUrl(req)}/api/v1/tv/playback/${token}${suffix}`;
 
-    // Per-user concurrent stream limit. A new session is rejected when the limit is reached; existing sessions are preserved.
+    // Per-user concurrent stream limit (plan.maxConcurrentStreams, env default
+    // otherwise). Under the strict policy (STREAM_LIMIT_POLICY=refuse, default)
+    // only the SAME device may replace its own session; another device sharing
+    // the subscription is refused instead of silently kicking the viewer out.
     const session = await registerStreamSession({
       userId: String(req.user.id),
       sessionId: rootSessionId,
       ttlSec: Math.max(0, (expiresAt - Date.now()) / 1000),
       maxConcurrentStreams: playbackAccess.plan?.maxConcurrentStreams,
+      deviceHash: resolveStreamDeviceHash(req),
     });
     if (!session.allowed) {
       return res.status(429).json({
         success: false,
-        error: 'Concurrent playback limit reached for this subscription',
         code: 'CONCURRENT_STREAM_LIMIT',
+        error: 'This subscription is already streaming on another device. Stop it there, or add a device to your plan.',
         streamLimit: { max: session.max, active: session.active },
       });
     }
