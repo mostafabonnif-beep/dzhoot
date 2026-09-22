@@ -9,7 +9,7 @@
 | المورد | الموقع | ملاحظات |
 |---|---|---|
 | المستودع | `github.com/mostafabonnif-beep/dzhoot` | Android في `android/`، الخادم في `server/`، CI في `.github/` |
-| خادم الإنتاج (VPS) | `5.135.79.221` | البنية: 6 حاويات Docker (`dzhoof-api/frontend/scheduler/caddy/redis/mongodb`)، API على `https://iptv.ld-11.net` |
+| خادم الإنتاج (VPS) | `5.196.51.152` | البنية: 6 حاويات Docker (`dzhoof-api/frontend/scheduler/caddy/redis/mongodb`)، API على `https://iptv.ld-11.net` |
 | مضيف البناء | على نفس الـVPS | تُبنى الحزم في مجلدات خربشة كمستخدم `dzhoof-admin` (مثال `/tmp/<tag>/repo`) |
 | توقيع Android | `SIGNING_*` في إعدادات GitHub، وعلى الـVPS | الوركفلو يتحقق من وجودها قبل البناء |
 
