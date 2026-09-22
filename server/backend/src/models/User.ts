@@ -230,17 +230,12 @@ userSchema.methods.generateUserPlaylist = async function (
   baseUrl?: string,
 ): Promise<string> {
   const ChannelModel = mongoose.model('Channel');
-  const XtreamSourceModel = mongoose.model('XtreamSource');
-  const verifiedXtreamSourceIds = (await XtreamSourceModel.find({
-    $or: [
-      { status: 'Active', verificationStatus: 'verified' },
-      { customerVisible: true },
-      { directPlayback: true },
-    ],
-  }).distinct('_id')).map((id: any) => String(id));
-  const directPlaybackSourceIds = (await XtreamSourceModel.find({
-    directPlayback: true,
-  }).distinct('_id')).map((id: any) => String(id));
+  // Shared visibility inputs are user-independent: memoized in-process so a
+  // per-user playlist does not re-read the source sets on every request.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { getVerifiedXtreamSourceIds, getDirectPlaybackSourceIds } = require('../services/channel-gate-cache');
+  const verifiedXtreamSourceIds: string[] = await getVerifiedXtreamSourceIds();
+  const directPlaybackSourceIds: string[] = await getDirectPlaybackSourceIds();
   const xtreamVisibilityGuard = {
     $nor: [
       {

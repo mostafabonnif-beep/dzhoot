@@ -9,10 +9,13 @@ const https = require('https');
 const { validateUrlForSSRF, isPrivateIP, createPinnedLookup } = require('../utils/ssrf-guard');
 const { audit } = require('../services/audit-log');
 const { statsCache, channelCache } = require('../services/cache');
+const { clearChannelGateCache } = require('../services/channel-gate-cache');
 
 // Tests update metadata.isWorking, which the cached catalog payload includes —
-// bust the cached counts AND the catalog after test results land.
+// bust the cached counts AND the catalog after test results land, plus the
+// in-process gate memo (isWorking drives channel visibility).
 function invalidateChannelCaches() {
+  clearChannelGateCache();
   return Promise.all([
     statsCache.deletePattern('chcount:*'),
     channelCache.deletePattern('catalog:*'),

@@ -10,6 +10,7 @@ import { decryptSecret, encryptSecret } from '../utils/crypto';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
 import { reconcileChannelIdentities } from './channel-identity-service';
+import { clearChannelGateCache } from './channel-gate-cache';
 import { createSyncPreview, markSnapshotApplied } from './sync-snapshot-service';
 
 const PLAYLIST_TIMEOUT_MS = 30000;
@@ -350,6 +351,10 @@ export async function syncM3USource(sourceId: string) {
     source.syncStatus = 'idle';
     source.lastSyncAt = new Date();
     await source.save();
+
+    // An M3U sync creates/updates/deactivates channels — drop the in-process
+    // visibility/dedup memo so the customer gate is not stale for a TTL.
+    clearChannelGateCache();
 
     return { ok: true, stats, identity };
   } catch (error: any) {

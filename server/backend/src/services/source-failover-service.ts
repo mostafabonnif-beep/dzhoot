@@ -9,6 +9,7 @@ import { decryptSecret } from '../utils/crypto';
 import { testXtreamConnection, buildXtreamApiUrl } from './xtream-service';
 import { validateUrlForSSRF, createPinnedLookup, isPrivateIP } from '../utils/ssrf-guard';
 import { sendOperationalAlert } from './alert-notifier';
+import { clearChannelGateCache } from './channel-gate-cache';
 import { normalizeChannelName } from './channel-identity-service';
 
 /**
@@ -624,6 +625,8 @@ export async function runSourceWatchdog(): Promise<{
           },
         },
       ).exec();
+      // verificationStatus is a visibility-gate input (verified source ids).
+      clearChannelGateCache();
     }
 
     healthCache.set(key, { health: next, checkedAt: Date.now() });

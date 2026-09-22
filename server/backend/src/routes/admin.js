@@ -29,6 +29,7 @@ const {
   reconcileChannelIdentities,
 } = require('../services/channel-identity-service');
 const { channelCache, statsCache } = require('../services/cache');
+const { clearChannelGateCache } = require('../services/channel-gate-cache');
 const { listActiveStreamSessions, revokeStreamSession } = require('../services/stream-session-service');
 const {
   resolveChannelGroups,
@@ -39,7 +40,10 @@ const {
 
 // Bust the cached admin/demo catalog (served by GET /channels + /grouped) on any catalog
 // mutation, and drop cached channel-list counts. Keeps the TV/demo view consistent after edits.
+// The in-process gate memo (source visibility sets + dedup ids) is shared, so it is cleared
+// here as well — otherwise this process would serve a stale gate for up to its TTL.
 function invalidateCatalogCache() {
+  clearChannelGateCache();
   return Promise.all([
     channelCache.deletePattern('catalog:*'),
     statsCache.deletePattern('chcount:*'),

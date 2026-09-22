@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { clearChannelGateCache } from './channel-gate-cache';
 import http from 'http';
 import https from 'https';
 import mongoose from 'mongoose';
@@ -1048,6 +1049,10 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
     source.lastSyncAt = new Date();
     if (catalogOnly) source.catalogOnlyImportedAt = new Date();
     await source.save();
+
+    // A sync creates/updates/deactivates channels and rewrites the shared catalog —
+    // drop the in-process visibility memo so customers never see the old gate.
+    clearChannelGateCache();
 
     return {
       ok: true,

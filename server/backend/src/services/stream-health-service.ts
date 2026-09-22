@@ -2,6 +2,7 @@ import Channel from '../models/Channel';
 import XtreamSource from '../models/XtreamSource';
 import { probeStream } from './stream-prober';
 import { channelCache } from './cache';
+import { clearChannelGateCache } from './channel-gate-cache';
 import { redactSensitiveText } from './audit-log';
 import type { IChannelDocument } from '@dzhoof/shared';
 
@@ -102,6 +103,11 @@ export class StreamHealthService {
     // bust it so clients pick up the promoted streams (shared Redis with the API).
     if (stats.promoted > 0) {
       await channelCache.deletePattern('catalog:*');
+    }
+    // The visibility gate reads isWorking / flaggedBad, which this run rewrites on
+    // every probed channel — once per run is enough (the memo recomputes on demand).
+    if (stats.checked > 0) {
+      clearChannelGateCache();
     }
 
     return stats;

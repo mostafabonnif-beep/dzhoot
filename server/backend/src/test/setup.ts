@@ -60,6 +60,14 @@ afterAll(async () => {
 });
 
 afterEach(async () => {
+  // The in-process visibility-gate memo (services/channel-gate-cache) is keyed on
+  // data (source ids, dedup ids), not on the request — a suite that reseeds
+  // sources/channels in beforeEach would otherwise read the previous test's memo
+  // for a whole TTL. Production busts it from the mutation paths; tests start clean.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { clearChannelGateCache } = require('../services/channel-gate-cache');
+  clearChannelGateCache();
+
   if (!mongoServer && !usingExternalTestMongo) return;
   const collections = mongoose.connection.collections;
   for (const key in collections) {

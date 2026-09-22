@@ -45,6 +45,10 @@ const { isSourceDown, getFailoverTarget, getHttpsBackupStreamUrl } = require('..
 const { rewriteStreamUrlBase } = require('../services/xtream-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
 const { resolveStreamDeviceHash } = require('../utils/stream-device-hash');
+const {
+  getVerifiedXtreamSourceIds: getCachedVerifiedXtreamSourceIds,
+  getDirectPlaybackSourceIds: getCachedDirectPlaybackSourceIds,
+} = require('../services/channel-gate-cache');
 
 // Demo/free-tier group scoping moved to services/channel-scope (single source of truth).
 const WEB_PLAYBACK_COOKIE = '__Host-dzhoof-playback';
@@ -190,17 +194,13 @@ async function getVerifiedXtreamSourceIds() {
   // operator explicitly marked customer-visible (catalog-only import decision —
   // visible even while Inactive, since such sources cannot pass verification),
   // OR that opted into direct playback (clients fetch from their own network).
-  return new Set((await XtreamSource.find({
-    $or: [
-      { status: 'Active', verificationStatus: 'verified' },
-      { customerVisible: true },
-      { directPlayback: true },
-    ],
-  }).distinct('_id')).map((id) => String(id)));
+  // Memoized in-process (identical for every caller, short TTL) — see
+  // services/channel-gate-cache.ts.
+  return new Set(await getCachedVerifiedXtreamSourceIds());
 }
 
 async function getDirectPlaybackSourceIds() {
-  return new Set((await XtreamSource.find({ directPlayback: true }).distinct('_id')).map((id) => String(id)));
+  return new Set(await getCachedDirectPlaybackSourceIds());
 }
 
 function isCustomerVisibleChannel(channel, verifiedSourceIds, directPlaybackSourceIds) {

@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const XtreamSource = require('../models/XtreamSource');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx, redactSensitiveText } = require('../services/audit-log');
+const { clearChannelGateCache } = require('../services/channel-gate-cache');
 const {
   testXtreamConnection,
   verifyXtreamSource,
