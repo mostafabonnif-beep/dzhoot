@@ -10,6 +10,7 @@ import {
   type SourceDuration,
 } from '../utils/epg-timing';
 import EpgProgram from '../models/EpgProgram';
+import EpgChannel from '../models/EpgChannel';
 import M3USource from '../models/M3USource';
 import EpgSourceOverride from '../models/EpgSourceOverride';
 import { epgCache } from './cache';
@@ -181,6 +182,18 @@ interface ParsedProgram {
   language: string | null;
 }
 
+/** A guide channel and its `<display-name>` aliases, captured for name-matching. */
+interface ParsedChannelName {
+  channelEpgId: string;
+  displayNames: string[];
+}
+
+/** Result of one source fetch: the programmes we keep plus the guide's channel names. */
+interface ParsedXmltv {
+  programs: ParsedProgram[];
+  channels: ParsedChannelName[];
+}
+
 interface EpgCoverageItem {
   source: string;
   coveredChannelCount: number;
@@ -332,12 +345,13 @@ export class EpgService {
             }
             const beforeHeap = heapUsedMb();
             try {
-              const programs = await this.fetchAndParseXmltv(
+              const { programs, channels } = await this.fetchAndParseXmltv(
                 source.url,
                 source.coveredChannelIds,
                 controller.signal,
               );
               const count = programs.length > 0 ? await this.upsertPrograms(programs) : 0;
+              await this.upsertEpgChannels(channels);
               await this.recordSourceResult(source.url, true);
               return count;
             } catch (err: any) {
@@ -699,7 +713,7 @@ export class EpgService {
       // Fall back to '*' when discovery itself fails; the fetch is what we test.
     }
     try {
-      const programs = await this.fetchAndParseXmltv(url, coveredIds);
+      const { programs } = await this.fetchAndParseXmltv(url, coveredIds);
       return { ok: true, programCount: programs.length };
     } catch (err: any) {
       return { ok: false, programCount: 0, error: String(err?.message || err).slice(0, 500) };
@@ -712,7 +726,7 @@ export class EpgService {
     url: string,
     coveredChannelIds: string[],
     signal?: AbortSignal,
-  ): Promise<ParsedProgram[]> {
+  ): Promise<ParsedXmltv> {
     const coveredSet = new Set(coveredChannelIds.map((id) => id.toLowerCase()));
 
     // Stream the response to avoid holding compressed + decompressed buffers simultaneously
@@ -816,7 +830,24 @@ export class EpgService {
 
     const tv = parsed.tv || parsed['!xml']?.tv || parsed;
     const programmes = tv?.programme || [];
+    const xmlChannels = tv?.channel || [];
     parsed = null;
+
+    // Capture the guide's own channel naming before touching the programmes. This
+    // is the small amount of data that lets the re-match link a catalog channel
+    // with no tvgId to a guide id *by name*; the (potentially 100MB) parse tree is
+    // still dropped immediately after, so the heap profile is unchanged.
+    const channels: ParsedChannelName[] = [];
+    for (const ch of xmlChannels) {
+      const id = ch?.['@_id'];
+      if (!id) continue;
+      const dn = ch['display-name'];
+      const list = Array.isArray(dn) ? dn : dn ? [dn] : [];
+      const displayNames = list
+        .map((d: any) => (typeof d === 'string' ? d : d?.['#text'] || ''))
+        .filter((t: string) => Boolean(t && t.trim()));
+      if (displayNames.length) channels.push({ channelEpgId: String(id), displayNames });
+    }
 
     const programs: ParsedProgram[] = [];
 
@@ -877,10 +908,34 @@ export class EpgService {
       }
     }
 
-    return programs;
+    return { programs, channels };
   }
 
   // ─── Bulk Upsert ────────────────────────────────────────
+
+  /**
+   * Persist the guide's `<channel>` display-name aliases. Upserted per guide id
+   * with `$addToSet` so aliases accumulate across sources instead of one source
+   * clobbering another's naming. The re-match reads this to link blank-tvgId
+   * catalog channels by name.
+   */
+  async upsertEpgChannels(channels: ParsedChannelName[]): Promise<void> {
+    if (!channels.length) return;
+    for (let i = 0; i < channels.length; i += BATCH_SIZE) {
+      const batch = channels.slice(i, i + BATCH_SIZE);
+      const ops = batch.map((ch) => ({
+        updateOne: {
+          filter: { channelEpgId: ch.channelEpgId },
+          update: {
+            $addToSet: { displayNames: { $each: ch.displayNames } },
+            $set: { lastSeenAt: new Date() },
+          },
+          upsert: true,
+        },
+      }));
+      await EpgChannel.bulkWrite(ops, { ordered: false });
+    }
+  }
 
   async upsertPrograms(programs: ParsedProgram[]): Promise<number> {
     if (programs.length === 0) return 0;

@@ -49,7 +49,7 @@ describe('EpgService XMLTV ingestion', () => {
     </tv>`;
     mockedAxios.get.mockResolvedValue({ data: Readable.from([Buffer.from(xml)]) } as any);
 
-    const programs = await new EpgService().fetchAndParseXmltv(
+    const { programs } = await new EpgService().fetchAndParseXmltv(
       'https://epg.example/guide.xml',
       ['news.dz'],
     );
@@ -191,7 +191,7 @@ describe('EpgService source-fetch hardening', () => {
       data: Readable.from([Buffer.from('<tv><programme><title>x</tv></programme>')]),
     } as any);
 
-    const programs = await new EpgService().fetchAndParseXmltv('https://epg.example/broken.xml', []);
+    const { programs } = await new EpgService().fetchAndParseXmltv('https://epg.example/broken.xml', []);
 
     expect(Array.isArray(programs)).toBe(true);
     expect(programs).toHaveLength(0);
