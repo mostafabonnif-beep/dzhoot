@@ -16,9 +16,9 @@ import {
   Usb,
   FolderOpen,
   Smartphone,
-  Github,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { GithubMark } from '@/components/ui/github-mark';
 
 const DOWNLOAD_URL = '/api/v1/app/download';
 
@@ -321,7 +321,7 @@ export default function DownloadPage() {
         {/* Alternative source */}
         <div className="mx-auto mt-8 flex max-w-2xl flex-col items-center gap-2 rounded-2xl border border-border bg-card p-5 text-center">
           <p className="text-sm leading-relaxed text-muted-foreground">
-            <Github className="ms-1 inline h-4 w-4 align-[-2px] text-primary" aria-hidden="true" />
+            <GithubMark className="ms-1 inline h-4 w-4 align-[-2px] text-primary" />
             رابط التحميل الرسمي البديل متوفر دائماً على مخزن GitHub للمشروع —
           </p>
           <a
