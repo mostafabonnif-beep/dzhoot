@@ -131,6 +131,32 @@ if [ "$APPLY" -ne 1 ]; then
   exit 0
 fi
 
+# Single-flight deploys: two concurrent atomic-deploy runs can interleave the
+# /opt/dzhoot swap and corrupt the active release — there is no other mutual
+# exclusion on this host, and more than one operator/agent works on it. flock(1)
+# holds an exclusive advisory lock for the lifetime of this process; the second
+# runner gets an immediate, clear refusal instead of a corrupted swap. The lock is
+# taken before the first real step (provenance), not only before the swap, so a
+# queued deploy cannot race the health gate either.
+DEPLOY_LOCK_FILE="${DEPLOY_LOCK_FILE:-/run/lock/dzhoof-deploy.lock}"
+exec 9>"$DEPLOY_LOCK_FILE"
+if ! flock -n 9; then
+  # Refuse without die(): nothing has happened yet, so the ERR-trap rollback (and a
+  # misleading FAILED row in the deploy log) must not fire — this is a clean
+  # rejection of a concurrent run, not a failed deploy.
+  printf '[atomic-deploy][REFUSED] another deploy already holds %s\n' "$DEPLOY_LOCK_FILE" >&2
+  exit 1
+fi
+say "deploy lock acquired: $DEPLOY_LOCK_FILE"
+# Tell the child deploy-production.sh the lock is already held, so it does not try
+# to take the same lock on a new descriptor and deadlock against its own parent.
+export DZHOOF_DEPLOY_LOCK_HELD=1
+# The compose stack on this host was created under project `dzhoot`. Derived from
+# the release directory it would be `server`, and the hard-coded `container_name`s
+# then collide (deploy failures of 2026-09-19 and 2026-09-21). Pin it so the
+# project can never again depend on the directory the deploy happens to run from.
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dzhoot}"
+
 say "verifying release provenance for $SHA"
 "$(dirname "$0")/verify-commit-provenance.sh" "$SHA" \
   || die "commit $SHA is not proven deployable — refusing to swap it into production"
