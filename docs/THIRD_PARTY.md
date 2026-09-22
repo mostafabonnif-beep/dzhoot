@@ -10,4 +10,12 @@ This project started from the MIT-licensed FireVision IPTV Server and FireVision
 - `Vateron-Media/XC_VM` — AGPL-3.0; not copied into DZ HOOF.
 - `M3UAndroid` — GPL-3.0; not copied into DZ HOOF.
 
+## Inlined assets
+
+- **GitHub Octicons `mark-github` glyph** (MIT) — the single path inlined in
+  `server/frontend/src/components/ui/github-mark.tsx`. It replaced the `Github` export from
+  `lucide-react`, which removed its brand icons in v1 and broke the frontend build on upgrade.
+  Used only on the download page to link to this project's own releases; the GitHub logo itself
+  stays subject to GitHub's brand guidelines.
+
 Before publishing a release, verify each upstream license and the exact files included in that release.

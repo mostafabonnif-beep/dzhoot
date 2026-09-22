@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, Tv, Monitor, Zap, Download, Youtube, Radio } from 'lucide-react';
+// `Youtube` was one of the brand icons lucide dropped in v1 — importing it breaks the build on
+// any lucide >= 1.0. The row already carries the "YouTube Live" label, so a generic live-video
+// glyph keeps the meaning without depending on an icon name that no longer exists.
+import { Loader2, Tv, Monitor, Zap, Download, MonitorPlay, Radio } from 'lucide-react';
 import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { useBulkSelection } from '@/hooks/use-bulk-selection';
@@ -21,7 +24,7 @@ import type {
 const TABS: { id: SourceTab; label: string; icon: typeof Tv; defaultRegion?: string }[] = [
   { id: 'pluto-tv', label: 'Pluto TV', icon: Tv },
   { id: 'samsung-tv-plus', label: 'Samsung TV Plus', icon: Monitor },
-  { id: 'youtube-live', label: 'YouTube Live', icon: Youtube, defaultRegion: 'in' },
+  { id: 'youtube-live', label: 'YouTube Live', icon: MonitorPlay, defaultRegion: 'in' },
   { id: 'prasar-bharati', label: 'Prasar Bharati', icon: Radio, defaultRegion: 'in' },
 ];
 
