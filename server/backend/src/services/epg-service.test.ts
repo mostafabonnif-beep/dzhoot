@@ -65,6 +65,43 @@ describe('EpgService XMLTV ingestion', () => {
     expect(programs[0].startTime.getTime()).toBe(Math.floor(startTime.getTime() / 1000) * 1000);
   });
 
+  it('survives purely numeric display-names and titles (epgshare01 regression)', async () => {
+    // epgshare01 guides carry channels literally named "360", "104" etc. With
+    // fast-xml-parser's default parseTagValue these arrived as JS numbers and the
+    // refresh died with `t.trim is not a function` (production, 2026-09-23).
+    const startTime = new Date(Date.now() + 60 * 60 * 1000);
+    const endTime = new Date(startTime.getTime() + 60 * 60 * 1000);
+    const xmltvDateStart = '20260812070000 +0000';
+    const xmltvDateStop = '20260812080000 +0000';
+    const xml = `<?xml version="1.0"?><tv>
+      <channel id="ch.360.fr">
+        <display-name lang="fr">360</display-name>
+        <display-name>360 TV</display-name>
+      </channel>
+      <channel id="ch.104.tr">
+        <display-name lang="tr">104</display-name>
+      </channel>
+      <programme start="${xmltvDateStart}" stop="${xmltvDateStop}" channel="ch.360.fr">
+        <title>360</title>
+        <category>360</category>
+      </programme>
+    </tv>`;
+    mockedAxios.get.mockResolvedValue({ data: Readable.from([Buffer.from(xml)]) } as any);
+
+    const { programs, channels } = await new EpgService().fetchAndParseXmltv(
+      'https://epg.example/guide.xml',
+      ['ch.360.fr'],
+    );
+
+    expect(channels).toEqual([
+      { channelEpgId: 'ch.360.fr', displayNames: ['360', '360 TV'] },
+      { channelEpgId: 'ch.104.tr', displayNames: ['104'] },
+    ]);
+    expect(programs).toHaveLength(1);
+    expect(programs[0].title).toBe('360');
+    expect(programs[0].category).toEqual(['360']);
+  });
+
   it('reports EPG coverage and unmatched channels per source', async () => {
     const channelQuery = {
       select: jest.fn().mockReturnThis(),
