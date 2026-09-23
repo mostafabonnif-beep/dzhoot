@@ -39,3 +39,14 @@ updates:
     labels:
       - dependencies
       - github-actions
+    # `github/codeql-action` is referenced twice in .github/workflows/codeql.yml
+    # (init and analyze), and Dependabot tracks each `uses:` path as its own
+    # dependency. Without a group it opened one PR per path (#357 raised init,
+    # #358 raised analyze); neither can pass on its own because both actions read
+    # the same run configuration and CodeQL aborts when the versions differ:
+    #   Loaded a configuration file for version '4.37.9', but running version '4.38.1'
+    # Grouping both paths keeps the pair in a single PR so they always move together.
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
