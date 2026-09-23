@@ -971,20 +971,27 @@ router.get('/download', async (req, res) => {
     // exists (e.g. https://iptv.ld-11.net/downloads/<apk>).
     const { latest } = await resolvePublishedRelease(req);
 
-    // A row pointing back at this route (the historic canonical redirect) would
-    // loop — treat it as "no directly downloadable artifact".
-    if (
-      !latest ||
-      !isAllowedDownloadUrl(latest.downloadUrl, req) ||
-      isCanonicalRedirectUrl(req, latest.downloadUrl)
-    ) {
-      return res.status(404).json({
-        success: false,
-        error: 'No APK asset available for the published release',
-      });
+    // Self-hosted artifact: mapDbVersion rewrites `/downloads/*` rows to the
+    // canonical redirect, so `latest.downloadUrl` points back at this router.
+    // When the row's checksum is bound (resolvePublishedRelease only keeps a
+    // `db` sha256 that matches the bytes actually served), redirect to the
+    // row's own file URL — Caddy serves it directly.
+    if (latest && latest.source === 'db' && latest.sha256 && latest.checksumSource === 'db') {
+      const row = await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean();
+      if (row && isAllowedDownloadUrl(row.downloadUrl, req) && !isCanonicalRedirectUrl(req, row.downloadUrl)) {
+        return res.redirect(row.downloadUrl);
+      }
     }
 
-    return res.redirect(latest.downloadUrl);
+    // GitHub fallback (repo public): the release asset itself.
+    if (latest && latest.source === 'github' && isAllowedDownloadUrl(latest.downloadUrl, req)) {
+      return res.redirect(latest.downloadUrl);
+    }
+
+    return res.status(404).json({
+      success: false,
+      error: 'No APK asset available for the published release',
+    });
   } catch (error) {
     console.error('Error redirecting to APK:', error.message || error);
     return res.status(500).json({
@@ -1000,13 +1007,22 @@ router.get('/download-url', async (req, res) => {
     // fallback. Keeps working when the repository is private.
     const { latest } = await resolvePublishedRelease(req);
 
-    // A row pointing back at /download (the historic canonical redirect) would
-    // loop — treat it as "no directly downloadable artifact".
-    if (
-      !latest ||
-      !isAllowedDownloadUrl(latest.downloadUrl, req) ||
-      isCanonicalRedirectUrl(req, latest.downloadUrl)
-    ) {
+    if (!latest) {
+      return res.status(404).json({
+        success: false,
+        error: 'No APK asset available for the published release',
+      });
+    }
+
+    let downloadUrl = latest.downloadUrl;
+    if (latest.source === 'db' && latest.sha256 && latest.checksumSource === 'db') {
+      const row = await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean();
+      if (row && isAllowedDownloadUrl(row.downloadUrl, req) && !isCanonicalRedirectUrl(req, row.downloadUrl)) {
+        downloadUrl = row.downloadUrl;
+      }
+    }
+
+    if (!isAllowedDownloadUrl(downloadUrl, req) || isCanonicalRedirectUrl(req, downloadUrl)) {
       return res.status(404).json({
         success: false,
         error: 'No APK asset available for the published release',
@@ -1017,7 +1033,7 @@ router.get('/download-url', async (req, res) => {
       success: true,
       data: {
         versionName: latest.versionName,
-        downloadUrl: latest.downloadUrl,
+        downloadUrl,
         fileSize: Number(latest.apkFileSize) || 0,
         releaseNotes: latest.releaseNotes || '',
         isMandatory: Boolean(latest.isMandatory),
