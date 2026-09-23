@@ -820,6 +820,11 @@ export class EpgService {
       const parser = new XMLParser({
         ignoreAttributes: false,
         attributeNamePrefix: '@_',
+        // XMLTV is all text. Without this, fast-xml-parser converts purely
+        // numeric tag values ("360", "104") to JS numbers, which then explodes
+        // any downstream `.trim()` — this killed the epgshare01* guide refreshes
+        // in production on 2026-09-23 (`t.trim is not a function`).
+        parseTagValue: false,
         isArray: (name) => name === 'programme' || name === 'channel' || name === 'category',
       });
       parsed = parser.parse(xmlData);
@@ -844,8 +849,8 @@ export class EpgService {
       const dn = ch['display-name'];
       const list = Array.isArray(dn) ? dn : dn ? [dn] : [];
       const displayNames = list
-        .map((d: any) => (typeof d === 'string' ? d : d?.['#text'] || ''))
-        .filter((t: string) => Boolean(t && t.trim()));
+        .map((d: any) => this.textValue(typeof d === 'string' ? d : d?.['#text']))
+        .filter(Boolean);
       if (displayNames.length) channels.push({ channelEpgId: String(id), displayNames });
     }
 
@@ -882,7 +887,7 @@ export class EpgService {
       if (prog.category) {
         const cats = Array.isArray(prog.category) ? prog.category : [prog.category];
         for (const cat of cats) {
-          const text = typeof cat === 'string' ? cat : cat['#text'] || '';
+          const text = this.textValue(typeof cat === 'string' ? cat : cat['#text']);
           if (text) categories.push(text);
         }
       }
@@ -1223,10 +1228,17 @@ export class EpgService {
     if (!field) return '';
     if (typeof field === 'string') return field;
     if (Array.isArray(field)) {
-      const first = field[0];
-      return typeof first === 'string' ? first : first?.['#text'] || '';
+      return this.textValue(field[0]?.['#text']);
     }
-    return field['#text'] || '';
+    return this.textValue(field['#text']);
+  }
+
+  /** Coerce an XML text node to a trimmed string — the parser may hand us a
+   *  number for purely numeric values ("360"), never assume typeof string. */
+  private textValue(value: any): string {
+    if (value === null || value === undefined) return '';
+    const asString = typeof value === 'string' ? value : String(value);
+    return asString.trim();
   }
 
   private extractLang(field: any): string | null {
