@@ -964,55 +964,70 @@ router.get('/versions', async (req, res) => {
 
 router.get('/download', async (req, res) => {
   try {
-    const release = await fetchLatestRelease();
-    const apkAsset = pickApkAsset(release);
+    // Resolve through the published-release contract (DB row first, GitHub
+    // fallback) instead of api.github.com directly: a device or visitor hitting
+    // this route must keep working when the repository is private or the
+    // Releases API is unreachable, as long as a self-hosted AppVersion row
+    // exists (e.g. https://iptv.ld-11.net/downloads/<apk>).
+    const { latest } = await resolvePublishedRelease(req);
 
-    if (!apkAsset) {
+    // A row pointing back at this route (the historic canonical redirect) would
+    // loop — treat it as "no directly downloadable artifact".
+    if (
+      !latest ||
+      !isAllowedDownloadUrl(latest.downloadUrl, req) ||
+      isCanonicalRedirectUrl(req, latest.downloadUrl)
+    ) {
       return res.status(404).json({
         success: false,
-        error: 'No APK asset available in latest GitHub release',
+        error: 'No APK asset available for the published release',
       });
     }
 
-    return res.redirect(apkAsset.browser_download_url);
+    return res.redirect(latest.downloadUrl);
   } catch (error) {
-    console.error('Error redirecting to APK on GitHub:', error.message || error);
+    console.error('Error redirecting to APK:', error.message || error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to redirect to APK on GitHub',
+      error: 'Failed to redirect to APK',
     });
   }
 });
 
 router.get('/download-url', async (req, res) => {
   try {
-    const release = await fetchLatestRelease();
-    const apkAsset = pickApkAsset(release);
+    // Same contract as /download: DB row first (self-hosted artifact), GitHub
+    // fallback. Keeps working when the repository is private.
+    const { latest } = await resolvePublishedRelease(req);
 
-    if (!apkAsset) {
+    // A row pointing back at /download (the historic canonical redirect) would
+    // loop — treat it as "no directly downloadable artifact".
+    if (
+      !latest ||
+      !isAllowedDownloadUrl(latest.downloadUrl, req) ||
+      isCanonicalRedirectUrl(req, latest.downloadUrl)
+    ) {
       return res.status(404).json({
         success: false,
-        error: 'No APK asset available in latest GitHub release',
+        error: 'No APK asset available for the published release',
       });
     }
-
-    const latestVersionName = release.tag_name || release.name || APP_VERSION;
 
     return res.json({
       success: true,
       data: {
-        versionName: latestVersionName,
-        downloadUrl: apkAsset.browser_download_url,
-        fileSize: apkAsset.size,
-        releaseNotes: release.body || '',
-        isMandatory: false,
+        versionName: latest.versionName,
+        downloadUrl: latest.downloadUrl,
+        fileSize: Number(latest.apkFileSize) || 0,
+        releaseNotes: latest.releaseNotes || '',
+        isMandatory: Boolean(latest.isMandatory),
       },
     });
   } catch (error) {
-    console.error('Error getting download URL from GitHub:', error.message || error);
+    console.error('Error getting download URL:', error.message || error);
     return res.status(500).json({
       success: false,
-      error: 'Failed to get download URL from GitHub',
+      error: 'Failed to get download URL',
     });
   }
 });

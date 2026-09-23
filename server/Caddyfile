@@ -37,9 +37,11 @@
         reverse_proxy api:3000
     }
 
-    @legacyApkDownload path_regexp legacyApkDownload ^/downloads/[^/]+\.apk$
-    redir @legacyApkDownload /api/v1/app/download 302
-
+    # Self-hosted APK distribution (2026-09-23): the published release's
+    # downloadUrl points at a file in this directory (AppVersion row), so
+    # /downloads/*.apk must serve the file directly. The former 302 of
+    # /downloads/*.apk to /api/v1/app/download is gone — the canonical route now
+    # redirects BACK to a /downloads/ path, so keeping it would create a loop.
     handle_path /downloads/* {
         root * /downloads
         file_server
