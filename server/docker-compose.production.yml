@@ -21,7 +21,10 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./downloads:/downloads:ro
+      # Self-hosted APK dir — OUTSIDE the deploy tree so atomic deploys never
+      # wipe published artifacts (2026-09-23). Same volume is mounted into the
+      # api container so the update contract can verify artifacts exist on disk.
+      - /opt/dzhoof-apk:/downloads:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -167,6 +170,9 @@ services:
       RECORDING_MAX_CONCURRENT: ${RECORDING_MAX_CONCURRENT:-2}
     volumes:
       - recordings_data:/app/recordings
+      # Self-hosted APK artifacts, read-only — the update contract verifies the
+      # published artifact exists on disk before advertising its checksum.
+      - /opt/dzhoof-apk:/downloads:ro
     networks:
       - dzhoof-network
       - gkz-network

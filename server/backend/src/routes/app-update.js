@@ -8,6 +8,8 @@ const { ghReleaseCache, invalidateReleaseCaches } = require('../services/app-rel
 const { appVersionQuerySchema, buildErrorReport } = require('@dzhoof/shared');
 const https = require('https');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { validateUrlForSSRF, createPinnedLookup } = require('../utils/ssrf-guard');
 const { createHash } = require('crypto');
 // Shared demo-code guard (same strength rules + live-credential collision check).
@@ -19,6 +21,9 @@ const GITHUB_OWNER = process.env.GH_APP_OWNER || 'mostafabonnif-beep';
 const GITHUB_REPO = process.env.GH_APP_REPO || 'dzhoot';
 const GITHUB_APK_PATTERN = process.env.GH_APP_APK_PATTERN || '.apk';
 const GITHUB_TOKEN = process.env.GH_APP_TOKEN;
+// Where the self-hosted APK artifacts live inside this container (mounted
+// read-only from the host's /opt/dzhoof-apk — see docker-compose.production.yml).
+const SELF_HOSTED_DOWNLOADS_DIR = process.env.SELF_HOSTED_DOWNLOADS_DIR || '/downloads';
 
 // APP_VERSION is injected at build time via Docker build arg (e.g. "1.2.3")
 const APP_VERSION = process.env.APP_VERSION || '0.0.0';
@@ -774,10 +779,31 @@ async function resolvePublishedRelease(req, { channel = null, platform = null } 
   // it only when it matches the release the redirect actually serves.
   if (latest.source === 'db' && latest.sha256 && latest.downloadUrlCanonical) {
     const servedByRedirect = githubCandidate ? await fetchReleaseSha256(githubCandidate) : null;
+
+    // Since self-hosted distribution, `/api/v1/app/download` redirects to the
+    // row's own file URL when the row's checksum is bound (see the `/download`
+    // route) — the redirect serves the row's bytes, not GitHub's. So when GitHub
+    // cannot be resolved at all (private repo / outage), a row whose raw URL is a
+    // self-hosted `/downloads/` file that ACTUALLY EXISTS on disk is bound by
+    // construction. Fail-closed: a wiped or never-uploaded artifact stays unbound.
+    let selfHostedBound = false;
+    if (!servedByRedirect) {
+      const row = await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean();
+      if (row && isStaleLocalDownloadUrl(req, row.downloadUrl) && normalizeSha256(row.sha256) === latest.sha256) {
+        try {
+          const fileName = path.basename(new URL(row.downloadUrl).pathname);
+          selfHostedBound = fs.existsSync(path.join(SELF_HOSTED_DOWNLOADS_DIR, fileName));
+        } catch {
+          selfHostedBound = false;
+        }
+      }
+    }
+
     const binds =
-      !!servedByRedirect &&
-      servedByRedirect.sha256 === latest.sha256 &&
-      Number(githubCandidate.versionCode) === Number(latest.versionCode);
+      selfHostedBound ||
+      (!!servedByRedirect &&
+        servedByRedirect.sha256 === latest.sha256 &&
+        Number(githubCandidate.versionCode) === Number(latest.versionCode));
     if (!binds) {
       warnChecksumUnavailable(
         latest,
@@ -979,7 +1005,18 @@ router.get('/download', async (req, res) => {
     if (latest && latest.source === 'db' && latest.sha256 && latest.checksumSource === 'db') {
       const row = await AppVersion.findOne({ isActive: true }).sort({ versionCode: -1 }).lean();
       if (row && isAllowedDownloadUrl(row.downloadUrl, req) && !isCanonicalRedirectUrl(req, row.downloadUrl)) {
-        return res.redirect(row.downloadUrl);
+        // Redirect only when the artifact is really on disk; otherwise fall
+        // through so a wiped file never strands a device on a dead 302.
+        let artifactPresent = false;
+        try {
+          const fileName = path.basename(new URL(row.downloadUrl).pathname);
+          artifactPresent = fs.existsSync(path.join(SELF_HOSTED_DOWNLOADS_DIR, fileName));
+        } catch {
+          artifactPresent = false;
+        }
+        if (artifactPresent) {
+          return res.redirect(row.downloadUrl);
+        }
       }
     }
 
