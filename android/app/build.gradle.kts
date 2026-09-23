@@ -26,7 +26,7 @@ if (googleServicesAvailable) {
 
 android {
     namespace = "com.dzhoof.iptv"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.dzhoof.iptv"
