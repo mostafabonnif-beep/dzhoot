@@ -97,8 +97,10 @@ export async function runClientLiveness(): Promise<ClientLivenessResult> {
   }
 
   // Flag: shared-catalog channels only (ownerId:null — per-user copies are
-  // outside the shared selection paths). Never touch an admin/health-service
-  // flag (different flaggedBy) — those have their own lifecycle.
+  // outside the shared selection paths). `flaggedBad.flaggedBy` is an ObjectId
+  // (ref User) — we leave it null and put provenance in `reason`, which is
+  // what the clear path matches on. Never touch an admin/health-service flag
+  // (different reason) — those have their own lifecycle.
   if (flagIds.length) {
     const res = await Channel.updateMany(
       {
@@ -110,7 +112,6 @@ export async function runClientLiveness(): Promise<ClientLivenessResult> {
         $set: {
           'flaggedBad.isFlagged': true,
           'flaggedBad.reason': CLIENT_LIVENESS_REASON,
-          'flaggedBad.flaggedBy': 'client-liveness',
           'flaggedBad.flaggedAt': new Date(),
         },
       },
@@ -141,7 +142,7 @@ export async function runClientLiveness(): Promise<ClientLivenessResult> {
         _id: { $in: healedIds },
         ownerId: null,
         'flaggedBad.isFlagged': true,
-        'flaggedBad.flaggedBy': 'client-liveness',
+        'flaggedBad.reason': CLIENT_LIVENESS_REASON,
       },
       {
         $set: {
