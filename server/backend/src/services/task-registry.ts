@@ -14,6 +14,7 @@ import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
 import { expireStaleCodesAndReturnCredit } from './subscription-service';
 import { runSourceWatchdog } from './source-failover-service';
 import { runClientLiveness } from './client-liveness-service';
+import { runCatalogCleanup } from './catalog-cleanup-service';
 import { sendNotificationToDevices, pushOutcome } from './fcm-service';
 import { sendOperationalAlert } from './alert-notifier';
 
@@ -63,6 +64,7 @@ const SOURCE_WATCHDOG_INTERVAL = intervalMs(process.env.SOURCE_WATCHDOG_INTERVAL
 const DISK_WATCHDOG_INTERVAL = intervalMs(process.env.DISK_WATCHDOG_INTERVAL_MS, 600000); // 10 min
 const SYNC_WATCHDOG_INTERVAL = intervalMs(process.env.SYNC_WATCHDOG_INTERVAL_MS, 1800000); // 30 min
 const CLIENT_LIVENESS_INTERVAL = intervalMs(process.env.CLIENT_LIVENESS_INTERVAL_MS, 21600000); // 6h
+const CATALOG_CLEANUP_INTERVAL = intervalMs(process.env.CATALOG_CLEANUP_INTERVAL_MS, 86400000); // 24h
 // A sync is "stale" once its age passes 2× the sync interval (6h) plus margin.
 const SYNC_STALENESS_THRESHOLD_MS = intervalMs(process.env.SYNC_STALENESS_THRESHOLD_MS, 13 * 3600000);
 // At most one fast-retry per source within this window (avoids hammering a down upstream).
@@ -371,6 +373,26 @@ async function cacheRefreshHandler(): Promise<TaskResult> {
           durationMs: Date.now() - start,
           error: err.message,
         },
+      ],
+    };
+  }
+}
+
+async function catalogCleanupHandler(): Promise<TaskResult> {
+  const start = Date.now();
+  try {
+    const result = await runCatalogCleanup();
+    return {
+      summary: result,
+      subtasks: [
+        { name: 'catalog-cleanup', status: 'completed', durationMs: Date.now() - start, result },
+      ],
+    };
+  } catch (err: any) {
+    return {
+      summary: { error: err.message },
+      subtasks: [
+        { name: 'catalog-cleanup', status: 'failed', durationMs: Date.now() - start, error: err.message },
       ],
     };
   }
@@ -789,6 +811,13 @@ const tasks: TaskDefinition[] = [
     description: 'Refresh the IPTV-org channel and stream cache from upstream',
     intervalMs: CACHE_INTERVAL,
     handler: cacheRefreshHandler,
+  },
+  {
+    name: 'catalog-cleanup',
+    displayName: 'Catalog Cleanup (dupes + junk)',
+    description: 'Daily: hide junk-named channels and merge duplicate-name groups (winner keeps alternates) so the catalog stops showing copies of the same channel',
+    intervalMs: CATALOG_CLEANUP_INTERVAL,
+    handler: catalogCleanupHandler,
   },
   {
     name: 'client-liveness',
