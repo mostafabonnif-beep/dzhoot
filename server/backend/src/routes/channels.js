@@ -1,4 +1,5 @@
 const express = require('express');
+const { tvChannelsMax } = require('../services/catalog-capacity');
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 const router = express.Router();
@@ -36,10 +37,13 @@ function invalidateCatalogCache() {
 }
 
 
-// Max channels the TV app receives in one sync. DZ HOOF serves the full catalog
-// (~16.6k channels) to subscribers — the cap is a safety valve against pathological
-// payloads, not a browse limit. Override via TV_CHANNELS_MAX if the catalog grows.
-const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 20000;
+// Max channels the TV app receives in one sync — a safety valve against pathological
+// payloads, not a browse limit. Measured 2026-09-25: the repaired catalog serves 25,968
+// active channels, past the 20,000 ceiling that used to hold; the app then syncs fewer
+// channels than the catalog has and `totalCount` hides it by reporting the ceiling.
+// The number lives in services/catalog-capacity.ts so this file and routes/tv.js cannot
+// drift apart again. Override with TV_CHANNELS_MAX.
+const TV_CHANNELS_MAX = tvChannelsMax();
 
 // ── Demo / free tier (وضع الديمو والمجاني) ──────────────────────────
 // The app's "Browse demo channels" flow fetches /api/v1/app/demo-code, then
