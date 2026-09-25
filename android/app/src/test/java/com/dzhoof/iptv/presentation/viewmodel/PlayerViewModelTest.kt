@@ -125,7 +125,8 @@ class PlayerViewModelTest {
             channelHealthDao, thumbnailExtractor, epgRepository, getGuideProgramsUseCase,
             analyticsHelper, userPreferencesRepository, playerFactory, apiService,
             channelTrackPreferencesRepository,
-            channelPrefsRepository
+            channelPrefsRepository,
+            mockk(relaxed = true) // @ApplicationContext — prefs writes are SharedPreferences-backed
         )
     }
 

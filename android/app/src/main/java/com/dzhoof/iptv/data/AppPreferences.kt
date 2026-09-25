@@ -84,6 +84,23 @@ private const val PARENTAL_PIN_LOCK_MS = 30_000L
         return prefs.getString(SERVER_URL_KEY, DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL
     }
 
+    private const val LAST_LIVE_CHANNEL_KEY = "last_live_channel_id"
+
+    /**
+     * Last successfully-loaded live channel — the TV-first resume point.
+     * Written by the player on every successful channel load; read once at
+     * app start on TV devices to jump straight back into playback.
+     */
+    fun getLastLiveChannelId(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(LAST_LIVE_CHANNEL_KEY, null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun setLastLiveChannelId(context: Context, channelId: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(LAST_LIVE_CHANNEL_KEY, channelId).apply()
+    }
+
     fun getTvCode(context: Context): String {
         val secure = runCatching {
             secure(context)?.getString(TV_CODE_KEY, "") ?: ""

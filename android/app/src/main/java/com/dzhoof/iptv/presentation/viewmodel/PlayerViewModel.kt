@@ -28,6 +28,7 @@ import com.dzhoof.iptv.domain.usecase.ReportStreamStatusUseCase
 import com.dzhoof.iptv.domain.usecase.SavePlaybackPositionUseCase
 import com.dzhoof.iptv.domain.usecase.ToggleFavoriteUseCase
 import com.dzhoof.iptv.data.repository.TrackPreferenceMatcher
+import com.dzhoof.iptv.data.AppPreferences
 import com.dzhoof.iptv.presentation.mapper.ChannelUiMapper
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.PlayerUiState
@@ -39,6 +40,8 @@ import com.dzhoof.iptv.presentation.ui.player.StreamErrorContext
 import com.dzhoof.iptv.presentation.ui.player.StreamErrorMessageResolver
 import com.dzhoof.iptv.presentation.ui.animation.AUTO_HIDE_DELAY_MS
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -95,7 +98,8 @@ class PlayerViewModel @Inject constructor(
     private val playerFactory: PlayerFactory,
     private val apiService: DzhoofApiService,
     private val channelTrackPreferencesRepository: ChannelTrackPreferencesRepository,
-    private val channelPrefsRepository: ChannelPrefsRepository
+    private val channelPrefsRepository: ChannelPrefsRepository,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PlayerUiState())
@@ -368,6 +372,10 @@ class PlayerViewModel @Inject constructor(
                         if (previousChannelId != null && previousChannelId != channelId) {
                             resetTrackAutoApplyForChannelChange()
                         }
+                        // TV-first resume point: remember the last live channel that
+                        // actually loaded. Only live TV reaches loadChannel — VOD has
+                        // its own VodPlayerViewModel — so every save here is live.
+                        AppPreferences.setLastLiveChannelId(appContext, channelId)
                         channelViewStartTime = System.currentTimeMillis()
                         beginPlaybackQoeSession(channelId)
                         analyticsHelper.logEvent(

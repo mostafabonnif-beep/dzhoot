@@ -231,6 +231,18 @@ class ComposeMainActivity : ComponentActivity() {
                             }
                         }
 
+                        // TV-first (TiviMate-style): a paired TV opens straight back
+                        // into live playback on the last watched channel. Phones keep
+                        // the portal as home. Deep links win when present; a TV with
+                        // no watch history lands on Home once and behaves normally.
+                        if (!showSplash && targetChannelId == null && savedInstanceState == null && !needsPairing && isTvDevice(this@ComposeMainActivity)) {
+                            LaunchedEffect(Unit) {
+                                AppPreferences.getLastLiveChannelId(applicationContext)?.let { lastId ->
+                                    navController.navigate(Screen.Player.createRoute(lastId))
+                                }
+                            }
+                        }
+
                         // Update-available overlay — checks once after splash on a
                         // configured device; shows full-screen over the app when a
                         // newer version is published. Session-only dismiss.
