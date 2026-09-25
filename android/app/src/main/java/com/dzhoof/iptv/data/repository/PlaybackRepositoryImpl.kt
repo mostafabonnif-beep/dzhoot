@@ -5,6 +5,7 @@ import com.dzhoof.iptv.data.source.local.PlaybackLocalDataSource
 import com.dzhoof.iptv.data.source.local.entity.PlaybackPositionEntity
 import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.repository.PlaybackRepository
+import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -31,6 +32,7 @@ import javax.inject.Singleton
 @Singleton
 class PlaybackRepositoryImpl @Inject constructor(
     private val localDataSource: PlaybackLocalDataSource,
+    private val watchProgressSync: WatchProgressSyncRepository,
     @IoDispatcher private val dispatcher: CoroutineDispatcher
 ) : PlaybackRepository {
     
@@ -94,7 +96,17 @@ class PlaybackRepositoryImpl @Inject constructor(
             )
             
             localDataSource.savePosition(entity)
-            
+
+            // Mirror to the account so Continue Watching follows the viewer to
+            // another device. Fire-and-forget by design: the local write above is
+            // the one the UI depends on, and a dead network must not fail a save
+            // that already succeeded locally.
+            watchProgressSync.enqueueSave(
+                localKey = channelId,
+                positionMs = position,
+                durationMs = duration,
+            )
+
             Result.Success(Unit)
         } catch (e: Exception) {
             Result.Error(e)
@@ -113,6 +125,9 @@ class PlaybackRepositoryImpl @Inject constructor(
         withContext(dispatcher) {
             try {
                 localDataSource.deletePosition(channelId)
+                // The viewer finished or dismissed it here; drop it on the account
+                // too, otherwise the next pull would bring it back.
+                watchProgressSync.enqueueDelete(channelId)
                 Result.Success(Unit)
             } catch (e: Exception) {
                 Result.Error(e)

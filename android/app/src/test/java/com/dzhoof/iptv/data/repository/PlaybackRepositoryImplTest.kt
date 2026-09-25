@@ -3,6 +3,7 @@ package com.dzhoof.iptv.data.repository
 import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.data.source.local.PlaybackLocalDataSource
 import com.dzhoof.iptv.data.source.local.entity.PlaybackPositionEntity
+import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -32,6 +33,7 @@ class PlaybackRepositoryImplTest {
     
     private lateinit var repository: PlaybackRepositoryImpl
     private lateinit var localDataSource: PlaybackLocalDataSource
+    private lateinit var watchProgressSync: WatchProgressSyncRepository
     private val testDispatcher = StandardTestDispatcher()
     
     private val testPlaybackPosition = PlaybackPositionEntity(
@@ -44,9 +46,11 @@ class PlaybackRepositoryImplTest {
     @Before
     fun setup() {
         localDataSource = mockk()
+        watchProgressSync = mockk(relaxed = true)
         
         repository = PlaybackRepositoryImpl(
             localDataSource = localDataSource,
+            watchProgressSync = watchProgressSync,
             dispatcher = testDispatcher
         )
     }
@@ -321,5 +325,61 @@ class PlaybackRepositoryImplTest {
         // Then
         assertTrue(result is Result.Error)
         assertEquals(exception.message, (result as Result.Error).exception.message)
+    }
+
+    @Test
+    fun `savePlaybackPosition mirrors the position to the account`() = runTest(testDispatcher) {
+        // Given
+        coEvery { localDataSource.savePosition(any()) } returns Unit
+
+        // When
+        val result = repository.savePlaybackPosition("vod:movie:m1", 30000L, 120000L)
+
+        // Then the local write is what the caller depends on...
+        assertTrue(result is Result.Success)
+        coVerify(exactly = 1) { localDataSource.savePosition(any()) }
+        // ...and the account mirror is queued with the same key and millisecond values.
+        coVerify(exactly = 1) {
+            watchProgressSync.enqueueSave("vod:movie:m1", 30000L, 120000L)
+        }
+    }
+
+    @Test
+    fun `a failed local save never mirrors to the account`() = runTest(testDispatcher) {
+        // Given the local write fails, there is nothing truthful to mirror.
+        coEvery { localDataSource.savePosition(any()) } throws Exception("disk full")
+
+        // When
+        val result = repository.savePlaybackPosition("ch1", 30000L, 0L)
+
+        // Then
+        assertTrue(result is Result.Error)
+        coVerify(exactly = 0) { watchProgressSync.enqueueSave(any(), any(), any()) }
+    }
+
+    @Test
+    fun `deletePlaybackPosition mirrors the removal`() = runTest(testDispatcher) {
+        // Given
+        coEvery { localDataSource.deletePosition("vod:episode:e9") } returns Unit
+
+        // When
+        val result = repository.deletePlaybackPosition("vod:episode:e9")
+
+        // Then
+        assertTrue(result is Result.Success)
+        coVerify(exactly = 1) { watchProgressSync.enqueueDelete("vod:episode:e9") }
+    }
+
+    @Test
+    fun `a rejected save is not mirrored`() = runTest(testDispatcher) {
+        // Given a negative position, validation rejects before any local write.
+
+        // When
+        val result = repository.savePlaybackPosition("ch1", -1L, 1000L)
+
+        // Then
+        assertTrue(result is Result.Error)
+        coVerify(exactly = 0) { localDataSource.savePosition(any()) }
+        coVerify(exactly = 0) { watchProgressSync.enqueueSave(any(), any(), any()) }
     }
 }

@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import com.dzhoof.iptv.crash.CrashReporter
 import com.dzhoof.iptv.data.ads.AdsManager
 import com.dzhoof.iptv.data.source.remote.DzhoofApiService
+import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import com.dzhoof.iptv.worker.WorkManagerInitializer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,7 @@ class DzhoofApplication : Application(), Configuration.Provider {
 
     @Inject lateinit var adsManager: AdsManager
     @Inject lateinit var apiService: DzhoofApiService
+    @Inject lateinit var watchProgressSync: WatchProgressSyncRepository
 
     // Process-lifetime scope for fire-and-forget startup work.
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -75,6 +77,14 @@ class DzhoofApplication : Application(), Configuration.Provider {
                     adsManager.updateConfig(decision.body()?.data)
                 }
             }
+        }
+
+        // Cross-device Continue Watching: pull the account's resume positions into
+        // the local table on launch. Room is observed by the Home rail, so a
+        // successful pull surfaces there without any extra plumbing, and a failed
+        // one changes nothing (the device keeps its own history).
+        appScope.launch {
+            runCatching { watchProgressSync.pullIntoLocal() }
         }
 
         WorkManagerInitializer.scheduleChannelSync(this)

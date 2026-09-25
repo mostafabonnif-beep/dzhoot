@@ -21,6 +21,7 @@ import com.dzhoof.iptv.data.source.local.entity.FavoriteCategoryEntity
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
+import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.usecase.GetChannelsByCategoryUseCase
 import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
@@ -78,7 +79,8 @@ class ChannelsViewModel @Inject constructor(
     private val favoriteDao: FavoriteDao,
     private val playbackPositionDao: PlaybackPositionDao,
     private val favoriteCategoryDao: FavoriteCategoryDao,
-    private val channelPrefsRepository: ChannelPrefsRepository
+    private val channelPrefsRepository: ChannelPrefsRepository,
+    private val watchProgressSync: WatchProgressSyncRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChannelsUiState())
@@ -236,6 +238,15 @@ class ChannelsViewModel @Inject constructor(
     private fun loadHomeData() {
         recentlyWatchedJob?.cancel()
         popularCategoriesJob?.cancel()
+
+        // Refresh the account's Continue Watching list before observing Room: this
+        // is the surface that shows it, so it is the moment a stale list matters.
+        // Best-effort — the observer below emits the local rows either way, and the
+        // pull writes through Room so the rail updates without a second path.
+        viewModelScope.launch {
+            runCatching { watchProgressSync.pullIntoLocal() }
+        }
+
         // Recently watched — auto-updates when user watches a new channel
         recentlyWatchedJob = viewModelScope.launch {
             try {
