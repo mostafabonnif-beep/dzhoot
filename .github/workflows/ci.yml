@@ -144,7 +144,7 @@ jobs:
       # (run 34970591122 on 460b8cc). Requesting only what we install keeps the
       # job independent of a package that upstream has removed.
       - name: Set up Android SDK
-        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd
         with:
           packages: 'platform-tools'
           cmdline-tools-version: ${{ env.ANDROID_CMDLINE_TOOLS_VERSION }}
