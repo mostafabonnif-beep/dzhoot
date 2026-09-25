@@ -66,6 +66,7 @@ internal fun CatalogPosterRow(
                     imageUrl = item.imageUrl,
                     onClick = { onItemClick(item.key) },
                     modifier = Modifier.width(cardWidth),
+                    progress = item.progress,
                 )
             }
         }

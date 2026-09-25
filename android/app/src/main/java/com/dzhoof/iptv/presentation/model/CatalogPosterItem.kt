@@ -6,4 +6,9 @@ data class CatalogPosterItem(
     val title: String,
     val subtitle: String,
     val imageUrl: String?,
+    /**
+     * Resume progress (0f..1f) drawn as a bar on the poster, or null for a row that
+     * is not about resuming. Null keeps every existing caller pixel-identical.
+     */
+    val progress: Float? = null,
 )

@@ -18,6 +18,7 @@
     <string name="search">بحث</string>
     <string name="home_featured">مميز</string>
     <string name="home_popular_categories">التصنيفات الشائعة</string>
+    <string name="home_continue_watching">متابعة المشاهدة</string>
     <string name="home_recently_watched">شاهدتها مؤخرًا</string>
     <string name="home_for_you">مقترح لك</string>
     <string name="home_live_count">%d مباشر</string>

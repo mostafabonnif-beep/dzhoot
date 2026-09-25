@@ -42,8 +42,10 @@ import com.dzhoof.iptv.R
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
+import com.dzhoof.iptv.presentation.model.ContinueWatchingUiModel
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.model.SportsMatchUiModel
+import com.dzhoof.iptv.presentation.ui.components.CatalogPosterCard
 import com.dzhoof.iptv.presentation.ui.components.CategoryCard
 import com.dzhoof.iptv.presentation.ui.components.ChannelCard
 import com.dzhoof.iptv.presentation.ui.components.tvFocusVisuals
@@ -375,5 +377,58 @@ private fun LiveBadge(modifier: Modifier = Modifier) {
             fontWeight = FontWeight.Bold,
             color = liveColor
         )
+    }
+}
+
+/**
+ * "متابعة المشاهدة" for on-demand titles.
+ *
+ * Deliberately not [ChannelRow]: these cards resume a *file* position, so a click
+ * has to carry the content type and id, and the poster shows how far in the viewer
+ * is. The live row keeps its own meaning (re-tune a channel), and the two coexist
+ * instead of one pretending to be the other.
+ *
+ * Renders nothing when empty — an empty rail with a title is worse than no rail.
+ */
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+internal fun ContinueWatchingRow(
+    items: List<ContinueWatchingUiModel>,
+    onItemClick: (ContinueWatchingUiModel) -> Unit,
+    horizontalPadding: Dp,
+    modifier: Modifier = Modifier,
+) {
+    if (items.isEmpty()) return
+    val isCompact = LocalConfiguration.current.screenWidthDp < COMPACT_WIDTH_DP
+    val cardWidth = if (isCompact) 118.dp else 150.dp
+    val titleGap = if (isCompact) Dimens.RowTitleGapMobile else Dimens.RowTitleGap
+    val cardGap = if (isCompact) Dimens.CardGapMobile else Dimens.CardGap
+
+    val rowState = rememberLazyListState()
+
+    Column(modifier = modifier.padding(horizontal = horizontalPadding)) {
+        SectionHeader(
+            title = stringResource(R.string.home_continue_watching),
+            accentColor = categoryColor(stringResource(R.string.home_continue_watching)),
+        )
+        Spacer(modifier = Modifier.height(titleGap))
+        LazyRow(
+            state = rowState,
+            modifier = Modifier.focusRestorer(),
+            contentPadding = PaddingValues(vertical = if (isCompact) 4.dp else 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(cardGap),
+        ) {
+            items(items.size, key = { i -> "${i}:${items[i].localKey}" }) { i ->
+                val item = items[i]
+                CatalogPosterCard(
+                    title = item.title,
+                    subtitle = item.subtitle.orEmpty(),
+                    imageUrl = item.posterUrl,
+                    onClick = { onItemClick(item) },
+                    modifier = Modifier.width(cardWidth),
+                    progress = item.progress,
+                )
+            }
+        }
     }
 }

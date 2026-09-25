@@ -8,6 +8,7 @@ import com.dzhoof.iptv.data.source.local.dao.ChannelHealthDao
 import com.dzhoof.iptv.data.source.local.dao.FavoriteCategoryDao
 import com.dzhoof.iptv.data.source.local.dao.FavoriteDao
 import com.dzhoof.iptv.data.source.local.dao.PlaybackPositionDao
+import com.dzhoof.iptv.domain.model.VodContinueWatchingItem
 import com.dzhoof.iptv.data.source.local.entity.FavoriteCategoryEntity
 import com.dzhoof.iptv.data.source.remote.NetworkException
 import com.dzhoof.iptv.data.source.remote.UnauthorizedException
@@ -15,6 +16,7 @@ import com.dzhoof.iptv.data.source.remote.ServerException
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
+import com.dzhoof.iptv.domain.repository.VodContinueWatchingRepository
 import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.usecase.GetChannelsByCategoryUseCase
@@ -67,6 +69,7 @@ class ChannelsViewModelTest {
     private val favoriteCategoryDao: FavoriteCategoryDao = mockk()
     private val channelPrefsRepository: ChannelPrefsRepository = mockk()
     private val watchProgressSync: WatchProgressSyncRepository = mockk(relaxed = true)
+    private val vodContinueWatchingRepository: VodContinueWatchingRepository = mockk()
 
     private val healthFlow = MutableStateFlow(emptyList<com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity>())
     private val hiddenIdsFlow = MutableStateFlow<Set<String>>(emptySet())
@@ -86,6 +89,10 @@ class ChannelsViewModelTest {
         // Mock QRCodeWriter to throw WriterException so generateGuideQrCode() exits cleanly
         mockkConstructor(QRCodeWriter::class)
         every { anyConstructed<QRCodeWriter>().encode(any(), any(), any<Int>(), any<Int>()) } throws WriterException("mocked")
+
+        // The on-demand resume row: empty unless a test overrides it.
+        every { vodContinueWatchingRepository.observeItems(any()) } returns
+            flowOf(Result.Success(emptyList()))
 
         // Default mocks for init
         coEvery { epgRepository.ensureLoaded() } returns Unit
@@ -122,7 +129,8 @@ class ChannelsViewModelTest {
         playbackPositionDao = playbackPositionDao,
         favoriteCategoryDao = favoriteCategoryDao,
         channelPrefsRepository = channelPrefsRepository,
-        watchProgressSync = watchProgressSync
+        watchProgressSync = watchProgressSync,
+        vodContinueWatchingRepository = vodContinueWatchingRepository
     )
 
     @Test
@@ -417,5 +425,50 @@ class ChannelsViewModelTest {
         assertEquals(listOf("Sports"), vm.uiState.value.categories)
         assertEquals(1, vm.uiState.value.channels.size)
         assertEquals("s1", vm.uiState.value.channels[0].id)
+    }
+
+    @Test
+    fun `home exposes the on-demand continue watching row`() = runTest {
+        every { vodContinueWatchingRepository.observeItems(any()) } returns flowOf(
+            Result.Success(
+                listOf(
+                    VodContinueWatchingItem(
+                        localKey = "vod:movie:m1",
+                        contentType = "movie",
+                        contentId = "m1",
+                        title = "فيلم الاختبار",
+                        posterUrl = "https://cdn.example/m1.jpg",
+                        subtitle = "2024",
+                        positionMs = 300_000L,
+                        durationMs = 600_000L,
+                        progress = 0.5f,
+                    )
+                )
+            )
+        )
+        val vm = createViewModel()
+        advanceTimeBy(600)
+        runCurrent()
+
+        val row = vm.uiState.value.continueWatching
+        assertEquals(1, row.size)
+        // The click needs both halves of the route, so they must survive into the UI model.
+        assertEquals("movie", row[0].contentType)
+        assertEquals("m1", row[0].contentId)
+        assertEquals("vod:movie:m1", row[0].localKey)
+        assertEquals(0.5f, row[0].progress!!, 0.0001f)
+    }
+
+    @Test
+    fun `a failing resume row leaves home usable and silent`() = runTest {
+        every { vodContinueWatchingRepository.observeItems(any()) } returns
+            flowOf(Result.Error(Exception("catalog unavailable")))
+        val vm = createViewModel()
+        advanceTimeBy(600)
+        runCurrent()
+
+        // The row disappears; Home must not show an error over the whole screen.
+        assertEquals(emptyList<Any>(), vm.uiState.value.continueWatching)
+        assertEquals(null, vm.uiState.value.error)
     }
 }

@@ -25,6 +25,7 @@ import com.dzhoof.iptv.presentation.ui.components.ErrorState
 import com.dzhoof.iptv.presentation.ui.player.isMobileDevice
 import com.dzhoof.iptv.presentation.ui.screens.home.HomeContent
 import com.dzhoof.iptv.presentation.ui.screens.home.HomeSkeleton
+import com.dzhoof.iptv.presentation.model.ContinueWatchingUiModel
 import com.dzhoof.iptv.presentation.viewmodel.ChannelsViewModel
 import com.dzhoof.iptv.presentation.viewmodel.SubscriptionViewModel
 
@@ -37,6 +38,7 @@ fun HomeScreen(
     onChannelClick: (String) -> Unit,
     onPairDevice: () -> Unit = {},
     onMultiviewClick: (String) -> Unit = {},
+    onContinueWatchingClick: (ContinueWatchingUiModel) -> Unit = {},
     onMovieClick: (String) -> Unit = {},
     onSeriesClick: (String) -> Unit = {},
     onSeeAllMovies: (() -> Unit)? = null,
@@ -106,6 +108,7 @@ fun HomeScreen(
                     channels = uiState.channels,
                     featuredChannels = uiState.featuredChannels,
                     recentlyWatched = uiState.recentlyWatched,
+                    continueWatching = uiState.continueWatching,
                     forYou = uiState.forYou,
                     popularCategories = uiState.popularCategories,
                     latestMovies = uiState.latestMovies,
@@ -117,6 +120,7 @@ fun HomeScreen(
                     onNavigateToSettings = onNavigateToSettings,
                     onToggleFavorite = viewModel::toggleFavorite,
                     onMultiviewClick = onMultiviewClick,
+                    onContinueWatchingClick = onContinueWatchingClick,
                     onMovieClick = onMovieClick,
                     onSeriesClick = onSeriesClick,
                     onSeeAllMovies = onSeeAllMovies,
