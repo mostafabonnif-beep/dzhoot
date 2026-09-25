@@ -42,6 +42,10 @@ const {
   sortClientCatalogChannels,
 } = require('../utils/catalog-presentation');
 const { isSourceDown, getFailoverTarget, getHttpsBackupStreamUrl } = require('../services/source-failover-service');
+const {
+  customerTitleEligibilityClauses,
+  isSourceEligibleForCustomerTitles,
+} = require('../services/source-eligibility');
 const { rewriteStreamUrlBase, hlsTwinStreamUrl } = require('../services/xtream-service');
 const { proxyLogoUrl } = require('../utils/logo-proxy');
 const { resolveStreamDeviceHash } = require('../utils/stream-device-hash');
@@ -836,11 +840,7 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
           const playableSourceIds = (
             await XtreamSource.find({
               _id: { $in: candidateSourceIds },
-              $or: [
-                { status: 'Active', verificationStatus: 'verified' },
-                { customerVisible: true },
-                { directPlayback: true },
-              ],
+              $or: customerTitleEligibilityClauses(),
             }).distinct('_id')
           ).map(String);
           const playable = new Set(playableSourceIds);
@@ -865,15 +865,13 @@ router.post('/playback-token', requireTvOrSessionAuth, async (req, res) => {
     let mirrorPrimaryBase = null;
     if (channel.metadata?.source === 'xtream' && channel.metadata?.xtreamSourceId) {
       const source = await XtreamSource.findById(channel.metadata.xtreamSourceId).lean();
-      const sourceEligible = !!source && (
-        (source.status === 'Active' && source.verificationStatus === 'verified') ||
-        // Customer-visible sources are listed in the public catalog
-        // (channels.js verifiedXtreamChannelQuery uses the same OR set), so
-        // their channels must be playable — otherwise the catalog shows
-        // channels that always fail with SOURCE_NOT_VERIFIED.
-        source.customerVisible === true ||
-        source.directPlayback === true
-      );
+      // Customer-visible sources are listed in the public catalog
+      // (channels.js verifiedXtreamChannelQuery uses the same OR set), so their
+      // channels must be playable — otherwise the catalog shows channels that
+      // always fail with SOURCE_NOT_VERIFIED. The predicate lives in
+      // services/source-eligibility.ts because the movie path needed the same
+      // rule and, without it, a live-only watchdog verdict blanked the catalog.
+      const sourceEligible = isSourceEligibleForCustomerTitles(source);
       // Watchdog says the primary is down → look for a verified backup mapping
       // (catch-up NEVER fails over — the backup has no catch-up support).
       const sourceDown = source ? await isSourceDown(String(source._id)) : false;
