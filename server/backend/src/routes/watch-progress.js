@@ -1,6 +1,14 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
-const { requireAuth } = require('./auth');
+// `requireTvOrSessionAuth`, not `requireAuth`: this is an app-facing surface and
+// the Android/TV client authenticates with its paired channel-list code —
+// `AppPreferences.setSessionId` has no caller anywhere in the app, so the
+// session-only guard answered 401 for the one client that renders Continue
+// Watching ("ولو وُصل، يعيد 401", docs/APP_QUALITY_REMEDIATION_PLAN_AR_2026-09-17.md
+// item ع7 / plan item 10). This is the same guard `/api/v1/favorites` uses for
+// the same reason: a per-user list written by a paired device.
+const { requireTvOrSessionAuth } = require('../middleware/requireTvOrSessionAuth');
 const {
   upsertProgress,
   listContinueWatching,
@@ -28,8 +36,25 @@ function boundedLimit(raw, fallback, max) {
   return Math.min(parsed, max);
 }
 
-// All watch-progress routes require a logged-in user.
-router.use(requireAuth);
+/**
+ * Id of the authenticated user. `requireTvOrSessionAuth` puts it on
+ * `req.user.id` for both the TV-code and the session path; `req.userId` is kept
+ * as a fallback so a future guard swap does not silently break every handler.
+ *
+ * A demo session has no account: the middleware sets `req.user = { id: 'demo',
+ * demo: true }`. Returning null turns that into the same 401 as "not signed in"
+ * instead of handing `'demo'` to the model, where the ObjectId cast on `userId`
+ * failed and the route answered 400 with a stack trace in the log.
+ */
+function currentUserId(req) {
+  if (req.user?.demo === true) return null;
+  const id = req.userId || req.user?.id || null;
+  if (!id || !mongoose.Types.ObjectId.isValid(String(id))) return null;
+  return String(id);
+}
+
+// All watch-progress routes need a resolved account: a session or a paired TV code.
+router.use(requireTvOrSessionAuth);
 
 /**
  * PUT /api/v1/watch-progress/:contentType/:contentId
@@ -40,7 +65,7 @@ router.put('/:contentType/:contentId', async (req, res) => {
   try {
     const { contentType, contentId } = req.params;
     const { positionSec, durationSec } = req.body || {};
-    const userId = req.user?._id?.toString() || req.user?.id;
+    const userId = currentUserId(req);
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
 
     const doc = await upsertProgress({
@@ -64,7 +89,7 @@ router.put('/:contentType/:contentId', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const userId = req.user?._id?.toString() || req.user?.id;
+    const userId = currentUserId(req);
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
     const limit = boundedLimit(
       req.query.limit,
@@ -85,7 +110,7 @@ router.get('/', async (req, res) => {
  */
 router.get('/:contentType/:contentId', async (req, res) => {
   try {
-    const userId = req.user?._id?.toString() || req.user?.id;
+    const userId = currentUserId(req);
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
     const doc = await getProgress(userId, req.params.contentId);
     return res.json({ success: true, data: doc });
@@ -101,7 +126,7 @@ router.get('/:contentType/:contentId', async (req, res) => {
  */
 router.delete('/:contentType/:contentId', async (req, res) => {
   try {
-    const userId = req.user?._id?.toString() || req.user?.id;
+    const userId = currentUserId(req);
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
     const removed = await removeProgress(userId, req.params.contentId);
     return res.json({ success: true, data: { removed } });
@@ -117,7 +142,7 @@ router.delete('/:contentType/:contentId', async (req, res) => {
  */
 router.delete('/', async (req, res) => {
   try {
-    const userId = req.user?._id?.toString() || req.user?.id;
+    const userId = currentUserId(req);
     if (!userId) return res.status(401).json({ success: false, error: 'Unauthorized' });
     const removed = await clearProgress(userId);
     return res.json({ success: true, data: { removed } });
