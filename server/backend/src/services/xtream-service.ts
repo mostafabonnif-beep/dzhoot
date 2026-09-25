@@ -344,6 +344,29 @@ export interface XtreamDiagnostics {
       responseTimeMs: number;
     }>;
   };
+  /**
+   * On-demand health, measured separately from `live` on purpose. A provider can stop
+   * serving live channels (or fail its panel probe) while its VOD endpoints keep
+   * answering normally — measured in production on 2026-09-25, when one source's live
+   * channels were down and the single live verdict delisted all 17,176 movies in the
+   * customer catalog. Deciding VOD from a VOD probe is what makes that impossible.
+   *
+   * Sample URLs are never stored: a VOD URL embeds the panel credentials
+   * (`/movie/<user>/<pass>/<id>.mkv`) and `lastDiagnostics` is persisted and shown in
+   * the admin panel, so only the outcome is recorded.
+   */
+  vod: {
+    tested: number;
+    alive: number;
+    dead: number;
+    samples: Array<{
+      index: number;
+      status: ProbeResult['status'];
+      statusCode: number | null;
+      error: string | null;
+      responseTimeMs: number;
+    }>;
+  };
 }
 
 /**
@@ -351,12 +374,17 @@ export interface XtreamDiagnostics {
  * metadata from actual playback so an account that only lists channels is not
  * presented as a working source to the customer.
  */
-export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit = 3): Promise<XtreamDiagnostics> {
+export async function diagnoseXtreamSource(
+  creds: XtreamCredentials,
+  sampleLimit = 3,
+  options: { vodSampleUrls?: string[] } = {},
+): Promise<XtreamDiagnostics> {
   const result: XtreamDiagnostics = {
     api: { ok: false, error: null, auth: null, status: null },
     server: { url: null, protocol: null, port: null, httpsPort: null, rtmpPort: null },
     m3u: { status: 'not-tested', statusCode: null, error: null },
     live: { tested: 0, alive: 0, dead: 0, playbackFormat: null, samples: [] },
+    vod: { tested: 0, alive: 0, dead: 0, samples: [] },
   };
 
   try {
@@ -423,25 +451,76 @@ export async function diagnoseXtreamSource(creds: XtreamCredentials, sampleLimit
     result.api.error = error?.response?.status ? `HTTP ${error.response.status}` : String(error?.message || 'Diagnostics failed');
   }
 
+  // VOD probe: independent of the live result above, and never fatal to it.
+  const vodUrls = (options.vodSampleUrls || []).slice(0, Math.max(1, Math.min(sampleLimit, 10)));
+  for (const [index, url] of vodUrls.entries()) {
+    try {
+      const probe = await probeStream(url, { timeout: 12000 });
+      result.vod.tested += 1;
+      if (probe.status === 'alive') result.vod.alive += 1;
+      else result.vod.dead += 1;
+      result.vod.samples.push({
+        index,
+        status: probe.status,
+        statusCode: probe.statusCode,
+        error: probe.error,
+        responseTimeMs: probe.responseTimeMs,
+      });
+    } catch (error) {
+      result.vod.tested += 1;
+      result.vod.dead += 1;
+      result.vod.samples.push({
+        index,
+        status: 'dead',
+        statusCode: null,
+        error: String((error as Error)?.message || 'VOD probe failed'),
+        responseTimeMs: 0,
+      });
+    }
+  }
+
   return result;
+}
+
+/**
+ * Up to `limit` on-demand stream URLs for a source, in a stable order.
+ *
+ * Probe input only: the caller must never persist these. A VOD URL carries the panel
+ * credentials in its path, and `lastDiagnostics` is stored and rendered in the panel.
+ */
+async function sampleVodStreamUrls(sourceId: unknown, limit = 3): Promise<string[]> {
+  const rows = await Movie.find({ sourceId, isActive: true, streamUrl: { $ne: null } })
+    .select('streamUrl')
+    .limit(Math.max(1, limit))
+    .lean()
+    .exec();
+  return rows.map((row) => String((row as { streamUrl?: string })?.streamUrl || '')).filter(Boolean);
 }
 
 export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
   const source = await XtreamSource.findById(sourceId).exec();
   if (!source) throw new Error('Source not found');
 
+  const vodSampleUrls = await sampleVodStreamUrls(source._id, sampleLimit);
   const diagnostics = await diagnoseXtreamSource({
     serverUrl: source.serverUrl,
     mirrorServerUrls: source.mirrorServerUrls || [],
     username: decryptSecret(source.usernameEncrypted),
     password: decryptSecret(source.passwordEncrypted),
-  }, sampleLimit);
+  }, sampleLimit, { vodSampleUrls });
 
   const now = new Date();
   const liveAvailable = diagnostics.live.alive > 0;
   const apiAvailable = diagnostics.api.ok;
   const verified = apiAvailable && liveAvailable;
   const verificationStatus = verified ? 'verified' : apiAvailable ? 'degraded' : 'blocked';
+  // A source with no on-demand titles keeps `pending`: “we could not test VOD” and
+  // “VOD is broken” are different claims, and only the second may close a gate.
+  const vodVerificationStatus = diagnostics.vod.tested === 0
+    ? 'pending'
+    : diagnostics.vod.alive > 0
+      ? 'verified'
+      : 'blocked';
   const error = verified
     ? null
     : diagnostics.api.error || (diagnostics.live.tested > 0 ? 'No tested live stream is playable' : 'No live stream could be verified');
@@ -455,6 +534,7 @@ export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
       : null;
 
   source.verificationStatus = verificationStatus;
+  source.vodVerificationStatus = vodVerificationStatus;
   source.status = verified ? 'Active' : 'Inactive';
   source.lastDiagnosticsAt = now;
   source.lastDiagnostics = diagnostics as unknown as Record<string, unknown>;
@@ -473,6 +553,7 @@ export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
     ...diagnostics,
     decision: {
       verificationStatus,
+      vodVerificationStatus,
       status: source.status,
       verified,
       reason: error,

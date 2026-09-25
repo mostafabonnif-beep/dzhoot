@@ -32,6 +32,7 @@ export interface SourceEligibilityShape {
   verificationStatus?: string | null;
   customerVisible?: boolean | null;
   directPlayback?: boolean | null;
+  vodVerificationStatus?: string | null;
 }
 
 /**
@@ -55,5 +56,22 @@ export function isSourceEligibleForCustomerTitles(
   return source.customerVisible === true || source.directPlayback === true;
 }
 
+/**
+ * On-demand titles (movies, episodes) additionally accept a source whose VOD family
+ * was probed and answered — the strongest available evidence that this source serves
+ * VOD, independent of whether its live channels are down.
+ *
+ * Deliberately NOT used for live channels: a VOD verdict says nothing about a
+ * channel, and letting it unlock the channel path would list dead channels.
+ */
+export function isSourceEligibleForVod(source?: SourceEligibilityShape | null): boolean {
+  if (isSourceEligibleForCustomerTitles(source)) return true;
+  return Boolean(source) && source?.vodVerificationStatus === 'verified';
+}
+
 // The route files are CommonJS and require the compiled service from `dist`.
-module.exports = { isSourceEligibleForCustomerTitles, customerTitleEligibilityClauses };
+module.exports = {
+  isSourceEligibleForCustomerTitles,
+  isSourceEligibleForVod,
+  customerTitleEligibilityClauses,
+};

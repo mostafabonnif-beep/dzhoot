@@ -150,6 +150,20 @@ describe('movie playback is gated on source eligibility, not on the live verdict
     expect(JSON.stringify(res.body)).not.toContain('panel.test');
   });
 
+  it('authorizes a movie from a source whose VOD family was probed and answered', async () => {
+    // The strongest available evidence: no visibility flag, no direct playback, live
+    // channels down — but the on-demand endpoints themselves were verified. This is
+    // what stops a live-only verdict from closing the movie catalog.
+    process.env.ALLOW_DIRECT_PLAYBACK = 'false';
+    const source = await seedSource({ vodVerificationStatus: 'verified' });
+    const movie = await seedMovie(source._id);
+
+    const res = await authorize(movie._id);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.deliveryMode).toBe('proxy');
+  });
+
   it('still refuses a source with no visibility signal and no live verdict', async () => {
     const source = await seedSource();
     const movie = await seedMovie(source._id);

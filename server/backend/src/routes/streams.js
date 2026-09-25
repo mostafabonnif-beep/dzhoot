@@ -15,7 +15,7 @@ const { resolveUser } = require('../middleware/resolveUser');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
 const { issuePlaybackToken } = require('../services/playback-token');
 const { registerStreamSession } = require('../services/stream-session-service');
-const { isSourceEligibleForCustomerTitles } = require('../services/source-eligibility');
+const { isSourceEligibleForVod } = require('../services/source-eligibility');
 const { resolveStreamDeviceHash } = require('../utils/stream-device-hash');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { inferPlaybackMimeType, HLS_MIME_TYPE } = require('../utils/playback-mime');
@@ -169,9 +169,9 @@ router.post('/authorize', async (req, res) => {
         // with dead channels turned every one of its 17,176 movies into a 404 while
         // the video bytes were reachable. See services/source-eligibility.ts.
         const source = await XtreamSource.findOne({ _id: content.sourceId })
-          .select('status verificationStatus customerVisible directPlayback')
+          .select('status verificationStatus vodVerificationStatus customerVisible directPlayback')
           .lean();
-        if (!isSourceEligibleForCustomerTitles(source)) content = null;
+        if (!isSourceEligibleForVod(source)) content = null;
         else {
           url = content.streamUrl;
           directPlayback = directPlaybackEnabled && source.directPlayback === true;
@@ -188,10 +188,10 @@ router.post('/authorize', async (req, res) => {
         // serve customer-visible titles, not on the live-probe verdict.
         const source = series
           ? await XtreamSource.findOne({ _id: series.sourceId })
-              .select('status verificationStatus customerVisible directPlayback')
+              .select('status verificationStatus vodVerificationStatus customerVisible directPlayback')
               .lean()
           : null;
-        if (!series || !season || !isSourceEligibleForCustomerTitles(source)) content = null;
+        if (!series || !season || !isSourceEligibleForVod(source)) content = null;
         else {
           url = content.streamUrl;
           directPlayback = directPlaybackEnabled && source.directPlayback === true;
