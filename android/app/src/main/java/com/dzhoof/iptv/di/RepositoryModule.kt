@@ -12,6 +12,7 @@ import com.dzhoof.iptv.data.repository.SearchHistoryRepositoryImpl
 import com.dzhoof.iptv.data.repository.StreamMetricsRepositoryImpl
 import com.dzhoof.iptv.data.repository.SubscriptionRepositoryImpl
 import com.dzhoof.iptv.data.repository.UserPreferencesRepositoryImpl
+import com.dzhoof.iptv.data.repository.WatchProgressSyncRepositoryImpl
 import com.dzhoof.iptv.domain.repository.CategoryRepository
 import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
@@ -24,6 +25,7 @@ import com.dzhoof.iptv.domain.repository.SearchHistoryRepository
 import com.dzhoof.iptv.domain.repository.StreamMetricsRepository
 import com.dzhoof.iptv.domain.repository.SubscriptionRepository
 import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
+import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -144,4 +146,15 @@ abstract class RepositoryModule {
     abstract fun bindChannelPrefsRepository(
         impl: ChannelPrefsRepositoryImpl
     ): ChannelPrefsRepository
+
+    /**
+     * Binds the local-to-account Continue Watching mirror. Kept separate from
+     * PlaybackRepository because the local table stays the source of truth: this
+     * one may fail entirely (offline device) without affecting playback.
+     */
+    @Binds
+    @Singleton
+    abstract fun bindWatchProgressSyncRepository(
+        impl: WatchProgressSyncRepositoryImpl
+    ): WatchProgressSyncRepository
 }

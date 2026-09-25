@@ -15,6 +15,7 @@ import com.dzhoof.iptv.data.source.remote.ServerException
 import com.dzhoof.iptv.domain.model.Channel
 import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
+import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.usecase.GetChannelsByCategoryUseCase
 import com.dzhoof.iptv.domain.usecase.GetChannelsUseCase
@@ -65,6 +66,7 @@ class ChannelsViewModelTest {
     private val playbackPositionDao: PlaybackPositionDao = mockk()
     private val favoriteCategoryDao: FavoriteCategoryDao = mockk()
     private val channelPrefsRepository: ChannelPrefsRepository = mockk()
+    private val watchProgressSync: WatchProgressSyncRepository = mockk(relaxed = true)
 
     private val healthFlow = MutableStateFlow(emptyList<com.dzhoof.iptv.data.source.local.entity.ChannelHealthEntity>())
     private val hiddenIdsFlow = MutableStateFlow<Set<String>>(emptySet())
@@ -119,7 +121,8 @@ class ChannelsViewModelTest {
         favoriteDao = favoriteDao,
         playbackPositionDao = playbackPositionDao,
         favoriteCategoryDao = favoriteCategoryDao,
-        channelPrefsRepository = channelPrefsRepository
+        channelPrefsRepository = channelPrefsRepository,
+        watchProgressSync = watchProgressSync
     )
 
     @Test

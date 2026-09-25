@@ -31,11 +31,17 @@ import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationRequest
 import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationResponse
 import com.dzhoof.iptv.data.model.dto.PlaybackQoeReport
 import com.dzhoof.iptv.data.model.dto.UnifiedSearchResponse
+import com.dzhoof.iptv.data.model.dto.WatchProgressListResponse
+import com.dzhoof.iptv.data.model.dto.WatchProgressRemovedResponse
+import com.dzhoof.iptv.data.model.dto.WatchProgressUpsertRequest
+import com.dzhoof.iptv.data.model.dto.WatchProgressUpsertResponse
 import okhttp3.ResponseBody
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Headers
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -250,4 +256,38 @@ interface DzhoofApiService {
      */
     @GET("health/version")
     suspend fun getHealthVersion(): Response<HealthVersionDto>
+
+    // ---- Cross-device Continue Watching -------------------------------------
+    // The account's resume positions, so a viewer can start on one device and
+    // continue on another. The server has carried these endpoints all along; the
+    // app had no client for them, so the whole feature stayed device-local. They
+    // authenticate like every other managed call (paired X-TV-Code attached by
+    // the network interceptor) and the routes accept that credential
+    // server-side: `requireTvOrSessionAuth` in `routes/watch-progress.js`.
+
+    /** Continue Watching for the paired account, most recently updated first. */
+    @GET("api/v1/watch-progress")
+    suspend fun getWatchProgress(
+        @Query("limit") limit: Int = 20,
+    ): Response<WatchProgressListResponse>
+
+    /**
+     * Upserts the resume position for one piece of content.
+     *
+     * [contentType] is one of `live`, `movie`, `series`, `episode`;
+     * [contentId] is the channel id or catalog id. Positions are SECONDS here.
+     */
+    @PUT("api/v1/watch-progress/{contentType}/{contentId}")
+    suspend fun putWatchProgress(
+        @Path("contentType") contentType: String,
+        @Path("contentId") contentId: String,
+        @Body request: WatchProgressUpsertRequest,
+    ): Response<WatchProgressUpsertResponse>
+
+    /** Drops one resume position from the account. */
+    @DELETE("api/v1/watch-progress/{contentType}/{contentId}")
+    suspend fun deleteWatchProgress(
+        @Path("contentType") contentType: String,
+        @Path("contentId") contentId: String,
+    ): Response<WatchProgressRemovedResponse>
 }
