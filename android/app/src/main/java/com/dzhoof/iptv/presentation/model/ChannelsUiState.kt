@@ -34,6 +34,9 @@ data class ChannelsUiState(
     // HomeScreen: latest VOD rows (movies / series)
     val latestMovies: List<CatalogPosterItem> = emptyList(),
     val latestSeries: List<CatalogPosterItem> = emptyList(),
+    // HomeScreen: on-demand titles the viewer has not finished. Sourced from the
+    // local positions (which cross-device sync fills), resolved against the catalog.
+    val continueWatching: List<ContinueWatchingUiModel> = emptyList(),
     // Category logos (category name → up to 4 channel logo URLs for collage)
     val categoryLogos: Map<String, List<String>> = emptyMap(),
     // Category favorite names

@@ -4,6 +4,7 @@ import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.domain.model.CatalogCategory
 import com.dzhoof.iptv.domain.model.CatalogPage
 import com.dzhoof.iptv.domain.model.Episode
+import com.dzhoof.iptv.domain.model.EpisodeDetail
 import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.PlaybackAuthorization
 import com.dzhoof.iptv.domain.model.Season
@@ -21,5 +22,7 @@ interface CatalogRepository {
     suspend fun getSeriesById(seriesId: String): Result<Series>
     suspend fun getSeasons(seriesId: String): Result<List<Season>>
     suspend fun getEpisodes(seasonId: String): Result<List<Episode>>
+    /** One episode by its own id, with the parent labels — see [EpisodeDetail]. */
+    suspend fun getEpisodeById(episodeId: String): Result<EpisodeDetail>
     suspend fun authorizePlayback(contentType: String, contentId: String): Result<PlaybackAuthorization>
 }

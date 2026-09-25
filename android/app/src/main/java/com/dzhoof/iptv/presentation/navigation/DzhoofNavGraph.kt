@@ -30,6 +30,7 @@ import com.dzhoof.iptv.presentation.ui.screens.CategoriesScreen
 import com.dzhoof.iptv.presentation.ui.screens.CatalogScreen
 import com.dzhoof.iptv.presentation.ui.screens.ChannelsScreen
 import com.dzhoof.iptv.presentation.ui.screens.FavoritesScreen
+import com.dzhoof.iptv.presentation.model.ContinueWatchingUiModel
 import com.dzhoof.iptv.presentation.ui.screens.HomeScreen
 import com.dzhoof.iptv.presentation.ui.screens.MultiviewScreen
 import com.dzhoof.iptv.presentation.ui.screens.guide.GuideScreen
@@ -133,6 +134,13 @@ fun DzhoofNavGraph(
                 },
                 onMultiviewClick = { channelId ->
                     navController.navigate(Screen.Multiview.createRoute(channelId))
+                },
+                onContinueWatchingClick = { item ->
+                    // Resume straight into the player: the row exists to continue
+                    // watching, so a stop at the details screen would be a detour.
+                    navController.navigate(
+                        Screen.VodPlayer.createRoute(item.contentType, item.contentId, item.title)
+                    )
                 },
                 onMovieClick = { movieId ->
                     navController.navigate(Screen.MovieDetails.createRoute(movieId))

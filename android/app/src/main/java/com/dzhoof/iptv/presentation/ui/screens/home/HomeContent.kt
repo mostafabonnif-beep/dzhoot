@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Tv
 import androidx.compose.ui.unit.dp
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.CatalogPosterItem
+import com.dzhoof.iptv.presentation.model.ContinueWatchingUiModel
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.model.SportsMatchUiModel
 import com.dzhoof.iptv.presentation.ui.LocalPerfProfile
@@ -71,6 +72,7 @@ fun HomeContent(
     channels: List<ChannelUiModel>,
     featuredChannels: List<ChannelUiModel>,
     recentlyWatched: List<ChannelUiModel>,
+    continueWatching: List<ContinueWatchingUiModel>,
     forYou: List<ChannelUiModel>,
     popularCategories: List<PopularCategoryUiModel>,
     latestMovies: List<CatalogPosterItem>,
@@ -84,6 +86,7 @@ fun HomeContent(
     onNavigateToGuide: (() -> Unit)? = null,
     onToggleFavorite: (String) -> Unit,
     onMultiviewClick: (String) -> Unit,
+    onContinueWatchingClick: (ContinueWatchingUiModel) -> Unit,
     onMovieClick: (String) -> Unit = {},
     onSeriesClick: (String) -> Unit = {},
     onSeeAllMovies: (() -> Unit)? = null,
@@ -310,6 +313,19 @@ fun HomeContent(
                 SportsMatchesRow(
                     matches = matchesToday,
                     onMatchClick = onChannelClick,
+                    horizontalPadding = horizontalPadding,
+                    modifier = Modifier
+                        .padding(bottom = rowGap)
+                        .animateItemEntrance(index = 2)
+                )
+            }
+        }
+
+        if (continueWatching.isNotEmpty()) {
+            item(key = "continue_watching") {
+                ContinueWatchingRow(
+                    items = continueWatching,
+                    onItemClick = onContinueWatchingClick,
                     horizontalPadding = horizontalPadding,
                     modifier = Modifier
                         .padding(bottom = rowGap)

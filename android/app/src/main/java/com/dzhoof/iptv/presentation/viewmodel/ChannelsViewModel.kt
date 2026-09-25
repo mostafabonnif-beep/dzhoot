@@ -21,6 +21,7 @@ import com.dzhoof.iptv.data.source.local.entity.FavoriteCategoryEntity
 import com.dzhoof.iptv.domain.model.ChannelHealthStatus
 import com.dzhoof.iptv.domain.repository.CatalogRepository
 import com.dzhoof.iptv.domain.repository.ChannelPrefsRepository
+import com.dzhoof.iptv.domain.repository.VodContinueWatchingRepository
 import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import com.dzhoof.iptv.domain.repository.EpgRepository
 import com.dzhoof.iptv.domain.usecase.GetChannelsByCategoryUseCase
@@ -30,6 +31,7 @@ import com.dzhoof.iptv.domain.usecase.ToggleFavoriteUseCase
 import com.dzhoof.iptv.presentation.mapper.ChannelUiMapper
 import com.dzhoof.iptv.presentation.model.ChannelUiModel
 import com.dzhoof.iptv.presentation.model.CatalogPosterItem
+import com.dzhoof.iptv.presentation.model.ContinueWatchingUiModel
 import com.dzhoof.iptv.presentation.model.ChannelsUiState
 import com.dzhoof.iptv.presentation.model.PopularCategoryUiModel
 import com.dzhoof.iptv.presentation.model.toUiModels
@@ -80,7 +82,8 @@ class ChannelsViewModel @Inject constructor(
     private val playbackPositionDao: PlaybackPositionDao,
     private val favoriteCategoryDao: FavoriteCategoryDao,
     private val channelPrefsRepository: ChannelPrefsRepository,
-    private val watchProgressSync: WatchProgressSyncRepository
+    private val watchProgressSync: WatchProgressSyncRepository,
+    private val vodContinueWatchingRepository: VodContinueWatchingRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChannelsUiState())
@@ -90,6 +93,7 @@ class ChannelsViewModel @Inject constructor(
     private var refreshJob: Job? = null
     private var recentlyWatchedJob: Job? = null
     private var popularCategoriesJob: Job? = null
+    private var continueWatchingJob: Job? = null
     private var matchesTodayJob: Job? = null
     private var hasResumedBefore = false
 
@@ -235,6 +239,36 @@ class ChannelsViewModel @Inject constructor(
      * and popular categories. All streams are fully reactive via Room Flows.
      */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class, FlowPreview::class)
+    /**
+     * Loads the on-demand Continue Watching row.
+     *
+     * Best-effort by design: an unresolved title is already dropped inside the
+     * repository, and a failed flow leaves the row empty rather than surfacing an
+     * error over the whole Home screen — an empty row is invisible, and the rest of
+     * Home is still usable.
+     */
+    private fun loadVodContinueWatching() {
+        continueWatchingJob?.cancel()
+        continueWatchingJob = viewModelScope.launch {
+            vodContinueWatchingRepository.observeItems().collect { result ->
+                val items = (result as? Result.Success)?.data.orEmpty().map { item ->
+                    ContinueWatchingUiModel(
+                        localKey = item.localKey,
+                        contentType = item.contentType,
+                        contentId = item.contentId,
+                        title = item.title,
+                        subtitle = item.subtitle,
+                        posterUrl = item.posterUrl,
+                        // A known duration is what makes the bar meaningful; without
+                        // one the card shows no bar instead of an empty track.
+                        progress = item.progress.takeIf { item.durationMs > 0L },
+                    )
+                }
+                _uiState.update { it.copy(continueWatching = items) }
+            }
+        }
+    }
+
     private fun loadHomeData() {
         recentlyWatchedJob?.cancel()
         popularCategoriesJob?.cancel()
@@ -246,6 +280,10 @@ class ChannelsViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { watchProgressSync.pullIntoLocal() }
         }
+
+        // On-demand resume row. Independent of the live rail: it reads the `vod:`
+        // positions and resolves each one against the catalog.
+        loadVodContinueWatching()
 
         // Recently watched — auto-updates when user watches a new channel
         recentlyWatchedJob = viewModelScope.launch {

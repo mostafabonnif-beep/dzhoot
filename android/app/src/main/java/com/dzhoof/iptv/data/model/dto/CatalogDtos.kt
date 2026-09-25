@@ -47,6 +47,31 @@ data class EpisodeDto(
     val duration: Int? = null,
 )
 
+/**
+ * `GET /api/v1/catalog/episodes/:id` — the episode plus the parent labels the server
+ * resolves with it (series title/poster, season name and number).
+ */
+data class EpisodeDetailDto(
+    @SerializedName("_id") val id: String,
+    val seriesId: String,
+    val seasonId: String,
+    val episodeNumber: Int = 0,
+    val title: String,
+    val description: String? = null,
+    val thumbnail: String? = null,
+    val duration: Int? = null,
+    val seriesTitle: String? = null,
+    val seriesPoster: String? = null,
+    val seasonName: String? = null,
+    val seasonNumber: Int? = null,
+)
+
+data class EpisodeDetailResponse(
+    val success: Boolean = false,
+    val data: EpisodeDetailDto? = null,
+    val error: String? = null,
+)
+
 data class MoviePageResponse(
     val success: Boolean = false,
     val data: List<MovieDto> = emptyList(),

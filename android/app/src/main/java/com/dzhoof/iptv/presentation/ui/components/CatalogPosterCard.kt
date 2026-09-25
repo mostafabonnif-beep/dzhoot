@@ -3,7 +3,10 @@ package com.dzhoof.iptv.presentation.ui.components
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,8 +22,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +52,8 @@ fun CatalogPosterCard(
     imageUrl: String?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Resume progress (0f..1f). Null draws nothing — catalog rows are unaffected. */
+    progress: Float? = null,
 ) {
     var isFocused by remember { mutableStateOf(false) }
     val cardShape = ShapeMedium
@@ -70,15 +77,38 @@ fun CatalogPosterCard(
         border = cardBorder,
         colors = CardDefaults.cardColors(containerColor = containerColor),
     ) {
-        AsyncImage(
-            model = imageUrl,
-            contentDescription = title,
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(2f / 3f)
                 .clip(MaterialTheme.shapes.medium),
-            contentScale = ContentScale.Crop,
-        )
+        ) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+            )
+            if (progress != null) {
+                // How far in the viewer is, pinned to the poster's bottom edge. A bar
+                // rather than text because a long title would truncate any "بقي …"
+                // label, and this is the one thing a resume row must communicate.
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(Color.Black.copy(alpha = 0.45f)),
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth(progress.coerceIn(0f, 1f))
+                        .height(3.dp)
+                        .background(DzGold400),
+                )
+            }
+        }
         Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             Text(
                 text = title,

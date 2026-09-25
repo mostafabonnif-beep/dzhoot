@@ -12,6 +12,7 @@ import com.dzhoof.iptv.data.repository.SearchHistoryRepositoryImpl
 import com.dzhoof.iptv.data.repository.StreamMetricsRepositoryImpl
 import com.dzhoof.iptv.data.repository.SubscriptionRepositoryImpl
 import com.dzhoof.iptv.data.repository.UserPreferencesRepositoryImpl
+import com.dzhoof.iptv.data.repository.VodContinueWatchingRepositoryImpl
 import com.dzhoof.iptv.data.repository.WatchProgressSyncRepositoryImpl
 import com.dzhoof.iptv.domain.repository.CategoryRepository
 import com.dzhoof.iptv.domain.repository.CatalogRepository
@@ -25,6 +26,7 @@ import com.dzhoof.iptv.domain.repository.SearchHistoryRepository
 import com.dzhoof.iptv.domain.repository.StreamMetricsRepository
 import com.dzhoof.iptv.domain.repository.SubscriptionRepository
 import com.dzhoof.iptv.domain.repository.UserPreferencesRepository
+import com.dzhoof.iptv.domain.repository.VodContinueWatchingRepository
 import com.dzhoof.iptv.domain.repository.WatchProgressSyncRepository
 import dagger.Binds
 import dagger.Module
@@ -157,4 +159,11 @@ abstract class RepositoryModule {
     abstract fun bindWatchProgressSyncRepository(
         impl: WatchProgressSyncRepositoryImpl
     ): WatchProgressSyncRepository
+
+    /** Continue Watching for on-demand titles, resolved from the local positions. */
+    @Binds
+    @Singleton
+    abstract fun bindVodContinueWatchingRepository(
+        impl: VodContinueWatchingRepositoryImpl
+    ): VodContinueWatchingRepository
 }
