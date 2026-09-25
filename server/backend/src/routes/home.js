@@ -13,6 +13,21 @@ const { verifiedXtreamChannelQuery } = require('../utils/verified-channel-query'
 //   { featuredChannelIds: [], featuredMovieIds: [], featuredSeriesIds: [] }
 router.use(optionalAuth);
 
+// How many items a fallback rail carries when the operator's featured list is missing.
+const FEATURED_LIMIT = 20;
+
+/**
+ * The featured rails are operator configuration, and an absent or stale configuration used
+ * to leave them empty: measured in production on 2026-09-25, there was no `home` AppSetting
+ * at all, so the first screen a customer sees showed three empty sections out of five while
+ * the catalog held 84,545 movies. An operator who has not chosen featured titles wants a
+ * useful home screen, not a hole, so each empty rail falls back to the newest eligible
+ * titles — and says so once, so the configuration can be made deliberate.
+ */
+function pickNewestWhenEmpty(configured, fallbackQuery) {
+  return configured.length > 0 ? Promise.resolve(configured) : fallbackQuery();
+}
+
 router.get('/', async (req, res) => {
   try {
     const setting = await AppSetting.findOne({ key: 'home' }).lean();
@@ -24,15 +39,45 @@ router.get('/', async (req, res) => {
 
     const [featuredChannels, featuredMovies, featuredSeries] = await Promise.all([
       channelIds.length
-        ? Channel.find(await verifiedXtreamChannelQuery({ _id: { $in: channelIds } })).limit(20).lean()
+        ? Channel.find(await verifiedXtreamChannelQuery({ _id: { $in: channelIds } })).limit(FEATURED_LIMIT).lean()
         : [],
       movieIds.length
-        ? Movie.find({ _id: { $in: movieIds }, isActive: true }).limit(20).lean()
+        ? Movie.find({ _id: { $in: movieIds }, isActive: true }).limit(FEATURED_LIMIT).lean()
         : [],
       seriesIds.length
-        ? Series.find({ _id: { $in: seriesIds }, isActive: true }).limit(20).lean()
+        ? Series.find({ _id: { $in: seriesIds }, isActive: true }).limit(FEATURED_LIMIT).lean()
         : [],
+    ]).then(async ([channels, movies, series]) => [
+      await pickNewestWhenEmpty(
+        channels,
+        async () => Channel.find(await verifiedXtreamChannelQuery({}))
+          .sort({ order: 1 })
+          .limit(FEATURED_LIMIT)
+          .lean(),
+      ),
+      await pickNewestWhenEmpty(
+        movies,
+        async () => Movie.find({ isActive: true, poster: { $nin: [null, ''] } })
+          .sort({ createdAt: -1 })
+          .limit(FEATURED_LIMIT)
+          .lean(),
+      ),
+      await pickNewestWhenEmpty(
+        series,
+        async () => Series.find({ isActive: true, poster: { $nin: [null, ''] } })
+          .sort({ createdAt: -1 })
+          .limit(FEATURED_LIMIT)
+          .lean(),
+      ),
     ]);
+
+    if (channelIds.length === 0 || movieIds.length === 0 || seriesIds.length === 0) {
+      console.warn(
+        '[home] featured configuration is missing or does not resolve — filled the empty ' +
+          'rail(s) with the newest titles instead of showing an empty section. ' +
+          'Configure AppSetting "home" to choose them deliberately.',
+      );
+    }
 
     const [latestMovies, latestSeries] = await Promise.all([
       Movie.find({ isActive: true }).sort({ createdAt: -1 }).limit(12).lean(),
