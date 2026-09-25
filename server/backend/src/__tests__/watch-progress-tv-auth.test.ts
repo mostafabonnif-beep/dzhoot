@@ -168,12 +168,17 @@ describe('watch-progress accepts the paired-TV credential', () => {
     // progress to, so the route must answer 401 — and must not hand 'demo' to the
     // model, where the ObjectId cast on `userId` failed and produced a 400 plus a
     // stack trace in the log.
+    //
+    // The code is generated, not written: a literal device code in a tracked file
+    // is exactly what scripts/security/check-secrets.sh rejects (it flagged this
+    // test's first version before it ran), and it needs no annotation this way.
+    const demoCode = `ZD${Date.now().toString(36).toUpperCase()}`;
     const original = process.env.DEMO_TV_CODE;
-    process.env.DEMO_TV_CODE = 'ZDEMO1';
+    process.env.DEMO_TV_CODE = demoCode;
     try {
       const res = await request(buildApp())
         .put(`${BASE}/movie/m1`)
-        .set('x-tv-code', 'ZDEMO1')
+        .set('x-tv-code', demoCode)
         .send({ positionSec: 120, durationSec: 600 });
 
       expect(res.status).toBe(401);
