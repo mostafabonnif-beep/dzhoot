@@ -5,6 +5,9 @@ const XtreamSource = require('../models/XtreamSource');
 const { requireAuth, requireAdmin } = require('./auth');
 const { audit, reqCtx, redactSensitiveText } = require('../services/audit-log');
 const { clearChannelGateCache } = require('../services/channel-gate-cache');
+// Which content families may a sync import — one rule, shared with the scheduler and with
+// syncXtreamSource itself (services/source-eligibility.ts).
+const { syncFamilyPlan } = require('../services/source-eligibility');
 const {
   testXtreamConnection,
   verifyXtreamSource,
@@ -270,10 +273,14 @@ router.post('/:id/sync', async (req, res) => {
     if (!id) return res.status(400).json({ success: false, error: 'Invalid source id' });
     const source = await XtreamSource.findById(id).exec();
     if (!source) return res.status(404).json({ success: false, error: 'Source not found' });
-    if (source.status !== 'Active' || source.verificationStatus !== 'verified') {
+    // A source whose LIVE channels are down may still have a healthy on-demand catalog, so this
+    // refuses only a source that can import nothing at all. Requiring the live verdict here is what
+    // kept operators unable to re-sync a source whose movies played fine (measured 2026-09-25).
+    const families = syncFamilyPlan(source);
+    if (!families.live && !families.onDemand) {
       return res.status(409).json({
         success: false,
-        error: 'Source must pass live playback verification before synchronization',
+        error: 'Source must pass verification before synchronization',
         code: 'SOURCE_NOT_VERIFIED',
       });
     }
@@ -306,7 +313,16 @@ router.post('/:id/sync', async (req, res) => {
         console.error(`[xtream] sync failed for ${id}:`, redactSensitiveText(err));
       });
 
-    return res.json({ success: true, data: { syncing: true, message: 'Sync started' } });
+    return res.json({
+      success: true,
+      data: {
+        syncing: true,
+        message: families.live
+          ? 'Sync started'
+          : 'Sync started (on-demand only: live channels will not be imported)',
+        families,
+      },
+    });
   } catch (err) {
     console.error('[xtream] sync error:', err);
     return res.status(500).json({ success: false, error: 'Internal Server Error' });
