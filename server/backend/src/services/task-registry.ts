@@ -8,7 +8,8 @@ import { IptvOrgChannel } from '../models/IptvOrgCache';
 import XtreamSource from '../models/XtreamSource';
 import M3USource from '../models/M3USource';
 import Notification from '../models/Notification';
-import { syncXtreamSource, verifyXtreamSource } from './xtream-service';
+import { syncXtreamSource, verifyXtreamSource, verifySampleLimit } from './xtream-service';
+import { syncCandidateClauses } from './source-eligibility';
 import { syncM3USource } from './m3u-service';
 import { sendDailyOpsReport, sendExpiryAlerts } from './ops-report-service';
 import { expireStaleCodesAndReturnCredit } from './subscription-service';
@@ -21,7 +22,7 @@ import { sendOperationalAlert } from './alert-notifier';
 
 export interface SubtaskResult {
   name: string;
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'skipped';
   durationMs: number;
   result?: any;
   error?: string;
@@ -463,8 +464,12 @@ async function streamHealthHandler(): Promise<TaskResult> {
 async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskResult> {
   const startedAt = Date.now();
   const subtasks: SubtaskResult[] = [];
+  // Sources are selected by "could a sync import anything?" rather than by `status: 'Active'`.
+  // The old filter silently produced an EMPTY list once every source was `Inactive`, and the task
+  // then reported success while syncing nothing — measured 2026-09-25, with movies, series and
+  // channels all frozen for days to weeks. The per-family rule lives in source-eligibility.ts.
   const sources = kind === 'xtream'
-    ? await XtreamSource.find({ status: 'Active' }, { _id: 1, name: 1 }).lean()
+    ? await XtreamSource.find({ $or: syncCandidateClauses() }, { _id: 1, name: 1 }).lean()
     : await M3USource.find({ status: 'Active' }, { _id: 1, name: 1 }).lean();
 
   for (const source of sources) {
@@ -472,9 +477,21 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
     try {
       let result;
       if (kind === 'xtream') {
-        const verification = await verifyXtreamSource(String(source._id), 2);
-        if (!verification.decision.verified) {
-          throw new Error(`Source verification failed: ${verification.decision.reason || verification.decision.verificationStatus}`);
+        // Verify first: this refreshes BOTH family verdicts, which is what the sync plan reads. It
+        // is not a gate by itself — a source whose live channels are down may still serve a healthy
+        // on-demand catalog, and refusing that source is what froze the catalog.
+        const verification = await verifyXtreamSource(String(source._id), verifySampleLimit());
+        const families = verification.decision.families;
+        if (!families.live && !families.onDemand) {
+          // Never silent: a source that cannot be synced must say so, with the reason.
+          subtasks.push({
+            name: `${kind}:${source.name}`,
+            status: 'skipped',
+            durationMs: Date.now() - sourceStartedAt,
+            error: verification.decision.reason ||
+              `not syncable (status=${verification.decision.status}, verification=${verification.decision.verificationStatus}, vod=${verification.decision.vodVerificationStatus})`,
+          });
+          continue;
         }
         result = await syncXtreamSource(String(source._id));
       } else {
@@ -498,12 +515,14 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
 
   const completed = subtasks.filter((s) => s.status === 'completed').length;
   const failed = subtasks.filter((s) => s.status === 'failed').length;
+  const skipped = subtasks.filter((s) => s.status === 'skipped').length;
   return {
     summary: {
       sourceType: kind,
       sources: sources.length,
       completed,
       failed,
+      skipped,
       durationMs: Date.now() - startedAt,
     },
     subtasks,
@@ -659,7 +678,10 @@ async function sourceSyncWatchdogHandler(): Promise<TaskResult> {
       lastSyncAt?: Date | null;
       lastError?: string | null;
     }> = await model
-      .find({ status: 'Active' }, { _id: 1, name: 1, syncStatus: 1, lastSyncAt: 1, lastError: 1 })
+      .find(
+        kind === 'xtream' ? { $or: syncCandidateClauses() } : { status: 'Active' },
+        { _id: 1, name: 1, syncStatus: 1, lastSyncAt: 1, lastError: 1 },
+      )
       .lean()
       .exec();
 
@@ -678,9 +700,10 @@ async function sourceSyncWatchdogHandler(): Promise<TaskResult> {
           const retryStarted = Date.now();
           try {
             if (kind === 'xtream') {
-              const verification = await verifyXtreamSource(id, 1);
-              if (!verification.decision.verified) {
-                throw new Error(verification.decision.reason || 'source verification failed');
+              const verification = await verifyXtreamSource(id, verifySampleLimit());
+              const families = verification.decision.families;
+              if (!families.live && !families.onDemand) {
+                throw new Error(verification.decision.reason || 'source is not syncable');
               }
               await syncXtreamSource(id);
             } else {

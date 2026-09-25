@@ -11,6 +11,7 @@ import Season from '../models/Season';
 import Episode from '../models/Episode';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
 import { decideCatalogPrune, DEFAULT_PRUNE_MIN_RATIO } from './catalog-prune-guard';
+import { syncFamilyPlan } from './source-eligibility';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
 import { reconcileChannelIdentities } from './channel-identity-service';
@@ -498,6 +499,22 @@ async function sampleVodStreamUrls(sourceId: unknown, limit = 3): Promise<string
   return rows.map((row) => String((row as { streamUrl?: string })?.streamUrl || '')).filter(Boolean);
 }
 
+/**
+ * Live probes per verification.
+ *
+ * Two probes across a 26,000-channel panel is a coin toss, and a wrong verdict is expensive: on
+ * 2026-09-25 a source with half its channels actually playing (3 of 6 probes answered with real
+ * bytes) was judged dead from a two-probe sample, and that `Inactive` verdict is what kept its
+ * 25,960 live channels and 84,545 movies out of sync. A few extra probes in a background task
+ * make the verdict describe the panel instead of the draw.
+ */
+export const DEFAULT_VERIFY_SAMPLE_LIMIT = 6;
+
+export function verifySampleLimit(): number {
+  const raw = Number(process.env.XTREAM_VERIFY_SAMPLE_LIMIT);
+  return Number.isFinite(raw) && raw >= 1 && raw <= 25 ? Math.floor(raw) : DEFAULT_VERIFY_SAMPLE_LIMIT;
+}
+
 export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
   const source = await XtreamSource.findById(sourceId).exec();
   if (!source) throw new Error('Source not found');
@@ -558,6 +575,15 @@ export async function verifyXtreamSource(sourceId: string, sampleLimit = 3) {
       status: source.status,
       verified,
       reason: error,
+      // The per-family import plan, so scheduled callers do not have to re-derive it (and cannot
+      // drift from the gate inside syncXtreamSource).
+      families: syncFamilyPlan({
+        status: source.status,
+        verificationStatus,
+        vodVerificationStatus,
+        customerVisible: source.customerVisible,
+        directPlayback: source.directPlayback,
+      }),
     },
   };
 }
@@ -967,11 +993,23 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
   const source = await XtreamSource.findById(sourceId).exec();
   if (!source) throw new Error('Xtream source not found');
   const catalogOnly = opts.allowCatalogOnly === true;
-  if (!catalogOnly && (source.status !== 'Active' || source.verificationStatus !== 'verified')) {
-    throw new Error('Xtream source must pass live playback verification before sync');
-  }
-  if (catalogOnly && source.verificationStatus === 'blocked') {
-    throw new Error('Xtream source API is blocked; catalog import cannot proceed');
+  // The rule for "which families may this sync import" lives in one place, so the two paths that
+  // need it cannot drift: services/source-eligibility.ts#syncFamilyPlan. The old gate here required
+  // a LIVE verdict before importing ANY family, so a source whose live channels were down could not
+  // refresh its movies or series either, and nothing re-verified it — the catalog froze for good.
+  const plan = syncFamilyPlan(source);
+  const families = catalogOnly
+    // An explicit operator "import the catalog" request keeps its previous meaning — it works on
+    // any panel we can authenticate to (a FIRST import has no stored titles to probe, so the
+    // on-demand verdict cannot exist yet). It still refuses to import live channels known dead.
+    ? { live: plan.live, onDemand: source.verificationStatus !== 'blocked' }
+    : plan;
+  if (!families.live && !families.onDemand) {
+    throw new Error(
+      source.verificationStatus === 'blocked'
+        ? 'Xtream source API is blocked; catalog import cannot proceed'
+        : 'Xtream source must pass verification before sync',
+    );
   }
   if (source.syncStatus === 'syncing') throw new Error('Sync already in progress');
 
@@ -995,8 +1033,12 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
     // Categories are non-essential (fall back to "Uncategorized"); the stream
     // lists ARE essential — if they fail, the whole sync is an error.
     const [liveCats, liveStreams, vodCats, vodStreams, seriesCats, seriesList] = await Promise.all([
-      apiGet(creds, 'get_live_categories').catch(() => []),
-      apiGet(creds, 'get_live_streams'),
+      families.live ? apiGet(creds, 'get_live_categories').catch(() => []) : Promise.resolve([]),
+      // Only fetched when we may actually import them. These two calls are deliberately NOT
+      // `.catch`-guarded (a failure means the panel is broken and the sync must fail loudly), so
+      // fetching live from a source we will not import from would let a dead live endpoint take
+      // the whole sync down with it — movies and series included.
+      families.live ? apiGet(creds, 'get_live_streams') : Promise.resolve([]),
       apiGet(creds, 'get_vod_categories').catch(() => []),
       apiGet(creds, 'get_vod_streams'),
       apiGet(creds, 'get_series_categories').catch(() => []),
@@ -1005,13 +1047,23 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
 
     const liveCatMap = await mapCategories(liveCats);
     const vodCatMap = await mapCategories(vodCats);
-    const livePreview = await createSyncPreview({
-      sourceType: 'xtream',
-      sourceId: String(id),
-      nextChannels: (Array.isArray(liveStreams) ? liveStreams : []).map((item) =>
-        liveChannelSnapshot(id, item, liveCatMap.get(String(item.category_id)) || 'Uncategorized', creds, source.playbackFormat || 'm3u8'),
-      ),
-    });
+    // No live import ⇒ no live snapshot: a preview is what an operator reviews before a channel
+    // list goes out, so staging an empty one would be a lie about what this sync did.
+    const livePreview = families.live
+      ? await createSyncPreview({
+          sourceType: 'xtream',
+          sourceId: String(id),
+          nextChannels: (Array.isArray(liveStreams) ? liveStreams : []).map((item) =>
+            liveChannelSnapshot(id, item, liveCatMap.get(String(item.category_id)) || 'Uncategorized', creds, source.playbackFormat || 'm3u8'),
+          ),
+        })
+      : null;
+    if (!families.live) {
+      console.log(
+        `[xtream-sync] source ${id}: importing on-demand only (no live channel import) — ` +
+          `status=${source.status} verification=${source.verificationStatus} vod=${source.vodVerificationStatus || 'pending'}`,
+      );
+    }
     const seriesCatMap = await mapCategories(seriesCats);
 
     // Live channels
@@ -1049,7 +1101,7 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
     const catalogBefore = source.mergeCatalog === true ? await snapshotCatalogFingerprint() : null;
     let mergeMatched = 0;
     let adopted = 0;
-    for (const item of Array.isArray(liveStreams) ? liveStreams : []) {
+    for (const item of families.live && Array.isArray(liveStreams) ? liveStreams : []) {
       const group = liveCatMap.get(String(item.category_id)) || 'Uncategorized';
       if (mergeIndex) {
         const existing = matchCatalogChannel(item, mergeIndex);
@@ -1138,16 +1190,20 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
     // deactivation), no later sync could undo it. Measured 2026-09-25: a single run
     // deactivated 58,240 movies and 9,538 channels, permanently and silently.
     const previouslyActive = {
-      channels: await Channel.countDocuments({
-        ownerId: null,
-        'metadata.xtreamSourceId': String(id),
-        isActive: true,
-      }),
+      // A family this sync did not import must not be measured for loss — see the per-family prune
+      // below: an empty `liveIds` set would otherwise deactivate every channel this source still has.
+      channels: families.live
+        ? await Channel.countDocuments({
+            ownerId: null,
+            'metadata.xtreamSourceId': String(id),
+            isActive: true,
+          })
+        : 0,
       movies: await Movie.countDocuments({ sourceId: id, isActive: true }),
       series: await Series.countDocuments({ sourceId: id, isActive: true }),
     };
     const pruneDecision = decideCatalogPrune(
-      { channels, movies, series: seriesCount },
+      { channels: families.live ? channels : 0, movies, series: seriesCount },
       previouslyActive,
       Number(process.env.XTREAM_PRUNE_MIN_RATIO) || DEFAULT_PRUNE_MIN_RATIO,
     );
@@ -1159,17 +1215,19 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
           'the existing catalog is kept, because a short fetch is not evidence of removal',
       );
     } else {
-      await Channel.updateMany(
-        { ownerId: null, 'metadata.xtreamSourceId': String(id), channelId: { $nin: [...liveIds] } },
-        {
-          $set: {
-            isActive: false,
-            identityKey: null,
-            identityConfidence: null,
-            identityMatch: null,
+      if (families.live) {
+        await Channel.updateMany(
+          { ownerId: null, 'metadata.xtreamSourceId': String(id), channelId: { $nin: [...liveIds] } },
+          {
+            $set: {
+              isActive: false,
+              identityKey: null,
+              identityConfidence: null,
+              identityMatch: null,
+            },
           },
-        },
-      ).exec();
+        ).exec();
+      }
       await Movie.updateMany(
         { sourceId: id, externalId: { $nin: [...vodIds] } },
         { $set: { isActive: false } },
@@ -1181,7 +1239,7 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
     }
 
     const identity = await reconcileChannelIdentities();
-    await markSnapshotApplied(livePreview.snapshotId);
+    if (livePreview) await markSnapshotApplied(livePreview.snapshotId);
     // Stability proof (after): record the diff — customer list unchanged?
     if (catalogBefore) {
       const catalogAfter = await snapshotCatalogFingerprint();

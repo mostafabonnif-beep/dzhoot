@@ -69,9 +69,71 @@ export function isSourceEligibleForVod(source?: SourceEligibilityShape | null): 
   return Boolean(source) && source?.vodVerificationStatus === 'verified';
 }
 
+/**
+ * Which families may a sync import from this source?
+ *
+ * The sync used to demand a LIVE verdict (`status === 'Active' && verificationStatus === 'verified'`)
+ * before importing ANY family, and the scheduler only ever looked at `status: 'Active'` sources. A
+ * source whose live channels were down therefore stopped refreshing its movies and series, and
+ * nothing re-verified it either — a closed loop with no way out. Measured in production
+ * 2026-09-25: both configured sources were `Inactive`, so 84,545 movies, 20,766 series and 25,960
+ * live channels had not synced for three days to three weeks, silently — the scheduled sync
+ * reported success while iterating an empty source list.
+ *
+ * The live rule is deliberately the SAME predicate the channel gate uses to decide which channels
+ * customers may watch (services/channel-gate-cache.ts `VERIFIED_OR_VISIBLE_SOURCES`): if a source's
+ * channels are customer-visible, refusing to sync it can only freeze the list customers are
+ * watching, and if they are not visible, importing them would add channels nobody can play.
+ *
+ * One exception, because it is positive evidence rather than a missing verdict:
+ * `verificationStatus: 'degraded'` means live playback was probed and no sample played, so that
+ * source keeps refreshing its on-demand catalog without importing channels.
+ */
+export interface SyncFamilyPlan {
+  /** May this sync import live channels? */
+  live: boolean;
+  /** May this sync import movies, series and episodes? */
+  onDemand: boolean;
+}
+
+export function syncFamilyPlan(source?: SourceEligibilityShape | null): SyncFamilyPlan {
+  if (!source) return { live: false, onDemand: false };
+  // A panel that cannot be reached or authenticated tells us nothing about its catalog: syncing it
+  // is guesswork, and a short/empty fetch is exactly what produced the destructive prunes.
+  if (source.verificationStatus === 'blocked') return { live: false, onDemand: false };
+
+  const customerFacing = isSourceEligibleForCustomerTitles(source);
+  const liveProbedDead = source.verificationStatus === 'degraded';
+
+  return {
+    live: customerFacing && !liveProbedDead,
+    onDemand: customerFacing || source.vodVerificationStatus === 'verified',
+  };
+}
+
+/**
+ * Mongo filter for "sources a sync could import from" — {@link syncFamilyPlan} expressed as a
+ * query, so the scheduler cannot select an empty list of sources the plan would have accepted.
+ * That divergence is what left the catalog frozen: the scheduled sync filtered on
+ * `status: 'Active'`, both configured sources were `Inactive`, and the task reported success
+ * while syncing nothing at all.
+ *
+ * `verificationStatus: 'blocked'` is deliberately NOT excluded here: such a source is selected and
+ * then skipped with a recorded reason, which is louder than quietly not listing it.
+ */
+export function syncCandidateClauses(): Array<Record<string, unknown>> {
+  return [
+    ...customerTitleEligibilityClauses(),
+    // Positive on-demand evidence: the VOD family was probed and played.
+    { vodVerificationStatus: 'verified' },
+  ];
+}
+
 // The route files are CommonJS and require the compiled service from `dist`.
 module.exports = {
   isSourceEligibleForCustomerTitles,
   isSourceEligibleForVod,
   customerTitleEligibilityClauses,
+  syncFamilyPlan,
+  syncCandidateClauses,
 };

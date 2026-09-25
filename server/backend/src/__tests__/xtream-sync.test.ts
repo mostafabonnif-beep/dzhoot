@@ -410,4 +410,76 @@ describe('xtream-service', () => {
     expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(true);
     expect((await Series.findOne({ externalId: '301' }).lean())!.isActive).toBe(true);
   });
+
+  it('imports the on-demand catalog of a source whose live channels are dead, without live channels', async () => {
+    // Production shape measured 2026-09-25 («MIBOX»): the panel authenticated (auth=1) and its
+    // movies answered HTTP 206 with real MPEG-TS bytes, while every live sample came back empty.
+    // The old gate demanded a LIVE verdict before importing ANY family, so its 16,948 movies and
+    // 3,571 series had not synced since 2026-09-01 — and because nothing re-verified it either, the
+    // catalog could never recover on its own.
+    const source = await XtreamSource.create({
+      name: 'Live-dead VOD-healthy Panel',
+      serverUrl: SERVER,
+      usernameEncrypted: encryptSecret(USER),
+      passwordEncrypted: encryptSecret(PASS),
+      status: 'Inactive',
+      verificationStatus: 'degraded',
+      directPlayback: true,
+    });
+
+    const result = await syncXtreamSource(String(source._id));
+
+    expect(result.ok).toBe(true);
+    // On-demand imported...
+    expect(result.stats.movies).toBe(1);
+    expect(result.stats.series).toBe(1);
+    expect((await Movie.findOne({ sourceId: source._id, externalId: '201' }).lean())!.isActive).toBe(true);
+    // ...and NOT a single live channel, because we know this panel's live playback is dead.
+    expect(result.stats.channels).toBe(0);
+    expect(
+      await Channel.countDocuments({ ownerId: null, 'metadata.xtreamSourceId': String(source._id) }),
+    ).toBe(0);
+    const refreshed = await XtreamSource.findById(source._id).lean();
+    expect(refreshed!.syncStatus).toBe('idle');
+    expect(refreshed!.lastSyncAt).toBeDefined();
+  });
+
+  it('never touches the existing channels of a source it is importing on-demand only', async () => {
+    // The dangerous half of the same change: an empty live id set must never be read as
+    // "every channel disappeared". These channels belong to a source that is still serving live.
+    const source = await XtreamSource.create({
+      name: 'Was live, now live-dead',
+      serverUrl: SERVER,
+      usernameEncrypted: encryptSecret(USER),
+      passwordEncrypted: encryptSecret(PASS),
+      status: 'Active',
+      verificationStatus: 'verified',
+      // Its channels are customer-visible, which is what makes it syncable at all.
+      directPlayback: true,
+    });
+    await syncXtreamSource(String(source._id));
+    expect(await Channel.countDocuments({ ownerId: null, 'metadata.xtreamSourceId': String(source._id), isActive: true })).toBe(2);
+
+    // The live verdict turns bad afterwards, so the next sync imports on-demand only.
+    await XtreamSource.updateOne(
+      { _id: source._id },
+      { $set: { status: 'Inactive', verificationStatus: 'degraded' } },
+    );
+    await syncXtreamSource(String(source._id));
+
+    expect(await Channel.countDocuments({ ownerId: null, 'metadata.xtreamSourceId': String(source._id), isActive: true })).toBe(2);
+    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(true);
+  });
+
+  it('refuses to sync a source with no usable evidence at all', async () => {
+    const source = await XtreamSource.create({
+      name: 'Unproven Panel',
+      serverUrl: SERVER,
+      usernameEncrypted: encryptSecret(USER),
+      passwordEncrypted: encryptSecret(PASS),
+      status: 'Inactive',
+      verificationStatus: 'pending',
+    });
+    await expect(syncXtreamSource(String(source._id))).rejects.toThrow();
+  });
 });
