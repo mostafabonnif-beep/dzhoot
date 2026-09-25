@@ -13,6 +13,7 @@ import XtreamSource from '../models/XtreamSource';
 import {
   customerTitleEligibilityClauses,
   isSourceEligibleForCustomerTitles,
+  isSourceEligibleForVod,
 } from './source-eligibility';
 
 const combos: Array<{
@@ -102,5 +103,28 @@ describe('source eligibility for customer-visible titles', () => {
   it('is a boolean for every shape, including partially loaded documents', () => {
     expect(isSourceEligibleForCustomerTitles({})).toBe(false);
     expect(isSourceEligibleForCustomerTitles({ status: 'Active' })).toBe(false);
+  });
+
+  it('accepts a VOD-verified source for on-demand titles only', () => {
+    const vodOnly = {
+      status: 'Inactive',
+      verificationStatus: 'degraded',
+      customerVisible: false,
+      directPlayback: false,
+      vodVerificationStatus: 'verified',
+    };
+    // On-demand may proceed on the VOD probe alone...
+    expect(isSourceEligibleForVod(vodOnly)).toBe(true);
+    // ...while the customer-title rule is unchanged, so a VOD verdict cannot be
+    // mistaken for evidence about live channels.
+    expect(isSourceEligibleForCustomerTitles(vodOnly)).toBe(false);
+  });
+
+  it('does not treat an untested or failed VOD family as eligible', () => {
+    const base = { status: 'Inactive', verificationStatus: 'degraded' };
+    expect(isSourceEligibleForVod({ ...base, vodVerificationStatus: 'pending' })).toBe(false);
+    expect(isSourceEligibleForVod({ ...base, vodVerificationStatus: 'blocked' })).toBe(false);
+    expect(isSourceEligibleForVod({ ...base })).toBe(false);
+    expect(isSourceEligibleForVod(null)).toBe(false);
   });
 });

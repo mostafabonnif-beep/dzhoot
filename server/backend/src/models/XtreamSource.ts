@@ -8,6 +8,13 @@ export interface IXtreamSourceDocument extends Document {
   passwordEncrypted: string;
   status: 'Active' | 'Inactive';
   verificationStatus: 'pending' | 'verified' | 'degraded' | 'blocked';
+  /**
+   * On-demand verdict, measured independently of `verificationStatus` (which is the live
+   * one). A provider can stop serving live channels while its VOD endpoints keep working,
+   * and judging both families by one probe is what blanked the movie catalog on
+   * 2026-09-25. `pending` means “no on-demand titles to test”, not “broken”.
+   */
+  vodVerificationStatus?: 'pending' | 'verified' | 'blocked';
   playbackFormat?: 'm3u8' | 'ts' | null;
   syncStatus: 'idle' | 'syncing' | 'error';
   lastSyncAt?: Date | null;
@@ -73,6 +80,11 @@ const xtreamSourceSchema = new Schema<IXtreamSourceDocument>(
       enum: ['pending', 'verified', 'degraded', 'blocked'],
       default: 'pending',
       index: true,
+    },
+    vodVerificationStatus: {
+      type: String,
+      enum: ['pending', 'verified', 'blocked'],
+      default: 'pending',
     },
     syncStatus: { type: String, enum: ['idle', 'syncing', 'error'], default: 'idle' },
     lastSyncAt: { type: Date, default: null },
