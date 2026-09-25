@@ -68,6 +68,18 @@ interface PlaybackPositionDao {
     fun observeRecentlyWatchedIds(limit: Int = 20): Flow<List<String>>
 
     /**
+     * Observe on-demand resume positions, most recent first.
+     *
+     * On-demand rows are the ones whose key carries the `vod:` prefix
+     * (`VodPlayerViewModel.progressKey()`). A live channel id never contains a
+     * colon, so this can never pick up channel history — which is what lets the
+     * Continue Watching rail for movies and episodes coexist with the live one in
+     * a single table.
+     */
+    @Query("SELECT * FROM playback_positions WHERE channelId LIKE 'vod:%' ORDER BY lastPlayed DESC LIMIT :limit")
+    fun observeVodProgress(limit: Int = 20): Flow<List<PlaybackPositionEntity>>
+
+    /**
      * Get popular category IDs based on recent plays (one-shot).
      */
     @Query("""

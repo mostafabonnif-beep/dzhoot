@@ -26,6 +26,7 @@ import com.dzhoof.iptv.data.model.dto.MovieDetailResponse
 import com.dzhoof.iptv.data.model.dto.SeriesPageResponse
 import com.dzhoof.iptv.data.model.dto.SeriesDetailResponse
 import com.dzhoof.iptv.data.model.dto.SeasonsResponse
+import com.dzhoof.iptv.data.model.dto.EpisodeDetailResponse
 import com.dzhoof.iptv.data.model.dto.EpisodesResponse
 import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationRequest
 import com.dzhoof.iptv.data.model.dto.PlaybackAuthorizationResponse
@@ -122,6 +123,15 @@ interface DzhoofApiService {
 
     @GET("api/v1/catalog/seasons/{seasonId}/episodes")
     suspend fun getEpisodes(@Path("seasonId") seasonId: String): Response<EpisodesResponse>
+
+    /**
+     * One episode by its own id, with its parent labels.
+     *
+     * Every other episode route is keyed by a SEASON id, so an id held on its own —
+     * a resume position, a deep link — previously could not be resolved at all.
+     */
+    @GET("api/v1/catalog/episodes/{episodeId}")
+    suspend fun getEpisodeById(@Path("episodeId") episodeId: String): Response<EpisodeDetailResponse>
 
     @POST("api/v1/streams/authorize")
     suspend fun authorizePlayback(

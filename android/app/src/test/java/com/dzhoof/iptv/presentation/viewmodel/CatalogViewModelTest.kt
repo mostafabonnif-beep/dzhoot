@@ -5,6 +5,7 @@ import com.dzhoof.iptv.data.model.Result
 import com.dzhoof.iptv.domain.model.CatalogCategory
 import com.dzhoof.iptv.domain.model.CatalogPage
 import com.dzhoof.iptv.domain.model.Episode
+import com.dzhoof.iptv.domain.model.EpisodeDetail
 import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.PlaybackAuthorization
 import com.dzhoof.iptv.domain.model.Season
@@ -136,6 +137,12 @@ class CatalogViewModelTest {
         override suspend fun getSeasons(seriesId: String): Result<List<Season>> = Result.Success(seasons)
 
         override suspend fun getEpisodes(seasonId: String): Result<List<Episode>> = Result.Success(episodes)
+
+        // Added with CatalogRepository.getEpisodeById: the fake must implement the
+        // interface the same way in the same change, otherwise the test source set
+        // stops compiling while main stays green.
+        override suspend fun getEpisodeById(episodeId: String): Result<EpisodeDetail> =
+            Result.Error(UnsupportedOperationException("not used by these tests"))
 
         override suspend fun authorizePlayback(contentType: String, contentId: String): Result<PlaybackAuthorization> {
             authorizedContent = contentType to contentId

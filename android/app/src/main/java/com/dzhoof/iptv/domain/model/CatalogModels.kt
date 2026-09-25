@@ -45,6 +45,28 @@ data class Episode(
     val durationMinutes: Int?,
 )
 
+/**
+ * One episode with the parent labels the API resolves for it
+ * (`GET /api/v1/catalog/episodes/:id`). Continue Watching needs these because a
+ * resume position carries an episode id only — the season and series names are not
+ * in the local database, and walking series -> seasons -> episodes for one row
+ * would be three calls per item.
+ */
+data class EpisodeDetail(
+    val id: String,
+    val seriesId: String,
+    val seasonId: String,
+    val episodeNumber: Int,
+    val title: String,
+    val description: String?,
+    val thumbnail: String?,
+    val durationMinutes: Int?,
+    val seriesTitle: String,
+    val seriesPoster: String?,
+    val seasonName: String,
+    val seasonNumber: Int?,
+)
+
 data class CatalogPage<T>(
     val items: List<T>,
     val totalCount: Int,

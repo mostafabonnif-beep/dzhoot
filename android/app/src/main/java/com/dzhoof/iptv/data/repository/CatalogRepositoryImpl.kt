@@ -8,6 +8,7 @@ import com.dzhoof.iptv.di.IoDispatcher
 import com.dzhoof.iptv.domain.model.CatalogCategory
 import com.dzhoof.iptv.domain.model.CatalogPage
 import com.dzhoof.iptv.domain.model.Episode
+import com.dzhoof.iptv.domain.model.EpisodeDetail
 import com.dzhoof.iptv.domain.model.Movie
 import com.dzhoof.iptv.domain.model.PlaybackAuthorization
 import com.dzhoof.iptv.domain.model.Season
@@ -273,6 +274,36 @@ class CatalogRepositoryImpl @Inject constructor(
                 })
             } else {
                 Result.Error(Exception(body?.error ?: response.message().ifBlank { "تعذر تحميل الحلقات" }))
+            }
+        } catch (error: Exception) {
+            Result.Error(error)
+        }
+    }
+
+    override suspend fun getEpisodeById(episodeId: String): Result<EpisodeDetail> = withContext(dispatcher) {
+        try {
+            val response = apiService.getEpisodeById(episodeId)
+            val body = response.body()
+            val episode = body?.data
+            if (response.isSuccessful && body?.success == true && episode != null) {
+                Result.Success(
+                    EpisodeDetail(
+                        id = episode.id,
+                        seriesId = episode.seriesId,
+                        seasonId = episode.seasonId,
+                        episodeNumber = episode.episodeNumber,
+                        title = episode.title,
+                        description = episode.description,
+                        thumbnail = episode.thumbnail,
+                        durationMinutes = episode.duration,
+                        seriesTitle = episode.seriesTitle.orEmpty(),
+                        seriesPoster = episode.seriesPoster?.takeIf { it.isNotBlank() },
+                        seasonName = episode.seasonName.orEmpty(),
+                        seasonNumber = episode.seasonNumber,
+                    )
+                )
+            } else {
+                Result.Error(Exception(body?.error ?: response.message().ifBlank { "تعذر تحميل الحلقة" }))
             }
         } catch (error: Exception) {
             Result.Error(error)
