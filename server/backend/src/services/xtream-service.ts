@@ -10,6 +10,7 @@ import Series from '../models/Series';
 import Season from '../models/Season';
 import Episode from '../models/Episode';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
+import { decideCatalogPrune, DEFAULT_PRUNE_MIN_RATIO } from './catalog-prune-guard';
 import { createPinnedLookup, validateUrlForSSRF } from '../utils/ssrf-guard';
 import { redactSensitiveText } from './audit-log';
 import { reconcileChannelIdentities } from './channel-identity-service';
@@ -1130,25 +1131,54 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
     }
 
     // Prune: deactivate channels/movies/series from this source that disappeared.
-    await Channel.updateMany(
-      { ownerId: null, 'metadata.xtreamSourceId': String(id), channelId: { $nin: [...liveIds] } },
-      {
-        $set: {
-          isActive: false,
-          identityKey: null,
-          identityConfidence: null,
-          identityMatch: null,
+    //
+    // Guarded deliberately — see services/catalog-prune-guard.ts. One short fetch used to
+    // be enough to deactivate tens of thousands of titles, and because the upserts write
+    // `isActive` under `$setOnInsert` (so a re-sync never overrides an operator's manual
+    // deactivation), no later sync could undo it. Measured 2026-09-25: a single run
+    // deactivated 58,240 movies and 9,538 channels, permanently and silently.
+    const previouslyActive = {
+      channels: await Channel.countDocuments({
+        ownerId: null,
+        'metadata.xtreamSourceId': String(id),
+        isActive: true,
+      }),
+      movies: await Movie.countDocuments({ sourceId: id, isActive: true }),
+      series: await Series.countDocuments({ sourceId: id, isActive: true }),
+    };
+    const pruneDecision = decideCatalogPrune(
+      { channels, movies, series: seriesCount },
+      previouslyActive,
+      Number(process.env.XTREAM_PRUNE_MIN_RATIO) || DEFAULT_PRUNE_MIN_RATIO,
+    );
+    if (!pruneDecision.prune) {
+      console.warn(
+        `[xtream-sync] skipping catalog prune for source ${id}: ${pruneDecision.skippedReason} ` +
+          `(fetched channels/movies/series=${channels}/${movies}/${seriesCount}, ` +
+          `active=${previouslyActive.channels}/${previouslyActive.movies}/${previouslyActive.series}) — ` +
+          'the existing catalog is kept, because a short fetch is not evidence of removal',
+      );
+    } else {
+      await Channel.updateMany(
+        { ownerId: null, 'metadata.xtreamSourceId': String(id), channelId: { $nin: [...liveIds] } },
+        {
+          $set: {
+            isActive: false,
+            identityKey: null,
+            identityConfidence: null,
+            identityMatch: null,
+          },
         },
-      },
-    ).exec();
-    await Movie.updateMany(
-      { sourceId: id, externalId: { $nin: [...vodIds] } },
-      { $set: { isActive: false } },
-    ).exec();
-    await Series.updateMany(
-      { sourceId: id, externalId: { $nin: [...seriesExternalIds] } },
-      { $set: { isActive: false } },
-    ).exec();
+      ).exec();
+      await Movie.updateMany(
+        { sourceId: id, externalId: { $nin: [...vodIds] } },
+        { $set: { isActive: false } },
+      ).exec();
+      await Series.updateMany(
+        { sourceId: id, externalId: { $nin: [...seriesExternalIds] } },
+        { $set: { isActive: false } },
+      ).exec();
+    }
 
     const identity = await reconcileChannelIdentities();
     await markSnapshotApplied(livePreview.snapshotId);

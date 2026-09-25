@@ -351,34 +351,63 @@ describe('xtream-service', () => {
     expect(series!.isActive).toBe(false);
   });
 
-  it('keeps pruned movies/series inactive when the panel still lists them as gone', async () => {
+  it('deactivates the titles the panel dropped, and keeps the rest on sale', async () => {
     const source = await makeSource();
+    // A catalog wide enough that "one title went away" is distinguishable from
+    // "the fetch came back short" — with a single title, both look identical.
+    const allMovies = [
+      ...((fixturePayload('get_vod_streams') as Array<Record<string, unknown>>)),
+      { num: 2, name: 'Interstellar', stream_id: 202, category_id: '2', container_extension: 'mp4' },
+      { num: 3, name: 'Dunkirk', stream_id: 203, category_id: '2', container_extension: 'mp4' },
+    ];
+    const allSeries = [
+      ...((fixturePayload('get_series') as Array<Record<string, unknown>>)),
+      { num: 2, name: 'The Wire', series_id: 302, category_id: '3' },
+      { num: 3, name: 'Chernobyl', series_id: 303, category_id: '3' },
+    ];
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      const action = new URL(url).searchParams.get('action') || undefined;
+      if (action === 'get_vod_streams') return { data: allMovies };
+      if (action === 'get_series') return { data: allSeries };
+      return { data: fixturePayload(action) };
+    });
+    await syncXtreamSource(String(source._id));
+    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(true);
+
+    // The panel drops 201 and 301 while still listing the rest — an ordinary removal,
+    // and the prune may act on it.
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      const action = new URL(url).searchParams.get('action') || undefined;
+      if (action === 'get_vod_streams') return { data: allMovies.filter((m) => String(m.stream_id) !== '201') };
+      if (action === 'get_series') return { data: allSeries.filter((s) => String(s.series_id) !== '301') };
+      return { data: fixturePayload(action) };
+    });
     await syncXtreamSource(String(source._id));
 
-    // Panel drops the movie (201) and series (301).
+    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(false);
+    expect((await Series.findOne({ externalId: '301' }).lean())!.isActive).toBe(false);
+    // ...and what the panel still lists stays on sale.
+    expect((await Movie.findOne({ externalId: '202' }).lean())!.isActive).toBe(true);
+    expect((await Series.findOne({ externalId: '303' }).lean())!.isActive).toBe(true);
+  });
+
+  it('never deactivates the catalog when the panel answers with an empty list', async () => {
+    const source = await makeSource();
+    await syncXtreamSource(String(source._id));
+    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(true);
+
+    // The shape of the 2026-09-22 incident: the VOD endpoint answers empty, and the
+    // unguarded prune deactivated 58,240 movies and 9,538 channels for one source —
+    // permanently, because re-inserting never re-activates an existing document.
     mockedAxios.get.mockImplementation(async (url: string) => {
-      const parsed = new URL(url);
-      const action = parsed.searchParams.get('action') || undefined;
+      const action = new URL(url).searchParams.get('action') || undefined;
       if (action === 'get_vod_streams') return { data: [] };
       if (action === 'get_series') return { data: [] };
       return { data: fixturePayload(action) };
     });
     await syncXtreamSource(String(source._id));
 
-    // Pruned.
-    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(false);
-    expect((await Series.findOne({ externalId: '301' }).lean())!.isActive).toBe(false);
-
-    // Panel brings them back — a fresh sync re-activates them ONLY on insert;
-    // since docs already exist, isActive stays false until an admin re-enables.
-    mockedAxios.get.mockImplementation(async (url: string) => {
-      const parsed = new URL(url);
-      const action = parsed.searchParams.get('action') || undefined;
-      return { data: fixturePayload(action) };
-    });
-    await syncXtreamSource(String(source._id));
-
-    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(false);
-    expect((await Series.findOne({ externalId: '301' }).lean())!.isActive).toBe(false);
+    expect((await Movie.findOne({ externalId: '201' }).lean())!.isActive).toBe(true);
+    expect((await Series.findOne({ externalId: '301' }).lean())!.isActive).toBe(true);
   });
 });
