@@ -252,6 +252,54 @@ router.get('/seasons/:id/episodes', async (req, res) => {
   }
 });
 
+// GET /api/v1/catalog/episodes/:id
+//
+// One episode, plus the parent labels a client needs to render it on its own.
+//
+// Why this exists: an episode id was previously only resolvable by walking
+// series -> seasons -> episodes, because the only episode route takes a SEASON id
+// (`/seasons/:id/episodes`). A client holding just an episode id — a resume
+// position from `/api/v1/watch-progress`, a deep link, a cached Continue
+// Watching row — could not resolve it at all, so "continue watching" could only
+// ever be built for live channels and movies. The parent labels ride along so one
+// call yields a card (title, poster, season name) instead of three.
+//
+// `-streamUrl` is projected out for the same reason as the sibling routes: the
+// raw upstream URL is a credential and belongs only in a playback authorization.
+router.get('/episodes/:id', async (req, res) => {
+  try {
+    const id = parseId(req.params.id);
+    if (!id) return res.status(400).json({ success: false, error: 'Invalid episode id' });
+
+    const episode = await Episode.findById(id).select('-streamUrl').lean();
+    if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
+
+    // The parent must still be listed. A device can hold an episode id from a
+    // period when its series was active; resolving it after the series is
+    // de-listed would resurrect removed content through the back door. Same
+    // gate the season route applies.
+    const series = await Series.findOne({ _id: episode.seriesId, isActive: true })
+      .select('title poster')
+      .lean();
+    if (!series) return res.status(404).json({ success: false, error: 'Series not found' });
+
+    const season = await Season.findById(episode.seasonId).select('name seasonNumber').lean();
+
+    return res.json({
+      success: true,
+      data: {
+        ...presentVod(episode),
+        seriesTitle: cleanVodTitle(cleanDisplayText(series.title || '')),
+        seriesPoster: series.poster || '',
+        seasonName: season?.name || '',
+        seasonNumber: typeof season?.seasonNumber === 'number' ? season.seasonNumber : null,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'Internal Server Error' });
+  }
+});
+
 // GET /api/v1/catalog/search?q= — unified search across live + movies + series
 router.get('/search', async (req, res) => {
   try {
