@@ -1,4 +1,5 @@
 const express = require('express');
+const { tvChannelsMax } = require('../services/catalog-capacity');
 const crypto = require('crypto');
 const router = express.Router();
 const User = require('../models/User');
@@ -369,7 +370,8 @@ async function ensurePlaybackSubscription(user, res) {
 }
 
 // Same cap as the /channels sync — the EPG only needs to cover what the TV can list.
-const TV_CHANNELS_MAX = Number(process.env.TV_CHANNELS_MAX) || 20000;
+// Shared with routes/channels.js — see services/catalog-capacity.ts.
+const TV_CHANNELS_MAX = tvChannelsMax();
 
 async function tokenizeChannelForClient(channel, user, baseUrl) {
   const source = channel.toObject ? channel.toObject() : channel;
