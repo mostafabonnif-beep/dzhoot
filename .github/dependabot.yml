@@ -3,7 +3,7 @@ updates:
   - package-ecosystem: npm
     directory: /server
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
     open-pull-requests-limit: 5
     labels:
@@ -13,7 +13,7 @@ updates:
   - package-ecosystem: gradle
     directory: /android
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
     open-pull-requests-limit: 5
     labels:
@@ -23,7 +23,7 @@ updates:
   - package-ecosystem: docker
     directory: /server
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
     open-pull-requests-limit: 3
     labels:
@@ -33,7 +33,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
     open-pull-requests-limit: 3
     labels:
