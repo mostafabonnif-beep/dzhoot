@@ -15,6 +15,7 @@ const { resolveUser } = require('../middleware/resolveUser');
 const { checkPlaybackSubscription } = require('../services/playback-access-service');
 const { issuePlaybackToken } = require('../services/playback-token');
 const { registerStreamSession } = require('../services/stream-session-service');
+const { isSourceEligibleForCustomerTitles } = require('../services/source-eligibility');
 const { resolveStreamDeviceHash } = require('../utils/stream-device-hash');
 const { getPublicBaseUrl } = require('../utils/public-url');
 const { inferPlaybackMimeType, HLS_MIME_TYPE } = require('../utils/playback-mime');
@@ -163,12 +164,14 @@ router.post('/authorize', async (req, res) => {
     } else if (contentType === 'MOVIE') {
       content = await Movie.findOne({ _id: id, isActive: true }).lean();
       if (content) {
-        const source = await XtreamSource.findOne({
-          _id: content.sourceId,
-          status: 'Active',
-          verificationStatus: 'verified',
-        }).select('directPlayback').lean();
-        if (!source) content = null;
+        // A movie is listed to the customer (isActive) or it is not — and a listed
+        // movie must be playable. Requiring the LIVE verdict here meant one source
+        // with dead channels turned every one of its 17,176 movies into a 404 while
+        // the video bytes were reachable. See services/source-eligibility.ts.
+        const source = await XtreamSource.findOne({ _id: content.sourceId })
+          .select('status verificationStatus customerVisible directPlayback')
+          .lean();
+        if (!isSourceEligibleForCustomerTitles(source)) content = null;
         else {
           url = content.streamUrl;
           directPlayback = directPlaybackEnabled && source.directPlayback === true;
@@ -181,14 +184,14 @@ router.post('/authorize', async (req, res) => {
           Series.findOne({ _id: content.seriesId, isActive: true }).select('sourceId').lean(),
           Season.findOne({ _id: content.seasonId, seriesId: content.seriesId }).select('_id').lean(),
         ]);
+        // Same reasoning as the MOVIE branch above: gate on whether the source may
+        // serve customer-visible titles, not on the live-probe verdict.
         const source = series
-          ? await XtreamSource.findOne({
-              _id: series.sourceId,
-              status: 'Active',
-              verificationStatus: 'verified',
-            }).select('directPlayback').lean()
+          ? await XtreamSource.findOne({ _id: series.sourceId })
+              .select('status verificationStatus customerVisible directPlayback')
+              .lean()
           : null;
-        if (!series || !season || !source) content = null;
+        if (!series || !season || !isSourceEligibleForCustomerTitles(source)) content = null;
         else {
           url = content.streamUrl;
           directPlayback = directPlaybackEnabled && source.directPlayback === true;
