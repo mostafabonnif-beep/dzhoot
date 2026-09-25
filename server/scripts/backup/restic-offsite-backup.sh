@@ -19,6 +19,40 @@ MODE="${1:---backup}"
 say() { printf '[offsite-backup] %s\n' "$*"; }
 die() { printf '[offsite-backup][ERROR] %s\n' "$*" >&2; exit 1; }
 
+# Bounded retry for commands that talk to the off-site repository.
+#
+# Why this exists (measured 2026-09-25): the rclone backend starts a helper process per
+# restic invocation, and that helper intermittently fails to answer restic's HTTP client
+# in time, aborting the run with
+#   Fatal: unable to open repository at rclone:...: error talking HTTP to rclone:
+#   context deadline exceeded (Client.Timeout exceeded while awaiting headers)
+# 5 of the previous 11 nightly runs failed that way. The failures were always the FIRST
+# repository call and always ~90 s in, while successful runs took 6-7 minutes — i.e. the
+# helper's cold start, never a mid-transfer error. A retry spawns a fresh helper, which
+# is what changes the outcome; per-attempt success was ~55%, so three attempts put the
+# nightly job above 90%.
+#
+# Knobs (defaults chosen for the numbers above; override in $CONFIG_FILE):
+#   OFFSITE_REPO_ATTEMPTS        attempts per repository command (default 3)
+#   OFFSITE_REPO_DELAY_SECONDS   pause between attempts (default 20)
+with_repo_retry() {
+  local label="$1"; shift
+  local attempts="${OFFSITE_REPO_ATTEMPTS:-3}"
+  local delay="${OFFSITE_REPO_DELAY_SECONDS:-20}"
+  local attempt=1
+  while :; do
+    if "$@"; then
+      return 0
+    fi
+    if [ "$attempt" -ge "$attempts" ]; then
+      return 1
+    fi
+    say "$label failed (attempt $attempt/$attempts) — retrying in ${delay}s"
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
+}
+
 case "$MODE" in
   --backup|--check|--dry-run|--init) ;;
   *) die "Usage: $0 [--backup|--check|--dry-run|--init]" ;;
@@ -64,6 +98,17 @@ export RESTIC_PASSWORD_FILE="$OFFSITE_RESTIC_PASSWORD_FILE"
 if [ "$MODE" = '--dry-run' ]; then
   say 'Configuration and permissions are valid. No backup, network request, or database operation was performed.'
   exit 0
+fi
+
+if [ "$MODE" = '--backup' ]; then
+  # Open the repository BEFORE doing any work. Two reasons: a genuinely unreachable
+  # repository now fails in seconds instead of after a full mongodump, and the retry
+  # below gives the rclone helper a second chance at the step that actually fails
+  # (see with_repo_retry). Read-only — no data is written.
+  say 'Opening the off-site repository.'
+  with_repo_retry 'repository open' \
+    restic snapshots --latest 1 --retry-lock "$RETRY_LOCK" >/dev/null \
+    || die "Off-site repository is unreachable after ${OFFSITE_REPO_ATTEMPTS:-3} attempts."
 fi
 
 if [ "$MODE" = '--init' ]; then
@@ -125,7 +170,15 @@ tar -C "$(dirname "$COMPOSE_DIR")" -czf "$STAGING/recovery/server-source.tar.gz"
 )
 
 say 'Uploading encrypted recovery snapshot to the configured off-site repository.'
-restic backup "$STAGING/recovery" --retry-lock "$RETRY_LOCK" --tag dzhoof --tag production --tag "created-$STAMP"
-restic forget --prune --retry-lock "$RETRY_LOCK" --keep-daily 7 --keep-weekly 4 --keep-monthly 3
+# `restic backup` is idempotent: a retry after a failed attempt re-reads the snapshot and
+# uploads only what is still missing, so retrying can never duplicate or corrupt data.
+with_repo_retry 'off-site upload' \
+  restic backup "$STAGING/recovery" --retry-lock "$RETRY_LOCK" --tag dzhoof --tag production --tag "created-$STAMP" \
+  || die "Off-site upload failed after ${OFFSITE_REPO_ATTEMPTS:-3} attempts."
+# Retention stays fatal: the job's contract includes it, and a repo that silently stops
+# pruning is its own incident. It gets the same retry for the same helper-startup reason.
+with_repo_retry 'retention/prune' \
+  restic forget --prune --retry-lock "$RETRY_LOCK" --keep-daily 7 --keep-weekly 4 --keep-monthly 3 \
+  || die "Retention/prune failed after ${OFFSITE_REPO_ATTEMPTS:-3} attempts."
 restic snapshots --latest 1 --retry-lock "$RETRY_LOCK" >/dev/null
 say 'Off-site backup completed successfully.'
