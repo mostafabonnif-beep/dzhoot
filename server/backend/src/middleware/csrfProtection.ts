@@ -60,15 +60,6 @@ function extractOrigin(headerValue: string): string | null {
   }
 }
 
-/** Lower-cased hostname part of an Origin/Referer value, or null. */
-function originHostname(headerValue: string): string | null {
-  try {
-    return new URL(headerValue).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
 const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
   // Safe methods don't need CSRF protection
   if (SAFE_METHODS.has(req.method)) {
@@ -116,15 +107,16 @@ const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
     });
   }
 
-  // Same-origin relaxation: the platform is served on several hostnames
-  // (main domain, mirror domain, raw-IP aliases like *.sslip.io) that all
-  // terminate TLS at the same edge. A request whose Origin hostname matches
-  // the Host header is same-origin and therefore CSRF-safe by definition,
-  // no matter which alias the operator added to ALLOWED_ORIGINS.
+  // Preserve same-origin access on mirror domains without treating a different
+  // scheme or port on the same hostname as trusted. Express resolves protocol
+  // using its trust-proxy policy; never read X-Forwarded-Proto directly here.
+  // Keep Host (including its port), not X-Forwarded-Host. URL.origin normalizes
+  // default ports and handles bracketed IPv6 hostnames.
   const hostHeader = req.headers['host'] as string | undefined;
-  if (hostHeader) {
-    const hostHostname = hostHeader.split(':')[0].trim().toLowerCase();
-    if (hostHostname && originHostname(requestOrigin) === hostHostname) {
+  if (hostHeader && (req.protocol === 'http' || req.protocol === 'https')) {
+    const targetOrigin = extractOrigin(`${req.protocol}://${hostHeader}`);
+    const candidateOrigin = extractOrigin(requestOrigin);
+    if (targetOrigin && candidateOrigin && candidateOrigin === targetOrigin) {
       return next();
     }
   }
