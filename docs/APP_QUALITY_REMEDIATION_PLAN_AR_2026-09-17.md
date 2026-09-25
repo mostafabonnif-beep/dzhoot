@@ -97,6 +97,14 @@
 `DzhoofApiService.kt`. والمسار المحلي (`playback_positions`) منفصل تمامًا ولا يُزامَن.
 ولو وُصل، يعيد 401 لأن المسار يستخدم `requireAuth` لا `requireTvOrSessionAuth`.
 
+> **تحديث 2026-09-25 — الشقّ الخادمي أُغلق.** صار المسار على `requireTvOrSessionAuth`
+> (نفس حارس `/api/v1/favorites`)، وأُضيف رفض صريح لجلسة demo: كان `req.user.id = 'demo'`
+> يصل إلى الموديل فيفشل تحويل ObjectId ويردّ 400 مع أثر مكدّس؛ الآن يردّ 401 نظيفًا.
+> اختبار الانحدار `src/__tests__/watch-progress-tv-auth.test.ts` (9 حالات، منها عزل
+> بيانات مستخدم عن آخر) — وإرجاع `requireAuth` يُفشل 4 منها (متحقَّق بإرجاعه فعليًا).
+> **يبقى الشقّ العميل:** مسار في `DzhoofApiService.kt` + مزامنة `playback_positions`
+> مع الخادم.
+
 ### ع8 — حالات «فراغ كاذبة» في الواجهة
 `PlayerViewModel.kt:538` يبتلع فشل EPG ويعيد `emptyList()`
 ⇒ `PlayerPortraitTabs.kt:228` يعرض «لا تتوفر بيانات دليل البرامج» عند أي فشل شبكة.
