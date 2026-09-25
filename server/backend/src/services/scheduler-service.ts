@@ -44,7 +44,6 @@ export async function setTaskEnabled(taskName: string, enabled: boolean, updated
 
 class SchedulerService {
   private timers: Map<string, ReturnType<typeof setInterval>> = new Map();
-  private catchUpTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
   // Start interval timers for all registered tasks
   async start(): Promise<void> {
@@ -54,56 +53,48 @@ class SchedulerService {
     const tasks = getAllTasks();
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
-      const timer = setInterval(async () => {
+      const runScheduled = async () => {
         // Paused tasks keep their timer but skip scheduled executions.
         if (!(await isTaskEnabled(task.name))) return;
         this.executeTask(task.name, 'scheduled').catch((err) =>
           console.error(`[scheduler] Scheduled run of '${task.name}' failed:`, err.message),
         );
-      }, task.intervalMs);
-      this.timers.set(task.name, timer);
+      };
 
-      // Catch-up: if the task is overdue (never ran, or last completed run is
-      // older than its interval), trigger an immediate run. Staggered per index
-      // to avoid a thundering herd on (re)start.
-      this.maybeRunOnStart(task, i).catch((err) =>
-        console.error(`[scheduler] Catch-up check for '${task.name}' failed:`, err.message),
-      );
+      // Anchor the first tick to the task's last completed run in the DB
+      // instead of a full interval after boot: without this, every restart
+      // (i.e. every deploy) pushed periodic tasks a full interval later, and
+      // tasks like epg-rematch could be silently deferred for many hours.
+      let lastAt: Date | undefined;
+      try {
+        const lastCompleted = await ScheduledTaskRun.findOne({
+          taskName: task.name,
+          status: 'completed',
+        })
+          .sort({ completedAt: -1 })
+          .lean();
+        lastAt = lastCompleted?.completedAt || lastCompleted?.startedAt || undefined;
+      } catch (err: any) {
+        console.error(`[scheduler] Failed to read last run for '${task.name}':`, err.message);
+      }
+
+      const remaining = lastAt ? new Date(lastAt).getTime() + task.intervalMs - Date.now() : 0;
+      // Overdue (or never ran): fire immediately, staggered per index to avoid
+      // a thundering herd on (re)start. Not due yet: wait the remaining time,
+      // then hand over to the recurring interval.
+      const delay = remaining > 0 ? remaining : i * 5000;
+      const first = setTimeout(() => {
+        runScheduled();
+        const timer = setInterval(runScheduled, task.intervalMs);
+        this.timers.set(task.name, timer);
+      }, delay);
+      this.timers.set(task.name, first);
 
       const hours = (task.intervalMs / 3600000).toFixed(1);
-      console.log(`[scheduler] ${task.displayName} scheduled every ${hours}h`);
+      const wait = remaining > 0 ? `next in ${Math.round(remaining / 60000)}min` : 'overdue — catching up';
+      console.log(`[scheduler] ${task.displayName} scheduled every ${hours}h (${wait})`);
     }
     console.log(`[scheduler] Started ${tasks.length} tasks`);
-  }
-
-  // Trigger an immediate run if the task is overdue relative to its last completed run.
-  private async maybeRunOnStart(
-    task: { name: string; intervalMs: number },
-    index: number,
-  ): Promise<void> {
-    if (!(await isTaskEnabled(task.name))) return;
-    const lastCompleted = await ScheduledTaskRun.findOne({
-      taskName: task.name,
-      status: 'completed',
-    })
-      .sort({ completedAt: -1 })
-      .lean();
-
-    const lastAt = lastCompleted?.completedAt || lastCompleted?.startedAt;
-    const overdue = !lastAt || Date.now() - new Date(lastAt).getTime() >= task.intervalMs;
-    if (!overdue) return;
-
-    // Stagger to avoid all overdue tasks firing at once on start. Re-check the
-    // enabled flag at fire time too — an admin may pause within the stagger
-    // window, and a paused task must NOT run.
-    const timer = setTimeout(async () => {
-      this.catchUpTimers.delete(task.name);
-      if (!(await isTaskEnabled(task.name))) return;
-      this.executeTask(task.name, 'scheduled').catch((err) =>
-        console.error(`[scheduler] Catch-up run of '${task.name}' failed:`, err.message),
-      );
-    }, index * 5000);
-    this.catchUpTimers.set(task.name, timer);
   }
 
   // Stop all interval timers (and pending catch-up runs)
@@ -112,10 +103,6 @@ class SchedulerService {
       clearInterval(timer);
     }
     this.timers.clear();
-    for (const [, timer] of this.catchUpTimers) {
-      clearTimeout(timer);
-    }
-    this.catchUpTimers.clear();
     console.log('[scheduler] Stopped all tasks');
   }
 

@@ -15,6 +15,7 @@ import { expireStaleCodesAndReturnCredit } from './subscription-service';
 import { runSourceWatchdog } from './source-failover-service';
 import { runClientLiveness } from './client-liveness-service';
 import { runCatalogCleanup } from './catalog-cleanup-service';
+import { applyTaxonomy } from './catalog-taxonomy-service';
 import { sendNotificationToDevices, pushOutcome } from './fcm-service';
 import { sendOperationalAlert } from './alert-notifier';
 
@@ -382,8 +383,19 @@ async function catalogCleanupHandler(): Promise<TaskResult> {
   const start = Date.now();
   try {
     const result = await runCatalogCleanup();
+    // Keep the taxonomy tree applied after every cleanup pass: newly imported
+    // channels arrive with raw upstream groups and would otherwise bypass the
+    // section tree until applyTaxonomy was run by hand.
+    let taxonomy: Awaited<ReturnType<typeof applyTaxonomy>> | null = null;
+    let taxonomyError: string | null = null;
+    try {
+      taxonomy = await applyTaxonomy(false);
+    } catch (err: any) {
+      taxonomyError = err.message;
+      console.error('[catalog-cleanup] applyTaxonomy failed:', err.message);
+    }
     return {
-      summary: result,
+      summary: { ...result, taxonomy, taxonomyError },
       subtasks: [
         { name: 'catalog-cleanup', status: 'completed', durationMs: Date.now() - start, result },
       ],
