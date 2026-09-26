@@ -34,7 +34,17 @@
 
     @api path /api/* /health /health/* /ready /ready/*
     handle @api {
-        reverse_proxy api:3000
+        reverse_proxy api:3000 {
+            # A restart of the API container (deploy, or an OOM kill under ffmpeg/EPG
+            # pressure) used to reach the client as an immediate 502. Keep the request
+            # alive while Caddy redials, and take a genuinely dead backend out of
+            # rotation so the retry has somewhere to land instead of hammering it.
+            lb_try_duration 10s
+            lb_try_interval 250ms
+            health_uri /health
+            health_interval 10s
+            health_timeout 3s
+        }
     }
 
     # Self-hosted APK distribution (2026-09-23): the published release's
