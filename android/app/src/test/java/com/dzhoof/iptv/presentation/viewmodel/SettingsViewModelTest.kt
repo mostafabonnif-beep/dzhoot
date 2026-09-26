@@ -144,7 +144,7 @@ class SettingsViewModelTest {
 
     @Test
     fun `init with default tv code sets isDefaultMode`() = runTest {
-        every { AppPreferences.getTvCode(any()) } returns "5T6FEP"
+        every { AppPreferences.getTvCode(any()) } returns "ABC123"
         every { AppPreferences.isDemoMode(any()) } returns true
 
         val vm = createViewModel()

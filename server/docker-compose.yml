@@ -71,8 +71,10 @@ services:
       dockerfile: Dockerfile.dev
     container_name: dzhoof-api
     restart: unless-stopped
+    # Loopback only. This is the shared dev base; publishing it on 0.0.0.0 put a
+    # development API on the internet whenever anyone ran compose on the prod host.
     ports:
-      - '8009:3000'
+      - '127.0.0.1:8009:3000'
     environment:
       NODE_ENV: development
       # Local dev only: the backend refuses to boot with dev/placeholder secrets
@@ -87,7 +89,7 @@ services:
       SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:-superadmin}
       SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-ChangeMeNow123!}
       SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-admin@dzhoof.local}
-      SUPER_ADMIN_CHANNEL_LIST_CODE: ${SUPER_ADMIN_CHANNEL_LIST_CODE:-5T6FEP}
+      SUPER_ADMIN_CHANNEL_LIST_CODE: ${SUPER_ADMIN_CHANNEL_LIST_CODE:?Set SUPER_ADMIN_CHANNEL_LIST_CODE in your env file}
       FORCE_UPDATE_ADMIN_PASSWORD: ${FORCE_UPDATE_ADMIN_PASSWORD:-false}
       # Scheduler is handled by the dedicated scheduler container
       DISABLE_SCHEDULER: 'true'
@@ -130,7 +132,7 @@ services:
     container_name: dzhoof-frontend
     restart: unless-stopped
     ports:
-      - '3001:3001'
+      - '127.0.0.1:3001:3001'
     environment:
       NEXT_PUBLIC_API_URL: http://api:3000
       WATCHPACK_POLLING: 'true'

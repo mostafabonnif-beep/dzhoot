@@ -31,7 +31,7 @@ flowchart LR
 
 ```javascript
 {
-  channelListCode: String,    // 6-char code (e.g., "5T6FEP") — auto-generated
+  channelListCode: String,    // 6-char code (e.g., "ABC123") — auto-generated
   metadata: {
     lastPairedDevice: String, // e.g., "Samsung Smart TV"
     deviceModel: String,      // e.g., "QN65Q80AAFXZA"
@@ -68,13 +68,13 @@ sequenceDiagram
     participant API
     participant DB as MongoDB
 
-    Admin->>TV: Shares 6-char code (e.g., "5T6FEP")
+    Admin->>TV: Shares 6-char code (e.g., "ABC123")
     TV->>API: POST /tv/pair {code, deviceName, deviceModel}
     API->>DB: Find user where channelListCode = code
     API->>DB: Update user.metadata with device info
     API-->>TV: {success, username, channelListCode}
     TV->>TV: Save code to SharedPreferences
-    TV->>API: GET /tv/playlist/5T6FEP/json
+    TV->>API: GET /tv/playlist/ABC123/json
     API-->>TV: User's channel list
 ```
 
@@ -103,7 +103,7 @@ sequenceDiagram
     API-->>Web: {success, device, user}
 
     TV->>API: GET /tv/pairing/status/842736
-    API-->>TV: {status: "completed", channelListCode: "5T6FEP"}
+    API-->>TV: {status: "completed", channelListCode: "ABC123"}
     TV->>TV: Save code, navigate to channels
 ```
 
@@ -157,7 +157,7 @@ The channel list code is a bearer-like credential. Do not log or publish it. Suc
 
 | Variable                     | Default                    | Description              |
 | ---------------------------- | -------------------------- | ------------------------ |
-| `DEFAULT_TV_CODE`            | `5T6FEP`                   | Default code for testing |
+| `DEFAULT_TV_CODE`            | `ABC123`                   | Default code for testing |
 | `DEFAULT_SERVER_URL`         | `https://tv.example.com`   | Server URL placeholder; set a real HTTPS URL per environment |
 | `PAIRING_PIN_EXPIRY_MINUTES` | `10`                       | PIN expiry time          |
 
@@ -194,5 +194,5 @@ expiresAt: {
 | TV can't generate PIN           | Check server is running (`docker-compose ps`), verify server URL in TV settings, test endpoint with curl |
 | PIN expired                     | Increase `PAIRING_PIN_EXPIRY_MINUTES`, or generate new PIN                                               |
 | Pairing confirmed but TV stuck  | Keep TV app in foreground during pairing, check `db.pairingrequests.findOne({pin: '842736'})` status     |
-| Invalid code                    | Verify code exists: `db.users.findOne({channelListCode: '5T6FEP'})`, check `isActive: true`              |
+| Invalid code                    | Verify code exists: `db.users.findOne({channelListCode: 'ABC123'})`, check `isActive: true`              |
 | Multiple TVs overwrite metadata | Expected — only last device tracked. All TVs still work with same code.                                  |

@@ -31,7 +31,7 @@ flowchart TD
     PA --> PD{User choice}
     PD -- "Enter PIN" --> PA1[User enters PIN on dashboard]
     PD -- "Scan QR" --> PA2[User scans QR with phone]
-    PD -- "Skip — Use Default Channels" --> PA3[Store default TV code 5T6FEP]
+    PD -- "Skip — Use Default Channels" --> PA3[Store default TV code ABC123]
 
     PA1 --> PA4[Custom TV code saved to prefs]
     PA2 --> PA4

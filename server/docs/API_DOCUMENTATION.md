@@ -1495,7 +1495,7 @@ TV polls this endpoint to check whether the user has confirmed pairing.
   "success": true,
   "paired": true,
   "status": "completed",
-  "channelListCode": "5T6FEP",
+  "channelListCode": "ABC123",
   "message": "Device paired successfully"
 }
 ```
@@ -1543,7 +1543,7 @@ Web dashboard confirms the pairing by submitting the PIN.
   },
   "user": {
     "username": "john_doe",
-    "channelListCode": "5T6FEP",
+    "channelListCode": "ABC123",
     "role": "User"
   }
 }
@@ -2027,7 +2027,7 @@ Returns default configuration values for client applications.
 {
   "success": true,
   "data": {
-    "defaultTvCode": "5T6FEP",
+    "defaultTvCode": "ABC123",
     "defaultServerUrl": "https://tv.cadnative.com",
     "pairingPinExpiryMinutes": 10,
     "appName": "FireVision IPTV",
