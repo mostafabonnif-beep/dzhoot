@@ -18,7 +18,7 @@ import { runClientLiveness } from './client-liveness-service';
 import { runCatalogCleanup } from './catalog-cleanup-service';
 import { applyTaxonomy } from './catalog-taxonomy-service';
 import { sendNotificationToDevices, pushOutcome } from './fcm-service';
-import { sendOperationalAlert } from './alert-notifier';
+import { sendOperationalAlertDetailed } from './alert-notifier';
 
 export interface SubtaskResult {
   name: string;
@@ -690,7 +690,7 @@ async function diskWatchdogHandler(): Promise<TaskResult> {
   const threshold = level === 2 ? DISK_CRIT_PCT : DISK_WARN_PCT;
 
   if (level > 0 && level !== diskAlertedLevel) {
-    const ok = await sendOperationalAlert({
+    const outcome = await sendOperationalAlertDetailed({
       event: 'system.disk.high',
       severity: level === 2 ? 'critical' : 'warning',
       message: `Host disk usage reached ${usedPct}% (threshold ${threshold}%). Free space is running low — check backups, EPG data and docker images.`,
@@ -700,7 +700,10 @@ async function diskWatchdogHandler(): Promise<TaskResult> {
       return false;
     });
     diskAlertedLevel = level;
-    console.log(`[disk-watchdog] ${usedPct}% → alert ${ok ? 'sent' : 'queued (no webhook configured)'}`);
+    // Report the real outcome. The old line said "queued (no webhook configured)" for every
+      // non-delivery, which was untrue for a cooldown suppression or a Telegram failure — and
+      // nothing was ever queued.
+      console.log(`[disk-watchdog] ${usedPct}% → alert ${outcome}`);
   } else if (level === 0 && diskAlertedLevel > 0) {
     console.log(`[disk-watchdog] ${usedPct}% → recovered, alerts re-armed`);
     diskAlertedLevel = 0;
@@ -800,7 +803,7 @@ async function sourceSyncWatchdogHandler(): Promise<TaskResult> {
           : lastSyncMs === 0
             ? 'لم تتم أي مزامنة ناجحة بعد'
             : `آخر مزامنة ناجحة قبل ${Math.max(1, Math.round((now - lastSyncMs) / 3600000))} ساعة`;
-        const ok = await sendOperationalAlert({
+        const outcome = await sendOperationalAlertDetailed({
           event: 'source-sync-stale',
           severity: 'warning',
           message: `مزامنة مصدر ${kind.toUpperCase()} «${name}» متوقفة: ${reason}`,
@@ -810,7 +813,8 @@ async function sourceSyncWatchdogHandler(): Promise<TaskResult> {
           return false;
         });
         syncAlerted.set(id, true);
-        console.log(`[sync-watchdog] ${kind} «${name}» stale → alert ${ok ? 'sent' : 'queued (no webhook configured)'}`);
+        // See the disk watchdog: never claim a reason (or a queue) this call site cannot know.
+          console.log(`[sync-watchdog] ${kind} «${name}» stale → alert ${outcome}`);
       } else if (!stale && wasAlerted) {
         syncAlerted.set(id, false);
         console.log(`[sync-watchdog] ${kind} «${name}» recovered — staleness alert re-armed`);

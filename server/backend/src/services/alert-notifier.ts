@@ -157,17 +157,31 @@ export async function getAlertChannelStatus(): Promise<AlertChannelStatus[]> {
   ];
 }
 
-export async function sendOperationalAlert(payload: AlertPayload): Promise<boolean> {
+/**
+ * Why an operational alert did or did not go out.
+ *
+ * The boolean return was not enough: the watchdogs logged `ok ? 'sent' : 'queued (no webhook
+ * configured)'`, so a cooldown suppression or a Telegram failure was reported as a missing
+ * webhook — a reason nobody could act on, and one that read like the alert was safely waiting
+ * somewhere. Nothing was ever queued. This type makes the reason explicit.
+ */
+export type AlertOutcome =
+  | 'delivered'
+  | 'suppressed_cooldown'
+  | 'no_channel'
+  | 'channel_failed';
+
+export async function sendOperationalAlertDetailed(payload: AlertPayload): Promise<AlertOutcome> {
   let webhookUrl = await getWebhookUrl();
   const alertEmail = await getAlertEmail();
   const telegramToken = await getTelegramBotToken();
   const telegramChatId = await getTelegramChatId();
-  if (!webhookUrl && !alertEmail && !(telegramToken && telegramChatId)) return false;
+  if (!webhookUrl && !alertEmail && !(telegramToken && telegramChatId)) return 'no_channel';
 
   const key = `${payload.event}:${payload.severity}`;
   const now = Date.now();
   const previous = lastSentAt.get(key) || 0;
-  if (now - previous < getCooldownMs()) return false;
+  if (now - previous < getCooldownMs()) return 'suppressed_cooldown';
 
   const safeMessage = redactSensitiveText(payload.message);
   let delivered = false;
@@ -300,11 +314,21 @@ export async function sendOperationalAlert(payload: AlertPayload): Promise<boole
   }
 
   if (delivered) lastSentAt.set(key, now);
-  return delivered;
+  return delivered ? 'delivered' : 'channel_failed';
+}
+
+/** Back-compat boolean: true only when a channel actually accepted the alert. */
+export async function sendOperationalAlert(payload: AlertPayload): Promise<boolean> {
+  return (await sendOperationalAlertDetailed(payload)) === 'delivered';
 }
 
 export function clearAlertCooldowns(): void {
   lastSentAt.clear();
 }
 
-module.exports = { sendOperationalAlert, clearAlertCooldowns, getAlertChannelStatus };
+module.exports = {
+  sendOperationalAlert,
+  sendOperationalAlertDetailed,
+  clearAlertCooldowns,
+  getAlertChannelStatus,
+};
