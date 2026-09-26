@@ -3,6 +3,7 @@ import type { ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { parseUpstreamProxyHosts, upstreamHostNeedsProxy } from './upstream-proxy-hosts';
 
 /**
  * Server-side HLS remux sessions (ffmpeg) — SHARED per upstream stream.
@@ -142,26 +143,12 @@ export interface StartHlsOptions {
   upstreamHeaders?: { userAgent?: string; referrer?: string };
 }
 
-/**
- * True when an upstream stream URL belongs to a host that must egress through
- * the residential relay (WAF blocks datacenter IPs on its /live endpoints).
- * Matches exact host or any subdomain of the configured suffixes.
- */
-export function upstreamHostNeedsProxy(
-  streamUrl: string,
-  proxyHostSuffixes: string[],
-): boolean {
-  if (!proxyHostSuffixes || proxyHostSuffixes.length === 0) return false;
-  let host: string;
-  try {
-    host = new URL(streamUrl).hostname.toLowerCase();
-  } catch {
-    return false; // unparseable URL — never break the direct fetch path
-  }
-  return proxyHostSuffixes.some(
-    (suffix) => host === suffix || host.endsWith(`.${suffix}`),
-  );
-}
+// Which hosts must egress through the residential relay is deployment configuration,
+// not code (AGENTS.md). The rule lives in `upstream-proxy-hosts` so the playback fetch
+// path (`upstream-proxy`) applies exactly the same gate as ffmpeg remux — they used to
+// disagree, and every upstream fetch was tunnelled whenever UPSTREAM_HTTP_PROXY was set.
+// Re-exported here because this module was the helper's original home.
+export { upstreamHostNeedsProxy };
 
 export function startHlsSession(
   token: string,
@@ -235,10 +222,7 @@ export function startHlsSession(
   // code: naming it here published that fact in the repository (AGENTS.md — do
   // not hard-code provider URLs). An empty list means "proxy nothing", which is
   // the safe default, and the warning below says so once.
-  const proxyHostSuffixes = String(process.env.UPSTREAM_PROXY_HOSTS || '')
-    .split(',')
-    .map((host) => host.trim().toLowerCase())
-    .filter(Boolean);
+  const proxyHostSuffixes = parseUpstreamProxyHosts();
   warnIfProxyHostsMissing(upstreamProxy, proxyHostSuffixes);
   if (upstreamProxy && upstreamHostNeedsProxy(opts.streamUrl, proxyHostSuffixes)) {
     args.push('-http_proxy', upstreamProxy);
