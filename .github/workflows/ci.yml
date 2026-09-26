@@ -56,6 +56,8 @@ jobs:
         run: bash scripts/ci/test-write-release-manifest.sh
       - name: Test the Android unit-test result verifier (fails closed)
         run: bash scripts/ci/test-verify-android-test-results.sh
+      - name: Test the egress relay hardening (no 0.0.0.0, no --allow-only any)
+        run: bash scripts/ci/test-relay-unit-hardening.sh
 
   backend:
     runs-on: ubuntu-latest

@@ -36,6 +36,28 @@ MIN_DOCUMENTS="${MIN_DOCUMENTS:-1}"
 say() { printf '[offsite-restore] %s\n' "$*"; }
 die() { printf '[offsite-restore][ERROR] %s\n' "$*" >&2; exit 1; }
 
+# Bounded retry for repository commands.
+#
+# Measured 2026-09-26: the rclone backend's helper process intermittently fails to answer
+# restic's HTTP client on the FIRST call of a run ("context deadline exceeded"), which is
+# why the nightly backup grew the same wrapper. A manual restore is subject to exactly the
+# same cold start — the first `restic snapshots` of the session failed and the retry
+# succeeded immediately — so an un-retried restore would fail about half the time and make
+# a working recovery path look broken.
+with_repo_retry() {
+  local label="$1"; shift
+  local attempts="${OFFSITE_REPO_ATTEMPTS:-3}"
+  local delay="${OFFSITE_REPO_DELAY_SECONDS:-20}"
+  local attempt=1
+  while :; do
+    if "$@"; then return 0; fi
+    if [ "$attempt" -ge "$attempts" ]; then return 1; fi
+    say "$label failed (attempt $attempt/$attempts) — retrying in ${delay}s"
+    sleep "$delay"
+    attempt=$((attempt + 1))
+  done
+}
+
 MODE="${1:---verify}"
 case "$MODE" in
   --dry-run|--restore-only|--verify) ;;
