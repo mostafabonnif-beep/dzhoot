@@ -7,6 +7,7 @@ import ChannelFailoverMap from '../models/ChannelFailoverMap';
 import Channel from '../models/Channel';
 import { decryptSecret } from '../utils/crypto';
 import { testXtreamConnection, buildXtreamApiUrl } from './xtream-service';
+import { runOnPanelQueue, panelQueueKey } from './panel-request-queue';
 import { validateUrlForSSRF, createPinnedLookup, isPrivateIP } from '../utils/ssrf-guard';
 import { sendOperationalAlert } from './alert-notifier';
 import { clearChannelGateCache } from './channel-gate-cache';
@@ -481,7 +482,11 @@ async function guardedUpstreamGet(url: string, opts: AxiosRequestConfig = {}) {
   const agent =
     parsed.protocol === 'https:' ? new https.Agent({ lookup }) : new http.Agent({ lookup });
 
-  return axios.get(url, {
+  // Serialise per panel origin: the provider allows one concurrent connection per source
+  // IP (the 2nd gets HTTP 407, the 3rd 405). Without this, the watchdog raced the catalog
+  // sync and playback for the same seat and recorded 407 for a panel that was working.
+  const key = panelQueueKey(url);
+  const send = () => axios.get(url, {
     ...opts,
     httpAgent: parsed.protocol === 'http:' ? agent : undefined,
     httpsAgent: parsed.protocol === 'https:' ? agent : undefined,
@@ -502,6 +507,7 @@ async function guardedUpstreamGet(url: string, opts: AxiosRequestConfig = {}) {
       options.httpsAgent = new https.Agent({ lookup: hopLookup });
     },
   });
+  return key ? runOnPanelQueue(key, send) : send();
 }
 
 async function probePlaybackUrl(url: string): Promise<{ ok: boolean; error: string | null }> {
