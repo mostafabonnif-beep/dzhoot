@@ -36,14 +36,18 @@
     handle @api {
         reverse_proxy api:3000 {
             # A restart of the API container (deploy, or an OOM kill under ffmpeg/EPG
-            # pressure) used to reach the client as an immediate 502. Keep the request
-            # alive while Caddy redials, and take a genuinely dead backend out of
-            # rotation so the retry has somewhere to land instead of hammering it.
+            # pressure) used to reach the client as an immediate 502. `lb_try_duration`
+            # keeps the request alive and redials for up to 10s instead.
+            #
+            # Deliberately NO active `health_uri` probe: this stack has a single API
+            # upstream, and the deploy recreates that container on every release. An
+            # active check marks the only upstream down while it restarts, and Caddy
+            # answers 503 with no healthy upstream to retry — which is exactly what
+            # happened on 2026-09-26: the deploy's own post-swap health check got a 503
+            # and atomic-deploy rolled the release back. A retry window over a passive
+            # failure absorbs the restart without that failure mode.
             lb_try_duration 10s
             lb_try_interval 250ms
-            health_uri /health
-            health_interval 10s
-            health_timeout 3s
         }
     }
 
