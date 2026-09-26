@@ -1,0 +1,21 @@
+[Unit]
+Description=DZ HOOF Relay Pool — egress gateway for upstream streams (home lines + direct fallback)
+Documentation=file:///opt/dzhoof-relay/dzhoof-relay.py
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Hardening 2026-09-26: never listen on 0.0.0.0. Bind the production docker gateway only
+# (172.19.0.1 = dzhoof-shared-network, the only network the API uses to reach the proxy),
+# and restrict the destination allowlist to the provider + its CDN hosts instead of `any`.
+# The ExecStartPre script keeps the iptables rules that also block every other source.
+ExecStartPre=-/opt/dzhoof-relay/relay-firewall.sh
+ExecStart=/usr/bin/python3 /opt/dzhoof-relay/dzhoof-relay.py pool --host 172.19.0.1 --port 9001 --egress 9101,9102,9103 --fallback-direct --allow-only business-cloud-neo.com,wdcdn8s.com,ip1-neo50.me --allow-ports 80,443,8080
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

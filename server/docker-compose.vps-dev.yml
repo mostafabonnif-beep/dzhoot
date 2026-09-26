@@ -1,0 +1,85 @@
+services:
+  mongodb:
+    container_name: !reset null
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:12717:27017"
+    mem_limit: 768m
+    cpus: 1.0
+
+  redis:
+    container_name: !reset null
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:16379:6379"
+    mem_limit: 256m
+    cpus: 0.25
+
+  mongo-express:
+    container_name: !reset null
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:18081:8081"
+    environment:
+      ME_CONFIG_BASICAUTH_USERNAME: ${ME_CONFIG_BASICAUTH_USERNAME:?Set ME_CONFIG_BASICAUTH_USERNAME in the private env file}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${ME_CONFIG_BASICAUTH_PASSWORD:?Set ME_CONFIG_BASICAUTH_PASSWORD in the private env file}
+    mem_limit: 256m
+    cpus: 0.25
+
+  mailhog:
+    container_name: !reset null
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:11025:1025"
+      - "127.0.0.1:18025:8025"
+    mem_limit: 128m
+    cpus: 0.25
+
+  api:
+    container_name: !reset null
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:18009:3000"
+    environment:
+      ALLOW_INSECURE_DEV_SECRETS: "1"
+      PUBLIC_BASE_URL: http://localhost:13001
+      ALLOWED_ORIGINS: http://localhost:13001,http://127.0.0.1:13001
+      APP_URL: http://localhost:13001
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in the private env file}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in the private env file}
+      PLAYBACK_TOKEN_SECRET: ${PLAYBACK_TOKEN_SECRET:?Set PLAYBACK_TOKEN_SECRET in the private env file}
+      XTREAM_SECRET_KEY: ${XTREAM_SECRET_KEY:?Set XTREAM_SECRET_KEY in the private env file}
+      TOTP_ENCRYPTION_KEY: ${TOTP_ENCRYPTION_KEY:?Set TOTP_ENCRYPTION_KEY in the private env file}
+      SUPER_ADMIN_USERNAME: ${SUPER_ADMIN_USERNAME:?Set SUPER_ADMIN_USERNAME in the private env file}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:?Set SUPER_ADMIN_PASSWORD in the private env file}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:?Set SUPER_ADMIN_EMAIL in the private env file}
+      SUPER_ADMIN_CHANNEL_LIST_CODE: ${SUPER_ADMIN_CHANNEL_LIST_CODE:?Set SUPER_ADMIN_CHANNEL_LIST_CODE in the private env file}
+      FORCE_UPDATE_ADMIN_PASSWORD: "false"
+    mem_limit: 768m
+    cpus: 1.0
+
+  frontend:
+    container_name: !reset null
+    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:13001:3001"
+    mem_limit: 1g
+    cpus: 1.25
+
+  scheduler:
+    container_name: !reset null
+    profiles: !override
+      - manual
+    restart: unless-stopped
+    mem_limit: 512m
+    cpus: 0.5
+
+volumes:
+  mongodb_data:
+    name: dzhoot-dev-mongodb-data
+  mongodb_config:
+    name: dzhoot-dev-mongodb-config
+
+networks:
+  dzhoof-network:
+    name: dzhoot-dev-network

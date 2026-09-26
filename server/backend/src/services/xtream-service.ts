@@ -181,6 +181,39 @@ async function upsertMergeFailoverMap(
 
 const API_TIMEOUT_MS = 30000;
 
+/**
+ * Panels count connections per source IP: the second concurrent request from one
+ * IP is rejected with HTTP 407 and the third with 405 (measured in production
+ * 2026-09-21, re-confirmed 2026-09-26). `syncXtreamSource` issues six
+ * `player_api.php` calls, so a bare `Promise.all` made the sync race against
+ * itself — and against the source watchdog and playback — for the same panel
+ * seat, which surfaced as `lastError: "HTTP 407"` and an Inactive source.
+ *
+ * Fix: serialise outbound panel requests per origin, FIFO, one in flight at a
+ * time. Different panels still run in parallel because the queue is keyed by
+ * origin. Each request already carries its own timeout, so a stuck call cannot
+ * wedge the queue forever.
+ */
+const panelQueues = new Map<string, Promise<unknown>>();
+
+function runOnPanelQueue<T>(origin: string, task: () => Promise<T>): Promise<T> {
+  const previous = panelQueues.get(origin) ?? Promise.resolve();
+  // `then(task, task)` runs the task whether the previous one resolved or rejected,
+  // so one failed call can never cancel the calls queued behind it.
+  const current = previous.then(task, task);
+  const tail = current.then(
+    () => undefined,
+    () => undefined,
+  );
+  panelQueues.set(origin, tail);
+  // Drop the entry once this chain is the last one, so the map cannot grow with
+  // every panel ever contacted.
+  void tail.then(() => {
+    if (panelQueues.get(origin) === tail) panelQueues.delete(origin);
+  });
+  return current;
+}
+
 async function safeAxiosGet(url: string) {
   const validation = await validateUrlForSSRF(url);
   if (!validation.safe || !validation.resolvedAddresses?.length) {
@@ -193,13 +226,13 @@ async function safeAxiosGet(url: string) {
     ? new https.Agent({ lookup: lookup as any })
     : new http.Agent({ lookup: lookup as any });
 
-  return axios.get(url, {
+  return runOnPanelQueue(parsed.origin, () => axios.get(url, {
     timeout: API_TIMEOUT_MS,
     maxRedirects: 0,
     httpAgent: parsed.protocol === 'http:' ? agent : undefined,
     httpsAgent: parsed.protocol === 'https:' ? agent : undefined,
     validateStatus: (status) => status >= 200 && status < 300,
-  });
+  }));
 }
 
 /**

@@ -94,6 +94,34 @@ describe('xtream-service', () => {
     jest.clearAllMocks();
   });
 
+  it('never issues concurrent panel requests to the same origin', async () => {
+    // Production 2026-09-26: the panel rejects the 2nd concurrent request from one IP
+    // with HTTP 407 and the 3rd with 405, and `syncXtreamSource` fires six player_api.php
+    // calls. Without serialisation the sync raced itself and the source went Inactive
+    // with `lastError: "HTTP 407"`. This pins the fix: one in-flight request per origin.
+    let inFlight = 0;
+    let maxInFlight = 0;
+    mockedAxios.get.mockImplementation(async (url: string) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      // Yield so a concurrent caller would have a window to overlap this one.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      inFlight -= 1;
+      const parsed = new URL(url);
+      return {
+        data: fixturePayload(
+          parsed.searchParams.get('action') || undefined,
+          parsed.searchParams.get('series_id') || undefined,
+        ),
+      };
+    });
+
+    const source = await makeSource();
+    await syncXtreamSource(String(source._id));
+
+    expect(maxInFlight).toBe(1);
+  });
+
   it('diagnoses metadata separately from M3U and live playback', async () => {
     const source = await makeSource();
     mockedProbeStream

@@ -7,14 +7,20 @@ import { createPinnedLookup, isPrivateIP, validateUrlForSSRF } from '../utils/ss
 import { redactSensitiveText } from './audit-log';
 import { createEgressMeter, type UsageTier } from './usage-metrics';
 import { resolveEgressTier } from './stream-usage-service';
+import { parseUpstreamProxyHosts, upstreamHostNeedsProxy } from './upstream-proxy-hosts';
 
 // Residential egress (home relay / hosted ISP proxy): when UPSTREAM_HTTP_PROXY
-// is set, every upstream stream fetch in this relay tunnels through it (CONNECT
-// via HttpsProxyAgent works for http:// and https:// targets alike). This keeps
-// provider credentials server-side for relayed playback and bypasses providers
-// that WAF-block datacenter IPs (HTTP 456). DNS pinning is intentionally
-// skipped in proxy mode — the proxy resolves; SSRF string-level validation
-// still runs on every URL before it reaches this point.
+// is set, upstream stream fetches for the hosts listed in UPSTREAM_PROXY_HOSTS
+// tunnel through it (CONNECT via HttpsProxyAgent works for http:// and https://
+// targets alike). This keeps provider credentials server-side for relayed
+// playback and bypasses providers that WAF-block datacenter IPs (HTTP 456). DNS
+// pinning is intentionally skipped in proxy mode — the proxy resolves; SSRF
+// string-level validation still runs on every URL before it reaches this point.
+//
+// The host gate is deliberate (2026-09-26): tunnelling *every* host whenever the
+// proxy was configured sent CDN segment fetches through the relay that the
+// operator had left direct, and made the relay a single point of failure for
+// traffic that never needed it. It now matches hls-remux-service exactly.
 let cachedProxyAgent: HttpsProxyAgent<string> | null | undefined;
 
 export function getUpstreamProxyAgent(): HttpsProxyAgent<string> | null {
@@ -78,10 +84,12 @@ async function fetchUpstreamWithRetry(
   options: AxiosRequestConfig,
 ): Promise<any> {
   let lastError: unknown;
+  // Resolved once per fetch, not per attempt: the config cannot change mid-retry.
+  const proxyHostSuffixes = parseUpstreamProxyHosts();
   for (let attempt = 0; attempt <= MAX_UPSTREAM_RETRIES; attempt++) {
     try {
       const proxyAgent = getUpstreamProxyAgent();
-      if (proxyAgent) {
+      if (proxyAgent && upstreamHostNeedsProxy(url, proxyHostSuffixes)) {
         // Residential egress: tunnel this upstream fetch through the proxy.
         // (Type note: HttpsProxyAgent is protocol-agnostic CONNECT tunneling,
         // so it serves as both the http and https agent.)

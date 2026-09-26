@@ -6,7 +6,7 @@ Each user gets a unique 6-character code that links their TV device to their cha
 
 ```mermaid
 flowchart TD
-    A[User created] -->|auto-generate| B["6-char code (e.g., 5T6FEP)"]
+    A[User created] -->|auto-generate| B["6-char code (e.g., ABC123)"]
     B --> C{How is it used?}
     C --> D["TV enters code → POST /tv/pair"]
     C --> E["IPTV player uses playlist URL"]
@@ -23,7 +23,7 @@ flowchart TD
 
 ### Super Admin
 
-- On first startup, super admin is created with code from `SUPER_ADMIN_CHANNEL_LIST_CODE` env var (default: `5T6FEP`)
+- On first startup, super admin is created with code from `SUPER_ADMIN_CHANNEL_LIST_CODE` env var (default: `ABC123`)
 - If not set, a random code is generated and logged to console
 
 ### New Users
@@ -60,7 +60,7 @@ http://<SERVER_IP>:3000/api/v1/tv/playlist/<YOUR_CODE>
 
 | Variable                        | Default  | Description                                   |
 | ------------------------------- | -------- | --------------------------------------------- |
-| `SUPER_ADMIN_CHANNEL_LIST_CODE` | `5T6FEP` | Admin's code. Auto-generated if unset.        |
+| `SUPER_ADMIN_CHANNEL_LIST_CODE` | `ABC123` | Admin's code. Auto-generated if unset.        |
 | `PLAYLIST_CODE`                 | —        | Legacy global code. Falls back to admin code. |
 
 ## Troubleshooting

@@ -235,7 +235,7 @@ All ViewModels are `@HiltViewModel` with constructor injection.
 - `requestNewPairing()` — POST to `/api/v1/tv/pairing/request` with device info, receives 6-digit PIN
 - `startPolling(pin)` — Polls `/api/v1/tv/pairing/status/{pin}` every 3 seconds (max ~10 minutes)
 - `onPairingSuccess(channelListCode, username)` — Saves TV code to SharedPreferences
-- `useDefaultChannelList()` — Uses default code `"5T6FEP"` for quick setup
+- `useDefaultChannelList()` — Uses default code `"ABC123"` for quick setup
 
 ## UI Models
 

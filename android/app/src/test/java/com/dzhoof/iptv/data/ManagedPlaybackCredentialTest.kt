@@ -18,7 +18,7 @@ class ManagedPlaybackCredentialTest {
 
     @Test
     fun `a paired TV code alone authorizes managed playback`() {
-        assertTrue(AppPreferences.hasManagedPlaybackCredential(tvCode = "5T6FEP", sessionId = ""))
+        assertTrue(AppPreferences.hasManagedPlaybackCredential(tvCode = "ABC123", sessionId = ""))
     }
 
     @Test
@@ -28,7 +28,7 @@ class ManagedPlaybackCredentialTest {
 
     @Test
     fun `holding both credentials is fine`() {
-        assertTrue(AppPreferences.hasManagedPlaybackCredential(tvCode = "5T6FEP", sessionId = "sess-abc"))
+        assertTrue(AppPreferences.hasManagedPlaybackCredential(tvCode = "ABC123", sessionId = "sess-abc"))
     }
 
     @Test

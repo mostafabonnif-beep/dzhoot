@@ -45,7 +45,7 @@ up: ## Start all services in background
 	@echo "  Username         $${SUPER_ADMIN_USERNAME:-superadmin}"
 	@echo "  Password         (see SUPER_ADMIN_PASSWORD in .env)"
 	@echo "  Email            $${SUPER_ADMIN_EMAIL:-admin@dzhoof.local}"
-	@echo "  Channel Code     $${SUPER_ADMIN_CHANNEL_LIST_CODE:-5T6FEP}"
+	@echo "  Channel Code     $${SUPER_ADMIN_CHANNEL_LIST_CODE:-(unset)}"
 	@echo ""
 	@echo "\033[1;32m══════════════════════════════════════════════════\033[0m"
 	@echo ""
