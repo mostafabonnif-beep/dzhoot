@@ -26,6 +26,11 @@ export interface SubtaskResult {
   durationMs: number;
   result?: any;
   error?: string;
+  /**
+   * Machine-readable reason, so a failed run can be filtered instead of read.
+   * Examples: NO_SYNC_CANDIDATES, SOURCE_NOT_SYNCABLE, SYNC_NO_PROGRESS, SYNC_ERROR.
+   */
+  errorCode?: string;
   startedAt?: Date;
   completedAt?: Date;
 }
@@ -472,15 +477,41 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
     ? await XtreamSource.find({ $or: syncCandidateClauses() }, { _id: 1, name: 1 }).lean()
     : await M3USource.find({ status: 'Active' }, { _id: 1, name: 1 }).lean();
 
+  // A scheduled run that syncs nothing is NOT a success. The old filter silently produced an
+  // empty list once every source was Inactive and the task still reported success — measured
+  // 2026-09-25, with movies, series and channels frozen for days (see the note above). An empty
+  // candidate list means every source is disabled or the eligibility rule is wrong; either way
+  // it must surface as a failure with a machine-readable code, not as a quiet "completed".
+  if (sources.length === 0) {
+    return {
+      summary: {
+        sourceType: kind,
+        sources: 0,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+        durationMs: Date.now() - startedAt,
+        errorCode: 'NO_SYNC_CANDIDATES',
+      },
+      subtasks: [{
+        name: `${kind}:<none>`,
+        status: 'failed',
+        durationMs: Date.now() - startedAt,
+        error: 'NO_SYNC_CANDIDATES: no syncable source was selected — refusing to report success.',
+      }],
+    };
+  }
+
   for (const source of sources) {
     const sourceStartedAt = Date.now();
+    let verification: any = null;
     try {
       let result;
       if (kind === 'xtream') {
         // Verify first: this refreshes BOTH family verdicts, which is what the sync plan reads. It
         // is not a gate by itself — a source whose live channels are down may still serve a healthy
         // on-demand catalog, and refusing that source is what froze the catalog.
-        const verification = await verifyXtreamSource(String(source._id), verifySampleLimit());
+        verification = await verifyXtreamSource(String(source._id), verifySampleLimit());
         const families = verification.decision.families;
         if (!families.live && !families.onDemand) {
           // Never silent: a source that cannot be synced must say so, with the reason.
@@ -490,6 +521,7 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
             durationMs: Date.now() - sourceStartedAt,
             error: verification.decision.reason ||
               `not syncable (status=${verification.decision.status}, verification=${verification.decision.verificationStatus}, vod=${verification.decision.vodVerificationStatus})`,
+            errorCode: 'SOURCE_NOT_SYNCABLE',
           });
           continue;
         }
@@ -497,11 +529,40 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
       } else {
         result = await syncM3USource(String(source._id));
       }
+
+      // A sync that reports ok but leaves `lastSyncAt` where it was did not do the job. Treat it
+      // as a failure so the alert fires, instead of a green row that hides a frozen catalog.
+      const after = await XtreamSource.findById(source._id, { lastSyncAt: 1, syncStatus: 1 }).lean()
+        .catch(() => null) as { lastSyncAt?: Date | null; syncStatus?: string } | null;
+      const advanced = after?.lastSyncAt ? new Date(after.lastSyncAt).getTime() >= sourceStartedAt - 1000 : false;
+      if (!advanced) {
+        subtasks.push({
+          name: `${kind}:${source.name}`,
+          status: 'failed',
+          durationMs: Date.now() - sourceStartedAt,
+          error: `SYNC_NO_PROGRESS: lastSyncAt did not advance (syncStatus=${after?.syncStatus ?? 'unknown'})`,
+          errorCode: 'SYNC_NO_PROGRESS',
+        });
+        continue;
+      }
+
       subtasks.push({
         name: `${kind}:${source.name}`,
         status: 'completed',
         durationMs: Date.now() - sourceStartedAt,
-        result: result.stats,
+        result: {
+          // One shape for every source, so a scheduler row answers "what did this run do?"
+          // without reading the service logs.
+          source: source.name,
+          sourceId: String(source._id),
+          family: kind === 'xtream' ? (verification?.decision?.families ?? null) : { live: true, onDemand: false },
+          stats: result.stats ?? null,
+          catalogOnly: Boolean((result as { catalogOnly?: boolean }).catalogOnly),
+          pruned: (result as { pruned?: boolean }).pruned ?? null,
+          pruneSkippedReason: (result as { pruneSkippedReason?: string | null }).pruneSkippedReason ?? null,
+          durationMs: Date.now() - sourceStartedAt,
+          lastSyncAt: after?.lastSyncAt ?? null,
+        },
       });
     } catch (err: any) {
       subtasks.push({
@@ -509,6 +570,7 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
         status: 'failed',
         durationMs: Date.now() - sourceStartedAt,
         error: err.message,
+        errorCode: (err as { code?: string })?.code || 'SYNC_ERROR',
       });
     }
   }
@@ -524,6 +586,9 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
       failed,
       skipped,
       durationMs: Date.now() - startedAt,
+      // A single code on the row makes "why did this run fail?" answerable by filtering,
+      // instead of reading prose out of the per-source error strings.
+      ...(failed > 0 ? { errorCode: 'ONE_OR_MORE_SOURCES_FAILED' } : {}),
     },
     subtasks,
   };
