@@ -1295,6 +1295,11 @@ export async function syncXtreamSource(sourceId: string, opts: { allowCatalogOnl
       catalogOnly,
       // Channels that used to point at a replaced source and were taken over by this one.
       adopted,
+      // The prune verdict belongs to the outcome: "we fetched 12 channels where 26,000 were live
+      // and deliberately kept the old catalog" is a different result from a clean sync, and the
+      // scheduler row has to be able to say which one happened.
+      pruned: pruneDecision.prune,
+      pruneSkippedReason: pruneDecision.prune ? null : pruneDecision.skippedReason || null,
       stabilityReport: source.stabilityReport ?? null,
     };
   } catch (err: any) {
@@ -1322,5 +1327,16 @@ module.exports = {
   matchCatalogChannel,
   // CommonJS consumers (`require('../services/xtream-service')`, e.g. routes/tv.js) replace the
   // module exports object wholesale, so every named export has to be listed here too.
+  //
+  // 2026-09-26: this list had gone stale by three names. `verifySampleLimit` was added as a named
+  // export when the live-verification sample was widened, but not here — so the scheduler's
+  // `import { verifySampleLimit } from './xtream-service'` resolved to `undefined` at runtime and
+  // every Xtream sync died instantly with "(0 , import_xtream_service.verifySampleLimit) is not a
+  // function", logged only as "failed in 0.0s". The two scheduled sources stayed stale and the
+  // watchdog alerted on them, which looked like a provider problem and was not.
+  // `cjs-export-parity.test.ts` now fails the build if this ever drifts again.
+  snapshotCatalogFingerprint,
+  DEFAULT_VERIFY_SAMPLE_LIMIT,
+  verifySampleLimit,
   hlsTwinStreamUrl,
 };

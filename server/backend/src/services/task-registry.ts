@@ -18,7 +18,7 @@ import { runClientLiveness } from './client-liveness-service';
 import { runCatalogCleanup } from './catalog-cleanup-service';
 import { applyTaxonomy } from './catalog-taxonomy-service';
 import { sendNotificationToDevices, pushOutcome } from './fcm-service';
-import { sendOperationalAlert } from './alert-notifier';
+import { sendOperationalAlertDetailed } from './alert-notifier';
 
 export interface SubtaskResult {
   name: string;
@@ -26,6 +26,11 @@ export interface SubtaskResult {
   durationMs: number;
   result?: any;
   error?: string;
+  /**
+   * Machine-readable reason, so a failed run can be filtered instead of read.
+   * Examples: NO_SYNC_CANDIDATES, SOURCE_NOT_SYNCABLE, SYNC_NO_PROGRESS, SYNC_ERROR.
+   */
+  errorCode?: string;
   startedAt?: Date;
   completedAt?: Date;
 }
@@ -472,15 +477,41 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
     ? await XtreamSource.find({ $or: syncCandidateClauses() }, { _id: 1, name: 1 }).lean()
     : await M3USource.find({ status: 'Active' }, { _id: 1, name: 1 }).lean();
 
+  // A scheduled run that syncs nothing is NOT a success. The old filter silently produced an
+  // empty list once every source was Inactive and the task still reported success — measured
+  // 2026-09-25, with movies, series and channels frozen for days (see the note above). An empty
+  // candidate list means every source is disabled or the eligibility rule is wrong; either way
+  // it must surface as a failure with a machine-readable code, not as a quiet "completed".
+  if (sources.length === 0) {
+    return {
+      summary: {
+        sourceType: kind,
+        sources: 0,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+        durationMs: Date.now() - startedAt,
+        errorCode: 'NO_SYNC_CANDIDATES',
+      },
+      subtasks: [{
+        name: `${kind}:<none>`,
+        status: 'failed',
+        durationMs: Date.now() - startedAt,
+        error: 'NO_SYNC_CANDIDATES: no syncable source was selected — refusing to report success.',
+      }],
+    };
+  }
+
   for (const source of sources) {
     const sourceStartedAt = Date.now();
+    let verification: any = null;
     try {
       let result;
       if (kind === 'xtream') {
         // Verify first: this refreshes BOTH family verdicts, which is what the sync plan reads. It
         // is not a gate by itself — a source whose live channels are down may still serve a healthy
         // on-demand catalog, and refusing that source is what froze the catalog.
-        const verification = await verifyXtreamSource(String(source._id), verifySampleLimit());
+        verification = await verifyXtreamSource(String(source._id), verifySampleLimit());
         const families = verification.decision.families;
         if (!families.live && !families.onDemand) {
           // Never silent: a source that cannot be synced must say so, with the reason.
@@ -490,6 +521,7 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
             durationMs: Date.now() - sourceStartedAt,
             error: verification.decision.reason ||
               `not syncable (status=${verification.decision.status}, verification=${verification.decision.verificationStatus}, vod=${verification.decision.vodVerificationStatus})`,
+            errorCode: 'SOURCE_NOT_SYNCABLE',
           });
           continue;
         }
@@ -497,11 +529,40 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
       } else {
         result = await syncM3USource(String(source._id));
       }
+
+      // A sync that reports ok but leaves `lastSyncAt` where it was did not do the job. Treat it
+      // as a failure so the alert fires, instead of a green row that hides a frozen catalog.
+      const after = await XtreamSource.findById(source._id, { lastSyncAt: 1, syncStatus: 1 }).lean()
+        .catch(() => null) as { lastSyncAt?: Date | null; syncStatus?: string } | null;
+      const advanced = after?.lastSyncAt ? new Date(after.lastSyncAt).getTime() >= sourceStartedAt - 1000 : false;
+      if (!advanced) {
+        subtasks.push({
+          name: `${kind}:${source.name}`,
+          status: 'failed',
+          durationMs: Date.now() - sourceStartedAt,
+          error: `SYNC_NO_PROGRESS: lastSyncAt did not advance (syncStatus=${after?.syncStatus ?? 'unknown'})`,
+          errorCode: 'SYNC_NO_PROGRESS',
+        });
+        continue;
+      }
+
       subtasks.push({
         name: `${kind}:${source.name}`,
         status: 'completed',
         durationMs: Date.now() - sourceStartedAt,
-        result: result.stats,
+        result: {
+          // One shape for every source, so a scheduler row answers "what did this run do?"
+          // without reading the service logs.
+          source: source.name,
+          sourceId: String(source._id),
+          family: kind === 'xtream' ? (verification?.decision?.families ?? null) : { live: true, onDemand: false },
+          stats: result.stats ?? null,
+          catalogOnly: Boolean((result as { catalogOnly?: boolean }).catalogOnly),
+          pruned: (result as { pruned?: boolean }).pruned ?? null,
+          pruneSkippedReason: (result as { pruneSkippedReason?: string | null }).pruneSkippedReason ?? null,
+          durationMs: Date.now() - sourceStartedAt,
+          lastSyncAt: after?.lastSyncAt ?? null,
+        },
       });
     } catch (err: any) {
       subtasks.push({
@@ -509,6 +570,7 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
         status: 'failed',
         durationMs: Date.now() - sourceStartedAt,
         error: err.message,
+        errorCode: (err as { code?: string })?.code || 'SYNC_ERROR',
       });
     }
   }
@@ -524,6 +586,9 @@ async function catalogSourceSyncHandler(kind: 'xtream' | 'm3u'): Promise<TaskRes
       failed,
       skipped,
       durationMs: Date.now() - startedAt,
+      // A single code on the row makes "why did this run fail?" answerable by filtering,
+      // instead of reading prose out of the per-source error strings.
+      ...(failed > 0 ? { errorCode: 'ONE_OR_MORE_SOURCES_FAILED' } : {}),
     },
     subtasks,
   };
@@ -625,7 +690,7 @@ async function diskWatchdogHandler(): Promise<TaskResult> {
   const threshold = level === 2 ? DISK_CRIT_PCT : DISK_WARN_PCT;
 
   if (level > 0 && level !== diskAlertedLevel) {
-    const ok = await sendOperationalAlert({
+    const outcome = await sendOperationalAlertDetailed({
       event: 'system.disk.high',
       severity: level === 2 ? 'critical' : 'warning',
       message: `Host disk usage reached ${usedPct}% (threshold ${threshold}%). Free space is running low — check backups, EPG data and docker images.`,
@@ -635,7 +700,10 @@ async function diskWatchdogHandler(): Promise<TaskResult> {
       return false;
     });
     diskAlertedLevel = level;
-    console.log(`[disk-watchdog] ${usedPct}% → alert ${ok ? 'sent' : 'queued (no webhook configured)'}`);
+    // Report the real outcome. The old line said "queued (no webhook configured)" for every
+      // non-delivery, which was untrue for a cooldown suppression or a Telegram failure — and
+      // nothing was ever queued.
+      console.log(`[disk-watchdog] ${usedPct}% → alert ${outcome}`);
   } else if (level === 0 && diskAlertedLevel > 0) {
     console.log(`[disk-watchdog] ${usedPct}% → recovered, alerts re-armed`);
     diskAlertedLevel = 0;
@@ -735,7 +803,7 @@ async function sourceSyncWatchdogHandler(): Promise<TaskResult> {
           : lastSyncMs === 0
             ? 'لم تتم أي مزامنة ناجحة بعد'
             : `آخر مزامنة ناجحة قبل ${Math.max(1, Math.round((now - lastSyncMs) / 3600000))} ساعة`;
-        const ok = await sendOperationalAlert({
+        const outcome = await sendOperationalAlertDetailed({
           event: 'source-sync-stale',
           severity: 'warning',
           message: `مزامنة مصدر ${kind.toUpperCase()} «${name}» متوقفة: ${reason}`,
@@ -745,7 +813,8 @@ async function sourceSyncWatchdogHandler(): Promise<TaskResult> {
           return false;
         });
         syncAlerted.set(id, true);
-        console.log(`[sync-watchdog] ${kind} «${name}» stale → alert ${ok ? 'sent' : 'queued (no webhook configured)'}`);
+        // See the disk watchdog: never claim a reason (or a queue) this call site cannot know.
+          console.log(`[sync-watchdog] ${kind} «${name}» stale → alert ${outcome}`);
       } else if (!stale && wasAlerted) {
         syncAlerted.set(id, false);
         console.log(`[sync-watchdog] ${kind} «${name}» recovered — staleness alert re-armed`);
